@@ -7,3 +7,10 @@ services:
       - "127.0.0.1:8081:8080"
     env_file:
       - .env.production
+    # The VPS prefers IPv6 outbound, but MongoDB Atlas's Network Access list only
+    # allow-lists the IPv4 address. Node's own dns.setDefaultResultOrder("ipv4first")
+    # (src/server.ts) didn't reliably stop the mongodb driver from still attempting
+    # IPv6 first, so IPv6 is disabled for this container's whole network stack instead
+    # -- a harder guarantee than any application-level DNS-order setting.
+    sysctls:
+      - net.ipv6.conf.all.disable_ipv6=1
