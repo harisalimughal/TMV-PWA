@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <!-- viewport-fit=cover is required for env(safe-area-inset-*) to have any effect on
+         iOS -- without it the safe-area env() variables just resolve to 0. -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0, user-scalable=no" />
+    <meta name="theme-color" content="#0A1A2F" />
+
+    <!-- iOS ignores manifest.json's display:standalone in some older versions -- these
+         meta tags are the belt-and-braces iOS-specific way to force standalone mode and
+         a matching status bar, needed alongside the manifest, not instead of it. -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="TMV Driver" />
+    <link rel="apple-touch-icon" href="/icons/icon-192.png" />
+
+    <title>TMV Driver</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

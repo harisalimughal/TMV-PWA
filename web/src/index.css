@@ -1,0 +1,42 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  /* -webkit-fill-available is iOS Safari's fix for 100vh including the address bar
+     height, which pushes content below the visible viewport. Fall back to 100% for
+     everything else. */
+  min-height: -webkit-fill-available;
+  overscroll-behavior-y: none; /* stops the iOS "rubber-band" bounce feeling non-native */
+  -webkit-tap-highlight-color: transparent; /* no grey flash on tap */
+  -webkit-text-size-adjust: 100%; /* iOS auto-enlarging text on rotate, looks broken in an app shell */
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+/* Safe-area utility classes -- pt-safe/pb-safe etc. for iOS notch/home-indicator
+   clearance. Tailwind's arbitrary-value env() works too (e.g. pt-[env(safe-area-inset-top)])
+   but named utilities read better at call sites used repeatedly (header, composer bar). */
+.pt-safe { padding-top: env(safe-area-inset-top); }
+.pb-safe { padding-bottom: env(safe-area-inset-bottom); }
+.pl-safe { padding-left: env(safe-area-inset-left); }
+.pr-safe { padding-right: env(safe-area-inset-right); }
+
+/* Keyboard-safe viewport height. 100dvh (dynamic viewport height) accounts for the
+   mobile keyboard/address-bar resizing the visible area -- 100vh does not, and is the
+   #1 cause of a chat composer bar hiding behind the keyboard on mobile. Fall back for
+   older browsers that don't support dvh. */
+.h-screen-safe {
+  height: 100vh;
+  height: 100dvh;
+}
