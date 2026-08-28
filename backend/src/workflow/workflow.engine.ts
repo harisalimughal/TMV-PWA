@@ -1,15 +1,10 @@
 import { env } from "../config/env";
-import {
-  activityWrite, commitWrites, driverFlowWrite, evidenceWrite, getJob, getSetting, jobWrite, listEvidenceForJob,
-  paymentWrite, readEvidenceSummary, signatureWrite, SheetWrite, workflowWrite
-} from "../google/sheets";
-import {
-  ChatAttachment, EvidenceRecord, EvidenceStatus, EvidenceType, ExtraChargeType, Job
-} from "../jobs/job.types";
-import { buildReceivedEvidence, markRequeued } from "../jobs/evidence.service";
+import { getJob } from "../db/jobs.repo";
+import { readEvidenceSummary } from "../db/evidence.repo";
+import { appendActivity } from "../db/activity.repo";
+import { EvidenceType, ExtraChargeType, Job } from "../jobs/job.types";
+import { uploadEvidence } from "../jobs/evidence.service";
 import { completeJob, getJobForDriver, getNextJobForDriver, saveJob, startJob } from "../jobs/jobs.service";
-import { enqueueAll } from "../queue/queue.service";
-import { ProcessJobImageTask } from "../queue/queue.types";
 import { WorkflowState, nextAfterPhoto, PHOTO_STATES } from "./workflow.states";
 import {
   assertState, validateCurrency,
@@ -45,43 +40,45 @@ const PHOTO_FOLDER: Record<string, EvidenceType> = {
   [WorkflowState.WAITING_EMPTY_VAN_PHOTO]: "EmptyVan"
 };
 
-export interface PhotoAcceptance {
-  job: Job;
-  /** Evidence accepted onto the queue. Never "saved" — that is the worker's word. */
-  accepted: EvidenceRecord[];
-  /** True when at least one enqueue failed and the reaper is the recovery path. */
-  degraded: boolean;
+export interface UploadedPhoto {
+  buffer: Buffer;
+  contentType: string;
+  fileName: string;
 }
 
 /**
  * Critical path for a photo upload.
  *
- * Everything here is validation plus one Sheets batch. No media download, no Drive call,
- * no Gmail. The photo is not in Drive when this returns, and the driver is told exactly
- * that.
+ * Synchronous end to end: validate -> upload to Cloudinary -> advance state -> save.
+ * The old version accepted a Chat attachment *reference* and returned before the photo
+ * was actually in Drive (a background worker finished the job later) -- that two-phase
+ * design existed because Chat attachments have to be downloaded from Chat first. The
+ * PWA's camera upload already has the real bytes in the request, so there's nothing to
+ * defer; by the time this returns, the photo really is in Cloudinary.
  */
 export async function handlePhotoStep(
+  jobId: string,
   identifier: string,
-  attachments: ChatAttachment[]
-): Promise<PhotoAcceptance> {
-  const { job, driver } = await getActiveJob(identifier);
-  setContext({ jobId: job.jobId });
+  photos: UploadedPhoto[]
+): Promise<Job> {
+  setContext({ jobId });
+  const { job, driver } = await getJobForDriver(jobId, identifier);
 
   const state = job.currentState as WorkflowState;
   if (!PHOTO_STATES.has(state)) {
     throw new ValidationError("A photo is not expected at the current workflow step.");
   }
-  if (!attachments.length) throw new ValidationError("Please attach at least one image.");
-  if (state === WorkflowState.WAITING_LOADED_PHOTO && attachments.length > 2) {
+  if (!photos.length) throw new ValidationError("Please attach at least one image.");
+  if (state === WorkflowState.WAITING_LOADED_PHOTO && photos.length > 2) {
     throw new ValidationError("Proof Of Van Loaded accepts 1 or 2 photos at this step.");
   }
 
   const evidenceType = PHOTO_FOLDER[state];
   const actor = driver.email || driver.chatUserName;
 
-  // Metadata-only validation. Throws before anything is persisted if the attachment can
-  // never be processed, so the driver learns immediately instead of via a failure card.
-  const { records, writes } = buildReceivedEvidence(job.jobId, actor, evidenceType, attachments);
+  for (const photo of photos) {
+    await uploadEvidence(job, actor, evidenceType, photo.buffer, photo.contentType, photo.fileName);
+  }
 
   const from = job.currentState;
   job.currentState = nextAfterPhoto(state);
@@ -93,95 +90,13 @@ export async function handlePhotoStep(
   if (evidenceType === "Arrival" && !job.actualStart) job.actualStart = now;
   if (evidenceType === "EmptyVan" && !job.actualFinish) job.actualFinish = now;
 
-  const extras: SheetWrite[] = [
-    ...writes,
-    driverFlowWrite({
-      jobId: job.jobId,
-      driver: actor,
-      field: `${evidenceType} Photo`,
-      value: `${records.length} image(s) received; processing`,
-      state: job.currentState
-    })
-  ];
-
-  // Evidence rows, the driver-flow row, the booking row, the workflow row and the
-  // activity row are one batchUpdate. After this returns, the photo is recoverable even
-  // if the process dies on the next line.
-  await saveJob(job, driver, `PHOTO_${evidenceType.toUpperCase()}_RECEIVED`, from, `${records.length} file(s)`, extras);
-
-  const results = await enqueueAll(
-    records.map(record => ({
-      type: "PROCESS_JOB_IMAGE",
-      evidenceId: record.evidenceId,
-      jobId: job.jobId
-    }) satisfies ProcessJobImageTask)
-  );
-  const degraded = results.some(result => !result.queued);
-  if (degraded) {
-    log.warn("evidence queued to reaper fallback", { job_id: job.jobId, evidence: records.length });
-  }
-
-  return { job, accepted: records, degraded };
-}
-
-/**
- * Driver-initiated retry of failed evidence. Resets the attempt budget and re-queues.
- * Used by the RETRY button on the failure card.
- */
-export async function retryFailedEvidence(jobId: string, identifier: string): Promise<Job> {
-  const { job, driver } = await getJobForDriver(jobId, identifier, { fresh: true });
-  const failed = (await listEvidenceForJob(jobId)).filter(record => record.status === EvidenceStatus.FAILED);
-  if (!failed.length) throw new ValidationError("There is no failed photo to retry on this job.");
-
-  const requeued = failed.map(markRequeued);
-  await commitWrites([
-    ...requeued.map(evidenceWrite),
-    activityWrite({
-      jobId,
-      driver: driver.email || driver.chatUserName,
-      action: "EVIDENCE_RETRY_REQUESTED",
-      fromState: job.currentState,
-      toState: job.currentState,
-      detail: failed.map(record => record.evidenceId).join(", ")
-    })
-  ]);
-
-  await enqueueAll(
-    requeued.map(record => ({
-      type: "PROCESS_JOB_IMAGE",
-      evidenceId: record.evidenceId,
-      jobId
-    }) satisfies ProcessJobImageTask),
-    // Fresh dedupe id: the original task name is spent.
-    {}
-  ).catch(() => undefined);
-
-  return job;
-}
-
-/**
- * Sends the driver back to a photo step so they can re-upload evidence that failed
- * permanently (expired Chat media, corrupt file). The failed records stay on the sheet
- * as an audit record of the attempt.
- */
-export async function reopenPhotoStep(jobId: string, identifier: string, evidenceType: EvidenceType): Promise<Job> {
-  const { job, driver } = await getJobForDriver(jobId, identifier, { fresh: true });
-  const target = Object.entries(PHOTO_FOLDER).find(([, type]) => type === evidenceType)?.[0];
-  if (!target) throw new ValidationError(`Unknown evidence type: ${evidenceType}`);
-
-  const from = job.currentState;
-  job.currentState = target;
-  return saveJob(job, driver, "PHOTO_STEP_REOPENED", from, evidenceType);
+  return saveJob(job, driver, `PHOTO_${evidenceType.toUpperCase()}_RECEIVED`, from, `${photos.length} file(s)`);
 }
 
 export async function getActiveJob(identifier: string) {
-  // No Calendar sync here: mid-workflow steps only ever read state that Sheets
-  // already holds. fresh: true because a photo upload is a read-modify-write, exactly
-  // like a card click — a cached snapshot could predate a step the driver just did
-  // seconds earlier and silently overwrite it on save.
-  const { job, driver } = await getNextJobForDriver(identifier, { fresh: true });
+  const { job, driver } = await getNextJobForDriver(identifier);
   if (!job || job.status !== "IN_PROGRESS") {
-    throw new ValidationError("You do not have an active job. Type 'Next Job' to get your next job.");
+    throw new ValidationError("You do not have an active job.");
   }
   return { job, driver };
 }
@@ -195,18 +110,14 @@ export async function handleAction(
   setContext({ jobId });
   if (action === "START_JOB") return beginJob(jobId, identifier);
 
-  // fresh: true — every case below reads job, mutates a few fields, and writes the
-  // whole row back. A cached read here can start from a snapshot taken before the
-  // driver's previous step (seconds earlier, well inside the Sheets cache TTL)
-  // finished writing, and silently clobber that step's change when this one saves.
-  const { job, driver } = await getJobForDriver(jobId, identifier, { fresh: true });
+  const { job, driver } = await getJobForDriver(jobId, identifier);
   const actor = driver.email || driver.chatUserName;
 
   switch (action) {
     case "FINISH_MOVE": {
       assertState(job.currentState, WorkflowState.IN_PROGRESS);
       const from = job.currentState;
-      // 2nd issues check now runs right after Finish Move, before Extra Charges
+      // 2nd issues check runs right after Finish Move, before Extra Charges.
       job.currentState = WorkflowState.WAITING_EMPTY_VAN_ISSUES_CHECK;
       return saveJob(job, driver, action, from);
     }
@@ -217,11 +128,8 @@ export async function handleAction(
       job.extraCharges = values;
       const from = job.currentState;
 
-      /*
-       * §47: minimise typing. The overtime step used to run unconditionally, so a
-       * driver who selected "No Extras Time" was still asked for overtime minutes and
-       * had to type 0. Skip straight to totals unless extra time was actually claimed.
-       */
+      // Minimise typing: a driver who selected "No Extras Time" skips straight to
+      // totals instead of being asked for overtime minutes and typing 0.
       const claimsOvertime = values.includes(ExtraChargeType.EXTRA_TIME);
       if (!claimsOvertime) {
         job.overtimeMinutes = 0;
@@ -229,88 +137,56 @@ export async function handleAction(
       }
       job.currentState = claimsOvertime ? WorkflowState.WAITING_OVERTIME : WorkflowState.WAITING_TOTAL_CHARGES;
 
-      return saveJob(job, driver, action, from, values.join(", "), [
-        driverFlowWrite({
-          jobId, driver: actor, field: "Any Extra charges", value: values.join(", "), state: job.currentState
-        })
-      ]);
+      return saveJob(job, driver, action, from, values.join(", "));
     }
 
     case "SUBMIT_OVERTIME": {
       assertState(job.currentState, WorkflowState.WAITING_OVERTIME);
       const driverMinutes = validateMinutes(input.overtime_minutes?.[0] ?? "");
 
-      // Overtime reconciliation (Req 10): cross-check the driver's entered overtime
-      // against actual server-recorded timestamps. If the server elapsed time implies
-      // MORE overtime than the driver entered, use the server figure to prevent
-      // under-reporting. A discrepancy >= 15 min is logged for admin review.
+      // Overtime reconciliation: cross-check the driver's entered overtime against
+      // actual server-recorded timestamps. If the server elapsed time implies MORE
+      // overtime than the driver entered, use the server figure to prevent
+      // under-reporting.
       let reconciledMinutes = driverMinutes;
-      const reconciliationExtras: SheetWrite[] = [];
       if (job.actualStart && job.bookedMinutes > 0) {
-        const elapsedNowMinutes = Math.round(
-          (Date.now() - new Date(job.actualStart).getTime()) / 60_000
-        );
+        const elapsedNowMinutes = Math.round((Date.now() - new Date(job.actualStart).getTime()) / 60_000);
         const serverOvertimeEstimate = Math.max(0, elapsedNowMinutes - job.bookedMinutes);
         const discrepancy = serverOvertimeEstimate - driverMinutes;
         if (discrepancy > 0) {
-          // Server says the job has run longer than the driver reported — use the
-          // server figure to ensure the customer is correctly charged.
           reconciledMinutes = serverOvertimeEstimate;
-          reconciliationExtras.push(activityWrite({
+          await appendActivity({
             jobId, driver: actor, action: "OVERTIME_RECONCILED",
             detail: `Driver entered ${driverMinutes} min; server timestamps indicate ${serverOvertimeEstimate} min elapsed — using server estimate.`
-          }));
+          });
         } else if (Math.abs(discrepancy) >= 15) {
-          // Driver entered more than server estimate — log for transparency but trust driver.
-          reconciliationExtras.push(activityWrite({
+          await appendActivity({
             jobId, driver: actor, action: "OVERTIME_NOTE",
             detail: `Driver entered ${driverMinutes} min; server timestamps indicate ~${serverOvertimeEstimate} min elapsed.`
-          }));
+          });
         }
       }
 
       job.overtimeMinutes = reconciledMinutes;
-      
-      const otGraceStr = await getSetting("OVERTIME_GRACE_MINS", String(env.overtimeGraceMinutes));
-      const otGrace = parseInt(otGraceStr, 10) || 0;
 
-      let rateKey = "CREW_RATE_2_MAN";
-      let rateFallback = 55;
-      if (job.crewSize === 1) {
-        rateKey = "CREW_RATE_1_MAN";
-        rateFallback = 45;
-      } else if (job.crewSize === 3) {
-        rateKey = "CREW_RATE_3_MAN";
-        rateFallback = 65;
-      }
+      const otGrace = env.overtimeGraceMinutes;
+      let defaultRate = env.crewRate2Man;
+      if (job.crewSize === 1) defaultRate = env.crewRate1Man;
+      else if (job.crewSize === 3) defaultRate = env.crewRate3Man;
 
       const isPackingService = job.extraCharges.includes(ExtraChargeType.PACKING);
-      const defaultRateStr = isPackingService
-        ? await getSetting("PACKING_RATE", "95")
-        : await getSetting(rateKey, String(rateFallback));
-      const defaultRate = parseFloat(defaultRateStr) || rateFallback;
+      if (isPackingService) defaultRate = env.packingRate;
 
-      const otRateStr = await getSetting("OVERTIME_RATE_PER_30", "");
-      const otRate = otRateStr ? (parseFloat(otRateStr) || defaultRate) : defaultRate;
-
-      const unitStr = isPackingService
-        ? await getSetting("PACKING_BILLING_UNIT", "Per hour")
-        : await getSetting("CREW_BILLING_UNIT", "Per 30 minutes");
-      const unitMins = unitStr.toLowerCase().includes("hour") ? 60 : 30;
+      const otRate = env.overtimeRatePer30Minutes || defaultRate;
+      const billingUnit = isPackingService ? env.packingBillingUnit : env.crewBillingUnit;
+      const unitMins = billingUnit.toLowerCase().includes("hour") ? 60 : 30;
 
       const chargeableMinutes = Math.max(0, reconciledMinutes - otGrace);
-      job.overtimeCharge =
-        chargeableMinutes === 0 ? 0 : Math.ceil(chargeableMinutes / unitMins) * otRate;
-      
+      job.overtimeCharge = chargeableMinutes === 0 ? 0 : Math.ceil(chargeableMinutes / unitMins) * otRate;
+
       const from = job.currentState;
       job.currentState = WorkflowState.WAITING_TOTAL_CHARGES;
-      return saveJob(job, driver, action, from, `${reconciledMinutes} minutes`, [
-        driverFlowWrite({
-          jobId, driver: actor, field: "Over Time Charges",
-          value: `${reconciledMinutes} min / ${formatPounds(job.overtimeCharge)}`, state: job.currentState
-        }),
-        ...reconciliationExtras
-      ]);
+      return saveJob(job, driver, action, from, `${reconciledMinutes} minutes / ${formatPounds(job.overtimeCharge)}`);
     }
 
     case "SUBMIT_TOTAL_CHARGES": {
@@ -320,14 +196,10 @@ export async function handleAction(
       const suggested = suggestedTotal(job);
       const from = job.currentState;
       job.currentState = WorkflowState.WAITING_PAYMENT;
-      // Exact integer comparison in pence. `Math.abs(a - b) >= 0.01` was an epsilon
-      // test standing in for equality, which is not a correctness argument for money.
       const mismatch = equalPence(fromPounds(total), fromPounds(suggested))
         ? formatPounds(total)
         : `Entered ${formatPounds(total)}; suggested ${formatPounds(suggested)}`;
-      return saveJob(job, driver, action, from, mismatch, [
-        driverFlowWrite({ jobId, driver: actor, field: "Total Charges", value: formatPounds(total), state: job.currentState })
-      ]);
+      return saveJob(job, driver, action, from, mismatch);
     }
 
     case "SUBMIT_PAYMENT": {
@@ -336,24 +208,16 @@ export async function handleAction(
       job.paymentMethod = method;
       job.paymentStatus = method === "Invoice" ? "Outstanding" : "Recorded";
       const from = job.currentState;
-      // The 2nd issues check was moved to before Extra Charges (after FINISH_MOVE),
-      // so after Payment the next step is the Empty Van photo directly.
+      // After Payment the next step is the Empty Van photo directly.
       job.currentState = WorkflowState.WAITING_EMPTY_VAN_PHOTO;
-      return saveJob(job, driver, action, from, method, [
-        paymentWrite({ jobId, driver: actor, method, amount: job.totalCharges, status: job.paymentStatus }),
-        driverFlowWrite({ jobId, driver: actor, field: "Payment Method", value: method, state: job.currentState })
-      ]);
+      return saveJob(job, driver, action, from, method);
     }
-
-    // SUBMIT_CLIENT_DETAILS removed — card 8 (Client Postcode) is gone.
-    // SEND_ON_MY_WAY_MESSAGE removed — On My Way step skipped; job starts at arrival photo.
 
     case "ISSUES_NONE":
     case "ISSUES_YES": {
       const from = job.currentState as WorkflowState;
       const noneTarget: Partial<Record<WorkflowState, WorkflowState>> = {
         [WorkflowState.WAITING_ARRIVAL_ISSUES_CHECK]: WorkflowState.WAITING_LOADED_PHOTO,
-        // 2nd checkpoint now sits before Extra Charges — NONE skips straight there
         [WorkflowState.WAITING_EMPTY_VAN_ISSUES_CHECK]: WorkflowState.WAITING_EXTRA_CHARGES
       };
       const yesTarget: Partial<Record<WorkflowState, WorkflowState>> = {
@@ -366,19 +230,31 @@ export async function handleAction(
       return saveJob(job, driver, action, from);
     }
 
+    // The dedicated Parking Liability / Liability Report detour forms (launched from
+    // ISSUES_YES in the original Chat bot) aren't built in this pass -- ISSUES_YES
+    // currently just records that an issue was flagged and resumes the same place NONE
+    // would. See the note in this project's README about deferred scope.
+    case "ISSUES_RESUME": {
+      const from = job.currentState as WorkflowState;
+      const target =
+        from === WorkflowState.WAITING_ARRIVAL_ISSUES_CHOICE ? WorkflowState.WAITING_LOADED_PHOTO
+        : from === WorkflowState.WAITING_EMPTY_VAN_ISSUES_CHOICE ? WorkflowState.WAITING_EXTRA_CHARGES
+        : null;
+      if (!target) throw new ValidationError(`This action is not valid at the current step (${from}).`);
+      job.currentState = target;
+      return saveJob(job, driver, action, from);
+    }
+
     case "REVIEW_NONE":
     case "REVIEW_YES": {
       assertState(job.currentState, WorkflowState.WAITING_REVIEW_CHECK);
       const from = job.currentState;
       if (action === "REVIEW_YES") {
-        // Driver wants to send a review email — go to the email preview card
         job.currentState = WorkflowState.WAITING_REVIEW_SEND;
         return saveJob(job, driver, action, from);
       }
-      // REVIEW_NONE: no review email requested — complete the job immediately
       if (job.customerEmail) {
-        const completionTemplate = await getSetting("JOB_COMPLETION_EMAIL_TEXT", JOB_COMPLETION_EMAIL_TEMPLATE);
-        sendJobCompletionEmail(job, completionTemplate).catch(err =>
+        sendJobCompletionEmail(job, JOB_COMPLETION_EMAIL_TEMPLATE).catch(err =>
           log.warn("job completion email failed (non-fatal)", { job_id: jobId, error: String(err) })
         );
       }
@@ -388,26 +264,19 @@ export async function handleAction(
     case "SEND_REVIEW_EMAIL": {
       assertState(job.currentState, WorkflowState.WAITING_REVIEW_SEND);
       const from = job.currentState;
-      const template = await getSetting("REVIEW_REQUEST_EMAIL_TEXT", REVIEW_REQUEST_EMAIL_TEMPLATE);
-      const extras: SheetWrite[] = [];
       if (job.customerEmail) {
         try {
-          await sendReviewRequestEmail(job, template);
-          extras.push(activityWrite({
+          await sendReviewRequestEmail(job, REVIEW_REQUEST_EMAIL_TEMPLATE);
+          await appendActivity({
             jobId, driver: actor, action: "CLIENT_REVIEW_EMAIL_SENT", fromState: from, toState: from, detail: job.customerEmail
-          }));
+          });
         } catch (error) {
-          extras.push(activityWrite({
+          await appendActivity({
             jobId, driver: actor, action: "CLIENT_REVIEW_EMAIL_FAILED", fromState: from, toState: from,
             detail: error instanceof Error ? error.message : String(error)
-          }));
+          });
         }
-      }
-      // Commit the review email activity, then complete the job immediately
-      await commitWrites(extras);
-      if (job.customerEmail) {
-        const completionTemplate = await getSetting("JOB_COMPLETION_EMAIL_TEXT", JOB_COMPLETION_EMAIL_TEMPLATE);
-        sendJobCompletionEmail(job, completionTemplate).catch(err =>
+        sendJobCompletionEmail(job, JOB_COMPLETION_EMAIL_TEMPLATE).catch(err =>
           log.warn("job completion email failed (non-fatal)", { job_id: jobId, error: String(err) })
         );
       }
@@ -423,14 +292,9 @@ export async function handleAction(
     }
 
     case "COMPLETE_JOB": {
-      // Legacy fallback: jobs already sitting at READY_TO_COMPLETE in the sheet
-      // (written by an older version of the app) can still be completed via this action.
-      // New jobs never reach READY_TO_COMPLETE — they complete directly from REVIEW_NONE
-      // or SEND_REVIEW_EMAIL above. The completion gate still runs here.
       await assertCompletionGate(jobId, job);
       if (job.customerEmail) {
-        const completionTemplate = await getSetting("JOB_COMPLETION_EMAIL_TEXT", JOB_COMPLETION_EMAIL_TEMPLATE);
-        sendJobCompletionEmail(job, completionTemplate).catch(err =>
+        sendJobCompletionEmail(job, JOB_COMPLETION_EMAIL_TEMPLATE).catch(err =>
           log.warn("job completion email failed (non-fatal)", { job_id: jobId, error: String(err) })
         );
       }
@@ -443,17 +307,14 @@ export async function handleAction(
 }
 
 /** BACK button targets for the data-entry steps -- lets a driver who mis-typed
- *  something return and redo it, rather than being stuck once a step is submitted.
- *  Total Charges' predecessor is ambiguous (Overtime only runs if extra time was
- *  claimed), so it always goes back to Extra Charges, the fixed branch point, rather
- *  than trying to reconstruct which path was actually taken. */
+ *  something return and redo it. Total Charges' predecessor is ambiguous (Overtime
+ *  only runs if extra time was claimed), so it always goes back to Extra Charges, the
+ *  fixed branch point, rather than trying to reconstruct which path was actually taken. */
 const BACK_TARGET: Partial<Record<WorkflowState, WorkflowState>> = {
-  // 2nd issues check is now before Extra Charges, so Extra Charges back = issues check
   [WorkflowState.WAITING_EXTRA_CHARGES]: WorkflowState.WAITING_EMPTY_VAN_ISSUES_CHECK,
   [WorkflowState.WAITING_OVERTIME]: WorkflowState.WAITING_EXTRA_CHARGES,
   [WorkflowState.WAITING_TOTAL_CHARGES]: WorkflowState.WAITING_EXTRA_CHARGES,
   [WorkflowState.WAITING_PAYMENT]: WorkflowState.WAITING_TOTAL_CHARGES
-  // WAITING_CLIENT_DETAILS removed — that step is gone from the workflow
 };
 
 export class SignatureAlreadyCapturedError extends Error {
@@ -464,53 +325,38 @@ export class SignatureAlreadyCapturedError extends Error {
 }
 
 /**
- * Records a customer's hand-drawn signature, submitted from their own device via the
- * signature-pad link (see chat/signature.routes.ts) rather than from the driver's Chat
- * session. There is no Chat identity here — the "driver" for the audit trail is whoever
- * the job is assigned to.
+ * Records the customer's signature, captured in-app by the driver handing their phone
+ * to the customer (the original design had a separate customer-facing signature-pad
+ * link, sent by SMS/email to the customer's own device -- out of scope for this pass;
+ * see the README). The image itself is uploaded through the same Cloudinary evidence
+ * pipeline as a photo (evidenceType handling lives in the route), and this just records
+ * the resulting URL on the job and advances the workflow.
  */
 export async function submitDrawnSignature(
   jobId: string,
+  identifier: string,
   customerName: string,
-  signature: { fileId: string; fileUrl: string }
+  signatureUrl: string
 ): Promise<Job> {
-  const job = await getJob(jobId, 0);
-  if (!job) throw new ValidationError(`Job ${jobId} was not found.`);
+  const { job, driver } = await getJobForDriver(jobId, identifier);
   if (job.currentState !== WorkflowState.WAITING_CLIENT_CONFIRMATION) {
-    // The customer's device double-submitted, or the link was reopened after the driver
-    // already moved on. Treat as already-done rather than erroring.
     throw new SignatureAlreadyCapturedError();
   }
 
   const name = customerName.trim() || "Customer";
-  const actor = job.driverInitials || "customer device";
-  job.clientConfirmedBy = name;
-  job.updatedAt = new Date().toISOString();
   const from = job.currentState;
+  job.clientConfirmedBy = name;
+  job.signatureUrl = signatureUrl;
   job.currentState = WorkflowState.WAITING_REVIEW_CHECK;
 
-  await commitWrites([
-    jobWrite(job),
-    workflowWrite(job.jobId, actor, job.currentState),
-    signatureWrite({
-      jobId, driver: actor, customerName: name, confirmationText: signature.fileUrl,
-      mode: "Drawn signature (customer device)"
-    }),
-    driverFlowWrite({
-      jobId, driver: actor, field: "Client Signature", value: `${name} — signed`, state: job.currentState
-    }),
-    activityWrite({
-      jobId, driver: actor, action: "SUBMIT_CLIENT_CONFIRMATION", fromState: from, toState: job.currentState, detail: name
-    })
-  ]);
-
-  return job;
+  return saveJob(job, driver, "SUBMIT_CLIENT_CONFIRMATION", from, name);
 }
 
 /**
  * Thrown when the only thing standing between the driver and completion is background
- * work that has not finished yet. Distinct from ValidationError so the UI can offer
- * "wait and retry" rather than "you did something wrong".
+ * work that hasn't finished yet. In practice this almost never fires now (evidence
+ * upload is synchronous), but the shape is kept so the completion gate's contract with
+ * the frontend doesn't change if that ever stops being true.
  */
 export class EvidencePendingError extends Error {
   constructor(message: string, readonly pending: string[]) {
@@ -533,15 +379,9 @@ const REQUIRED_EVIDENCE: Array<{ type: EvidenceType; label: string; minimum: num
 ];
 
 /**
- * The guarantee that makes the async architecture safe.
- *
- * Receiving an attachment never satisfies a requirement — only evidence that reached
- * COMPLETED does, which means the file is verifiably in Drive with a recorded URL. The
- * three failure modes are reported separately so the driver gets an actionable message:
- *
- *   never uploaded   -> ValidationError    "missing X"
- *   still processing -> EvidencePendingError "wait a moment"
- *   failed           -> EvidenceFailedError  "retry / re-upload"
+ * The guarantee that makes completion mean something. Only evidence that reached
+ * COMPLETED counts -- which, with a synchronous upload, means the file is verifiably in
+ * Cloudinary with a recorded URL by the time the request that uploaded it returned.
  */
 async function assertCompletionGate(jobId: string, job: Job): Promise<void> {
   const { completed, pending, failed, hasSignature } = await readEvidenceSummary(jobId);
@@ -565,17 +405,14 @@ async function assertCompletionGate(jobId: string, job: Job): Promise<void> {
   }
 
   if (!job.paymentMethod) missing.push("payment method");
-  // clientNamePostcode check removed — card 8 (Client Postcode) was removed from the workflow
   if (!hasSignature) missing.push("client confirmation");
 
-  // Order matters: a hard-missing step is the driver's problem and outranks anything
-  // the backend is still doing.
   if (missing.length) {
     throw new ValidationError(`Cannot complete job. Missing: ${missing.join(", ")}.`);
   }
   if (permanentlyFailed.length) {
     throw new EvidenceFailedError(
-      `We couldn't save your ${permanentlyFailed.map(labelFor).join(" and ")}.`,
+      `We couldn't save your ${permanentlyFailed.map(labelFor).join(" and ")}. Please retake and upload again.`,
       permanentlyFailed
     );
   }

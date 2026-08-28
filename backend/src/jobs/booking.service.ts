@@ -3,12 +3,7 @@ import { calendar_v3 } from "googleapis";
 import { DateTime } from "luxon";
 import { env } from "../config/env";
 import { listCalendarEvents } from "../google/calendar";
-import { exceptionWrite, commitWrites, jobToBookingRow, jobWrite, listJobs, SheetWrite, getDriverSpace, getSetting } from "../google/sheets";
-import { enqueue } from "../queue/queue.service";
-// Note: the original also imported createChatMessage (../google/chat) and
-// jobAssignmentPushMessage (../chat/cards) here, but never actually called either --
-// dead imports carried over from copy-paste in the source file. Dropped since neither
-// applies to this project (no Google Chat integration here).
+import { listJobs, upsertJob } from "../db/jobs.repo";
 import { Job, JobStatus, ParsedCalendarBooking } from "./job.types";
 import { WorkflowState } from "../workflow/workflow.states";
 import { log } from "../utils/logger";
@@ -99,9 +94,8 @@ function toJob(parsed: ParsedCalendarBooking, existing?: Job): Job {
   /*
    * Commercial terms freeze the moment work begins.
    *
-   * basePrice was re-read from the Calendar title on every sync, including mid-job.
-   * Ops editing the title while the driver sat on the totals step silently changed the
-   * price under them, and the audit trail could not show which figure applied.
+   * basePrice was re-read from the Calendar title on every sync. Ops editing the title
+   * while the driver sat on the totals step would silently change the price under them.
    */
   const started = Boolean(existing?.actualStart);
   const basePrice = started ? existing!.basePrice : parsed.price;
@@ -138,8 +132,9 @@ function toJob(parsed: ParsedCalendarBooking, existing?: Job): Job {
     paymentStatus: existing?.paymentStatus ?? (paidOnline ? "Paid Online" : "Pending"),
     clientNamePostcode: existing?.clientNamePostcode ?? "",
     clientConfirmedBy: existing?.clientConfirmedBy ?? "",
-    driveFolderId: existing?.driveFolderId ?? "",
-    driveFolderUrl: existing?.driveFolderUrl ?? "",
+    signatureUrl: existing?.signatureUrl ?? "",
+    driveFolderId: "",
+    driveFolderUrl: "",
     status: existing?.status ?? JobStatus.READY,
     currentState: existing?.currentState ?? WorkflowState.READY,
     createdAt: existing?.createdAt || now,
@@ -147,12 +142,18 @@ function toJob(parsed: ParsedCalendarBooking, existing?: Job): Job {
   };
 }
 
-/** True when nothing except the "Updated" stamp differs, so the write can be skipped. */
+/** True when nothing meaningful differs from the stored doc, so the write (and its
+ * updatedAt bump) can be skipped. Compares the fields a Calendar-driven resync can
+ * actually change; workflow-owned fields (currentState, charges, payment, etc.) are
+ * deliberately excluded since toJob() already carries those through unchanged from
+ * `existing` and comparing them here would be comparing a value to itself. */
 function isUnchanged(next: Job, existing?: Job): boolean {
   if (!existing) return false;
-  const a = jobToBookingRow(next);
-  const b = jobToBookingRow(existing);
-  return Object.keys(a).every(key => key === "Updated" || String(a[key] ?? "") === String(b[key] ?? ""));
+  const keys: Array<keyof Job> = [
+    "driverInitials", "customerName", "customerEmail", "customerPhone", "pickup", "dropoff",
+    "crewSize", "basePrice", "paidOnline", "bookedStart", "bookedFinish", "bookedMinutes", "status"
+  ];
+  return keys.every(key => String(next[key] ?? "") === String(existing[key] ?? ""));
 }
 
 export async function syncBookingsForDate(date = DateTime.now().setZone(env.timezone)): Promise<Job[]> {
@@ -160,21 +161,24 @@ export async function syncBookingsForDate(date = DateTime.now().setZone(env.time
   const end = date.endOf("day");
   const [events, existingJobs] = await Promise.all([
     // showDeleted so cancellations are visible; without it a cancelled booking simply
-    // vanished from the result set and stayed READY in Sheets forever.
+    // vanished from the result set and stayed READY forever.
     listCalendarEvents(start.toUTC().toISO()!, end.toUTC().toISO()!, { showDeleted: true }),
     listJobs()
   ]);
   const existingByEvent = new Map(existingJobs.map(j => [j.calendarEventId, j]));
   const synced: Job[] = [];
-  const writes: SheetWrite[] = [];
+  const writes: Job[] = [];
   const seenEventIds = new Set<string>();
-  const newAssignments: Job[] = [];
+
   for (const event of events) {
     if (event.id) seenEventIds.add(event.id);
 
     if (event.status === "cancelled") {
       const existing = event.id ? existingByEvent.get(event.id) : undefined;
-      if (existing) writes.push(...reconcileDisappeared(existing, "cancelled in Calendar"));
+      if (existing) {
+        const reconciled = reconcileDisappeared(existing, "cancelled in Calendar");
+        if (reconciled) writes.push(reconciled);
+      }
       continue;
     }
 
@@ -184,83 +188,39 @@ export async function syncBookingsForDate(date = DateTime.now().setZone(env.time
     const job = toJob(parsed, existing);
     synced.push(job);
 
-    if (!isUnchanged(job, existing)) writes.push(jobWrite(job));
+    if (!isUnchanged(job, existing)) writes.push(job);
   }
 
   // A booking that was on this date and is no longer returned has been moved or
-  // deleted. Anything not yet started is cancelled; anything started is escalated.
+  // deleted. Anything not yet started is cancelled; anything started is escalated
+  // (logged, not auto-cancelled -- there may be evidence, charges and a payment).
   const dateKey = start.toFormat("yyyy-LL-dd");
   for (const existing of existingJobs) {
     if (seenEventIds.has(existing.calendarEventId)) continue;
     if (!existing.bookedStart.startsWith(dateKey)) continue;
     if (existing.status === JobStatus.COMPLETED || existing.status === JobStatus.CANCELLED) continue;
-    writes.push(...reconcileDisappeared(existing, "no longer present in Calendar for this date"));
+    const reconciled = reconcileDisappeared(existing, "no longer present in Calendar for this date");
+    if (reconciled) writes.push(reconciled);
   }
 
-  // One batched write for the whole day instead of one round trip per booking.
-  await commitWrites(writes);
+  await Promise.all(writes.map(upsertJob));
 
   return synced;
 }
 
-/**
- * A booking that has left the Calendar.
- *
- * Not started -> cancel it, so it stops appearing in driver results. Already started ->
- * never auto-cancel: work has happened and there may be evidence, charges and a
- * payment. Raise an exception for a human instead.
- */
-function reconcileDisappeared(existing: Job, reason: string): SheetWrite[] {
+function reconcileDisappeared(existing: Job, reason: string): Job | null {
   if (existing.actualStart) {
-    log.warn("started job disappeared from Calendar", { job_id: existing.jobId, reason });
-    return [
-      exceptionWrite({
-        jobId: existing.jobId,
-        type: "STARTED_JOB_BOOKING_DISAPPEARED",
-        detail: `${reason}. The job is ${existing.status} and was not auto-cancelled. Needs a human decision.`
-      })
-    ];
+    // No exceptions collection in tmv-pwa (no admin surface reads one) -- logged loudly
+    // instead so it's visible in the container's logs; TMV-Chat-bot's own Sheets-based
+    // exception tracking is unaffected since this is a separate copy of the job data.
+    log.error("started job disappeared from Calendar; needs a human decision", {
+      job_id: existing.jobId, reason, status: existing.status
+    });
+    return null;
   }
 
   log.info("cancelling booking", { job_id: existing.jobId, reason });
-  return [
-    jobWrite({
-      ...existing,
-      status: JobStatus.CANCELLED,
-      currentState: "CANCELLED",
-      updatedAt: new Date().toISOString()
-    }),
-    exceptionWrite({ jobId: existing.jobId, type: "BOOKING_CANCELLED", detail: reason })
-  ];
-}
-
-async function scheduleNotification(job: Job): Promise<void> {
-  if (!job.customerEmail && !job.customerPhone) return;
-
-  const offsetStr = await getSetting("CLIENT_NOTIFICATION_OFFSET_MINUTES", "60");
-  const offsetMinutes = Math.max(0, parseInt(offsetStr, 10) || 60);
-  if (offsetMinutes === 0) return;
-
-  const startDt = DateTime.fromISO(job.bookedStart).setZone(env.timezone);
-  const delaySeconds = Math.max(
-    0,
-    Math.round((startDt.toMillis() - Date.now()) / 1000) - offsetMinutes * 60
-  );
-
-  // Dedupe ID includes bookedStart and initials so rescheduling or reassigning schedules a fresh task
-  const dedupeId = `client-notif-${job.jobId}-${startDt.toMillis()}-${job.driverInitials || "unassigned"}`;
-  
-  await enqueue(
-    { type: "SEND_CLIENT_NOTIFICATION", jobId: job.jobId },
-    { delaySeconds, dedupeId }
-  );
-  
-  log.info("client notification scheduled", {
-    job_id: job.jobId,
-    delay_seconds: delaySeconds,
-    offset_minutes: offsetMinutes,
-    dedupe_id: dedupeId
-  });
+  return { ...existing, status: JobStatus.CANCELLED, currentState: "CANCELLED", updatedAt: new Date().toISOString() };
 }
 
 /**
@@ -275,8 +235,8 @@ export async function syncTodayBookings(): Promise<Job[]> {
   const days = [today.minus({ days: 1 }), today, today.plus({ days: 1 }), today.plus({ days: 2 })];
   const results: Job[] = [];
   for (const day of days) {
-    // Sequential: each pass reads and writes Bookings, so overlapping them would
-    // fight over row indices.
+    // Sequential: each pass reads and writes jobs for that date, so overlapping them
+    // would race on the same documents.
     results.push(...(await syncBookingsForDate(day)));
   }
   return results;

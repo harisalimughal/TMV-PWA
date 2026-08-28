@@ -13,11 +13,10 @@ import { env, warmupAuth } from "./config/env";
 // IPv6 entry in Atlas at all.
 dns.setDefaultResultOrder("ipv4first");
 import { log } from "./utils/logger";
-import { readDataset } from "./read/sheet-reader";
-import { normalizeDataset } from "./normalize/normalize";
 import { ensureIndexes } from "./db/mongo";
 import { authRoutes } from "./auth/auth.routes";
-import { requireDriverAuth } from "./auth/require-driver-auth";
+import { jobsRoutes } from "./jobs/jobs.routes";
+import { syncTodayBookings } from "./jobs/booking.service";
 
 const app = express();
 app.use(express.json({ limit: "2mb" }));
@@ -25,34 +24,8 @@ app.use(cookieParser());
 
 app.get("/healthz", (_req, res) => res.status(200).json({ ok: true }));
 
-// Smoke-test route: proves the copied Sheets/normalize layer actually works end-to-end
-// from this project, not just that it compiles. Remove once real routes exist.
-app.get("/api/debug/jobs", async (_req, res) => {
-  try {
-    const dataset = await readDataset();
-    const jobs = normalizeDataset(dataset);
-    res.status(200).json({ ok: true, count: jobs.length, sample: jobs.slice(0, 3) });
-  } catch (error) {
-    log.error("debug jobs route failed", error);
-    res.status(500).json({ ok: false, error: String(error) });
-  }
-});
-
 app.use("/api/auth", authRoutes());
-
-// Smoke-test route: proves requireDriverAuth actually works end-to-end (cookie ->
-// verified session -> DB revocation check). Remove once real protected routes exist.
-app.get("/api/debug/whoami", requireDriverAuth, (req, res) => {
-  res.status(200).json({ ok: true, driverEmail: req.driverEmail });
-});
-
-// TODO(pwa): mount real routes here as they're built --
-//   - the core job-workflow API (next job, start job, evidence upload, finish job --
-//     porting workflow.engine.ts's command handling to plain REST, per the "same bot,
-//     new UI, no chat protocol" decision)
-//   - camera-photo upload endpoint (multipart -> uploadEvidenceImage in google/drive.ts;
-//     see the TODO(pwa) note in google/drive.ts about the evidence-pipeline adaptation
-//     this needs)
+app.use("/api/jobs", jobsRoutes());
 
 // Serve the built PWA frontend (web/dist), if present. This whole domain IS the app --
 // unlike TMV-Chat-bot's /ops, there's no separate public marketing site sharing the
@@ -91,6 +64,24 @@ app.use((error: Error, _req: express.Request, res: express.Response, _next: expr
   res.status(500).json({ error: "Internal server error" });
 });
 
+/**
+ * Keeps Mongo's job data fresh from Calendar without needing an external scheduler.
+ * TMV-Chat-bot's equivalent relies on Cloud Scheduler hitting /internal/sync; this app
+ * has no such infra configured yet, so it just syncs itself on the same interval
+ * jobs.service.ts's own throttle uses. A driver requesting their job list also
+ * triggers a throttled sync (see getNextJobForDriver's `sync: true`), so this interval
+ * mainly matters for picking up new/changed bookings when nobody has the app open.
+ */
+function startBackgroundSync(): void {
+  const run = () => {
+    syncTodayBookings()
+      .then(jobs => log.debug("background calendar sync completed", { synced: jobs.length }))
+      .catch(error => log.warn("background calendar sync failed", { error: String(error) }));
+  };
+  run();
+  setInterval(run, env.calendarSyncTtlMs);
+}
+
 async function main(): Promise<void> {
   await ensureIndexes();
 
@@ -99,6 +90,7 @@ async function main(): Promise<void> {
   });
 
   warmupAuth().catch(error => log.warn("auth warmup failed at startup", { error: String(error) }));
+  startBackgroundSync();
 
   const shutdown = () => {
     log.info("SIGTERM received; draining");

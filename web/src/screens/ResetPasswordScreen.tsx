@@ -1,36 +1,42 @@
 import React, { useState } from "react";
-import { Eye, EyeOff, Loader2, Lock, Mail, Truck } from "lucide-react";
-import { login, type ApiError, type DriverProfile } from "../api/auth";
+import { Eye, EyeOff, Loader2, Lock, Truck } from "lucide-react";
+import { resetPassword, type DriverProfile } from "../api/auth";
 
-interface LoginScreenProps {
-  onLoggedIn: (driver: DriverProfile) => void;
-  onForgotPassword: () => void;
+interface ResetPasswordScreenProps {
+  token: string;
+  onDone: (driver: DriverProfile) => void;
 }
 
-export function LoginScreen({ onLoggedIn, onForgotPassword }: LoginScreenProps) {
-  const [email, setEmail] = useState("");
+export function ResetPasswordScreen({ token, onDone }: ResetPasswordScreenProps) {
   const [password, setPassword] = useState("");
+  const [confirm, setConfirm] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const tooShort = password.length > 0 && password.length < 8;
+  const mismatch = confirm.length > 0 && password !== confirm;
 
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
     if (submitting) return;
     setError(null);
 
-    if (!email.trim() || !password) {
-      setError("Enter your email and password.");
+    if (password.length < 8) {
+      setError("Password must be at least 8 characters.");
+      return;
+    }
+    if (password !== confirm) {
+      setError("Passwords don't match.");
       return;
     }
 
     setSubmitting(true);
     try {
-      const driver = await login(email.trim(), password);
-      onLoggedIn(driver);
-    } catch (err) {
-      const apiError = err as ApiError;
-      setError(apiError?.message || "Couldn't sign in. Try again.");
+      const driver = await resetPassword(token, password);
+      onDone(driver);
+    } catch (err: any) {
+      setError(err?.message || "Couldn't reset your password. The link may have expired.");
     } finally {
       setSubmitting(false);
     }
@@ -40,45 +46,26 @@ export function LoginScreen({ onLoggedIn, onForgotPassword }: LoginScreenProps) 
     <div className="h-screen-safe flex flex-col bg-[#0A1A2F] text-white pt-safe pb-safe pl-safe pr-safe">
       <div className="flex-1 flex flex-col justify-center px-6">
         <div className="w-full max-w-sm mx-auto">
-          <div className="flex flex-col items-center gap-3 mb-10">
+          <div className="flex flex-col items-center gap-3 mb-8">
             <div className="w-16 h-16 rounded-2xl bg-brand/20 flex items-center justify-center">
               <Truck className="w-8 h-8 text-brand" />
             </div>
-            <h1 className="text-xl font-bold">TMV Driver</h1>
-            <p className="text-sm text-white/50">Sign in to see your jobs</p>
+            <h1 className="text-xl font-bold">Set a new password</h1>
+            <p className="text-sm text-white/50 text-center">Choose a new password for your driver account.</p>
           </div>
 
           <form onSubmit={handleSubmit} className="flex flex-col gap-4" noValidate>
             <label className="flex flex-col gap-1.5">
-              <span className="text-xs font-medium text-white/60 pl-1">Email</span>
-              <div className="relative">
-                <Mail className="w-4 h-4 text-white/40 absolute left-3.5 top-1/2 -translate-y-1/2" />
-                <input
-                  type="email"
-                  inputMode="email"
-                  autoComplete="username"
-                  autoCapitalize="none"
-                  autoCorrect="off"
-                  value={email}
-                  onChange={e => setEmail(e.target.value)}
-                  disabled={submitting}
-                  placeholder="you@themanvan.co.uk"
-                  className="w-full rounded-xl bg-white/5 border border-white/10 pl-10 pr-4 py-3 text-sm placeholder:text-white/30 focus:outline-none focus:border-brand disabled:opacity-50"
-                />
-              </div>
-            </label>
-
-            <label className="flex flex-col gap-1.5">
-              <span className="text-xs font-medium text-white/60 pl-1">Password</span>
+              <span className="text-xs font-medium text-white/60 pl-1">New password</span>
               <div className="relative">
                 <Lock className="w-4 h-4 text-white/40 absolute left-3.5 top-1/2 -translate-y-1/2" />
                 <input
                   type={showPassword ? "text" : "password"}
-                  autoComplete="current-password"
+                  autoComplete="new-password"
                   value={password}
                   onChange={e => setPassword(e.target.value)}
                   disabled={submitting}
-                  placeholder="••••••••"
+                  placeholder="At least 8 characters"
                   className="w-full rounded-xl bg-white/5 border border-white/10 pl-10 pr-11 py-3 text-sm placeholder:text-white/30 focus:outline-none focus:border-brand disabled:opacity-50"
                 />
                 <button
@@ -91,13 +78,24 @@ export function LoginScreen({ onLoggedIn, onForgotPassword }: LoginScreenProps) 
                   {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                 </button>
               </div>
-              <button
-                type="button"
-                onClick={onForgotPassword}
-                className="self-end text-xs text-brand hover:text-brand-dark pt-1"
-              >
-                Forgot password?
-              </button>
+              {tooShort && <span className="text-xs text-amber-400 pl-1">At least 8 characters.</span>}
+            </label>
+
+            <label className="flex flex-col gap-1.5">
+              <span className="text-xs font-medium text-white/60 pl-1">Confirm password</span>
+              <div className="relative">
+                <Lock className="w-4 h-4 text-white/40 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                <input
+                  type={showPassword ? "text" : "password"}
+                  autoComplete="new-password"
+                  value={confirm}
+                  onChange={e => setConfirm(e.target.value)}
+                  disabled={submitting}
+                  placeholder="Re-enter your new password"
+                  className="w-full rounded-xl bg-white/5 border border-white/10 pl-10 pr-4 py-3 text-sm placeholder:text-white/30 focus:outline-none focus:border-brand disabled:opacity-50"
+                />
+              </div>
+              {mismatch && <span className="text-xs text-amber-400 pl-1">Passwords don't match.</span>}
             </label>
 
             {error && (
@@ -112,13 +110,9 @@ export function LoginScreen({ onLoggedIn, onForgotPassword }: LoginScreenProps) 
               className="mt-2 flex items-center justify-center gap-2 rounded-xl bg-brand hover:bg-brand-dark active:bg-brand-dark transition-colors py-3.5 text-sm font-semibold disabled:opacity-60"
             >
               {submitting && <Loader2 className="w-4 h-4 animate-spin" />}
-              {submitting ? "Signing in…" : "Sign in"}
+              {submitting ? "Saving…" : "Save new password"}
             </button>
           </form>
-
-          <p className="text-center text-xs text-white/40 mt-6">
-            New account? Your manager will email you a link to set your password.
-          </p>
         </div>
       </div>
     </div>

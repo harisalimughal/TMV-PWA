@@ -68,3 +68,15 @@ export async function sendJobCompletionEmail(job: Job, template: string): Promis
   const subject = `Your ${env.notificationFromName} move is complete — thank you!`;
   await sendPlainTextEmail(job.customerEmail, subject, renderMessageTemplate(template, job));
 }
+
+/** Sent from POST /api/auth/forgot-password. The link is valid for 30 minutes (see
+ * auth/reset-token.ts) and is single-use in practice -- completing a reset bumps the
+ * account's tokenVersion, which invalidates any other outstanding reset link too. */
+export async function sendPasswordResetEmail(to: string, resetUrl: string): Promise<void> {
+  const subject = `Reset your ${env.notificationFromName} driver app password`;
+  const body =
+    `You asked to reset your password for the ${env.notificationFromName} driver app.\n\n` +
+    `Tap this link to set a new password (valid for 30 minutes):\n${resetUrl}\n\n` +
+    "If you didn't request this, you can safely ignore this email -- your password won't change.";
+  await sendPlainTextEmail(to, subject, body);
+}

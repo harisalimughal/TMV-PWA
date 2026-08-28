@@ -125,7 +125,36 @@ export const env = {
    * /complete-setup route refuses with a clear "not configured" error -- login and
    * everything else keep working.
    */
-  driverSetupLinkSecret: process.env.DRIVER_SETUP_LINK_SECRET?.trim() || ""
+  driverSetupLinkSecret: process.env.DRIVER_SETUP_LINK_SECRET?.trim() || "",
+
+  /**
+   * Evidence photos (arrival/loaded/empty-van/signature) upload here instead of Google
+   * Drive. Standard Cloudinary SDK auto-config format: cloudinary://<key>:<secret>@<cloud>.
+   * Blank until the client provides it -- storage/cloudinary.ts only throws when an
+   * upload is actually attempted, same "not configured yet" pattern as the other
+   * pending-credential fields above. Everything else (auth, job list, workflow state)
+   * works without it.
+   */
+  cloudinaryUrl: process.env.CLOUDINARY_URL?.trim() || "",
+
+  /**
+   * Crew hourly/overtime rates. In TMV-Chat-bot these are admin-editable via the /ops
+   * Settings tab (backed by a Sheets row, see google/sheets.ts's getSetting()); tmv-pwa
+   * has no such admin surface, so they're plain env config here instead, with the same
+   * fallback values workflow.engine.ts always used when no Settings row existed.
+   */
+  crewRate1Man: numberEnv("TMV_CREW_RATE_1_MAN", 45),
+  crewRate2Man: numberEnv("TMV_CREW_RATE_2_MAN", 55),
+  crewRate3Man: numberEnv("TMV_CREW_RATE_3_MAN", 65),
+  packingRate: numberEnv("TMV_PACKING_RATE", 95),
+  /** "Per hour" or "Per 30 minutes" -- anything containing "hour" is treated as hourly. */
+  packingBillingUnit: process.env.TMV_PACKING_BILLING_UNIT?.trim() || "Per hour",
+  crewBillingUnit: process.env.TMV_CREW_BILLING_UNIT?.trim() || "Per 30 minutes",
+
+  /** This app's own public URL, for building absolute links in emails (password reset).
+   * Falls back to the production domain since that's the only place this app is
+   * actually deployed; override for local dev via .env if testing the email link. */
+  appUrl: (process.env.APP_URL?.trim() || "https://chat.themanvan.co.uk").replace(/\/+$/, "")
 };
 
 export const SCOPES = {

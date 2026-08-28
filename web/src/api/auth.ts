@@ -46,3 +46,35 @@ export async function login(email: string, password: string): Promise<DriverProf
 export async function logout(): Promise<void> {
   await fetch("/api/auth/logout", { method: "POST", credentials: "same-origin" });
 }
+
+/** Always resolves (never throws for "not found") -- the backend deliberately returns
+ * the same generic response either way, so this can't be used to enumerate accounts. */
+export async function forgotPassword(email: string): Promise<{ message: string }> {
+  const res = await fetch("/api/auth/forgot-password", {
+    method: "POST",
+    credentials: "same-origin",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email })
+  });
+  const body = await parseJson(res);
+  if (!res.ok) {
+    const error: ApiError = body?.error ?? { code: "UNKNOWN", message: "Something went wrong. Try again." };
+    throw error;
+  }
+  return body;
+}
+
+export async function resetPassword(token: string, password: string): Promise<DriverProfile> {
+  const res = await fetch("/api/auth/reset-password", {
+    method: "POST",
+    credentials: "same-origin",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ token, password })
+  });
+  const body = await parseJson(res);
+  if (!res.ok) {
+    const error: ApiError = body?.error ?? { code: "UNKNOWN", message: "Something went wrong. Try again." };
+    throw error;
+  }
+  return body.driver as DriverProfile;
+}

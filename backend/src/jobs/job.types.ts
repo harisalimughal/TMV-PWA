@@ -61,6 +61,9 @@ export interface Job {
   paymentStatus: string;
   clientNamePostcode: string;
   clientConfirmedBy: string;
+  /** Cloudinary URL of the customer's drawn signature, once captured -- replaces the
+   * old Sheets "Signatures" tab. Empty until WAITING_CLIENT_CONFIRMATION is completed. */
+  signatureUrl: string;
   driveFolderId: string;
   driveFolderUrl: string;
   status: JobStatus;
@@ -84,19 +87,6 @@ export interface ParsedCalendarBooking {
   bookedFinish: string;
   rawTitle: string;
   rawDescription: string;
-}
-
-export interface ChatAttachment {
-  name?: string;
-  contentName?: string;
-  contentType?: string;
-  source?: string;
-  attachmentDataRef?: {
-    resourceName?: string;
-  };
-  driveDataRef?: {
-    driveFileId?: string;
-  };
 }
 
 // ---------------------------------------------------------------------------
@@ -131,16 +121,16 @@ export interface EvidenceRecord {
   jobId: string;
   driverEmail: string;
   evidenceType: EvidenceType;
-  /** Google Chat media resourceName. The only handle the worker needs. */
-  attachmentReference: string;
   contentType: string;
   fileName: string;
   status: EvidenceStatus;
   receivedAt: string;
   processingStartedAt: string;
   processingCompletedAt: string;
-  driveFileId: string;
-  driveUrl: string;
+  /** Cloudinary's public_id -- replaces Drive's fileId. */
+  cloudinaryPublicId: string;
+  /** Cloudinary's secure_url -- replaces Drive's webViewLink. */
+  cloudinaryUrl: string;
   retryCount: number;
   lastError: string;
 }

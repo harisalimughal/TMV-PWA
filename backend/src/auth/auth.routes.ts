@@ -1,10 +1,13 @@
 import { Request, Response, Router } from "express";
+import { env } from "../config/env";
 import { getDriver } from "../google/sheets";
+import { sendPasswordResetEmail } from "../google/gmail";
 import { log } from "../utils/logger";
 import { getDriverAccount, setDriverPassword, verifyDriverPassword } from "./driver-account.service";
 import { requireDriverAuth } from "./require-driver-auth";
 import { clearSessionCookie, setSessionCookie } from "./session";
 import { verifySetupToken } from "./setup-token";
+import { issueResetToken, verifyResetToken } from "./reset-token";
 
 interface RateLimitRecord {
   count: number;
@@ -110,6 +113,89 @@ export function authRoutes(): Router {
     res.status(200).json({
       ok: true,
       driver: { email: verified.email, fullName: profile.fullName, initials: profile.initials }
+    });
+  });
+
+  // Always responds 200 with the same generic message whether or not the email has an
+  // account -- confirming/denying account existence here would let anyone enumerate
+  // registered driver emails.
+  router.post("/forgot-password", async (req: Request, res: Response) => {
+    const ip = req.ip || req.socket.remoteAddress || "unknown";
+    if (tooManyAttempts(ip)) {
+      res.status(429).json({ error: { code: "TOO_MANY_ATTEMPTS", message: "Too many attempts. Try again later." } });
+      return;
+    }
+
+    const email = String(req.body?.email ?? "").trim();
+    const generic = { ok: true, message: "If that email has a driver account, we've sent a password reset link." };
+    if (!email) {
+      res.status(200).json(generic);
+      return;
+    }
+
+    try {
+      const account = await getDriverAccount(email);
+      if (account && account.active) {
+        const token = issueResetToken(account.email, account.tokenVersion);
+        const resetUrl = `${env.appUrl}/reset-password?token=${encodeURIComponent(token)}`;
+        await sendPasswordResetEmail(account.email, resetUrl);
+      }
+    } catch (error) {
+      // Logged, not surfaced -- the response must stay generic either way.
+      log.warn("forgot-password request failed", { error: String(error) });
+    }
+
+    res.status(200).json(generic);
+  });
+
+  router.post("/reset-password", async (req: Request, res: Response) => {
+    const ip = req.ip || req.socket.remoteAddress || "unknown";
+    if (tooManyAttempts(ip)) {
+      res.status(429).json({ error: { code: "TOO_MANY_ATTEMPTS", message: "Too many attempts. Try again later." } });
+      return;
+    }
+
+    const token = String(req.body?.token ?? "");
+    const password = String(req.body?.password ?? "");
+    if (password.length < 8) {
+      res.status(400).json({ error: { code: "VALIDATION_FAILED", message: "Password must be at least 8 characters." } });
+      return;
+    }
+
+    const verified = verifyResetToken(token);
+    if (!verified.ok) {
+      log.warn("password reset link verification failed", { reason: verified.reason });
+      const message =
+        verified.reason === "expired"
+          ? "This reset link has expired. Request a new one."
+          : "This reset link is invalid. Request a new one.";
+      res.status(400).json({ error: { code: "INVALID_RESET_LINK", message } });
+      return;
+    }
+
+    const account = await getDriverAccount(verified.email);
+    if (!account || !account.active) {
+      res.status(400).json({ error: { code: "DRIVER_NOT_FOUND", message: "This driver account could not be found or is inactive." } });
+      return;
+    }
+    // The account's tokenVersion has moved on since this link was issued (a password
+    // change, or another reset already completed) -- the link is stale even though it
+    // hasn't technically expired yet.
+    if (account.tokenVersion !== verified.tokenVersion) {
+      res.status(400).json({ error: { code: "INVALID_RESET_LINK", message: "This reset link has already been used. Request a new one." } });
+      return;
+    }
+
+    await setDriverPassword(verified.email, password);
+    const profile = await getDriver(verified.email);
+    const updated = await getDriverAccount(verified.email);
+    setSessionCookie(res, verified.email, updated!.tokenVersion);
+
+    res.status(200).json({
+      ok: true,
+      driver: profile
+        ? { email: verified.email, fullName: profile.fullName, initials: profile.initials }
+        : { email: verified.email, fullName: verified.email, initials: "" }
     });
   });
 
