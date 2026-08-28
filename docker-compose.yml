@@ -1,0 +1,9 @@
+services:
+  tmv-pwa:
+    build: .
+    container_name: tmv-pwa
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8081:8080"
+    env_file:
+      - .env.production

@@ -34,6 +34,10 @@ function boolEnv(name: string, fallback: boolean): boolean {
 export const env = {
   nodeEnv: process.env.NODE_ENV ?? "development",
   port: numberEnv("PORT", 8080),
+  /** Driver accounts (credentials, sessions) only -- jobs/bookings/evidence stay in
+   * Sheets. Required at startup; there's no meaningful fallback for "no database". */
+  mongoUri: required("MONGODB_URI"),
+  mongoDbName: process.env.MONGODB_DB_NAME?.trim() || "tmv_pwa",
   spreadsheetId: required("GOOGLE_SHEETS_SPREADSHEET_ID"),
   calendarId: process.env.GOOGLE_CALENDAR_ID?.trim() || "primary",
   driveRootFolderId: required("GOOGLE_DRIVE_ROOT_FOLDER_ID"),
@@ -111,7 +115,17 @@ export const env = {
    * (e.g. a photo-upload confirmation link). Required in production -- without it,
    * anything "signed" by this process could be forged.
    */
-  signatureLinkSecret: process.env.TMV_SIGNATURE_LINK_SECRET?.trim() || ""
+  signatureLinkSecret: process.env.TMV_SIGNATURE_LINK_SECRET?.trim() || "",
+
+  /**
+   * Shared with TMV-Chat-bot -- it signs driver password-setup links (from the admin
+   * dashboard's Add/Edit Driver flow), this project only verifies them (see
+   * auth/setup-token.ts). Must be the identical value in both projects' env files, or
+   * every link this app issues will fail to verify. Blank here just means the
+   * /complete-setup route refuses with a clear "not configured" error -- login and
+   * everything else keep working.
+   */
+  driverSetupLinkSecret: process.env.DRIVER_SETUP_LINK_SECRET?.trim() || ""
 };
 
 export const SCOPES = {
