@@ -1,7 +1,13 @@
-# node:24-slim, not 22: the committed lockfiles were generated under npm 11 (Node 24's
-# bundled npm). npm 10 (Node 22's bundled npm) resolves some transitive deps (e.g.
-# picomatch, pulled at two different versions by different dependents) differently and
-# rejects the lockfile as out of sync under `npm ci`.
+# node:24-slim for the BUILD stages only, not 22: the committed lockfiles were generated
+# under npm 11 (Node 24's bundled npm). npm 10 (Node 22's bundled npm) resolves some
+# transitive deps (e.g. picomatch, pulled at two different versions by different
+# dependents) differently and rejects the lockfile as out of sync under `npm ci`.
+# The runtime stage below deliberately stays on node:22-slim -- Node 24's OpenSSL 3.5
+# fails the TLS handshake against MongoDB Atlas from inside this container ("tlsv1
+# alert internal error" on every connection attempt); 22's OpenSSL doesn't have the
+# problem. None of the runtime deps (mongodb driver's default pure-JS bson, bcryptjs,
+# express, googleapis) have native bindings, so copying node_modules built under 24
+# into a 22 runtime is safe.
 # ---- backend build ----
 FROM node:24-slim AS backend-build
 WORKDIR /app/backend
@@ -22,7 +28,7 @@ COPY web ./
 RUN npm run build
 
 # ---- runtime ----
-FROM node:24-slim
+FROM node:22-slim
 WORKDIR /app
 ENV NODE_ENV=production
 COPY --from=backend-build /app/backend/node_modules ./node_modules
