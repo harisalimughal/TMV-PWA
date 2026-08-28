@@ -1,5 +1,9 @@
+# node:24-slim, not 22: the committed lockfiles were generated under npm 11 (Node 24's
+# bundled npm). npm 10 (Node 22's bundled npm) resolves some transitive deps (e.g.
+# picomatch, pulled at two different versions by different dependents) differently and
+# rejects the lockfile as out of sync under `npm ci`.
 # ---- backend build ----
-FROM node:22-slim AS backend-build
+FROM node:24-slim AS backend-build
 WORKDIR /app/backend
 COPY backend/package*.json ./
 # npm ci, not npm install: the lockfile is present and builds must be reproducible.
@@ -10,7 +14,7 @@ RUN npm run build
 RUN npm prune --omit=dev
 
 # ---- web build ----
-FROM node:22-slim AS web-build
+FROM node:24-slim AS web-build
 WORKDIR /app/web
 COPY web/package*.json ./
 RUN npm ci
@@ -18,7 +22,7 @@ COPY web ./
 RUN npm run build
 
 # ---- runtime ----
-FROM node:22-slim
+FROM node:24-slim
 WORKDIR /app
 ENV NODE_ENV=production
 COPY --from=backend-build /app/backend/node_modules ./node_modules
