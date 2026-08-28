@@ -1,8 +1,17 @@
+import dns from "node:dns";
 import express from "express";
 import cookieParser from "cookie-parser";
 import path from "node:path";
 import fs from "node:fs";
 import { env, warmupAuth } from "./config/env";
+
+// The VPS this runs on prefers IPv6 for outbound connections. MongoDB Atlas's Network
+// Access list only has the IPv4 address allow-listed (0.0.0.0/0), so an IPv6 connection
+// gets past plain TCP but is killed by Atlas's TLS-routing proxy with a generic
+// "tlsv1 alert internal error" -- indistinguishable from a real TLS bug until you
+// notice it's specific to this one host. Forcing IPv4 resolution avoids needing an
+// IPv6 entry in Atlas at all.
+dns.setDefaultResultOrder("ipv4first");
 import { log } from "./utils/logger";
 import { readDataset } from "./read/sheet-reader";
 import { normalizeDataset } from "./normalize/normalize";
