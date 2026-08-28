@@ -58,17 +58,30 @@ app.get("/api/debug/whoami", requireDriverAuth, (req, res) => {
 // unlike TMV-Chat-bot's /ops, there's no separate public marketing site sharing the
 // host, so the SPA shell is served at the root and everything not matched above (i.e.
 // not /healthz or /api/*) falls through to index.html for client-side routing.
-const distPath = path.resolve(__dirname, "../web/dist");
-const fallbackDistPath = path.resolve(process.cwd(), "web/dist");
-const finalDistPath = fs.existsSync(distPath) ? distPath : fallbackDistPath;
+// Candidates cover both layouts this ever actually runs under:
+//   - production (Docker): compiled server.js lands at /app/dist/server.js, and
+//     web/dist is copied to /app/web/dist -- one level up from __dirname.
+//   - local dev (`tsx src/server.ts`, run from backend/): __dirname is
+//     backend/src, two levels up from web/dist, which is a sibling of backend/.
+const distCandidates = [
+  path.resolve(__dirname, "../web/dist"),
+  path.resolve(__dirname, "../../web/dist"),
+  path.resolve(process.cwd(), "web/dist"),
+  path.resolve(process.cwd(), "../web/dist")
+];
+const finalDistPath = distCandidates.find(candidate => fs.existsSync(candidate)) ?? distCandidates[0];
 
 if (fs.existsSync(finalDistPath)) {
   app.use(express.static(finalDistPath));
-  app.get("*", (_req, res) => {
+  // A RegExp, not the string "*" -- Express 4.21+ bundles a path-to-regexp version that
+  // deprecated the bare "*" wildcard (it silently fails to match anything, including
+  // "/", rather than erroring at registration time). /.*/ isn't affected by that syntax
+  // change either way.
+  app.get(/.*/, (_req, res) => {
     res.sendFile(path.join(finalDistPath, "index.html"));
   });
 } else {
-  app.get("*", (_req, res) => {
+  app.get(/.*/, (_req, res) => {
     res.status(200).send("TMV PWA backend is online. Frontend bundle not built yet.");
   });
 }
