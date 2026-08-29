@@ -1,9 +1,8 @@
 import { Request, Response, Router } from "express";
 import { env } from "../config/env";
-import { getDriver } from "../google/sheets";
 import { sendPasswordResetEmail } from "../google/gmail";
 import { log } from "../utils/logger";
-import { getDriverAccount, setDriverPassword, verifyDriverPassword } from "./driver-account.service";
+import { getDriverAccount, getDriverProfile, setDriverPassword, verifyDriverPassword } from "./driver-account.service";
 import { requireDriverAuth } from "./require-driver-auth";
 import { clearSessionCookie, setSessionCookie } from "./session";
 import { verifySetupToken } from "./setup-token";
@@ -59,7 +58,7 @@ export function authRoutes(): Router {
       return;
     }
 
-    const profile = await getDriver(result.account.email);
+    const profile = await getDriverProfile(result.account.email);
     setSessionCookie(res, result.account.email, result.account.tokenVersion);
     res.status(200).json({
       ok: true,
@@ -97,10 +96,10 @@ export function authRoutes(): Router {
       return;
     }
 
-    // The Sheets row is the actual source of truth for "is this a real driver" --
-    // a valid signature only proves the link came from the admin dashboard, not that
-    // the driver row still exists/is active.
-    const profile = await getDriver(verified.email);
+    // The Mongo driver_accounts doc is the actual source of truth for "is this a real
+    // driver" -- a valid signature only proves the link came from the admin dashboard,
+    // not that the driver record still exists/is active.
+    const profile = await getDriverProfile(verified.email);
     if (!profile || !profile.active) {
       res.status(400).json({ error: { code: "DRIVER_NOT_FOUND", message: "This driver account could not be found or is inactive." } });
       return;
@@ -187,7 +186,7 @@ export function authRoutes(): Router {
     }
 
     await setDriverPassword(verified.email, password);
-    const profile = await getDriver(verified.email);
+    const profile = await getDriverProfile(verified.email);
     const updated = await getDriverAccount(verified.email);
     setSessionCookie(res, verified.email, updated!.tokenVersion);
 
@@ -205,7 +204,7 @@ export function authRoutes(): Router {
   });
 
   router.get("/me", requireDriverAuth, async (req: Request, res: Response) => {
-    const profile = await getDriver(req.driverEmail!);
+    const profile = await getDriverProfile(req.driverEmail!);
     res.status(200).json({
       driver: profile
         ? { email: req.driverEmail, fullName: profile.fullName, initials: profile.initials }

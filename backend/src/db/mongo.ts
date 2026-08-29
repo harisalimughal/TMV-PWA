@@ -5,18 +5,33 @@ import { Job } from "../jobs/job.types";
 import { EvidenceRecord } from "../jobs/job.types";
 
 export interface DriverAccountDoc {
-  /** Lower-cased, matches the "Email" column in the Drivers sheet -- the join key back
-   * to the driver's real profile data, which stays in Sheets, not duplicated here. */
+  /** Lower-cased. Primary lookup key for login. */
   email: string;
+  /** "" until an admin sets a password (via the /admin Drivers screen) or the driver
+   * completes a setup link -- verifyDriverPassword treats a blank hash as "can't log
+   * in yet", never as a match. */
   passwordHash: string;
   active: boolean;
   createdAt: Date;
   updatedAt: Date;
   lastLoginAt: Date | null;
-  /** Bumped on password change (or manual "log out everywhere") to invalidate every
-   * session token issued before that point, without needing a sessions collection --
-   * see auth/session.ts. */
+  /** Bumped on password change, deactivation (or manual "log out everywhere") to
+   * invalidate every session token issued before that point, without needing a
+   * sessions collection -- see auth/session.ts. */
   tokenVersion: number;
+
+  // ---------------------------------------------------------------------------
+  // Profile fields -- migrated off the old Sheets "Drivers" tab (Aug 2026). This
+  // collection is now the single source of truth for the driver roster, managed via
+  // the /admin Drivers screen (see auth/admin.routes.ts).
+  // ---------------------------------------------------------------------------
+  /** Upper-cased. Matched against Job.driverInitials -- the join key between a job and
+   * the driver assigned to it. */
+  initials: string;
+  fullName: string;
+  phone: string;
+  vanRegistration: string;
+  role: string;
 }
 
 /** Job/booking data, formerly the Bookings sheet. _id is the jobId (deterministic,
@@ -37,6 +52,14 @@ export interface ActivityDoc {
   toState?: string;
   detail?: string;
   timestamp: string;
+}
+
+/** Generic admin-editable key/value store -- replaces the old Sheets "Settings" tab.
+ * See db/settings.repo.ts. */
+export interface SettingDoc {
+  key: string;
+  value: string;
+  updatedAt: Date;
 }
 
 let clientPromise: Promise<MongoClient> | null = null;
@@ -77,19 +100,28 @@ export async function activityCollection(): Promise<Collection<ActivityDoc>> {
   return db.collection<ActivityDoc>("activity");
 }
 
+export async function settingsCollection(): Promise<Collection<SettingDoc>> {
+  const db = await getDb();
+  return db.collection<SettingDoc>("settings");
+}
+
 /** Creates indexes if they don't exist yet. Safe to call every startup -- createIndex
  * is a no-op when the index already matches. */
 export async function ensureIndexes(): Promise<void> {
-  const [accounts, jobs, evidence, activity] = await Promise.all([
-    driverAccounts(), jobsCollection(), evidenceCollection(), activityCollection()
+  const [accounts, jobs, evidence, activity, settings] = await Promise.all([
+    driverAccounts(), jobsCollection(), evidenceCollection(), activityCollection(), settingsCollection()
   ]);
   await Promise.all([
     accounts.createIndex({ email: 1 }, { unique: true }),
+    // Sparse: legacy accounts created before the profile migration may briefly have no
+    // initials, and a non-sparse unique index would reject a second such doc.
+    accounts.createIndex({ initials: 1 }, { unique: true, sparse: true }),
     jobs.createIndex({ calendarEventId: 1 }, { unique: true }),
     jobs.createIndex({ driverInitials: 1, status: 1 }),
     jobs.createIndex({ bookedStart: 1 }),
     evidence.createIndex({ jobId: 1 }),
-    activity.createIndex({ jobId: 1, timestamp: 1 })
+    activity.createIndex({ jobId: 1, timestamp: 1 }),
+    settings.createIndex({ key: 1 }, { unique: true })
   ]);
   log.info("mongo indexes verified");
 }

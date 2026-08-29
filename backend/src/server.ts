@@ -15,6 +15,7 @@ dns.setDefaultResultOrder("ipv4first");
 import { log } from "./utils/logger";
 import { ensureIndexes } from "./db/mongo";
 import { authRoutes } from "./auth/auth.routes";
+import { adminRoutes } from "./auth/admin.routes";
 import { jobsRoutes } from "./jobs/jobs.routes";
 import { syncTodayBookings } from "./jobs/booking.service";
 
@@ -25,6 +26,7 @@ app.use(cookieParser());
 app.get("/healthz", (_req, res) => res.status(200).json({ ok: true }));
 
 app.use("/api/auth", authRoutes());
+app.use("/api/admin", adminRoutes());
 app.use("/api/jobs", jobsRoutes());
 
 // Serve the built PWA frontend (web/dist), if present. This whole domain IS the app --

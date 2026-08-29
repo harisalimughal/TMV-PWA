@@ -4,7 +4,10 @@ Mobile-first installable PWA for drivers, live at `chat.themanvan.co.uk`. Separa
 project from `TMV-Chat-bot` (which keeps running unchanged as the admin dashboard +
 existing Google Chat bot). This is a from-scratch REST API + React UI porting that
 project's job-workflow logic (same states, same business rules) to a driver-facing app
-instead of Chat cards -- with its own datastore, not Sheets.
+instead of Chat cards -- with its own datastore, not Sheets. Google Sheets and Drive
+were fully removed from this project (Aug 2026) -- everything below is MongoDB-backed,
+including a self-contained `/admin` UI for the driver roster and settings that used to
+live on TMV-Chat-bot's dashboard.
 
 ## Architecture
 
@@ -13,9 +16,11 @@ instead of Chat cards -- with its own datastore, not Sheets.
   sync (`jobs/booking.service.ts`, run on an interval by `server.ts` and throttled
   on-demand by `jobs.service.ts`) parses Calendar events into Mongo the same way it
   used to write Sheets rows.
-- **Driver roster** (initials, phone, van registration, active flag): stays in the
-  Sheets "Drivers" tab, admin-managed via TMV-Chat-bot's Add/Edit Driver flow
-  (`google/sheets.ts` here is read-only, trimmed to just that lookup + Settings, below).
+- **Driver roster** (initials, phone, van registration, role, active flag): MongoDB's
+  `driver_accounts` collection (`db/mongo.ts`, `auth/driver-account.service.ts`) --
+  the same collection that already held login credentials, now extended with profile
+  fields. Admin-managed via this app's own `/admin` Drivers screen
+  (`auth/admin.routes.ts`, `web/src/screens/admin/`), not TMV-Chat-bot's dashboard.
 - **Evidence photos** (arrival/loaded/empty-van, scenario-form photos, signatures):
   Cloudinary (`storage/cloudinary.ts`), not Google Drive. Upload is synchronous -- the
   camera upload posts real bytes directly, so there's no Chat-attachment-relay step
@@ -23,14 +28,15 @@ instead of Chat cards -- with its own datastore, not Sheets.
   design). Live-verified end to end with real credentials.
 - **Driver auth**: MongoDB (`auth/*.ts`) -- password login, forgot/reset password
   (email via Gmail, same domain-wide-delegation setup as TMV-Chat-bot), and the
-  password-setup-link flow from TMV-Chat-bot's admin dashboard.
+  password-setup-link flow (signed link, verified against `driver_accounts`).
 - **Customer emails** (job completion, review request, password reset): Gmail
   (`google/gmail.ts`, unchanged).
-- **Admin-editable settings** (email templates, crew rates, the signature-step
-  confirmation text): read from the *same* Sheets "Settings" tab TMV-Chat-bot's admin
-  dashboard already edits (`dashboard/server/routes/settings.route.ts` there) -- an
-  ops change on that existing dashboard takes effect here too, with no new admin UI
-  needed. `config/env.ts`'s values are only the fallback if a Settings row is unset.
+- **Admin** (`/admin` -- password-protected, separate session/cookie from driver
+  logins, see `auth/admin-session.ts`): driver roster CRUD and a settings screen
+  (email templates, crew/packing/overtime rates, the signature-step confirmation
+  text) backed by a generic Mongo key/value store (`db/settings.repo.ts`, keys listed
+  in `admin/settings-spec.ts`). `config/env.ts`'s values are only the fallback until
+  an override is saved.
 - **Scenario forms** (Check In, Check Out, Parking Liability, Liability Report):
   ported from TMV-Chat-bot's `chat/scenario.engine.ts` -- same fields, legal notices,
   and signature text (`workflow/scenario.spec.ts` / `web/src/scenarioSpec.ts`, kept in
@@ -62,10 +68,10 @@ cd backend && npm install && npm run dev   # listens on PORT (see .env)
 cd web && npm install && npm run dev       # :3001, proxies /api and /healthz to :8090
 ```
 
-Backend `.env` needs: `MONGODB_URI`, `GOOGLE_SHEETS_SPREADSHEET_ID` +
-service-account credentials (Drivers/Settings-tab lookup + Calendar + Gmail),
+Backend `.env` needs: `MONGODB_URI`, service-account credentials (Calendar + Gmail),
 `GOOGLE_CALENDAR_ID`, `DRIVER_SETUP_LINK_SECRET` (must match TMV-Chat-bot's value
-exactly), `TMV_SIGNATURE_LINK_SECRET`, `CLOUDINARY_URL`. See `config/env.ts` for the
+exactly, if that project's setup-link flow is still used), `TMV_SIGNATURE_LINK_SECRET`,
+`TMV_ADMIN_PASSWORD` (`/admin` login), `CLOUDINARY_URL`. See `config/env.ts` for the
 full list and defaults.
 
 ## Deployment

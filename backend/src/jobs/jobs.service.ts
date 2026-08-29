@@ -1,6 +1,6 @@
 import { DateTime } from "luxon";
 import { env } from "../config/env";
-import { getDriver } from "../google/sheets";
+import { getDriverProfile } from "../auth/driver-account.service";
 import { getJob, listJobs, upsertJob } from "../db/jobs.repo";
 import { appendActivity } from "../db/activity.repo";
 import { WorkflowState } from "../workflow/workflow.states";
@@ -14,13 +14,13 @@ export function driverIdentifier(email?: string, chatUserName?: string): string 
   return email?.trim() || chatUserName?.trim() || "";
 }
 
-/** Driver PROFILE (initials, phone, van registration, role, active flag) stays in the
- * Sheets Drivers tab -- that roster is admin-managed via TMV-Chat-bot's Add/Edit Driver
- * flow, which is unchanged. Only job/booking/evidence data moved to Mongo. */
+/** Driver PROFILE (initials, phone, van registration, role, active flag) lives in the
+ * driver_accounts Mongo collection -- admin-managed via tmv-pwa's own /admin Drivers
+ * screen (see auth/admin.routes.ts). */
 export async function resolveDriver(identifier: string): Promise<DriverProfile> {
   if (!identifier) throw new Error("No driver identity was provided.");
-  const profile = await getDriver(identifier);
-  if (!profile) throw new Error(`Driver is not registered in the Drivers sheet: ${identifier}`);
+  const profile = await getDriverProfile(identifier);
+  if (!profile) throw new Error(`Driver is not registered: ${identifier}`);
   if (!profile.active) throw new Error("This driver account is inactive.");
   return profile;
 }

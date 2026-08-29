@@ -6,6 +6,7 @@ import { ForgotPasswordScreen } from "./screens/ForgotPasswordScreen";
 import { ResetPasswordScreen } from "./screens/ResetPasswordScreen";
 import { JobListScreen } from "./screens/JobListScreen";
 import { JobWorkflowScreen } from "./screens/JobWorkflowScreen";
+import { AdminApp } from "./screens/admin/AdminApp";
 
 type View =
   | { name: "checking" }
@@ -28,7 +29,13 @@ function resetTokenFromUrl(): string | null {
 export function App() {
   const [view, setView] = useState<View>({ name: "checking" });
 
+  // /admin is a whole separate app (its own login, its own session cookie) -- bail out
+  // before ever touching the driver session check below, same reasoning as
+  // /reset-password's early return.
+  const isAdmin = window.location.pathname === "/admin";
+
   useEffect(() => {
+    if (isAdmin) return;
     const resetToken = resetTokenFromUrl();
     if (resetToken) {
       setView({ name: "reset-password", token: resetToken });
@@ -38,6 +45,10 @@ export function App() {
       .then(driver => setView(driver ? { name: "jobs", driver } : { name: "login" }))
       .catch(() => setView({ name: "login" }));
   }, []);
+
+  if (isAdmin) {
+    return <AdminApp />;
+  }
 
   if (view.name === "checking") {
     // h-screen-safe (dvh, not vh) + safe-area padding: this shell is the one place

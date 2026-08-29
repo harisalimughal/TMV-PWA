@@ -34,13 +34,11 @@ function boolEnv(name: string, fallback: boolean): boolean {
 export const env = {
   nodeEnv: process.env.NODE_ENV ?? "development",
   port: numberEnv("PORT", 8080),
-  /** Driver accounts (credentials, sessions) only -- jobs/bookings/evidence stay in
-   * Sheets. Required at startup; there's no meaningful fallback for "no database". */
+  /** Everything -- driver accounts, jobs/bookings/evidence, settings -- lives here.
+   * Required at startup; there's no meaningful fallback for "no database". */
   mongoUri: required("MONGODB_URI"),
   mongoDbName: process.env.MONGODB_DB_NAME?.trim() || "tmv_pwa",
-  spreadsheetId: required("GOOGLE_SHEETS_SPREADSHEET_ID"),
   calendarId: process.env.GOOGLE_CALENDAR_ID?.trim() || "primary",
-  driveRootFolderId: required("GOOGLE_DRIVE_ROOT_FOLDER_ID"),
   serviceAccountEmail: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL?.trim() || "",
   serviceAccountPrivateKey: (process.env.GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY || "").replace(/\\n/g, "\n"),
   impersonatedUser: process.env.GOOGLE_WORKSPACE_IMPERSONATED_USER?.trim() || "",
@@ -55,10 +53,8 @@ export const env = {
   bootstrapOnStart: boolEnv("BOOTSTRAP_ON_START", true),
   syncSecret: process.env.SYNC_SECRET?.trim() || "",
 
-  // Caching / throttling. All are safe to lower to 0 to disable.
+  // Caching / throttling. Safe to lower to 0 to disable.
   calendarSyncTtlMs: numberEnv("TMV_CALENDAR_SYNC_TTL_MS", 120_000),
-  sheetCacheTtlMs: numberEnv("TMV_SHEET_CACHE_TTL_MS", 10_000),
-  driverCacheTtlMs: numberEnv("TMV_DRIVER_CACHE_TTL_MS", 300_000),
 
   // Hard ceilings so a slow Google call can never hold a driver on a spinner.
   mediaDownloadTimeoutMs: numberEnv("TMV_MEDIA_DOWNLOAD_TIMEOUT_MS", 15_000),
@@ -128,6 +124,14 @@ export const env = {
   driverSetupLinkSecret: process.env.DRIVER_SETUP_LINK_SECRET?.trim() || "",
 
   /**
+   * Shared password for tmv-pwa's own /admin screens (driver roster + settings --
+   * see auth/admin.routes.ts). A single, unhashed, ops-known password is intentional
+   * here: there's one admin, not a multi-user system with its own accounts. Blank
+   * means every /admin request is refused with "not configured", not "always allow".
+   */
+  adminPassword: process.env.TMV_ADMIN_PASSWORD?.trim() || "",
+
+  /**
    * Evidence photos (arrival/loaded/empty-van/signature) upload here instead of Google
    * Drive. Standard Cloudinary SDK auto-config format: cloudinary://<key>:<secret>@<cloud>.
    * Blank until the client provides it -- storage/cloudinary.ts only throws when an
@@ -138,10 +142,10 @@ export const env = {
   cloudinaryUrl: process.env.CLOUDINARY_URL?.trim() || "",
 
   /**
-   * Crew hourly/overtime rates. In TMV-Chat-bot these are admin-editable via the /ops
-   * Settings tab (backed by a Sheets row, see google/sheets.ts's getSetting()); tmv-pwa
-   * has no such admin surface, so they're plain env config here instead, with the same
-   * fallback values workflow.engine.ts always used when no Settings row existed.
+   * Crew hourly/overtime rate fallbacks -- overridable per-key from the /admin
+   * Settings screen (see db/settings.repo.ts, admin/settings-spec.ts) without a
+   * redeploy. These env values are only what workflow.engine.ts falls back to when no
+   * override has been saved.
    */
   crewRate1Man: numberEnv("TMV_CREW_RATE_1_MAN", 45),
   crewRate2Man: numberEnv("TMV_CREW_RATE_2_MAN", 55),
@@ -158,8 +162,6 @@ export const env = {
 };
 
 export const SCOPES = {
-  SHEETS: ["https://www.googleapis.com/auth/spreadsheets"],
-  DRIVE: ["https://www.googleapis.com/auth/drive"],
   // Read-write: needed if this app ever writes Calendar events directly. Requires the
   // service account to have edit (not just view) access on the calendar.
   CALENDAR: ["https://www.googleapis.com/auth/calendar"],
@@ -231,8 +233,6 @@ export function createGoogleAuth(scopes: readonly string[], options: AuthOptions
  */
 export async function warmupAuth(): Promise<void> {
   const sets: Array<{ scopes: readonly string[]; options?: AuthOptions }> = [
-    { scopes: SCOPES.SHEETS },
-    { scopes: SCOPES.DRIVE },
     { scopes: SCOPES.CALENDAR }
   ];
   if (env.queueDriver === "cloud-tasks") sets.push({ scopes: SCOPES.CLOUD_TASKS });

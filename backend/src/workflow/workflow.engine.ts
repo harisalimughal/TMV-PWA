@@ -2,7 +2,7 @@ import { env } from "../config/env";
 import { getJob } from "../db/jobs.repo";
 import { readEvidenceSummary } from "../db/evidence.repo";
 import { appendActivity } from "../db/activity.repo";
-import { getSetting } from "../google/sheets";
+import { getSetting } from "../db/settings.repo";
 import { EvidenceType, ExtraChargeType, Job } from "../jobs/job.types";
 import { uploadEvidence } from "../jobs/evidence.service";
 import { completeJob, getJobForDriver, getNextJobForDriver, saveJob, startJob } from "../jobs/jobs.service";
@@ -16,12 +16,11 @@ import { equalPence, formatPounds, fromPounds } from "../utils/money";
 import { sendJobCompletionEmail, sendReviewRequestEmail } from "../google/gmail";
 import { JOB_COMPLETION_EMAIL_TEMPLATE, REVIEW_REQUEST_EMAIL_TEMPLATE } from "../notifications/message";
 
-const DEFAULT_CUSTOMER_CONFIRMATION_TEXT =
+export const DEFAULT_CUSTOMER_CONFIRMATION_TEXT =
   "By signing below, you confirm that you have inspected the van, that it is empty, that all items have been delivered, and that no items have been left behind. You also confirm that the removal service has been completed to your satisfaction.";
 
-/** Same Settings-sheet key TMV-Chat-bot's admin dashboard already edits
- * ("Customer Confirmation Text") -- an ops-side wording change there takes effect
- * here too, no separate tmv-pwa admin surface needed. */
+/** Admin-editable via the /admin Settings screen (see admin/settings-spec.ts) --
+ * falls back to the default above until overridden. */
 export async function getConfirmationText(): Promise<string> {
   return getSetting("CUSTOMER_CONFIRMATION_TEXT", DEFAULT_CUSTOMER_CONFIRMATION_TEXT);
 }
@@ -109,10 +108,10 @@ export async function getActiveJob(identifier: string) {
   return { job, driver };
 }
 
-/** Fire-and-forget, same as the original -- a slow/failed customer email must never
- * hold up (or fail) the driver's completion action. Fetches the live template from
- * the Settings sheet (same key TMV-Chat-bot's dashboard edits) each time rather than
- * caching it, so an ops edit takes effect on the very next completion. */
+/** Fire-and-forget -- a slow/failed customer email must never hold up (or fail) the
+ * driver's completion action. Fetches the live template from Mongo each time rather
+ * than caching it, so an /admin Settings edit takes effect on the very next
+ * completion. */
 function sendCompletionEmailIfAny(job: Job, jobId: string): void {
   if (!job.customerEmail) return;
   getSetting("JOB_COMPLETION_EMAIL_TEXT", JOB_COMPLETION_EMAIL_TEMPLATE)
@@ -188,9 +187,8 @@ export async function handleAction(
 
       job.overtimeMinutes = reconciledMinutes;
 
-      // Same Settings-sheet keys the original Chat-bot workflow read (see
-      // TMV-Chat-bot's workflow.engine.ts) -- ops can override any of these from a
-      // Settings row without a redeploy; env.ts's values are only the fallback.
+      // Same keys the /admin Settings screen edits -- ops can override any of these
+      // without a redeploy; env.ts's values are only the fallback.
       const otGraceStr = await getSetting("OVERTIME_GRACE_MINS", String(env.overtimeGraceMinutes));
       const otGrace = parseInt(otGraceStr, 10) || 0;
 
