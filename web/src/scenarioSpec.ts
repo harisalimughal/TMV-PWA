@@ -5,7 +5,7 @@
  */
 
 export type ScenarioKey = "checkin" | "checkout" | "parking" | "liability";
-export type ScenarioFieldType = "text" | "tel" | "email" | "date" | "yesno" | "select";
+export type ScenarioFieldType = "text" | "tel" | "email" | "date" | "yesno" | "select" | "multiselect";
 
 export interface ScenarioFieldSpec {
   name: string;
@@ -14,6 +14,10 @@ export interface ScenarioFieldSpec {
   required: boolean;
   options?: string[];
 }
+
+/** multiselect fields store their choices as a single " | "-joined string (same
+ * convention TMV-Chat-bot's original chat/scenario.engine.ts used), not an array. */
+export const MULTISELECT_DELIMITER = " | ";
 
 export interface ScenarioSpec {
   key: ScenarioKey;
@@ -122,7 +126,7 @@ export const SCENARIOS: Record<ScenarioKey, ScenarioSpec> = {
     key: "liability",
     title: "Liability Report",
     fields: [
-      { name: "damage_categories", label: "Damage Liability & Assembly Risk Notice", type: "select", required: true, options: DAMAGE_CATEGORIES }
+      { name: "damage_categories", label: "Damage Liability & Assembly Risk Notice", type: "multiselect", required: true, options: DAMAGE_CATEGORIES }
     ],
     conditionalNotice: {
       field: "damage_categories", whenValue: "Van Overloaded",

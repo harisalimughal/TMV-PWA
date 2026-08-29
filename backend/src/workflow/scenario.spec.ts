@@ -10,17 +10,23 @@
  */
 
 export type ScenarioKey = "checkin" | "checkout" | "parking" | "liability";
-export type ScenarioFieldType = "text" | "tel" | "email" | "date" | "yesno" | "select";
+export type ScenarioFieldType = "text" | "tel" | "email" | "date" | "yesno" | "select" | "multiselect";
 
 export interface ScenarioFieldSpec {
   name: string;
   label: string;
   type: ScenarioFieldType;
   required: boolean;
-  /** select only. */
+  /** select/multiselect only. */
   options?: string[];
   placeholder?: string;
 }
+
+/** multiselect fields store their choices as a single " | "-joined string (same
+ * convention TMV-Chat-bot's original chat/scenario.engine.ts used), not an array --
+ * keeps every scenario field a plain string in Mongo/the API, no schema split between
+ * single- and multi-value fields. */
+export const MULTISELECT_DELIMITER = " | ";
 
 export interface ScenarioSpec {
   key: ScenarioKey;
@@ -139,7 +145,7 @@ export const SCENARIOS: Record<ScenarioKey, ScenarioSpec> = {
     title: "Liability Report",
     fields: [
       {
-        name: "damage_categories", label: "Damage Liability & Assembly Risk Notice", type: "select",
+        name: "damage_categories", label: "Damage Liability & Assembly Risk Notice", type: "multiselect",
         required: true, options: DAMAGE_CATEGORIES
       }
     ],

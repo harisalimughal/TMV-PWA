@@ -1,7 +1,7 @@
 import React, { useRef, useState } from "react";
 import { AlertCircle, AlertTriangle, ArrowLeft, Loader2 } from "lucide-react";
 import { submitScenario } from "../api/jobs";
-import { SCENARIOS, type ScenarioKey } from "../scenarioSpec";
+import { SCENARIOS, MULTISELECT_DELIMITER, type ScenarioKey } from "../scenarioSpec";
 import { PhotoPicker } from "../components/PhotoPicker";
 import { SignaturePad, type SignaturePadHandle } from "../components/SignaturePad";
 
@@ -44,8 +44,11 @@ export function ScenarioFormScreen({ jobId, scenario, onDone, onCancel }: Scenar
     }
   }
 
+  // The triggering field (damage_categories) is multiselect -- "matches" means the
+  // chosen value is one of possibly several selections, not that it's the only one.
   const conditionalNoticeVisible =
-    spec.conditionalNotice && fields[spec.conditionalNotice.field] === spec.conditionalNotice.whenValue;
+    spec.conditionalNotice &&
+    (fields[spec.conditionalNotice.field] ?? "").split(MULTISELECT_DELIMITER).includes(spec.conditionalNotice.whenValue);
 
   return (
     <div className="h-screen-safe flex flex-col bg-[#0A1A2F] text-white pt-safe pb-safe pl-safe pr-safe">
@@ -142,6 +145,40 @@ function FieldInput({
             No
           </button>
         </div>
+      </div>
+    );
+  }
+
+  if (field.type === "multiselect") {
+    const selected = value ? value.split(MULTISELECT_DELIMITER) : [];
+    function toggle(option: string) {
+      const next = selected.includes(option) ? selected.filter(v => v !== option) : [...selected, option];
+      onChange(next.join(MULTISELECT_DELIMITER));
+    }
+    return (
+      <div className="flex flex-col gap-1.5">
+        <span className="text-xs font-medium text-white/60 pl-1">{field.label}</span>
+        <div className="flex flex-col gap-1.5 max-h-72 overflow-y-auto rounded-xl border border-white/10 bg-white/5 p-2">
+          {field.options?.map(option => (
+            <label
+              key={option}
+              className={`flex items-center gap-2.5 rounded-lg px-2.5 py-2 cursor-pointer transition-colors ${
+                selected.includes(option) ? "bg-brand/15" : "hover:bg-white/5"
+              }`}
+            >
+              <input
+                type="checkbox"
+                checked={selected.includes(option)}
+                onChange={() => toggle(option)}
+                className="w-4 h-4 shrink-0 accent-[#1B75BC]"
+              />
+              <span className="text-sm">{option}</span>
+            </label>
+          ))}
+        </div>
+        {selected.length > 0 && (
+          <span className="text-xs text-white/40 pl-1">{selected.length} selected</span>
+        )}
       </div>
     );
   }
