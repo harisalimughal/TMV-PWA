@@ -13,7 +13,10 @@
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="TMV Driver" />
-    <link rel="apple-touch-icon" href="/icons/icon-192.png" />
+    <!-- 512, not 192 -- iOS scales this down itself (recommended source is 180x180
+         minimum), and starting from the larger source looks marginally sharper on
+         modern Retina iPhones than upscaling risk from the smaller one. -->
+    <link rel="apple-touch-icon" href="/icons/icon-512.png" />
 
     <title>TMV Driver</title>
   </head>
