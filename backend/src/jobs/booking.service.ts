@@ -4,6 +4,7 @@ import { DateTime } from "luxon";
 import { env } from "../config/env";
 import { listCalendarEvents } from "../google/calendar";
 import { listJobs, upsertJob } from "../db/jobs.repo";
+import { recordException } from "../db/exceptions.repo";
 import { Job, JobStatus, ParsedCalendarBooking } from "./job.types";
 import { WorkflowState } from "../workflow/workflow.states";
 import { log } from "../utils/logger";
@@ -176,7 +177,7 @@ export async function syncBookingsForDate(date = DateTime.now().setZone(env.time
     if (event.status === "cancelled") {
       const existing = event.id ? existingByEvent.get(event.id) : undefined;
       if (existing) {
-        const reconciled = reconcileDisappeared(existing, "cancelled in Calendar");
+        const reconciled = await reconcileDisappeared(existing, "cancelled in Calendar");
         if (reconciled) writes.push(reconciled);
       }
       continue;
@@ -199,7 +200,7 @@ export async function syncBookingsForDate(date = DateTime.now().setZone(env.time
     if (seenEventIds.has(existing.calendarEventId)) continue;
     if (!existing.bookedStart.startsWith(dateKey)) continue;
     if (existing.status === JobStatus.COMPLETED || existing.status === JobStatus.CANCELLED) continue;
-    const reconciled = reconcileDisappeared(existing, "no longer present in Calendar for this date");
+    const reconciled = await reconcileDisappeared(existing, "no longer present in Calendar for this date");
     if (reconciled) writes.push(reconciled);
   }
 
@@ -208,14 +209,20 @@ export async function syncBookingsForDate(date = DateTime.now().setZone(env.time
   return synced;
 }
 
-function reconcileDisappeared(existing: Job, reason: string): Job | null {
+async function reconcileDisappeared(existing: Job, reason: string): Promise<Job | null> {
   if (existing.actualStart) {
-    // No exceptions collection in tmv-pwa (no admin surface reads one) -- logged loudly
-    // instead so it's visible in the container's logs; TMV-Chat-bot's own Sheets-based
-    // exception tracking is unaffected since this is a separate copy of the job data.
     log.error("started job disappeared from Calendar; needs a human decision", {
       job_id: existing.jobId, reason, status: existing.status
     });
+    // Surfaced on the admin dashboard's Exceptions page (TMV-Chat-bot reads this same
+    // Mongo collection) -- previously only logged, invisible to ops unless someone
+    // happened to grep the container logs.
+    await recordException({
+      jobId: existing.jobId,
+      type: "STARTED_JOB_BOOKING_DISAPPEARED",
+      detail: `${reason}. The job is ${existing.status} and was not auto-cancelled. Needs a human decision.`,
+      timestamp: new Date().toISOString()
+    }).catch(err => log.warn("failed to record exception", { job_id: existing.jobId, error: String(err) }));
     return null;
   }
 

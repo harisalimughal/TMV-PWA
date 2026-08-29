@@ -203,6 +203,7 @@ export function JobWorkflowScreen({ jobId, onBack }: JobWorkflowScreenProps) {
       {signatureModalOpen && (
         <Modal title="Customer sign-off" onClose={() => setSignatureModalOpen(false)}>
           <SignatureForm
+            customerName={job.customerName}
             confirmationText={confirmationText}
             busy={busy}
             onSubmit={async (name, blob) => {
@@ -506,36 +507,27 @@ function PaymentForm({ busy, onSubmit }: { busy: boolean; onSubmit: (method: str
 }
 
 function SignatureForm({
-  confirmationText, busy, onSubmit
-}: { confirmationText: string; busy: boolean; onSubmit: (customerName: string, blob: Blob) => void }) {
-  const [customerName, setCustomerName] = useState("");
+  customerName, confirmationText, busy, onSubmit
+}: { customerName: string; confirmationText: string; busy: boolean; onSubmit: (customerName: string, blob: Blob) => void }) {
   const [hasSignature, setHasSignature] = useState(false);
   const padRef = useRef<SignaturePadHandle>(null);
 
   async function handleSubmit() {
     const blob = await padRef.current?.toBlob();
     if (!blob) return;
+    // The customer's name is already known from the booking -- no need to ask the
+    // driver to retype it here.
     onSubmit(customerName, blob);
   }
 
   return (
     <div className="flex flex-col gap-4">
       <p className="text-xs text-white/50 leading-relaxed">{confirmationText}</p>
-      <label className="flex flex-col gap-1.5">
-        <span className="text-xs font-medium text-white/60 pl-1">Customer name</span>
-        <input
-          type="text"
-          value={customerName}
-          onChange={e => setCustomerName(e.target.value)}
-          placeholder="Full name"
-          className="w-full rounded-xl bg-white/5 border border-white/10 px-4 py-3 text-sm placeholder:text-white/30 focus:outline-none focus:border-brand"
-        />
-      </label>
       <SignaturePad ref={padRef} onChange={setHasSignature} />
       <PrimaryButton
         busy={busy}
         onClick={() => {
-          if (!customerName.trim() || !hasSignature) return;
+          if (!hasSignature) return;
           handleSubmit();
         }}
       >
