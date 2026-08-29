@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Eye, EyeOff, Loader2, Lock, Truck } from "lucide-react";
+import { Eye, EyeOff, Loader2, Lock } from "lucide-react";
 import { resetPassword, type DriverProfile } from "../api/auth";
 
 interface ResetPasswordScreenProps {
@@ -47,8 +47,8 @@ export function ResetPasswordScreen({ token, onDone }: ResetPasswordScreenProps)
       <div className="flex-1 flex flex-col justify-center px-6">
         <div className="w-full max-w-sm mx-auto">
           <div className="flex flex-col items-center gap-3 mb-8">
-            <div className="w-16 h-16 rounded-2xl bg-brand/20 flex items-center justify-center">
-              <Truck className="w-8 h-8 text-brand" />
+            <div className="w-20 h-20 rounded-2xl bg-white p-2 shadow-lg flex items-center justify-center">
+              <img src="/tmv-logo.png" alt="The Man Van" className="w-full h-full object-contain" />
             </div>
             <h1 className="text-xl font-bold">Set a new password</h1>
             <p className="text-sm text-white/50 text-center">Choose a new password for your driver account.</p>

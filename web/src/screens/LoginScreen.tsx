@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Eye, EyeOff, Loader2, Lock, Mail, Truck } from "lucide-react";
+import { Eye, EyeOff, Loader2, Lock, Mail } from "lucide-react";
 import { login, type ApiError, type DriverProfile } from "../api/auth";
 
 interface LoginScreenProps {
@@ -41,10 +41,13 @@ export function LoginScreen({ onLoggedIn, onForgotPassword }: LoginScreenProps) 
       <div className="flex-1 flex flex-col justify-center px-6">
         <div className="w-full max-w-sm mx-auto">
           <div className="flex flex-col items-center gap-3 mb-10">
-            <div className="w-16 h-16 rounded-2xl bg-brand/20 flex items-center justify-center">
-              <Truck className="w-8 h-8 text-brand" />
+            {/* White card behind the logo -- the source PNG has a white/light
+                background, not transparent, so it needs a light backdrop to sit
+                cleanly on this screen's dark navy background (same treatment the
+                admin dashboard's Layout.tsx uses for the same asset). */}
+            <div className="w-24 h-24 rounded-2xl bg-white p-2.5 shadow-lg flex items-center justify-center">
+              <img src="/tmv-logo.png" alt="The Man Van" className="w-full h-full object-contain" />
             </div>
-            <h1 className="text-xl font-bold">TMV Driver</h1>
             <p className="text-sm text-white/50">Sign in to see your jobs</p>
           </div>
 
