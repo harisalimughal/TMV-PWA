@@ -34,7 +34,17 @@ export function App() {
   // /reset-password's early return. Trailing slash tolerated -- a bare "/admin"
   // exact-match missed "/admin/" (what a browser address bar normalises typed/pasted
   // URLs to), silently falling through to the ordinary driver login flow instead.
-  const isAdmin = window.location.pathname === "/admin" || window.location.pathname === "/admin/";
+  //
+  // Gated on hostname too: this same server/bundle answers both chat.themanvan.co.uk
+  // (nginx -> this container's driver-app port) and dashboard.themanvan.co.uk (nginx
+  // -> this same container, repointed off the old TMV-Chat-bot dashboard) -- /admin is
+  // deliberately only reachable on the dashboard domain, matching where ops already
+  // expect the admin panel to live.
+  const path = window.location.pathname;
+  const hostname = window.location.hostname;
+  const isAdmin =
+    (path === "/admin" || path === "/admin/") &&
+    (hostname === "dashboard.themanvan.co.uk" || hostname === "localhost");
 
   useEffect(() => {
     if (isAdmin) return;
