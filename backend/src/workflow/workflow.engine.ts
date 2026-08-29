@@ -8,7 +8,7 @@ import { uploadEvidence } from "../jobs/evidence.service";
 import { completeJob, getJobForDriver, getNextJobForDriver, saveJob, startJob } from "../jobs/jobs.service";
 import { WorkflowState, nextAfterPhoto, PHOTO_STATES } from "./workflow.states";
 import {
-  assertState, validateCurrency,
+  assertState, validateCrewSize, validateCurrency,
   validateExtraCharges, validateMinutes, validatePaymentMethod, ValidationError
 } from "./validation.engine";
 import { log, setContext } from "../utils/logger";
@@ -187,6 +187,14 @@ export async function handleAction(
 
       job.overtimeMinutes = reconciledMinutes;
 
+      // Crew size for the overtime period, as picked by the driver -- may differ from
+      // the job's booked crewSize (a helper joined partway through, or left early), so
+      // it's asked explicitly rather than assumed from the booking. Falls back to the
+      // booked crew size if the client didn't send one (older cached frontend build).
+      const overtimeCrewSize = input.overtime_crew_size?.[0]
+        ? validateCrewSize(input.overtime_crew_size[0])
+        : job.crewSize;
+
       // Same keys the /admin Settings screen edits -- ops can override any of these
       // without a redeploy; env.ts's values are only the fallback.
       const otGraceStr = await getSetting("OVERTIME_GRACE_MINS", String(env.overtimeGraceMinutes));
@@ -194,10 +202,10 @@ export async function handleAction(
 
       let rateKey = "CREW_RATE_2_MAN";
       let rateFallback = env.crewRate2Man;
-      if (job.crewSize === 1) {
+      if (overtimeCrewSize === 1) {
         rateKey = "CREW_RATE_1_MAN";
         rateFallback = env.crewRate1Man;
-      } else if (job.crewSize === 3) {
+      } else if (overtimeCrewSize === 3) {
         rateKey = "CREW_RATE_3_MAN";
         rateFallback = env.crewRate3Man;
       }
@@ -208,8 +216,15 @@ export async function handleAction(
         : await getSetting(rateKey, String(rateFallback));
       const defaultRate = parseFloat(defaultRateStr) || rateFallback;
 
+      // Bug fixed here: this used to fall back to the flat env.overtimeRatePer30Minutes
+      // (£55) whenever OVERTIME_RATE_PER_30 wasn't explicitly set, which -- since that
+      // env default is always truthy -- meant the crew/packing-based defaultRate below
+      // was silently never used. Matches TMV-Chat-bot's original logic: an explicit
+      // OVERTIME_RATE_PER_30 setting is a real override; otherwise always use the
+      // crew-size (or packing) rate, exactly as documented in admin/settings-spec.ts's
+      // hint for this key.
       const otRateStr = await getSetting("OVERTIME_RATE_PER_30", "");
-      const otRate = otRateStr ? (parseFloat(otRateStr) || defaultRate) : (env.overtimeRatePer30Minutes || defaultRate);
+      const otRate = otRateStr ? (parseFloat(otRateStr) || defaultRate) : defaultRate;
 
       const unitStr = isPackingService
         ? await getSetting("PACKING_BILLING_UNIT", env.packingBillingUnit)
@@ -221,7 +236,8 @@ export async function handleAction(
 
       const from = job.currentState;
       job.currentState = WorkflowState.WAITING_TOTAL_CHARGES;
-      return saveJob(job, driver, action, from, `${reconciledMinutes} minutes / ${formatPounds(job.overtimeCharge)}`);
+      const crewLabel = isPackingService ? "packing rate" : `${overtimeCrewSize}-man rate`;
+      return saveJob(job, driver, action, from, `${reconciledMinutes} minutes @ ${crewLabel} / ${formatPounds(job.overtimeCharge)}`);
     }
 
     case "SUBMIT_TOTAL_CHARGES": {

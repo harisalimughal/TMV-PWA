@@ -24,6 +24,20 @@ const EXTRA_CHARGE_OPTIONS = [
 
 const PAYMENT_METHODS = ["Card", "Cash", "Bank Transfer", "Link", "Invoice"];
 
+const CREW_SIZE_OPTIONS: Array<{ value: "1" | "2" | "3"; label: string }> = [
+  { value: "1", label: "1 man" },
+  { value: "2", label: "2 men" },
+  { value: "3", label: "3 men" }
+];
+
+/** Pre-selects the job's booked crew size, but the driver can change it -- the crew
+ * actually working the overtime period can differ from what was booked. */
+function defaultOvertimeCrewSize(job: Job): "1" | "2" | "3" {
+  if (job.crewSize === 1) return "1";
+  if (job.crewSize === 3) return "3";
+  return "2";
+}
+
 const BACK_ELIGIBLE = new Set([
   "WAITING_EXTRA_CHARGES", "WAITING_OVERTIME", "WAITING_TOTAL_CHARGES", "WAITING_PAYMENT"
 ]);
@@ -291,7 +305,15 @@ function StepBody({
       return <ExtraChargesForm busy={busy} onSubmit={values => onAction("SUBMIT_EXTRA_CHARGES", { extra_charges: values })} />;
 
     case "WAITING_OVERTIME":
-      return <OvertimeForm busy={busy} onSubmit={minutes => onAction("SUBMIT_OVERTIME", { overtime_minutes: [minutes] })} />;
+      return (
+        <OvertimeForm
+          job={job}
+          busy={busy}
+          onSubmit={(minutes, crewSize) =>
+            onAction("SUBMIT_OVERTIME", { overtime_minutes: [minutes], overtime_crew_size: [crewSize] })
+          }
+        />
+      );
 
     case "WAITING_TOTAL_CHARGES":
       return (
@@ -428,8 +450,11 @@ function ExtraChargesForm({ busy, onSubmit }: { busy: boolean; onSubmit: (values
   );
 }
 
-function OvertimeForm({ busy, onSubmit }: { busy: boolean; onSubmit: (minutes: string) => void }) {
+function OvertimeForm({
+  job, busy, onSubmit
+}: { job: Job; busy: boolean; onSubmit: (minutes: string, crewSize: string) => void }) {
   const [minutes, setMinutes] = useState("");
+  const [crewSize, setCrewSize] = useState<"1" | "2" | "3">(defaultOvertimeCrewSize(job));
   return (
     <div className="flex flex-col gap-4">
       <label className="flex flex-col gap-1.5">
@@ -444,7 +469,31 @@ function OvertimeForm({ busy, onSubmit }: { busy: boolean; onSubmit: (minutes: s
           className="w-full rounded-xl bg-white/5 border border-white/10 px-4 py-3 text-sm placeholder:text-white/30 focus:outline-none focus:border-brand"
         />
       </label>
-      <PrimaryButton busy={busy} onClick={() => onSubmit(minutes)}>
+
+      <div className="flex flex-col gap-1.5">
+        <span className="text-xs font-medium text-white/60 pl-1">Crew size for this overtime</span>
+        <div className="flex flex-col gap-2">
+          {CREW_SIZE_OPTIONS.map(option => (
+            <label
+              key={option.value}
+              className={`flex items-center gap-3 rounded-xl border px-4 py-3.5 cursor-pointer transition-colors ${
+                crewSize === option.value ? "bg-brand/15 border-brand" : "bg-white/5 border-white/10"
+              }`}
+            >
+              <input
+                type="radio"
+                name="overtime_crew_size"
+                checked={crewSize === option.value}
+                onChange={() => setCrewSize(option.value)}
+                className="w-4 h-4 accent-[#1B75BC]"
+              />
+              <span className="text-sm">{option.label}</span>
+            </label>
+          ))}
+        </div>
+      </div>
+
+      <PrimaryButton busy={busy} onClick={() => onSubmit(minutes, crewSize)}>
         Continue
       </PrimaryButton>
     </div>

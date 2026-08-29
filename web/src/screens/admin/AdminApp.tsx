@@ -10,8 +10,11 @@ type Tab = "drivers" | "settings";
 /**
  * Entry point for the /admin path (see App.tsx's pathname check). Fully independent of
  * the driver login flow -- its own session cookie (tmv_admin_session), its own
- * password, mounted at /api/admin. Replaces TMV-Chat-bot's old Sheets-backed Add/Edit
- * Driver + Settings tab admin surface, which this app no longer depends on.
+ * password, mounted at /api/admin. Visually matches TMV-Chat-bot's dashboard (same
+ * admin-* color tokens, same header treatment as Layout.tsx's collapsed brand icon)
+ * so this and the eventual replacement of that dashboard look like one product, even
+ * though this one only covers Drivers + Settings and runs entirely off tmv-pwa's own
+ * Mongo backend -- no Sheets dependency, unlike the dashboard it visually matches.
  */
 export function AdminApp() {
   const [checking, setChecking] = useState(true);
@@ -38,8 +41,8 @@ export function AdminApp() {
 
   if (checking) {
     return (
-      <div className="h-screen-safe flex items-center justify-center bg-[#0A1A2F] text-white pt-safe pb-safe pl-safe pr-safe">
-        <Loader2 className="w-6 h-6 animate-spin text-white/40" />
+      <div className="min-h-screen flex items-center justify-center bg-admin-bg">
+        <Loader2 className="w-6 h-6 animate-spin text-admin-muted" />
       </div>
     );
   }
@@ -49,27 +52,35 @@ export function AdminApp() {
   }
 
   return (
-    <div className="h-screen-safe flex flex-col bg-[#0A1A2F] text-white pt-safe pb-safe pl-safe pr-safe">
-      <div className="flex items-center justify-between px-5 py-4 border-b border-white/10 shrink-0">
-        <h1 className="text-sm font-semibold">Admin</h1>
-        <button
-          onClick={handleLogout}
-          disabled={loggingOut}
-          className="flex items-center gap-1.5 text-xs text-white/50 hover:text-white/80 disabled:opacity-50 px-2 py-1.5 shrink-0"
-        >
-          <LogOut className="w-3.5 h-3.5" />
-          {loggingOut ? "Signing out…" : "Sign out"}
-        </button>
+    <div className="min-h-screen bg-admin-bg font-sans">
+      <div className="bg-white border-b border-admin-line">
+        <div className="max-w-[1440px] mx-auto px-6 py-4 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <img
+              src="/tmv-logo.png"
+              alt="TMV"
+              className="w-8 h-8 rounded-lg object-contain bg-admin-surface border border-admin-line p-0.5"
+              title="The Man Van Operations"
+            />
+            <h1 className="text-[15px] font-bold text-admin-ink">Operations</h1>
+          </div>
+          <button
+            onClick={handleLogout}
+            disabled={loggingOut}
+            className="flex items-center gap-1.5 text-[13px] font-medium text-admin-muted hover:text-admin-ink disabled:opacity-50 px-2 py-1.5 transition"
+          >
+            <LogOut className="w-3.5 h-3.5" />
+            {loggingOut ? "Signing out…" : "Sign out"}
+          </button>
+        </div>
+
+        <div className="max-w-[1440px] mx-auto px-6 flex items-center gap-6">
+          <TabButton label="Drivers" active={tab === "drivers"} onClick={() => setTab("drivers")} />
+          <TabButton label="Settings" active={tab === "settings"} onClick={() => setTab("settings")} />
+        </div>
       </div>
 
-      <div className="flex gap-1 px-4 pt-4 shrink-0">
-        <TabButton label="Drivers" active={tab === "drivers"} onClick={() => setTab("drivers")} />
-        <TabButton label="Settings" active={tab === "settings"} onClick={() => setTab("settings")} />
-      </div>
-
-      <div className="flex-1 overflow-y-auto px-4 py-5 max-w-2xl w-full mx-auto">
-        {tab === "drivers" ? <DriversTab /> : <SettingsTab />}
-      </div>
+      <div className="max-w-[1440px] mx-auto px-6 py-6">{tab === "drivers" ? <DriversTab /> : <SettingsTab />}</div>
     </div>
   );
 }
@@ -78,8 +89,8 @@ function TabButton({ label, active, onClick }: { label: string; active: boolean;
   return (
     <button
       onClick={onClick}
-      className={`px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${
-        active ? "bg-brand/15 text-brand" : "text-white/50 hover:text-white/80"
+      className={`py-3 text-[14px] font-semibold border-b-2 transition ${
+        active ? "text-admin-brand border-admin-brand" : "text-admin-muted border-transparent hover:text-admin-ink"
       }`}
     >
       {label}

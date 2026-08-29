@@ -31,8 +31,10 @@ export function App() {
 
   // /admin is a whole separate app (its own login, its own session cookie) -- bail out
   // before ever touching the driver session check below, same reasoning as
-  // /reset-password's early return.
-  const isAdmin = window.location.pathname === "/admin";
+  // /reset-password's early return. Trailing slash tolerated -- a bare "/admin"
+  // exact-match missed "/admin/" (what a browser address bar normalises typed/pasted
+  // URLs to), silently falling through to the ordinary driver login flow instead.
+  const isAdmin = window.location.pathname === "/admin" || window.location.pathname === "/admin/";
 
   useEffect(() => {
     if (isAdmin) return;

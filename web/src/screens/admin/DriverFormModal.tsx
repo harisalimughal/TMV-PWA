@@ -1,167 +1,251 @@
 import React, { useState } from "react";
-import { AlertCircle, Loader2 } from "lucide-react";
-import { Modal } from "../../components/Modal";
+import { AlertTriangle, CheckCircle2, X } from "lucide-react";
 import { saveDriver, type AdminDriver, type ApiError } from "../../api/admin";
 
-interface DriverFormModalProps {
+interface Props {
   driver: AdminDriver | null;
+  existingDrivers: AdminDriver[];
   onClose: () => void;
   onSaved: () => void;
 }
 
-/** Add/Edit Driver -- replaces TMV-Chat-bot's old Sheets-backed form. Upserts on
- * email, same as before: resubmitting the same email edits that driver. */
-export function DriverFormModal({ driver, onClose, onSaved }: DriverFormModalProps) {
+/**
+ * Ported from TMV-Chat-bot's dashboard/web/src/components/AddDriverModal.tsx -- same
+ * layout, fields, and copy. Saves through tmv-pwa's own /api/admin/drivers (Mongo),
+ * not the Sheets-backed dashboard.route.ts this was copied from.
+ */
+export function DriverFormModal({ driver, existingDrivers, onClose, onSaved }: Props) {
   const isEdit = Boolean(driver);
+  const [name, setName] = useState(driver?.fullName ?? "");
+  const [code, setCode] = useState(driver?.initials ?? "");
+  const [vehicleReg, setVehicleReg] = useState(driver?.vanRegistration ?? "");
   const [email, setEmail] = useState(driver?.email ?? "");
-  const [initials, setInitials] = useState(driver?.initials ?? "");
-  const [fullName, setFullName] = useState(driver?.fullName ?? "");
   const [phone, setPhone] = useState(driver?.phone ?? "");
-  const [vanRegistration, setVanRegistration] = useState(driver?.vanRegistration ?? "");
-  const [role, setRole] = useState(driver?.role ?? "Driver");
   const [active, setActive] = useState(driver?.active ?? true);
-  const [password, setPassword] = useState("");
-  const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [pwaPassword, setPwaPassword] = useState("");
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveError, setSaveError] = useState("");
+  const [saveWarning, setSaveWarning] = useState("");
 
-  async function handleSubmit(event: React.FormEvent) {
-    event.preventDefault();
-    if (submitting) return;
-
-    if (!email.trim() || !initials.trim() || !fullName.trim()) {
-      setError("Email, initials and full name are required.");
-      return;
+  function handleNameChange(val: string) {
+    setName(val);
+    if (!isEdit && (!code || code.length < 2)) {
+      setCode(val.substring(0, 2).toUpperCase());
     }
-    if (password && password.length < 8) {
-      setError("Password must be at least 8 characters.");
-      return;
-    }
+  }
 
-    setSubmitting(true);
-    setError(null);
+  const isCodeTaken = existingDrivers.some(
+    d => d.initials === code.toUpperCase() && (!driver || driver.initials !== code.toUpperCase())
+  );
+  const passwordTooShort = pwaPassword.length > 0 && pwaPassword.length < 8;
+
+  async function handleSubmit() {
+    setSaveError("");
+    setSaveWarning("");
+    setIsSaving(true);
     try {
       const result = await saveDriver({
-        email: email.trim(),
-        initials: initials.trim(),
-        fullName: fullName.trim(),
-        phone: phone.trim(),
-        vanRegistration: vanRegistration.trim(),
-        role: role.trim(),
+        initials: code.toUpperCase(),
+        fullName: name,
+        email,
         active,
-        password: password || undefined
+        phone,
+        vanRegistration: vehicleReg,
+        role: driver?.role ?? "Driver",
+        // Omitted (not sent empty) when blank, so editing a driver without touching
+        // this field never resets/clears their existing app password.
+        ...(pwaPassword ? { password: pwaPassword } : {})
       });
-      if (result.warning) setError(result.warning);
-      else onSaved();
+      if (result.warning) {
+        // Stay open so the warning is actually seen -- the save did succeed, this
+        // isn't a failure, but silently closing would hide that the password part
+        // didn't take.
+        setSaveWarning(result.warning);
+      } else {
+        onSaved();
+      }
     } catch (err) {
       const apiError = err as ApiError;
-      setError(apiError?.message || "Couldn't save this driver. Try again.");
+      setSaveError(apiError?.message || "Failed to save driver.");
     } finally {
-      setSubmitting(false);
+      setIsSaving(false);
     }
   }
 
   return (
-    <Modal title={isEdit ? "Edit Driver" : "Add Driver"} onClose={onClose}>
-      <form onSubmit={handleSubmit} className="flex flex-col gap-4" noValidate>
-        <Field label="Full name">
-          <input
-            value={fullName}
-            onChange={e => setFullName(e.target.value)}
-            disabled={submitting}
-            className={inputClass}
-          />
-        </Field>
-
-        <div className="grid grid-cols-2 gap-3">
-          <Field label="Initials">
-            <input
-              value={initials}
-              onChange={e => setInitials(e.target.value.toUpperCase())}
-              disabled={submitting}
-              maxLength={5}
-              className={inputClass}
-            />
-          </Field>
-          <Field label="Role">
-            <input value={role} onChange={e => setRole(e.target.value)} disabled={submitting} className={inputClass} />
-          </Field>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+      <div className="bg-white rounded-[24px] shadow-2xl w-full max-w-[500px] max-h-[90vh] flex flex-col overflow-hidden">
+        <div className="px-6 py-5 border-b border-admin-line flex items-center justify-between shrink-0">
+          <h2 className="text-[18px] font-bold text-admin-ink">{isEdit ? "Edit Driver" : "Add New Driver"}</h2>
+          <button onClick={onClose} className="p-2 -mr-2 text-admin-muted hover:text-admin-ink hover:bg-admin-surface rounded-full transition">
+            <X className="w-5 h-5" />
+          </button>
         </div>
 
-        <Field label="Email">
-          <input
-            type="email"
-            value={email}
-            onChange={e => setEmail(e.target.value)}
-            disabled={submitting || isEdit}
-            className={`${inputClass} ${isEdit ? "opacity-50" : ""}`}
-          />
-        </Field>
+        <div className="p-6 space-y-5 overflow-y-auto">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="col-span-2">
+              <label className="block text-[12px] font-semibold text-admin-muted uppercase tracking-wider mb-1.5">
+                Full Name <span className="text-admin-status-red">*</span>
+              </label>
+              <input
+                type="text"
+                value={name}
+                onChange={e => handleNameChange(e.target.value)}
+                className="w-full h-11 px-3 rounded-[12px] border border-admin-line bg-admin-surface text-[14px] text-admin-ink outline-none focus:border-admin-brand focus:bg-white transition"
+                placeholder="e.g. John Doe"
+              />
+            </div>
 
-        <div className="grid grid-cols-2 gap-3">
-          <Field label="Phone">
-            <input type="tel" value={phone} onChange={e => setPhone(e.target.value)} disabled={submitting} className={inputClass} />
-          </Field>
-          <Field label="Van registration">
-            <input
-              value={vanRegistration}
-              onChange={e => setVanRegistration(e.target.value)}
-              disabled={submitting}
-              className={inputClass}
-            />
-          </Field>
-        </div>
+            <div>
+              <label className="block text-[12px] font-semibold text-admin-muted uppercase tracking-wider mb-1.5">
+                Driver Code (2-letter) <span className="text-admin-status-red">*</span>
+              </label>
+              <input
+                type="text"
+                maxLength={2}
+                value={code}
+                onChange={e => setCode(e.target.value.toUpperCase())}
+                className={`w-full h-11 px-3 rounded-[12px] border ${
+                  isCodeTaken ? "border-admin-status-red focus:border-admin-status-red" : "border-admin-line focus:border-admin-brand"
+                } bg-admin-surface text-[14px] text-admin-ink outline-none focus:bg-white transition uppercase`}
+                placeholder="e.g. JD"
+              />
+              {isCodeTaken && <span className="text-[11px] text-admin-status-red mt-1 block">This code is already in use.</span>}
+            </div>
 
-        <Field label={isEdit ? "New app password (leave blank to keep current)" : "App password"}>
-          <input
-            type="password"
-            autoComplete="new-password"
-            value={password}
-            onChange={e => setPassword(e.target.value)}
-            disabled={submitting}
-            placeholder={isEdit ? "••••••••" : "At least 8 characters"}
-            className={inputClass}
-          />
-        </Field>
+            <div>
+              <label className="block text-[12px] font-semibold text-admin-muted uppercase tracking-wider mb-1.5">Vehicle Registration</label>
+              <input
+                type="text"
+                value={vehicleReg}
+                onChange={e => setVehicleReg(e.target.value.toUpperCase())}
+                className="w-full h-11 px-3 rounded-[12px] border border-admin-line bg-admin-surface text-[14px] font-mono text-admin-ink outline-none focus:border-admin-brand focus:bg-white transition uppercase"
+                placeholder="e.g. AB12 CDE"
+              />
+            </div>
 
-        <label className="flex items-center gap-2.5 cursor-pointer select-none">
-          <input
-            type="checkbox"
-            checked={active}
-            onChange={e => setActive(e.target.checked)}
-            disabled={submitting}
-            className="w-4 h-4 shrink-0 accent-[#1B75BC]"
-          />
-          <span className="text-sm text-white/80">Active (can log in and be assigned jobs)</span>
-        </label>
+            <div className="col-span-2">
+              <label className="block text-[12px] font-semibold text-admin-muted uppercase tracking-wider mb-1.5">
+                Email Address <span className="text-admin-status-red">*</span>
+              </label>
+              <input
+                type="email"
+                value={email}
+                onChange={e => setEmail(e.target.value)}
+                disabled={isEdit}
+                className={`w-full h-11 px-3 rounded-[12px] border border-admin-line bg-admin-surface text-[14px] text-admin-ink outline-none focus:border-admin-brand focus:bg-white transition ${
+                  isEdit ? "opacity-60" : ""
+                }`}
+                placeholder="driver@example.com"
+              />
+              <span className="text-[11px] text-admin-muted mt-1 block">Used to sign the driver into the app, and as the unique key for this record.</span>
+            </div>
 
-        {error && (
-          <div className="flex items-center gap-2 text-sm text-red-400 bg-red-400/10 border border-red-400/20 rounded-lg px-3 py-3">
-            <AlertCircle className="w-4 h-4 shrink-0" />
-            {error}
+            <div className="col-span-2">
+              <label className="block text-[12px] font-semibold text-admin-muted uppercase tracking-wider mb-1.5">Phone Number</label>
+              <input
+                type="tel"
+                value={phone}
+                onChange={e => setPhone(e.target.value)}
+                className="w-full h-11 px-3 rounded-[12px] border border-admin-line bg-admin-surface text-[14px] text-admin-ink outline-none focus:border-admin-brand focus:bg-white transition"
+                placeholder="07..."
+              />
+            </div>
+
+            <div className="col-span-2">
+              <label className="block text-[12px] font-semibold text-admin-muted uppercase tracking-wider mb-1.5">Driver App Password</label>
+              <input
+                type="password"
+                value={pwaPassword}
+                onChange={e => setPwaPassword(e.target.value)}
+                className={`w-full h-11 px-3 rounded-[12px] border ${
+                  passwordTooShort ? "border-admin-status-red focus:border-admin-status-red" : "border-admin-line focus:border-admin-brand"
+                } bg-admin-surface text-[14px] text-admin-ink outline-none focus:bg-white transition`}
+                placeholder={isEdit ? "Leave blank to keep current password" : "Set a password (min 8 characters)"}
+                autoComplete="new-password"
+              />
+              {passwordTooShort ? (
+                <span className="text-[11px] text-admin-status-red mt-1 block">Must be at least 8 characters.</span>
+              ) : (
+                <span className="text-[11px] text-admin-muted mt-1 block">
+                  Login for the driver app.{isEdit ? " Leave blank to keep their current password unchanged." : ""}
+                </span>
+              )}
+            </div>
+
+            <div className="col-span-2 mt-4 pt-4 border-t border-admin-line">
+              <label className="block text-[12px] font-semibold text-admin-muted uppercase tracking-wider mb-3">System Access &amp; Status</label>
+              <div
+                className={`p-4 rounded-[12px] border transition-colors ${
+                  active ? "bg-admin-status-green-bg border-admin-status-green/20" : "bg-admin-status-red-bg border-[#FECACA]"
+                }`}
+              >
+                <label className="flex items-start gap-3 cursor-pointer">
+                  <div className="pt-0.5">
+                    <input
+                      type="checkbox"
+                      checked={active}
+                      onChange={e => setActive(e.target.checked)}
+                      className="w-5 h-5 text-admin-brand rounded focus:ring-admin-brand"
+                    />
+                  </div>
+                  <div>
+                    <span className={`text-[14px] font-bold block ${active ? "text-admin-status-green" : "text-admin-status-red"}`}>
+                      {active ? "Active (App Access Enabled)" : "Deactivated (Access Revoked)"}
+                    </span>
+                    <p className={`text-[13px] mt-1 ${active ? "text-admin-status-green/80" : "text-admin-status-red/80"}`}>
+                      {active
+                        ? "Driver can log in, view assignments, and complete jobs."
+                        : "Driver is immediately blocked from the app. Future assignments are stopped."}
+                    </p>
+                  </div>
+                </label>
+              </div>
+            </div>
           </div>
-        )}
+        </div>
 
-        <button
-          type="submit"
-          disabled={submitting}
-          className="mt-2 flex items-center justify-center gap-2 rounded-xl bg-brand hover:bg-brand-dark transition-colors py-3.5 text-sm font-semibold disabled:opacity-60"
-        >
-          {submitting && <Loader2 className="w-4 h-4 animate-spin" />}
-          {submitting ? "Saving…" : "Save driver"}
-        </button>
-      </form>
-    </Modal>
-  );
-}
-
-const inputClass =
-  "w-full rounded-xl bg-white/5 border border-white/10 px-4 py-3 text-sm placeholder:text-white/30 focus:outline-none focus:border-brand disabled:opacity-50";
-
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <label className="flex flex-col gap-1.5">
-      <span className="text-xs font-medium text-white/60 pl-1">{label}</span>
-      {children}
-    </label>
+        <div className="px-6 py-4 border-t border-admin-line bg-admin-surface shrink-0">
+          {saveError && (
+            <p className="text-[12px] text-admin-status-red font-medium mb-3 flex items-center gap-1.5">
+              <AlertTriangle className="w-3.5 h-3.5 shrink-0" /> {saveError}
+            </p>
+          )}
+          {saveWarning && (
+            <p className="text-[12px] text-amber-700 font-medium mb-3 flex items-center gap-1.5">
+              <AlertTriangle className="w-3.5 h-3.5 shrink-0" /> {saveWarning}
+            </p>
+          )}
+          <div className="flex items-center justify-end gap-3">
+            {saveWarning ? (
+              <button
+                onClick={onSaved}
+                className="px-6 py-2 rounded-[12px] bg-admin-brand hover:bg-admin-brand-dark text-white text-[13px] font-semibold shadow-sm transition flex items-center gap-1.5"
+              >
+                <CheckCircle2 className="w-4 h-4" /> Done
+              </button>
+            ) : (
+              <>
+                <button
+                  onClick={onClose}
+                  disabled={isSaving}
+                  className="px-4 py-2 rounded-[12px] text-[13px] font-semibold text-admin-muted hover:text-admin-ink transition disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleSubmit}
+                  disabled={isSaving || isCodeTaken || passwordTooShort || !name || !code || !email}
+                  className="px-6 py-2 rounded-[12px] bg-admin-brand disabled:bg-[#93C5FD] disabled:cursor-not-allowed hover:bg-admin-brand-dark text-white text-[13px] font-semibold shadow-sm transition"
+                >
+                  {isSaving ? "Saving…" : isEdit ? "Save Changes" : "Add Driver"}
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }

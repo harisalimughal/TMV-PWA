@@ -73,28 +73,33 @@ export function ScenarioFormScreen({ jobId, scenario, onDone, onCancel }: Scenar
         )}
 
         {spec.fields.map(field => (
-          <React.Fragment key={field.name}>
-            <FieldInput
-              field={field}
-              value={fields[field.name] ?? ""}
-              onChange={value => setField(field.name, value)}
-            />
-            {spec.conditionalNotice?.field === field.name && conditionalNoticeVisible && (
-              <div className="rounded-xl bg-amber-500/10 border border-amber-500/25 px-4 py-3.5 flex flex-col gap-1.5">
-                <div className="flex items-center gap-1.5 text-amber-400 text-xs font-bold uppercase tracking-wide">
-                  <AlertTriangle className="w-3.5 h-3.5" />
-                  {spec.conditionalNotice.title}
-                </div>
-                <p className="text-xs text-amber-100/80 leading-relaxed">{spec.conditionalNotice.text}</p>
-              </div>
-            )}
-          </React.Fragment>
+          <FieldInput
+            key={field.name}
+            field={field}
+            value={fields[field.name] ?? ""}
+            onChange={value => setField(field.name, value)}
+          />
         ))}
 
         <PhotoPicker label={spec.photoLabel} max={spec.photoMax} onChange={setPhotos} />
 
+        {/* The conditional notice (e.g. Overloading Liability Waiver) sits directly
+            above the signature pad, in place of the plain signatureText -- not both.
+            It used to render right after its triggering field, duplicating the
+            "by signing..." liability copy the customer would then see twice before
+            actually signing. */}
         <div className="flex flex-col gap-2">
-          {spec.signatureText && <p className="text-xs text-white/50 leading-relaxed">{spec.signatureText}</p>}
+          {conditionalNoticeVisible && spec.conditionalNotice ? (
+            <div className="rounded-xl bg-amber-500/10 border border-amber-500/25 px-4 py-3.5 flex flex-col gap-1.5">
+              <div className="flex items-center gap-1.5 text-amber-400 text-xs font-bold uppercase tracking-wide">
+                <AlertTriangle className="w-3.5 h-3.5" />
+                {spec.conditionalNotice.title}
+              </div>
+              <p className="text-xs text-amber-100/80 leading-relaxed">{spec.conditionalNotice.text}</p>
+            </div>
+          ) : (
+            spec.signatureText && <p className="text-xs text-white/50 leading-relaxed">{spec.signatureText}</p>
+          )}
           <SignaturePad ref={padRef} onChange={setHasSignature} />
         </div>
 

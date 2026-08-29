@@ -1,8 +1,32 @@
 import React, { useEffect, useState } from "react";
-import { AlertCircle, ChevronRight, Loader2, Plus } from "lucide-react";
-import { fetchDrivers, type AdminDriver } from "../../api/admin";
+import { AlertTriangle, Edit3, Loader2, Mail, Phone, Plus, ShieldCheck, Truck } from "lucide-react";
+import { fetchDrivers, saveDriver, type AdminDriver } from "../../api/admin";
 import { DriverFormModal } from "./DriverFormModal";
 
+/** Same palette-cycling approach as TMV-Chat-bot's dashboard utils/drivers.ts's
+ * getAvatarColor -- deterministic per initials, not random per render. */
+const AVATAR_COLORS = [
+  "bg-blue-100 text-blue-700",
+  "bg-emerald-100 text-emerald-700",
+  "bg-amber-100 text-amber-700",
+  "bg-violet-100 text-violet-700",
+  "bg-pink-100 text-pink-700",
+  "bg-cyan-100 text-cyan-700"
+];
+function avatarColor(initials: string): string {
+  let hash = 0;
+  for (const ch of initials) hash = (hash * 31 + ch.charCodeAt(0)) % AVATAR_COLORS.length;
+  return AVATAR_COLORS[Math.abs(hash)];
+}
+
+/**
+ * Ported from TMV-Chat-bot's dashboard/web/src/pages/DriversPage.tsx -- same card
+ * grid, same visual language. The per-driver job-performance stats there (completed
+ * jobs, revenue, avg delay, missing evidence) came from a job-aggregation endpoint
+ * this admin surface doesn't have -- tmv-pwa's own job data isn't wired into a
+ * /drivers/summary equivalent, so this stays a roster view (contact info, van reg,
+ * active status) rather than a performance dashboard.
+ */
 export function DriversTab() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -25,63 +49,124 @@ export function DriversTab() {
     load();
   }, []);
 
+  async function handleDeactivate(driver: AdminDriver) {
+    if (!window.confirm(`Are you sure you want to deactivate ${driver.fullName}? They will be blocked from the app.`)) return;
+    await saveDriver({
+      initials: driver.initials,
+      fullName: driver.fullName,
+      email: driver.email,
+      phone: driver.phone,
+      vanRegistration: driver.vanRegistration,
+      role: driver.role,
+      active: false
+    });
+    load();
+  }
+
   return (
-    <div className="flex flex-col gap-4">
+    <div className="space-y-6 max-w-[1440px] mx-auto pb-12">
       <div className="flex items-center justify-between">
-        <h2 className="text-sm font-semibold text-white/70">{drivers.length} driver{drivers.length === 1 ? "" : "s"}</h2>
+        <div>
+          <h2 className="text-[20px] font-bold text-admin-ink">Drivers</h2>
+          <p className="text-[13px] text-admin-muted mt-0.5">
+            {loading ? "..." : `${drivers.filter(d => d.active).length} active driver${drivers.filter(d => d.active).length === 1 ? "" : "s"}`}
+          </p>
+        </div>
         <button
           onClick={() => setEditing("new")}
-          className="flex items-center gap-1.5 text-xs font-semibold text-brand hover:text-brand-dark bg-brand/10 hover:bg-brand/15 rounded-lg px-3 py-2 transition-colors"
+          className="flex items-center gap-2 px-5 py-2.5 bg-admin-brand text-white rounded-full font-semibold shadow-sm hover:bg-admin-brand-dark transition"
         >
-          <Plus className="w-3.5 h-3.5" />
-          Add driver
+          <Plus className="w-4 h-4" /> Add Driver
         </button>
       </div>
 
       {loading ? (
-        <div className="flex items-center justify-center py-10">
-          <Loader2 className="w-6 h-6 animate-spin text-white/40" />
+        <div className="flex items-center justify-center py-16">
+          <Loader2 className="w-6 h-6 animate-spin text-admin-muted" />
         </div>
       ) : error ? (
-        <div className="flex items-center gap-2 text-sm text-red-400 bg-red-400/10 border border-red-400/20 rounded-lg px-3 py-3">
-          <AlertCircle className="w-4 h-4 shrink-0" />
+        <div className="flex items-center gap-2 text-[13px] text-admin-status-red bg-admin-status-red-bg border border-[#FECACA] rounded-xl px-4 py-3">
+          <AlertTriangle className="w-4 h-4 shrink-0" />
           {error}
         </div>
       ) : drivers.length === 0 ? (
-        <div className="rounded-xl bg-white/5 border border-white/10 px-4 py-6 text-center text-sm text-white/50">
+        <div className="bg-white rounded-[20px] border border-admin-line px-6 py-10 text-center text-[14px] text-admin-muted">
           No drivers yet. Add one to get started.
         </div>
       ) : (
-        <div className="flex flex-col gap-2">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 items-stretch">
           {drivers.map(driver => (
-            <button
+            <div
               key={driver.email}
-              onClick={() => setEditing(driver)}
-              className="w-full text-left rounded-xl border border-white/10 bg-white/5 hover:border-white/20 px-4 py-3.5 flex items-center gap-3 transition-colors"
+              className="bg-white rounded-[20px] shadow-[0_4px_20px_rgb(0,0,0,0.03)] border border-admin-line p-6 flex flex-col justify-between hover:-translate-y-0.5 hover:shadow-md transition-all relative group"
             >
-              <div className="w-9 h-9 rounded-full bg-brand/20 flex items-center justify-center text-xs font-bold text-brand shrink-0">
-                {driver.initials || driver.fullName.slice(0, 2).toUpperCase()}
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 mb-0.5">
-                  <span className="text-sm font-semibold truncate">{driver.fullName}</span>
-                  {!driver.active && (
-                    <span className="text-[10px] font-bold uppercase tracking-wide text-white/50 bg-white/10 px-1.5 py-0.5 rounded shrink-0">
-                      Inactive
-                    </span>
-                  )}
+              <div className="flex items-start justify-between mb-4">
+                <div className="flex items-center gap-3">
+                  <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-[14px] ${avatarColor(driver.initials)}`}>
+                    {driver.initials || "?"}
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-admin-ink text-[16px] flex items-center gap-1.5 leading-tight">
+                      {driver.fullName}
+                      {driver.active && (
+                        <span title="Active" className="cursor-help">
+                          <ShieldCheck className="w-4 h-4 text-admin-status-green" />
+                        </span>
+                      )}
+                    </h3>
+                  </div>
+                </div>
+
+                <div className="flex flex-col items-end gap-2">
+                  <span
+                    className={`px-2 py-0.5 rounded-[4px] text-[11px] font-bold uppercase tracking-wider ${
+                      driver.active ? "bg-admin-status-green-bg text-admin-status-green" : "bg-admin-surface text-admin-muted"
+                    }`}
+                  >
+                    {driver.active ? "Active" : "Inactive"}
+                  </span>
                   {!driver.hasPassword && (
-                    <span className="text-[10px] font-bold uppercase tracking-wide text-amber-400 bg-amber-400/10 px-1.5 py-0.5 rounded shrink-0">
+                    <span className="px-2 py-0.5 rounded-[4px] text-[11px] font-bold uppercase tracking-wider bg-admin-status-amber-bg text-admin-status-amber">
                       No password
                     </span>
                   )}
-                </div>
-                <div className="text-xs text-white/40 truncate">
-                  {driver.email} · {driver.phone || "no phone"} · {driver.vanRegistration || "no van"}
+
+                  <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition">
+                    <button
+                      onClick={() => setEditing(driver)}
+                      title="Edit Driver"
+                      className="p-1 rounded-full text-admin-muted hover:bg-admin-brand hover:text-white transition"
+                    >
+                      <Edit3 className="w-4 h-4" />
+                    </button>
+                    {driver.active && (
+                      <button
+                        onClick={() => handleDeactivate(driver)}
+                        title="Deactivate Driver"
+                        className="p-1 rounded-full text-admin-muted hover:bg-admin-status-red hover:text-white transition"
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/></svg>
+                      </button>
+                    )}
+                  </div>
                 </div>
               </div>
-              <ChevronRight className="w-4 h-4 text-white/30 shrink-0" />
-            </button>
+
+              <div className="flex flex-col gap-2 text-[13px] text-admin-muted">
+                <div className="flex items-center gap-4">
+                  <span className="flex items-center gap-1.5"><Mail className="w-3.5 h-3.5" /> {driver.email || "—"}</span>
+                  <span className="flex items-center gap-1.5"><Phone className="w-3.5 h-3.5" /> {driver.phone || "—"}</span>
+                </div>
+                {driver.vanRegistration && (
+                  <div className="flex items-center gap-1.5 mt-1">
+                    <Truck className="w-4 h-4 text-admin-ink-2" />
+                    <span className="px-2 py-1 rounded-[4px] border border-admin-line bg-admin-surface font-mono font-bold text-admin-ink tracking-widest text-[12px] shadow-sm uppercase">
+                      {driver.vanRegistration}
+                    </span>
+                  </div>
+                )}
+              </div>
+            </div>
           ))}
         </div>
       )}
@@ -89,6 +174,7 @@ export function DriversTab() {
       {editing && (
         <DriverFormModal
           driver={editing === "new" ? null : editing}
+          existingDrivers={drivers}
           onClose={() => setEditing(null)}
           onSaved={() => {
             setEditing(null);

@@ -55,6 +55,19 @@ export function validateCurrency(raw: string): number {
   return Math.round(value * 100) / 100;
 }
 
+/** Crew size the driver actually had on site for the overtime period -- may differ
+ * from the job's booked crew size (e.g. a helper joined partway through, or someone
+ * left early), which is why the driver picks it explicitly rather than it being
+ * silently inferred from the booking. Drives which CREW_RATE_*_MAN setting the
+ * overtime charge is calculated from -- see workflow.engine.ts's SUBMIT_OVERTIME. */
+export function validateCrewSize(raw: string): 1 | 2 | 3 {
+  const value = Number(raw.trim());
+  if (value !== 1 && value !== 2 && value !== 3) {
+    throw new ValidationError("Select a crew size of 1, 2 or 3 men.");
+  }
+  return value;
+}
+
 export function validatePaymentMethod(raw: string): PaymentMethod {
   if (!Object.values(PaymentMethod).includes(raw as PaymentMethod)) {
     throw new ValidationError("Select a valid payment method.");
