@@ -76,4 +76,5 @@ Live at `chat.themanvan.co.uk` on the same VPS as `dashboard.themanvan.co.uk`
 
 ## Not started yet
 
-- Real app icons (`web/public/icons/README.md` documents exactly what's needed)
+- A professionally designed app icon -- current ones (`web/public/icons/README.md`)
+  are a stand-in cropped from the existing marketing logo, functional but not polished

@@ -1,18 +1,14 @@
-# App icons needed here
+# App icons
 
-The manifest (`vite.config.ts`) and `index.html` already reference these files; they
-just don't exist yet, so the PWA install prompt/icon will look broken until they're added.
+`icon-192.png`, `icon-512.png`, `icon-maskable-512.png` are generated from the existing
+marketing logo (`dashboard/web/public/tmv-logo.png` in TMV-Chat-bot -- the "Helping you
+move forward" badge, not the letterboxed `tmv-new-logo.png`), centered on a white canvas
+with padding.
 
-Needed, all PNG:
-
-- `icon-192.png` — 192x192, used as the general app icon (Android home screen, etc.)
-- `icon-512.png` — 512x512, used for splash screens and higher-DPI displays
-- `icon-maskable-512.png` — 512x512, **maskable** format: the actual logo must fit inside
-  the safe zone (the center ~80% of the canvas) since Android crops maskable icons to
-  various shapes (circle, squircle, rounded square) depending on the device's icon theme.
-  A regular icon used as maskable will get its edges clipped off.
-
-These need real brand design, not just a resized version of an existing logo — get them
-from the client, or design them properly with the maskable safe-zone constraint in mind.
-A quick way to generate all three correctly from one source image once you have it:
-https://maskable.app (drag in the source art, exports all three sizes correctly).
+This is a stand-in, not a professionally designed app icon -- the source has small text
+("Helping you move forward", the URL) that's barely legible at 192px, and wasn't designed
+with the maskable safe-zone in mind. It fixed the real functional problem (Chrome refused
+to offer a proper "Install" and fell back to "Create shortcut" -- opens in a browser tab,
+generic letter-tile icon -- when the manifest's icons 404'd), but a real icon-only mark
+from the client (no wordmark, designed square) would look meaningfully better. Once you
+have one, regenerate all three sizes correctly in one pass at https://maskable.app.
