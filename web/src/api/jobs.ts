@@ -88,7 +88,9 @@ export async function fetchTomorrowJobs(): Promise<{ jobs: Job[]; unassignedCoun
 
 export async function fetchJobDetail(
   jobId: string
-): Promise<{ job: Job; activity: ActivityEntry[]; evidence: EvidenceSummary; suggestedTotal: number }> {
+): Promise<{
+  job: Job; activity: ActivityEntry[]; evidence: EvidenceSummary; suggestedTotal: number; confirmationText: string
+}> {
   const res = await fetch(`/api/jobs/${encodeURIComponent(jobId)}`, { credentials: "same-origin" });
   const body = await parseJson(res);
   await throwIfError(res, body);
@@ -123,6 +125,27 @@ export async function uploadSignature(jobId: string, customerName: string, blob:
   form.append("customerName", customerName);
   form.append("signature", blob, "signature.png");
   const res = await fetch(`/api/jobs/${encodeURIComponent(jobId)}/signature`, {
+    method: "POST",
+    credentials: "same-origin",
+    body: form
+  });
+  const body = await parseJson(res);
+  await throwIfError(res, body);
+  return body;
+}
+
+export async function submitScenario(
+  jobId: string,
+  scenario: string,
+  fields: Record<string, string>,
+  photos: File[],
+  signature: Blob
+): Promise<{ job: Job }> {
+  const form = new FormData();
+  for (const [key, value] of Object.entries(fields)) form.append(key, value);
+  photos.forEach(file => form.append("photos", file));
+  form.append("signature", signature, "signature.png");
+  const res = await fetch(`/api/jobs/${encodeURIComponent(jobId)}/scenarios/${encodeURIComponent(scenario)}`, {
     method: "POST",
     credentials: "same-origin",
     body: form

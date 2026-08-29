@@ -53,7 +53,10 @@ export async function uploadEvidenceImage(
       { folder, public_id: publicId, resource_type: "image", overwrite: true },
       (error, result) => {
         if (error || !result) {
-          reject(error ?? new Error("Cloudinary upload returned no result."));
+          // The SDK's error is a plain {message, http_code, ...} object, not an Error
+          // instance -- String(error) on it gives the useless "[object Object]"; pull
+          // .message out explicitly so both the log and the thrown error are readable.
+          reject(new Error(errorMessage(error) ?? "Cloudinary upload returned no result."));
           return;
         }
         resolve({ publicId: result.public_id, url: result.secure_url, contentType: `image/${result.format}` });
@@ -61,7 +64,14 @@ export async function uploadEvidenceImage(
     );
     stream.end(buffer);
   }).catch(error => {
-    log.error("cloudinary upload failed", { folder, public_id: publicId, error: String(error) });
+    log.error("cloudinary upload failed", { folder, public_id: publicId, error: errorMessage(error) });
     throw error;
   });
+}
+
+function errorMessage(error: unknown): string | undefined {
+  if (!error) return undefined;
+  if (error instanceof Error) return error.message;
+  if (typeof error === "object" && "message" in error) return String((error as { message: unknown }).message);
+  return String(error);
 }

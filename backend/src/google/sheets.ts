@@ -4,23 +4,29 @@ import { DriverProfile } from "../jobs/job.types";
 import { withRetry } from "../utils/retry";
 
 /**
- * Read-only access to the Drivers tab -- the one thing that's still Sheets-backed in
- * tmv-pwa. Driver PROFILES (initials, phone, van registration, role, active flag) are
- * an admin-managed roster, edited via TMV-Chat-bot's Add/Edit Driver flow, which is
- * unchanged and stays on Sheets. Everything else this file used to hold (jobs,
- * evidence, activity, payments, signatures, settings) moved to MongoDB -- see
- * db/jobs.repo.ts, db/evidence.repo.ts, db/activity.repo.ts -- and Drive-based photo
- * storage moved to Cloudinary (storage/cloudinary.ts). The full read/write version this
- * was trimmed from is TMV-Chat-bot's google/sheets.ts, if any of that ever needs
- * restoring here.
+ * Read-only access to the Drivers and Settings tabs -- the two things still
+ * Sheets-backed in tmv-pwa. Driver PROFILES (initials, phone, van registration, role,
+ * active flag) are an admin-managed roster, edited via TMV-Chat-bot's Add/Edit Driver
+ * flow, which is unchanged and stays on Sheets. Settings (email templates, crew rates)
+ * are the SAME Settings tab TMV-Chat-bot's admin dashboard already edits (see its
+ * dashboard/server/routes/settings.route.ts) -- reading it here means ops's existing
+ * "Job Completion Email" / "Customer Review Request Email" fields on that dashboard
+ * take effect for tmv-pwa too, with no new admin UI needed. Everything else this file
+ * used to hold (jobs, evidence, activity, payments, signatures) moved to MongoDB --
+ * see db/jobs.repo.ts, db/evidence.repo.ts, db/activity.repo.ts -- and Drive-based
+ * photo storage moved to Cloudinary (storage/cloudinary.ts). The full read/write
+ * version this was trimmed from is TMV-Chat-bot's google/sheets.ts, if any of that
+ * ever needs restoring here.
  */
 
 export const SHEETS = {
-  DRIVERS: "Drivers"
+  DRIVERS: "Drivers",
+  SETTINGS: "Settings"
 } as const;
 
 const SCHEMA: Record<string, string[]> = {
-  [SHEETS.DRIVERS]: ["Initials", "Full Name", "Email", "Chat User Name", "Active", "Role", "Phone", "Van Registration"]
+  [SHEETS.DRIVERS]: ["Initials", "Full Name", "Email", "Chat User Name", "Active", "Role", "Phone", "Van Registration"],
+  [SHEETS.SETTINGS]: ["Key", "Value", "Notes"]
 };
 
 let clientPromise: Promise<sheets_v4.Sheets> | null = null;
@@ -148,4 +154,14 @@ export async function getDriverByInitials(initials: string): Promise<DriverProfi
   const normalized = initials.trim().toUpperCase();
   const row = rows.find(r => (r["Initials"] ?? "").trim().toUpperCase() === normalized);
   return row ? rowToDriverProfile(row) : null;
+}
+
+/** Admin-editable operational text/values -- same Settings tab and same keys
+ * TMV-Chat-bot's dashboard reads/writes. Falls back to the caller-supplied default
+ * until ops sets a row for that key, so a blank Settings tab never breaks anything. */
+export async function getSetting(key: string, fallback: string): Promise<string> {
+  const rows = await listObjects(SHEETS.SETTINGS, env.driverCacheTtlMs);
+  const row = rows.find(r => (r["Key"] ?? "").trim() === key);
+  const value = row?.["Value"]?.trim();
+  return value || fallback;
 }

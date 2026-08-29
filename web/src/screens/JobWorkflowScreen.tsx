@@ -1,10 +1,13 @@
 import React, { useEffect, useRef, useState } from "react";
-import { AlertCircle, ArrowLeft, ChevronLeft, Loader2, PartyPopper } from "lucide-react";
+import { AlertCircle, ArrowLeft, ChevronLeft, ClipboardList, Loader2, PartyPopper, PenLine } from "lucide-react";
 import {
   fetchJobDetail, sendAction, startJob, uploadEvidencePhotos, uploadSignature, type Job
 } from "../api/jobs";
 import { CameraCapture } from "../components/CameraCapture";
+import { Modal } from "../components/Modal";
 import { SignaturePad, type SignaturePadHandle } from "../components/SignaturePad";
+import { ScenarioFormScreen } from "./ScenarioFormScreen";
+import type { ScenarioKey } from "../scenarioSpec";
 
 interface JobWorkflowScreenProps {
   jobId: string;
@@ -49,8 +52,11 @@ export function JobWorkflowScreen({ jobId, onBack }: JobWorkflowScreenProps) {
   const [loading, setLoading] = useState(true);
   const [job, setJob] = useState<Job | null>(null);
   const [suggestedTotal, setSuggestedTotal] = useState(0);
+  const [confirmationText, setConfirmationText] = useState(DEFAULT_CUSTOMER_CONFIRMATION_TEXT);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [signatureModalOpen, setSignatureModalOpen] = useState(false);
+  const [openScenario, setOpenScenario] = useState<ScenarioKey | null>(null);
 
   async function load() {
     setLoading(true);
@@ -59,6 +65,7 @@ export function JobWorkflowScreen({ jobId, onBack }: JobWorkflowScreenProps) {
       const result = await fetchJobDetail(jobId);
       setJob(result.job);
       setSuggestedTotal(result.suggestedTotal);
+      if (result.confirmationText) setConfirmationText(result.confirmationText);
     } catch (err: any) {
       setError(err?.message || "Couldn't load this job.");
     } finally {
@@ -71,14 +78,19 @@ export function JobWorkflowScreen({ jobId, onBack }: JobWorkflowScreenProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [jobId]);
 
-  async function run(action: () => Promise<{ job: Job }>): Promise<void> {
+  /** Returns whether the action succeeded -- the signature modal uses this to decide
+   * whether to close itself (only on success; a failure should keep it open with the
+   * error visible so the driver can retry without redrawing the signature). */
+  async function run(action: () => Promise<{ job: Job }>): Promise<boolean> {
     setBusy(true);
     setError(null);
     try {
       const result = await action();
       setJob(result.job);
+      return true;
     } catch (err: any) {
       setError(err?.message || "That didn't work. Try again.");
+      return false;
     } finally {
       setBusy(false);
     }
@@ -99,6 +111,20 @@ export function JobWorkflowScreen({ jobId, onBack }: JobWorkflowScreenProps) {
         <p className="text-sm text-white/60">{error || "This job couldn't be found."}</p>
         <button onClick={onBack} className="text-sm text-brand">Back to jobs</button>
       </div>
+    );
+  }
+
+  if (openScenario) {
+    return (
+      <ScenarioFormScreen
+        jobId={job.jobId}
+        scenario={openScenario}
+        onCancel={() => setOpenScenario(null)}
+        onDone={() => {
+          setOpenScenario(null);
+          load();
+        }}
+      />
     );
   }
 
@@ -135,7 +161,8 @@ export function JobWorkflowScreen({ jobId, onBack }: JobWorkflowScreenProps) {
           onStart={() => run(() => startJob(job.jobId))}
           onUploadPhotos={files => run(() => uploadEvidencePhotos(job.jobId, files))}
           onAction={(action, input) => run(() => sendAction(job.jobId, action, input))}
-          onSignature={(name, blob) => run(() => uploadSignature(job.jobId, name, blob))}
+          onOpenSignature={() => setSignatureModalOpen(true)}
+          onOpenScenario={setOpenScenario}
         />
 
         {BACK_ELIGIBLE.has(state) && (
@@ -148,7 +175,43 @@ export function JobWorkflowScreen({ jobId, onBack }: JobWorkflowScreenProps) {
             Go back a step
           </button>
         )}
+
+        {/* Check In/Check Out are standalone storage-job actions, not part of the
+            linear move workflow above -- always reachable regardless of job state. */}
+        <div className="mt-8 pt-5 border-t border-white/10">
+          <div className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-white/40 mb-3">
+            <ClipboardList className="w-3.5 h-3.5" />
+            Storage forms
+          </div>
+          <div className="flex gap-3">
+            <button
+              onClick={() => setOpenScenario("checkin")}
+              className="flex-1 rounded-xl border border-white/15 py-3 text-sm font-medium hover:border-white/30"
+            >
+              Check In
+            </button>
+            <button
+              onClick={() => setOpenScenario("checkout")}
+              className="flex-1 rounded-xl border border-white/15 py-3 text-sm font-medium hover:border-white/30"
+            >
+              Check Out
+            </button>
+          </div>
+        </div>
       </div>
+
+      {signatureModalOpen && (
+        <Modal title="Customer sign-off" onClose={() => setSignatureModalOpen(false)}>
+          <SignatureForm
+            confirmationText={confirmationText}
+            busy={busy}
+            onSubmit={async (name, blob) => {
+              const ok = await run(() => uploadSignature(job.jobId, name, blob));
+              if (ok) setSignatureModalOpen(false);
+            }}
+          />
+        </Modal>
+      )}
     </div>
   );
 }
@@ -161,10 +224,13 @@ interface StepBodyProps {
   onStart: () => void;
   onUploadPhotos: (files: File[]) => void;
   onAction: (action: string, input?: Record<string, string[]>) => void;
-  onSignature: (customerName: string, blob: Blob) => void;
+  onOpenSignature: () => void;
+  onOpenScenario: (scenario: ScenarioKey) => void;
 }
 
-function StepBody({ job, state, suggestedTotal, busy, onStart, onUploadPhotos, onAction, onSignature }: StepBodyProps) {
+function StepBody({
+  job, state, suggestedTotal, busy, onStart, onUploadPhotos, onAction, onOpenSignature, onOpenScenario
+}: StepBodyProps) {
   switch (state) {
     case "READY":
       return (
@@ -196,13 +262,20 @@ function StepBody({ job, state, suggestedTotal, busy, onStart, onUploadPhotos, o
     case "WAITING_ARRIVAL_ISSUES_CHOICE":
     case "WAITING_EMPTY_VAN_ISSUES_CHOICE":
       return (
-        <div className="flex flex-col gap-4">
-          <p className="text-sm text-white/60">
-            Noted. Let the office know the details separately (call or message) -- for now, continue the job.
-          </p>
-          <PrimaryButton busy={busy} onClick={() => onAction("ISSUES_RESUME")}>
-            Continue
-          </PrimaryButton>
+        <div className="flex flex-col gap-3">
+          <p className="text-sm text-white/60">Document the issue with the relevant form -- the job resumes automatically once it's submitted.</p>
+          <button
+            onClick={() => onOpenScenario("parking")}
+            className="rounded-xl border border-white/15 px-4 py-3.5 text-sm font-semibold text-left hover:border-white/30"
+          >
+            Parking Liability
+          </button>
+          <button
+            onClick={() => onOpenScenario("liability")}
+            className="rounded-xl border border-white/15 px-4 py-3.5 text-sm font-semibold text-left hover:border-white/30"
+          >
+            Liability Report
+          </button>
         </div>
       );
 
@@ -232,7 +305,17 @@ function StepBody({ job, state, suggestedTotal, busy, onStart, onUploadPhotos, o
       return <PaymentForm busy={busy} onSubmit={method => onAction("SUBMIT_PAYMENT", { payment_method: [method] })} />;
 
     case "WAITING_CLIENT_CONFIRMATION":
-      return <SignatureForm busy={busy} onSubmit={onSignature} />;
+      return (
+        <div className="flex flex-col gap-4">
+          <p className="text-sm text-white/60">
+            Hand your phone to the customer to review and sign off on the completed move.
+          </p>
+          <PrimaryButton busy={false} onClick={onOpenSignature}>
+            <PenLine className="w-4 h-4" />
+            Get customer signature
+          </PrimaryButton>
+        </div>
+      );
 
     case "WAITING_REVIEW_CHECK":
       return (
@@ -422,7 +505,9 @@ function PaymentForm({ busy, onSubmit }: { busy: boolean; onSubmit: (method: str
   );
 }
 
-function SignatureForm({ busy, onSubmit }: { busy: boolean; onSubmit: (customerName: string, blob: Blob) => void }) {
+function SignatureForm({
+  confirmationText, busy, onSubmit
+}: { confirmationText: string; busy: boolean; onSubmit: (customerName: string, blob: Blob) => void }) {
   const [customerName, setCustomerName] = useState("");
   const [hasSignature, setHasSignature] = useState(false);
   const padRef = useRef<SignaturePadHandle>(null);
@@ -435,7 +520,7 @@ function SignatureForm({ busy, onSubmit }: { busy: boolean; onSubmit: (customerN
 
   return (
     <div className="flex flex-col gap-4">
-      <p className="text-xs text-white/50 leading-relaxed">{CUSTOMER_CONFIRMATION_TEXT}</p>
+      <p className="text-xs text-white/50 leading-relaxed">{confirmationText}</p>
       <label className="flex flex-col gap-1.5">
         <span className="text-xs font-medium text-white/60 pl-1">Customer name</span>
         <input
@@ -460,7 +545,10 @@ function SignatureForm({ busy, onSubmit }: { busy: boolean; onSubmit: (customerN
   );
 }
 
-const CUSTOMER_CONFIRMATION_TEXT =
+// Fallback shown until the job detail response's confirmationText loads (see
+// backend/src/workflow/workflow.engine.ts's getConfirmationText -- reads the same
+// Settings-sheet key TMV-Chat-bot's admin dashboard already edits).
+const DEFAULT_CUSTOMER_CONFIRMATION_TEXT =
   "By signing below, you confirm that you have inspected the van, that it is empty, that all items have been " +
   "delivered, and that no items have been left behind. You also confirm that the removal service has been " +
   "completed to your satisfaction.";

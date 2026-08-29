@@ -15,35 +15,42 @@ instead of Chat cards -- with its own datastore, not Sheets.
   used to write Sheets rows.
 - **Driver roster** (initials, phone, van registration, active flag): stays in the
   Sheets "Drivers" tab, admin-managed via TMV-Chat-bot's Add/Edit Driver flow
-  (`google/sheets.ts` here is read-only, trimmed to just that lookup).
-- **Evidence photos** (arrival/loaded/empty-van/signature): Cloudinary
-  (`storage/cloudinary.ts`), not Google Drive. Upload is synchronous -- the camera
-  upload posts real bytes directly, so there's no Chat-attachment-relay step and no
-  async queue/worker/reaper (all deleted; they existed only for that two-hop design).
-  **Needs `CLOUDINARY_URL` set to actually work** -- until then the app runs fine,
-  photo upload just fails with a clear "not configured" error.
+  (`google/sheets.ts` here is read-only, trimmed to just that lookup + Settings, below).
+- **Evidence photos** (arrival/loaded/empty-van, scenario-form photos, signatures):
+  Cloudinary (`storage/cloudinary.ts`), not Google Drive. Upload is synchronous -- the
+  camera upload posts real bytes directly, so there's no Chat-attachment-relay step
+  and no async queue/worker/reaper (all deleted; they existed only for that two-hop
+  design). Live-verified end to end with real credentials.
 - **Driver auth**: MongoDB (`auth/*.ts`) -- password login, forgot/reset password
   (email via Gmail, same domain-wide-delegation setup as TMV-Chat-bot), and the
   password-setup-link flow from TMV-Chat-bot's admin dashboard.
 - **Customer emails** (job completion, review request, password reset): Gmail
   (`google/gmail.ts`, unchanged).
+- **Admin-editable settings** (email templates, crew rates, the signature-step
+  confirmation text): read from the *same* Sheets "Settings" tab TMV-Chat-bot's admin
+  dashboard already edits (`dashboard/server/routes/settings.route.ts` there) -- an
+  ops change on that existing dashboard takes effect here too, with no new admin UI
+  needed. `config/env.ts`'s values are only the fallback if a Settings row is unset.
+- **Scenario forms** (Check In, Check Out, Parking Liability, Liability Report):
+  ported from TMV-Chat-bot's `chat/scenario.engine.ts` -- same fields, legal notices,
+  and signature text (`workflow/scenario.spec.ts` / `web/src/scenarioSpec.ts`, kept in
+  sync manually). The original drove these as a one-field-per-Chat-card wizard with
+  persisted step state; this renders the whole form on one screen instead
+  (`jobs/scenario.service.ts`, no step machine needed). Check In/Check Out are
+  always-available actions (storage jobs); Parking Liability/Liability Report are also
+  reachable from the classic flow's "any issues?" step, and submitting one resumes the
+  paused job automatically.
 
 ## Deliberately deferred / simplified from the original Chat-bot workflow
 
-- **Parking Liability / Liability Report / Check In / Check Out scenario forms**:
-  the original Chat bot's dedicated multi-step detour forms aren't built. Flagging an
-  issue (`ISSUES_YES`) currently just resumes the same place `ISSUES_NONE` would --
-  the driver still needs to report it separately (call/message) until these are
-  built.
 - **Customer-facing signature link**: the original design texted/emailed the customer
-  a separate signature-pad link for their own device. This app instead has the
-  driver hand their phone to the customer to sign in-app (`SignaturePad.tsx`).
+  a separate signature-pad link for their own device. This app instead pops up a
+  signature-pad modal in the driver's own app (`components/Modal.tsx` +
+  `components/SignaturePad.tsx`) -- the driver hands their phone to the customer to
+  sign, rather than a link going to the customer's own device.
 - **Customer notification scheduling** ("your driver is arriving in 60 minutes"):
   not ported -- left entirely to TMV-Chat-bot, so a booking handled by both systems
   doesn't get the reminder sent twice.
-- **Admin-editable settings** (crew rates, email templates): there's no admin UI in
-  this project, so these are plain env config (`config/env.ts`) with the same
-  fallback values the original always used, not live-editable.
 
 ## Local dev
 
@@ -56,10 +63,10 @@ cd web && npm install && npm run dev       # :3001, proxies /api and /healthz to
 ```
 
 Backend `.env` needs: `MONGODB_URI`, `GOOGLE_SHEETS_SPREADSHEET_ID` +
-service-account credentials (Drivers-tab lookup + Calendar + Gmail),
+service-account credentials (Drivers/Settings-tab lookup + Calendar + Gmail),
 `GOOGLE_CALENDAR_ID`, `DRIVER_SETUP_LINK_SECRET` (must match TMV-Chat-bot's value
-exactly), `TMV_SIGNATURE_LINK_SECRET`, `CLOUDINARY_URL` (photo upload -- app runs
-without it, just can't upload). See `config/env.ts` for the full list and defaults.
+exactly), `TMV_SIGNATURE_LINK_SECRET`, `CLOUDINARY_URL`. See `config/env.ts` for the
+full list and defaults.
 
 ## Deployment
 
@@ -70,4 +77,3 @@ Live at `chat.themanvan.co.uk` on the same VPS as `dashboard.themanvan.co.uk`
 ## Not started yet
 
 - Real app icons (`web/public/icons/README.md` documents exactly what's needed)
-- The scenario forms and customer-facing signature link noted above

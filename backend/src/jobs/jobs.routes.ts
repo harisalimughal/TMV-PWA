@@ -6,16 +6,34 @@ import { getJobForDriver, getNextJobForDriver, getTomorrowJobsForDriver, startJo
 import { uploadEvidenceImage } from "../storage/cloudinary";
 import { looksLikeImage } from "./evidence.service";
 import {
-  EvidenceFailedError, EvidencePendingError, handleAction, handlePhotoStep, submitDrawnSignature, suggestedTotal
+  EvidenceFailedError, EvidencePendingError, getConfirmationText, handleAction, handlePhotoStep,
+  submitDrawnSignature, suggestedTotal
 } from "../workflow/workflow.engine";
+import { submitScenario } from "./scenario.service";
+import { SCENARIOS, ScenarioKey } from "../workflow/scenario.spec";
 import { ValidationError } from "../workflow/validation.engine";
 import { listActivityForJob } from "../db/activity.repo";
 import { readEvidenceSummary } from "../db/evidence.repo";
+import { listScenarioSubmissionsForJob } from "../db/scenario.repo";
 import { log } from "../utils/logger";
 
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: env.maxImageBytes, files: 2 },
+  fileFilter: (_req, file, cb) => {
+    if (!file.mimetype.startsWith("image/")) {
+      cb(new Error("Only image uploads are accepted."));
+      return;
+    }
+    cb(null, true);
+  }
+});
+
+// Liability Report allows up to 8 photos, the widest of the 4 scenario forms, +1 for
+// the signature.
+const scenarioUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: env.maxImageBytes, files: 9 },
   fileFilter: (_req, file, cb) => {
     if (!file.mimetype.startsWith("image/")) {
       cb(new Error("Only image uploads are accepted."));
@@ -77,11 +95,12 @@ export function jobsRoutes(): Router {
   router.get("/:jobId", async (req: Request, res: Response) => {
     try {
       const { job } = await getJobForDriver(String(req.params.jobId), req.driverEmail!);
-      const [activity, evidence] = await Promise.all([
+      const [activity, evidence, confirmationText] = await Promise.all([
         listActivityForJob(job.jobId),
-        readEvidenceSummary(job.jobId)
+        readEvidenceSummary(job.jobId),
+        getConfirmationText()
       ]);
-      res.status(200).json({ job, activity, evidence, suggestedTotal: suggestedTotal(job) });
+      res.status(200).json({ job, activity, evidence, suggestedTotal: suggestedTotal(job), confirmationText });
     } catch (error) {
       errorResponse(res, error);
     }
@@ -146,6 +165,56 @@ export function jobsRoutes(): Router {
       errorResponse(res, error);
     }
   });
+
+  // Past submissions for this job -- e.g. so the UI can show "already submitted"
+  // instead of a driver assuming they still need to fill it in.
+  router.get("/:jobId/scenarios", async (req: Request, res: Response) => {
+    try {
+      await getJobForDriver(String(req.params.jobId), req.driverEmail!); // 403s if not theirs
+      const submissions = await listScenarioSubmissionsForJob(String(req.params.jobId));
+      res.status(200).json({ submissions });
+    } catch (error) {
+      errorResponse(res, error);
+    }
+  });
+
+  // One-shot form submission (Check In / Check Out / Parking Liability / Liability
+  // Report) -- the whole form (fields + photos + signature) in a single request. See
+  // scenario.service.ts's submitScenario for why this doesn't need the original
+  // Chat-bot's multi-step progress tracking.
+  router.post(
+    "/:jobId/scenarios/:scenario",
+    scenarioUpload.fields([{ name: "photos", maxCount: 8 }, { name: "signature", maxCount: 1 }]),
+    async (req: Request, res: Response) => {
+      try {
+        const scenario = req.params.scenario as ScenarioKey;
+        if (!SCENARIOS[scenario]) {
+          res.status(404).json({ error: { code: "UNKNOWN_SCENARIO", message: "Unknown scenario." } });
+          return;
+        }
+        const filesByField = (req.files as Record<string, Express.Multer.File[]> | undefined) ?? {};
+        const photos = (filesByField.photos ?? []).map(file => ({ buffer: file.buffer, contentType: file.mimetype }));
+        const signatureFile = filesByField.signature?.[0];
+        if (!signatureFile) throw new ValidationError("A signature is required.");
+
+        // Every non-file form field is a scenario field, keyed by its own name (see
+        // workflow/scenario.spec.ts's field names) -- multer already parses these as
+        // plain strings.
+        const fields: Record<string, string> = {};
+        for (const [key, value] of Object.entries(req.body ?? {})) {
+          fields[key] = String(value);
+        }
+
+        const { job, submission } = await submitScenario(
+          scenario, String(req.params.jobId), req.driverEmail!, fields, photos,
+          { buffer: signatureFile.buffer, contentType: signatureFile.mimetype }
+        );
+        res.status(200).json({ job, submission });
+      } catch (error) {
+        errorResponse(res, error);
+      }
+    }
+  );
 
   return router;
 }

@@ -2,6 +2,7 @@ import { env } from "../config/env";
 import { getJob } from "../db/jobs.repo";
 import { readEvidenceSummary } from "../db/evidence.repo";
 import { appendActivity } from "../db/activity.repo";
+import { getSetting } from "../google/sheets";
 import { EvidenceType, ExtraChargeType, Job } from "../jobs/job.types";
 import { uploadEvidence } from "../jobs/evidence.service";
 import { completeJob, getJobForDriver, getNextJobForDriver, saveJob, startJob } from "../jobs/jobs.service";
@@ -15,8 +16,15 @@ import { equalPence, formatPounds, fromPounds } from "../utils/money";
 import { sendJobCompletionEmail, sendReviewRequestEmail } from "../google/gmail";
 import { JOB_COMPLETION_EMAIL_TEMPLATE, REVIEW_REQUEST_EMAIL_TEMPLATE } from "../notifications/message";
 
-export const CUSTOMER_CONFIRMATION_TEXT =
+const DEFAULT_CUSTOMER_CONFIRMATION_TEXT =
   "By signing below, you confirm that you have inspected the van, that it is empty, that all items have been delivered, and that no items have been left behind. You also confirm that the removal service has been completed to your satisfaction.";
+
+/** Same Settings-sheet key TMV-Chat-bot's admin dashboard already edits
+ * ("Customer Confirmation Text") -- an ops-side wording change there takes effect
+ * here too, no separate tmv-pwa admin surface needed. */
+export async function getConfirmationText(): Promise<string> {
+  return getSetting("CUSTOMER_CONFIRMATION_TEXT", DEFAULT_CUSTOMER_CONFIRMATION_TEXT);
+}
 
 function extraChargeAmount(job: Job): number {
   let total = 0;
@@ -101,6 +109,17 @@ export async function getActiveJob(identifier: string) {
   return { job, driver };
 }
 
+/** Fire-and-forget, same as the original -- a slow/failed customer email must never
+ * hold up (or fail) the driver's completion action. Fetches the live template from
+ * the Settings sheet (same key TMV-Chat-bot's dashboard edits) each time rather than
+ * caching it, so an ops edit takes effect on the very next completion. */
+function sendCompletionEmailIfAny(job: Job, jobId: string): void {
+  if (!job.customerEmail) return;
+  getSetting("JOB_COMPLETION_EMAIL_TEXT", JOB_COMPLETION_EMAIL_TEMPLATE)
+    .then(template => sendJobCompletionEmail(job, template))
+    .catch(err => log.warn("job completion email failed (non-fatal)", { job_id: jobId, error: String(err) }));
+}
+
 export async function handleAction(
   action: string,
   jobId: string,
@@ -169,17 +188,35 @@ export async function handleAction(
 
       job.overtimeMinutes = reconciledMinutes;
 
-      const otGrace = env.overtimeGraceMinutes;
-      let defaultRate = env.crewRate2Man;
-      if (job.crewSize === 1) defaultRate = env.crewRate1Man;
-      else if (job.crewSize === 3) defaultRate = env.crewRate3Man;
+      // Same Settings-sheet keys the original Chat-bot workflow read (see
+      // TMV-Chat-bot's workflow.engine.ts) -- ops can override any of these from a
+      // Settings row without a redeploy; env.ts's values are only the fallback.
+      const otGraceStr = await getSetting("OVERTIME_GRACE_MINS", String(env.overtimeGraceMinutes));
+      const otGrace = parseInt(otGraceStr, 10) || 0;
+
+      let rateKey = "CREW_RATE_2_MAN";
+      let rateFallback = env.crewRate2Man;
+      if (job.crewSize === 1) {
+        rateKey = "CREW_RATE_1_MAN";
+        rateFallback = env.crewRate1Man;
+      } else if (job.crewSize === 3) {
+        rateKey = "CREW_RATE_3_MAN";
+        rateFallback = env.crewRate3Man;
+      }
 
       const isPackingService = job.extraCharges.includes(ExtraChargeType.PACKING);
-      if (isPackingService) defaultRate = env.packingRate;
+      const defaultRateStr = isPackingService
+        ? await getSetting("PACKING_RATE", String(env.packingRate))
+        : await getSetting(rateKey, String(rateFallback));
+      const defaultRate = parseFloat(defaultRateStr) || rateFallback;
 
-      const otRate = env.overtimeRatePer30Minutes || defaultRate;
-      const billingUnit = isPackingService ? env.packingBillingUnit : env.crewBillingUnit;
-      const unitMins = billingUnit.toLowerCase().includes("hour") ? 60 : 30;
+      const otRateStr = await getSetting("OVERTIME_RATE_PER_30", "");
+      const otRate = otRateStr ? (parseFloat(otRateStr) || defaultRate) : (env.overtimeRatePer30Minutes || defaultRate);
+
+      const unitStr = isPackingService
+        ? await getSetting("PACKING_BILLING_UNIT", env.packingBillingUnit)
+        : await getSetting("CREW_BILLING_UNIT", env.crewBillingUnit);
+      const unitMins = unitStr.toLowerCase().includes("hour") ? 60 : 30;
 
       const chargeableMinutes = Math.max(0, reconciledMinutes - otGrace);
       job.overtimeCharge = chargeableMinutes === 0 ? 0 : Math.ceil(chargeableMinutes / unitMins) * otRate;
@@ -253,11 +290,7 @@ export async function handleAction(
         job.currentState = WorkflowState.WAITING_REVIEW_SEND;
         return saveJob(job, driver, action, from);
       }
-      if (job.customerEmail) {
-        sendJobCompletionEmail(job, JOB_COMPLETION_EMAIL_TEMPLATE).catch(err =>
-          log.warn("job completion email failed (non-fatal)", { job_id: jobId, error: String(err) })
-        );
-      }
+      sendCompletionEmailIfAny(job, jobId);
       return completeJob(jobId, identifier);
     }
 
@@ -266,7 +299,8 @@ export async function handleAction(
       const from = job.currentState;
       if (job.customerEmail) {
         try {
-          await sendReviewRequestEmail(job, REVIEW_REQUEST_EMAIL_TEMPLATE);
+          const reviewTemplate = await getSetting("REVIEW_REQUEST_EMAIL_TEXT", REVIEW_REQUEST_EMAIL_TEMPLATE);
+          await sendReviewRequestEmail(job, reviewTemplate);
           await appendActivity({
             jobId, driver: actor, action: "CLIENT_REVIEW_EMAIL_SENT", fromState: from, toState: from, detail: job.customerEmail
           });
@@ -276,10 +310,8 @@ export async function handleAction(
             detail: error instanceof Error ? error.message : String(error)
           });
         }
-        sendJobCompletionEmail(job, JOB_COMPLETION_EMAIL_TEMPLATE).catch(err =>
-          log.warn("job completion email failed (non-fatal)", { job_id: jobId, error: String(err) })
-        );
       }
+      sendCompletionEmailIfAny(job, jobId);
       return completeJob(jobId, identifier);
     }
 
@@ -293,11 +325,7 @@ export async function handleAction(
 
     case "COMPLETE_JOB": {
       await assertCompletionGate(jobId, job);
-      if (job.customerEmail) {
-        sendJobCompletionEmail(job, JOB_COMPLETION_EMAIL_TEMPLATE).catch(err =>
-          log.warn("job completion email failed (non-fatal)", { job_id: jobId, error: String(err) })
-        );
-      }
+      sendCompletionEmailIfAny(job, jobId);
       return completeJob(jobId, identifier);
     }
 
