@@ -26,14 +26,24 @@ export function getAvatarColor(code: string): string {
   return AVATAR_COLORS[Math.abs(hash)];
 }
 
-export function resolveDriver(raw: string | undefined | null): {
+/**
+ * `initials` is the driver's real assigned code (job.driverInitials, e.g. "HE") and
+ * should always be passed when the caller has it -- it's the only value that's stable
+ * across a driver's full name changing. The `name.substring(0, 2)` fallback below is
+ * only a last resort for callers that truly have nothing but a free-text string (e.g.
+ * ParkingLiabilityPage's scenario-submission rows, which don't carry a separate
+ * initials field), and produces a cosmetic guess, not a real code -- passing `raw` as
+ * a full display name (as JobsPage/FinishedJobsPage used to) silently mangled it into
+ * the wrong badge (e.g. "Man VAN Driver" -> "MA" instead of the real "HE").
+ */
+export function resolveDriver(raw: string | undefined | null, initials?: string | null): {
   name: string; code: string; vehicleReg?: string; needsReassignment: boolean; color: string;
 } {
   if (!raw || raw === "N/A" || raw === "undefined" || raw === "Unassigned") {
     return { name: "Unassigned", code: "UN", needsReassignment: false, color: getAvatarColor("UN") };
   }
   const name = String(raw).trim();
-  const code = name.substring(0, 2).toUpperCase() || "?";
+  const code = (initials?.trim().toUpperCase()) || name.substring(0, 2).toUpperCase() || "?";
   return { name, code, needsReassignment: false, color: getAvatarColor(code) };
 }
 

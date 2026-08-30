@@ -76,7 +76,7 @@ export function JobsPage() {
     // Search Filter
     if (debouncedSearch) {
       filtered = filtered.filter(j => {
-        const d = resolveDriver(j.driverName);
+        const d = resolveDriver(j.driverName, j.driverInitials);
         return (
           j.jobId.toLowerCase().includes(debouncedSearch) ||
           (j.customerName || "").toLowerCase().includes(debouncedSearch) ||
@@ -340,7 +340,7 @@ export function JobsPage() {
                     const isCancelled = job.status === "CANCELLED";
                     const photoCount = job.evidenceItems?.filter(e => (e.thumbProxyUrl || e.driveUrl)).length || 0;
                     
-                    const resolvedDriver = resolveDriver(job.driverName);
+                    const resolvedDriver = resolveDriver(job.driverName, job.driverInitials);
                     const isUnassigned = resolvedDriver.code === "UN";
                     
                     return (

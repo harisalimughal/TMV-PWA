@@ -116,7 +116,7 @@ export function FinishedJobsPage() {
                   
                   const photos = job.evidenceItems?.filter((e: any) => e.type === "IMAGE" && (e.thumbProxyUrl || e.driveUrl)) || [];
                   const isTest = isTestOrIncomplete(job);
-                  const resolvedDriver = resolveDriver(job.driverName);
+                  const resolvedDriver = resolveDriver(job.driverName, job.driverInitials);
                   const isUnassigned = resolvedDriver.code === "UN";
 
                   return (
