@@ -155,6 +155,10 @@ function JobCard({ job, onClick, muted }: { job: Job; onClick: () => void; muted
           <MapPin className="w-3 h-3 shrink-0" />
           <span className="truncate">{job.pickup || "Pickup TBC"}</span>
         </div>
+        <div className="flex items-center gap-1.5 text-xs text-white/50 mb-1">
+          <MapPin className="w-3 h-3 shrink-0" />
+          <span className="truncate">{job.dropoff || "Drop-off TBC"}</span>
+        </div>
         <div className="text-xs text-white/40">
           {formatTime(job.bookedStart)} · {job.crewSize || "?"} crew · {formatGBP(job.basePrice)}
         </div>

@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-import { AlertCircle, ArrowLeft, ChevronLeft, ClipboardList, Loader2, PartyPopper, PenLine } from "lucide-react";
+import { AlertCircle, AlertTriangle, ArrowLeft, ChevronLeft, ClipboardList, Loader2, MapPin, PartyPopper, PenLine } from "lucide-react";
 import {
   fetchJobDetail, sendAction, startJob, uploadEvidencePhotos, uploadSignature, type Job
 } from "../api/jobs";
@@ -36,6 +36,26 @@ function defaultOvertimeCrewSize(job: Job): "1" | "2" | "3" {
   if (job.crewSize === 1) return "1";
   if (job.crewSize === 3) return "3";
   return "2";
+}
+
+/** True when bookedStart isn't today, in the driver's own local time -- flags a job
+ * opened a day early (e.g. tapped from the "Tomorrow" list) so it isn't mistaken for
+ * today's work. Relies on the phone's local timezone matching the job's operating
+ * timezone (Europe/London), same assumption the rest of the driver-facing UI already
+ * makes for anything not computed server-side. */
+function isNotToday(bookedStart: string): boolean {
+  if (!bookedStart) return false;
+  const booked = new Date(bookedStart);
+  if (isNaN(booked.getTime())) return false;
+  return booked.toDateString() !== new Date().toDateString();
+}
+
+function formatBookedDay(bookedStart: string): string {
+  try {
+    return new Date(bookedStart).toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long" });
+  } catch {
+    return "";
+  }
 }
 
 const BACK_ELIGIBLE = new Set([
@@ -158,7 +178,31 @@ export function JobWorkflowScreen({ jobId, onBack }: JobWorkflowScreenProps) {
 
       <div className="flex-1 overflow-y-auto px-4 py-6">
         <h1 className="text-lg font-bold mb-1">{STEP_LABEL[state] ?? state}</h1>
-        <p className="text-xs text-white/40 mb-6">Job {job.jobId}</p>
+        <p className="text-xs text-white/40 mb-4">Job {job.jobId}</p>
+
+        {isNotToday(job.bookedStart) && (
+          <div className="flex items-center gap-2 text-sm text-amber-400 bg-amber-400/10 border border-amber-400/20 rounded-lg px-3 py-3 mb-4">
+            <AlertTriangle className="w-4 h-4 shrink-0" />
+            This job is booked for {formatBookedDay(job.bookedStart)} -- not today.
+          </div>
+        )}
+
+        <div className="rounded-xl bg-white/5 border border-white/10 px-4 py-3.5 mb-4 flex flex-col gap-3">
+          <div className="flex items-start gap-2.5">
+            <MapPin className="w-3.5 h-3.5 text-emerald-400 mt-0.5 shrink-0" />
+            <div className="min-w-0">
+              <div className="text-[10px] font-semibold uppercase tracking-wide text-white/40">Pickup</div>
+              <div className="text-sm text-white/90">{job.pickup || "Not recorded"}</div>
+            </div>
+          </div>
+          <div className="flex items-start gap-2.5">
+            <MapPin className="w-3.5 h-3.5 text-red-400 mt-0.5 shrink-0" />
+            <div className="min-w-0">
+              <div className="text-[10px] font-semibold uppercase tracking-wide text-white/40">Drop-off</div>
+              <div className="text-sm text-white/90">{job.dropoff || "Not recorded"}</div>
+            </div>
+          </div>
+        </div>
 
         {error && (
           <div className="flex items-center gap-2 text-sm text-red-400 bg-red-400/10 border border-red-400/20 rounded-lg px-3 py-3 mb-4">

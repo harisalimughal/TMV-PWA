@@ -1,3 +1,8 @@
+/* Leaflet's own base stylesheet -- required for the admin dashboard's Live Fleet map
+   (screens/admin/dashboard/components/LiveFleetMap.tsx) to render at all; without it
+   the map is an unstyled, broken mess of overlapping tiles/controls. */
+@import "leaflet/dist/leaflet.css";
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -39,4 +44,92 @@ body {
 .h-screen-safe {
   height: 100vh;
   height: 100dvh;
+}
+
+/* ---------------------------------------------------------------------------
+ * Ported from TMV-Chat-bot's dashboard/web/src/index.css -- global CSS the admin
+ * dashboard port (screens/admin/dashboard/*) needs that lives outside any component's
+ * own className, so it was missed by the earlier component-by-component port. Scoped
+ * to exactly what those components reference (checked before adding), and written
+ * with literal values instead of the source's CSS custom-property theme (--ink, --bg,
+ * etc.) so nothing here leaks new global variables into the driver-facing app.
+ * ------------------------------------------------------------------------- */
+
+/* Live Fleet map (LiveFleetMap.tsx): van marker hover scale + the pulsing "live"
+ * beacon ring animation. */
+.van-marker-container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.van-marker-container:hover {
+  transform: scale(1.15);
+  z-index: 1000 !important;
+}
+@keyframes ping-slow {
+  0% { transform: scale(0.95); opacity: 0.8; }
+  70% { transform: scale(2.2); opacity: 0; }
+  100% { transform: scale(2.2); opacity: 0; }
+}
+.animate-pulse-beacon {
+  animation: ping-slow 2s cubic-bezier(0, 0, 0.2, 1) infinite;
+}
+.leaflet-popup-content-wrapper {
+  background: #fff !important;
+  color: #0f172a !important;
+  border: 1px solid #e2e8f0 !important;
+  border-radius: 8px !important;
+  padding: 0 !important;
+}
+.leaflet-popup-content {
+  margin: 0 !important;
+  line-height: 1.4 !important;
+}
+.leaflet-popup-tip {
+  background: #fff !important;
+  border: 1px solid #e2e8f0 !important;
+}
+
+/* PDF/print export (PdfPreviewModal.tsx, SubmissionDetailDrawer.tsx -- both render a
+ * hidden .print-content wrapper around PaperDossierReport, only shown via @media
+ * print). This is the exact fix from TMV-Chat-bot's "PDF download only produced page 1
+ * of a multi-page report": position: fixed on .print-content made browsers repeat it
+ * identically on every printed page (the mechanism print stylesheets use for running
+ * headers/footers) instead of letting its content paginate -- position: absolute
+ * removes it from flow the same way without that per-page repeat. */
+@media print {
+  aside, header, .no-print, button {
+    display: none !important;
+  }
+  body > * {
+    visibility: hidden;
+  }
+  .print-content {
+    visibility: visible;
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    z-index: 99999;
+    background: white;
+    overflow: visible;
+  }
+  .print-content * {
+    visibility: visible;
+  }
+  .paper-sheet, .paper-sheet * {
+    visibility: visible;
+  }
+  .paper-sheet {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100% !important;
+    max-width: 100% !important;
+    padding: 0 !important;
+    box-shadow: none !important;
+    border: none !important;
+  }
 }
