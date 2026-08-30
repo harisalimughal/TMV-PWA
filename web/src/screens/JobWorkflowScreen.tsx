@@ -190,16 +190,14 @@ export function JobWorkflowScreen({ jobId, onBack }: JobWorkflowScreenProps) {
         <div className="rounded-xl bg-white/5 border border-white/10 px-4 py-3.5 mb-4 flex flex-col gap-3">
           <div className="flex items-start gap-2.5">
             <MapPin className="w-3.5 h-3.5 text-emerald-400 mt-0.5 shrink-0" />
-            <div className="min-w-0">
-              <div className="text-[10px] font-semibold uppercase tracking-wide text-white/40">Pickup</div>
-              <div className="text-sm text-white/90">{job.pickup || "Not recorded"}</div>
+            <div className="min-w-0 text-sm text-white/90">
+              <span className="font-semibold">Pickup:</span> {job.pickup || "Not recorded"}
             </div>
           </div>
           <div className="flex items-start gap-2.5">
             <MapPin className="w-3.5 h-3.5 text-red-400 mt-0.5 shrink-0" />
-            <div className="min-w-0">
-              <div className="text-[10px] font-semibold uppercase tracking-wide text-white/40">Drop-off</div>
-              <div className="text-sm text-white/90">{job.dropoff || "Not recorded"}</div>
+            <div className="min-w-0 text-sm text-white/90">
+              <span className="font-semibold">Drop-off:</span> {job.dropoff || "Not recorded"}
             </div>
           </div>
         </div>
