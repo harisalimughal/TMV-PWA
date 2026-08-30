@@ -4,16 +4,20 @@ export default {
   theme: {
     extend: {
       colors: {
-        // The driver-facing app's own brand blue -- unrelated to (and must stay
-        // independent of) the admin palette below, which ports TMV-Chat-bot's
-        // dashboard tokens verbatim for the /admin screens only.
+        // The driver-facing app's own brand blue -- kept as its own token (rather than
+        // switching every CTA to admin-brand below) since it's TMV's actual brand
+        // colour, not just a dashboard accent.
         brand: "#1B75BC",
         "brand-dark": "#155A94",
 
-        // Ported verbatim from TMV-Chat-bot/dashboard/web/tailwind.config.js, so
-        // /admin (web/src/screens/admin/*) renders pixel-identical to that dashboard's
-        // Login/Drivers/Settings screens. Namespaced under "admin-*" so it can never
-        // collide with the driver app's own `brand` above.
+        // Ported verbatim from TMV-Chat-bot/dashboard/web/tailwind.config.js for
+        // /admin (web/src/screens/admin/*) to render pixel-identical to that
+        // dashboard's Login/Drivers/Settings screens. Also reused directly by the
+        // driver-facing screens (LoginScreen, JobListScreen, JobWorkflowScreen, etc.)
+        // for their own light theme -- the two apps deliberately share one visual
+        // language now, so there's no reason to duplicate the same greys under a
+        // second set of names. Still namespaced "admin-*" for history/searchability,
+        // not because it's admin-exclusive.
         "admin-bg": "#F8FAFC",
         "admin-surface": "#F1F5F9",
         "admin-line": "#E2E8F0",

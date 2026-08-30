@@ -36,7 +36,7 @@ export function CameraCapture({ label, maxPhotos, submitting, onSubmit }: Camera
       {previews.length > 0 && (
         <div className="grid grid-cols-2 gap-2">
           {previews.map((src, index) => (
-            <div key={src} className="relative aspect-square rounded-xl overflow-hidden bg-white/5">
+            <div key={src} className="relative aspect-square rounded-xl overflow-hidden bg-admin-surface border border-admin-line">
               <img src={src} alt={`${label} ${index + 1}`} className="w-full h-full object-cover" />
               <button
                 type="button"
@@ -55,7 +55,7 @@ export function CameraCapture({ label, maxPhotos, submitting, onSubmit }: Camera
         <button
           type="button"
           onClick={() => inputRef.current?.click()}
-          className="flex flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-white/20 py-10 text-white/60 hover:border-brand hover:text-brand transition-colors"
+          className="flex flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-admin-line py-10 text-admin-muted hover:border-brand hover:text-brand transition-colors"
         >
           <Camera className="w-7 h-7" />
           <span className="text-sm font-medium">
@@ -78,7 +78,7 @@ export function CameraCapture({ label, maxPhotos, submitting, onSubmit }: Camera
         type="button"
         disabled={files.length === 0 || submitting}
         onClick={() => onSubmit(files)}
-        className="flex items-center justify-center gap-2 rounded-xl bg-brand hover:bg-brand-dark transition-colors py-3.5 text-sm font-semibold disabled:opacity-40"
+        className="flex items-center justify-center gap-2 rounded-xl bg-brand hover:bg-brand-dark transition-colors py-3.5 text-sm font-semibold text-white disabled:opacity-40"
       >
         {submitting && <Loader2 className="w-4 h-4 animate-spin" />}
         {submitting ? "Uploading…" : `Upload ${files.length || ""} photo${files.length === 1 ? "" : "s"}`}

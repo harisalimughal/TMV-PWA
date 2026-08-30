@@ -13,10 +13,10 @@ interface ModalProps {
  * clearly hands control back to the driver without touching workflow state. */
 export function Modal({ title, onClose, children }: ModalProps) {
   return (
-    <div className="fixed inset-0 z-50 bg-[#0A1A2F] flex flex-col pt-safe pb-safe pl-safe pr-safe">
-      <div className="flex items-center justify-between px-4 py-4 border-b border-white/10 shrink-0">
-        <h2 className="text-sm font-semibold text-white">{title}</h2>
-        <button onClick={onClose} className="text-white/50 hover:text-white/90 p-1 -mr-1" aria-label="Close">
+    <div className="fixed inset-0 z-50 bg-admin-bg flex flex-col pt-safe pb-safe pl-safe pr-safe">
+      <div className="flex items-center justify-between px-4 py-4 border-b border-admin-line bg-white shrink-0">
+        <h2 className="text-sm font-semibold text-admin-ink">{title}</h2>
+        <button onClick={onClose} className="text-admin-muted hover:text-admin-ink p-1 -mr-1" aria-label="Close">
           <X className="w-5 h-5" />
         </button>
       </div>

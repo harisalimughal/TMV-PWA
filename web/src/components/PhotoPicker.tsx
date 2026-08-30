@@ -36,11 +36,11 @@ export function PhotoPicker({ label, max, onChange }: PhotoPickerProps) {
 
   return (
     <div className="flex flex-col gap-3">
-      <span className="text-xs font-medium text-white/60 pl-1">{label}</span>
+      <span className="text-xs font-medium text-admin-ink-2 pl-1">{label}</span>
       {previews.length > 0 && (
         <div className="grid grid-cols-3 gap-2">
           {previews.map((src, index) => (
-            <div key={src} className="relative aspect-square rounded-lg overflow-hidden bg-white/5">
+            <div key={src} className="relative aspect-square rounded-lg overflow-hidden bg-admin-surface border border-admin-line">
               <img src={src} alt={`${label} ${index + 1}`} className="w-full h-full object-cover" />
               <button
                 type="button"
@@ -58,7 +58,7 @@ export function PhotoPicker({ label, max, onChange }: PhotoPickerProps) {
         <button
           type="button"
           onClick={() => inputRef.current?.click()}
-          className="flex items-center justify-center gap-2 rounded-xl border-2 border-dashed border-white/20 py-6 text-white/60 hover:border-brand hover:text-brand transition-colors"
+          className="flex items-center justify-center gap-2 rounded-xl border-2 border-dashed border-admin-line py-6 text-admin-muted hover:border-brand hover:text-brand transition-colors"
         >
           <Camera className="w-5 h-5" />
           <span className="text-sm font-medium">{files.length === 0 ? "Add photo" : "Add another"}</span>

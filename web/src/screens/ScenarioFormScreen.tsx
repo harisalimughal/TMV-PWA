@@ -51,9 +51,9 @@ export function ScenarioFormScreen({ jobId, scenario, onDone, onCancel }: Scenar
     (fields[spec.conditionalNotice.field] ?? "").split(MULTISELECT_DELIMITER).includes(spec.conditionalNotice.whenValue);
 
   return (
-    <div className="h-screen-safe flex flex-col bg-[#0A1A2F] text-white pt-safe pb-safe pl-safe pr-safe">
-      <div className="flex items-center gap-3 px-4 py-4 border-b border-white/10 shrink-0">
-        <button onClick={onCancel} className="text-white/60 hover:text-white/90 p-1 -ml-1">
+    <div className="h-screen-safe flex flex-col bg-admin-bg text-admin-ink pt-safe pb-safe pl-safe pr-safe">
+      <div className="flex items-center gap-3 px-4 py-4 border-b border-admin-line bg-white shrink-0">
+        <button onClick={onCancel} className="text-admin-muted hover:text-admin-ink p-1 -ml-1">
           <ArrowLeft className="w-5 h-5" />
         </button>
         <div className="text-sm font-semibold">{spec.title}</div>
@@ -61,14 +61,14 @@ export function ScenarioFormScreen({ jobId, scenario, onDone, onCancel }: Scenar
 
       <div className="flex-1 overflow-y-auto px-4 py-6 flex flex-col gap-5">
         {spec.noticeText && (
-          <div className="rounded-xl bg-amber-500/10 border border-amber-500/25 px-4 py-3.5 flex flex-col gap-1.5">
+          <div className="rounded-xl bg-admin-status-amber-bg border border-admin-status-amber/25 px-4 py-3.5 flex flex-col gap-1.5">
             {spec.noticeTitle && (
-              <div className="flex items-center gap-1.5 text-amber-400 text-xs font-bold uppercase tracking-wide">
+              <div className="flex items-center gap-1.5 text-admin-status-amber text-xs font-bold uppercase tracking-wide">
                 <AlertTriangle className="w-3.5 h-3.5" />
                 {spec.noticeTitle}
               </div>
             )}
-            <p className="text-xs text-amber-100/80 leading-relaxed">{spec.noticeText}</p>
+            <p className="text-xs text-amber-800/80 leading-relaxed">{spec.noticeText}</p>
           </div>
         )}
 
@@ -90,21 +90,21 @@ export function ScenarioFormScreen({ jobId, scenario, onDone, onCancel }: Scenar
             actually signing. */}
         <div className="flex flex-col gap-2">
           {conditionalNoticeVisible && spec.conditionalNotice ? (
-            <div className="rounded-xl bg-amber-500/10 border border-amber-500/25 px-4 py-3.5 flex flex-col gap-1.5">
-              <div className="flex items-center gap-1.5 text-amber-400 text-xs font-bold uppercase tracking-wide">
+            <div className="rounded-xl bg-admin-status-amber-bg border border-admin-status-amber/25 px-4 py-3.5 flex flex-col gap-1.5">
+              <div className="flex items-center gap-1.5 text-admin-status-amber text-xs font-bold uppercase tracking-wide">
                 <AlertTriangle className="w-3.5 h-3.5" />
                 {spec.conditionalNotice.title}
               </div>
-              <p className="text-xs text-amber-100/80 leading-relaxed">{spec.conditionalNotice.text}</p>
+              <p className="text-xs text-amber-800/80 leading-relaxed">{spec.conditionalNotice.text}</p>
             </div>
           ) : (
-            spec.signatureText && <p className="text-xs text-white/50 leading-relaxed">{spec.signatureText}</p>
+            spec.signatureText && <p className="text-xs text-admin-muted leading-relaxed">{spec.signatureText}</p>
           )}
           <SignaturePad ref={padRef} onChange={setHasSignature} />
         </div>
 
         {error && (
-          <div className="flex items-center gap-2 text-sm text-red-400 bg-red-400/10 border border-red-400/20 rounded-lg px-3 py-3">
+          <div className="flex items-center gap-2 text-sm text-admin-status-red bg-admin-status-red-bg border border-admin-status-red/20 rounded-lg px-3 py-3">
             <AlertCircle className="w-4 h-4 shrink-0" />
             {error}
           </div>
@@ -113,7 +113,7 @@ export function ScenarioFormScreen({ jobId, scenario, onDone, onCancel }: Scenar
         <button
           onClick={handleSubmit}
           disabled={!canSubmit || submitting}
-          className="flex items-center justify-center gap-2 rounded-xl bg-brand hover:bg-brand-dark transition-colors py-3.5 text-sm font-semibold disabled:opacity-40"
+          className="flex items-center justify-center gap-2 rounded-xl bg-brand hover:bg-brand-dark transition-colors py-3.5 text-sm font-semibold text-white disabled:opacity-40"
         >
           {submitting && <Loader2 className="w-4 h-4 animate-spin" />}
           {submitting ? "Submitting…" : "Submit"}
@@ -129,13 +129,13 @@ function FieldInput({
   if (field.type === "yesno") {
     return (
       <div className="flex flex-col gap-1.5">
-        <span className="text-xs font-medium text-white/60 pl-1">{field.label}</span>
+        <span className="text-xs font-medium text-admin-ink-2 pl-1">{field.label}</span>
         <div className="flex gap-3">
           <button
             type="button"
             onClick={() => onChange("Yes")}
             className={`flex-1 rounded-xl border py-3 text-sm font-semibold transition-colors ${
-              value === "Yes" ? "bg-brand/15 border-brand" : "bg-white/5 border-white/10"
+              value === "Yes" ? "bg-admin-brand-soft border-brand" : "bg-white border-admin-line"
             }`}
           >
             Yes
@@ -144,7 +144,7 @@ function FieldInput({
             type="button"
             onClick={() => onChange("No")}
             className={`flex-1 rounded-xl border py-3 text-sm font-semibold transition-colors ${
-              value === "No" ? "bg-brand/15 border-brand" : "bg-white/5 border-white/10"
+              value === "No" ? "bg-admin-brand-soft border-brand" : "bg-white border-admin-line"
             }`}
           >
             No
@@ -162,13 +162,13 @@ function FieldInput({
     }
     return (
       <div className="flex flex-col gap-1.5">
-        <span className="text-xs font-medium text-white/60 pl-1">{field.label}</span>
-        <div className="flex flex-col gap-1.5 max-h-72 overflow-y-auto rounded-xl border border-white/10 bg-white/5 p-2">
+        <span className="text-xs font-medium text-admin-ink-2 pl-1">{field.label}</span>
+        <div className="flex flex-col gap-1.5 max-h-72 overflow-y-auto rounded-xl border border-admin-line bg-white p-2">
           {field.options?.map(option => (
             <label
               key={option}
               className={`flex items-center gap-2.5 rounded-lg px-2.5 py-2 cursor-pointer transition-colors ${
-                selected.includes(option) ? "bg-brand/15" : "hover:bg-white/5"
+                selected.includes(option) ? "bg-admin-brand-soft" : "hover:bg-admin-surface"
               }`}
             >
               <input
@@ -182,7 +182,7 @@ function FieldInput({
           ))}
         </div>
         {selected.length > 0 && (
-          <span className="text-xs text-white/40 pl-1">{selected.length} selected</span>
+          <span className="text-xs text-admin-muted pl-1">{selected.length} selected</span>
         )}
       </div>
     );
@@ -191,11 +191,11 @@ function FieldInput({
   if (field.type === "select") {
     return (
       <label className="flex flex-col gap-1.5">
-        <span className="text-xs font-medium text-white/60 pl-1">{field.label}</span>
+        <span className="text-xs font-medium text-admin-ink-2 pl-1">{field.label}</span>
         <select
           value={value}
           onChange={e => onChange(e.target.value)}
-          className="w-full rounded-xl bg-white/5 border border-white/10 px-4 py-3 text-sm focus:outline-none focus:border-brand"
+          className="w-full rounded-xl bg-white border border-admin-line px-4 py-3 text-sm focus:outline-none focus:border-brand"
         >
           <option value="" disabled>
             Tap to select
@@ -213,12 +213,12 @@ function FieldInput({
   const inputType = field.type === "date" ? "date" : field.type === "tel" ? "tel" : field.type === "email" ? "email" : "text";
   return (
     <label className="flex flex-col gap-1.5">
-      <span className="text-xs font-medium text-white/60 pl-1">{field.label}</span>
+      <span className="text-xs font-medium text-admin-ink-2 pl-1">{field.label}</span>
       <input
         type={inputType}
         value={value}
         onChange={e => onChange(e.target.value)}
-        className="w-full rounded-xl bg-white/5 border border-white/10 px-4 py-3 text-sm placeholder:text-white/30 focus:outline-none focus:border-brand"
+        className="w-full rounded-xl bg-white border border-admin-line px-4 py-3 text-sm placeholder:text-admin-muted/60 focus:outline-none focus:border-brand"
       />
     </label>
   );

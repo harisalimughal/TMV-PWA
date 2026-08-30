@@ -69,8 +69,8 @@ export function App() {
     // every screen nests inside, so getting the keyboard/notch handling right here
     // once is what makes every other screen correct for free.
     return (
-      <div className="h-screen-safe flex items-center justify-center bg-[#0A1A2F] text-white pt-safe pb-safe pl-safe pr-safe">
-        <Loader2 className="w-6 h-6 animate-spin text-white/40" />
+      <div className="h-screen-safe flex items-center justify-center bg-admin-bg text-admin-ink pt-safe pb-safe pl-safe pr-safe">
+        <Loader2 className="w-6 h-6 animate-spin text-admin-muted" />
       </div>
     );
   }

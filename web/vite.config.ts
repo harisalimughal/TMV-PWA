@@ -20,8 +20,8 @@ export default defineConfig({
         description: "The Man Van driver app -- jobs, messages, and evidence photos.",
         start_url: "/",
         display: "standalone",
-        background_color: "#0A1A2F",
-        theme_color: "#0A1A2F",
+        background_color: "#F8FAFC",
+        theme_color: "#F8FAFC",
         icons: [
           { src: "/icons/icon-192.png", sizes: "192x192", type: "image/png" },
           { src: "/icons/icon-512.png", sizes: "512x512", type: "image/png" },

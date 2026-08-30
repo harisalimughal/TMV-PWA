@@ -138,17 +138,17 @@ export function JobWorkflowScreen({ jobId, onBack }: JobWorkflowScreenProps) {
 
   if (loading) {
     return (
-      <div className="h-screen-safe flex items-center justify-center bg-[#0A1A2F] text-white pt-safe pb-safe pl-safe pr-safe">
-        <Loader2 className="w-6 h-6 animate-spin text-white/40" />
+      <div className="h-screen-safe flex items-center justify-center bg-admin-bg text-admin-ink pt-safe pb-safe pl-safe pr-safe">
+        <Loader2 className="w-6 h-6 animate-spin text-admin-muted" />
       </div>
     );
   }
 
   if (!job) {
     return (
-      <div className="h-screen-safe flex flex-col items-center justify-center gap-4 bg-[#0A1A2F] text-white pt-safe pb-safe pl-safe pr-safe px-6 text-center">
-        <AlertCircle className="w-8 h-8 text-red-400" />
-        <p className="text-sm text-white/60">{error || "This job couldn't be found."}</p>
+      <div className="h-screen-safe flex flex-col items-center justify-center gap-4 bg-admin-bg text-admin-ink pt-safe pb-safe pl-safe pr-safe px-6 text-center">
+        <AlertCircle className="w-8 h-8 text-admin-status-red" />
+        <p className="text-sm text-admin-muted">{error || "This job couldn't be found."}</p>
         <button onClick={onBack} className="text-sm text-brand">Back to jobs</button>
       </div>
     );
@@ -171,45 +171,45 @@ export function JobWorkflowScreen({ jobId, onBack }: JobWorkflowScreenProps) {
   const state = job.currentState;
 
   return (
-    <div className="h-screen-safe flex flex-col bg-[#0A1A2F] text-white pt-safe pb-safe pl-safe pr-safe">
-      <div className="flex items-center gap-3 px-4 py-4 border-b border-white/10 shrink-0">
-        <button onClick={onBack} className="text-white/60 hover:text-white/90 p-1 -ml-1">
+    <div className="h-screen-safe flex flex-col bg-admin-bg text-admin-ink pt-safe pb-safe pl-safe pr-safe">
+      <div className="flex items-center gap-3 px-4 py-4 border-b border-admin-line bg-white shrink-0">
+        <button onClick={onBack} className="text-admin-muted hover:text-admin-ink p-1 -ml-1">
           <ArrowLeft className="w-5 h-5" />
         </button>
         <div className="min-w-0">
           <div className="text-sm font-semibold truncate">{job.customerName || "Unnamed customer"}</div>
-          <div className="text-xs text-white/40 truncate">{job.pickup || "Pickup TBC"}</div>
+          <div className="text-xs text-admin-muted truncate">{job.pickup || "Pickup TBC"}</div>
         </div>
       </div>
 
       <div className="flex-1 overflow-y-auto px-4 py-6">
         <h1 className="text-lg font-bold mb-1">{STEP_LABEL[state] ?? state}</h1>
-        <p className="text-xs text-white/40 mb-4">Job {job.jobId}</p>
+        <p className="text-xs text-admin-muted mb-4">Job {job.jobId}</p>
 
         {isNotToday(job.bookedStart) && (
-          <div className="flex items-center gap-2 text-sm text-amber-400 bg-amber-400/10 border border-amber-400/20 rounded-lg px-3 py-3 mb-4">
+          <div className="flex items-center gap-2 text-sm text-admin-status-amber bg-admin-status-amber-bg border border-admin-status-amber/20 rounded-lg px-3 py-3 mb-4">
             <AlertTriangle className="w-4 h-4 shrink-0" />
             This job is booked for {formatBookedDay(job.bookedStart)} -- not today.
           </div>
         )}
 
-        <div className="rounded-xl bg-white/5 border border-white/10 px-4 py-3.5 mb-4 flex flex-col gap-3">
+        <div className="rounded-xl bg-white border border-admin-line px-4 py-3.5 mb-4 flex flex-col gap-3">
           <div className="flex items-start gap-2.5">
-            <MapPin className="w-3.5 h-3.5 text-emerald-400 mt-0.5 shrink-0" />
-            <div className="min-w-0 text-sm text-white/90">
+            <MapPin className="w-3.5 h-3.5 text-emerald-600 mt-0.5 shrink-0" />
+            <div className="min-w-0 text-sm text-admin-ink">
               <span className="font-semibold">Pickup:</span> {job.pickup || "Not recorded"}
             </div>
           </div>
           <div className="flex items-start gap-2.5">
-            <MapPin className="w-3.5 h-3.5 text-red-400 mt-0.5 shrink-0" />
-            <div className="min-w-0 text-sm text-white/90">
+            <MapPin className="w-3.5 h-3.5 text-red-600 mt-0.5 shrink-0" />
+            <div className="min-w-0 text-sm text-admin-ink">
               <span className="font-semibold">Drop-off:</span> {job.dropoff || "Not recorded"}
             </div>
           </div>
         </div>
 
         {error && (
-          <div className="flex items-center gap-2 text-sm text-red-400 bg-red-400/10 border border-red-400/20 rounded-lg px-3 py-3 mb-4">
+          <div className="flex items-center gap-2 text-sm text-admin-status-red bg-admin-status-red-bg border border-admin-status-red/20 rounded-lg px-3 py-3 mb-4">
             <AlertCircle className="w-4 h-4 shrink-0" />
             {error}
           </div>
@@ -231,7 +231,7 @@ export function JobWorkflowScreen({ jobId, onBack }: JobWorkflowScreenProps) {
           <button
             onClick={() => run(() => sendAction(job.jobId, "GO_BACK"))}
             disabled={busy}
-            className="mt-4 flex items-center gap-1 text-xs text-white/40 hover:text-white/70 disabled:opacity-40"
+            className="mt-4 flex items-center gap-1 text-xs text-admin-muted hover:text-admin-ink disabled:opacity-40"
           >
             <ChevronLeft className="w-3.5 h-3.5" />
             Go back a step
@@ -240,21 +240,21 @@ export function JobWorkflowScreen({ jobId, onBack }: JobWorkflowScreenProps) {
 
         {/* Check In/Check Out are standalone storage-job actions, not part of the
             linear move workflow above -- always reachable regardless of job state. */}
-        <div className="mt-8 pt-5 border-t border-white/10">
-          <div className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-white/40 mb-3">
+        <div className="mt-8 pt-5 border-t border-admin-line">
+          <div className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-admin-muted mb-3">
             <ClipboardList className="w-3.5 h-3.5" />
             Storage forms
           </div>
           <div className="flex gap-3">
             <button
               onClick={() => setOpenScenario("checkin")}
-              className="flex-1 rounded-xl border border-white/15 py-3 text-sm font-medium hover:border-white/30"
+              className="flex-1 rounded-xl border border-admin-line bg-white py-3 text-sm font-medium hover:border-admin-muted/50"
             >
               Check In
             </button>
             <button
               onClick={() => setOpenScenario("checkout")}
-              className="flex-1 rounded-xl border border-white/15 py-3 text-sm font-medium hover:border-white/30"
+              className="flex-1 rounded-xl border border-admin-line bg-white py-3 text-sm font-medium hover:border-admin-muted/50"
             >
               Check Out
             </button>
@@ -326,16 +326,16 @@ function StepBody({
     case "WAITING_EMPTY_VAN_ISSUES_CHOICE":
       return (
         <div className="flex flex-col gap-3">
-          <p className="text-sm text-white/60">Document the issue with the relevant form -- the job resumes automatically once it's submitted.</p>
+          <p className="text-sm text-admin-muted">Document the issue with the relevant form -- the job resumes automatically once it's submitted.</p>
           <button
             onClick={() => onOpenScenario("parking")}
-            className="rounded-xl border border-white/15 px-4 py-3.5 text-sm font-semibold text-left hover:border-white/30"
+            className="rounded-xl border border-admin-line bg-white px-4 py-3.5 text-sm font-semibold text-left hover:border-admin-muted/50"
           >
             Parking Liability
           </button>
           <button
             onClick={() => onOpenScenario("liability")}
-            className="rounded-xl border border-white/15 px-4 py-3.5 text-sm font-semibold text-left hover:border-white/30"
+            className="rounded-xl border border-admin-line bg-white px-4 py-3.5 text-sm font-semibold text-left hover:border-admin-muted/50"
           >
             Liability Report
           </button>
@@ -378,7 +378,7 @@ function StepBody({
     case "WAITING_CLIENT_CONFIRMATION":
       return (
         <div className="flex flex-col gap-4">
-          <p className="text-sm text-white/60">
+          <p className="text-sm text-admin-muted">
             Hand your phone to the customer to review and sign off on the completed move.
           </p>
           <PrimaryButton busy={false} onClick={onOpenSignature}>
@@ -408,14 +408,14 @@ function StepBody({
     case "COMPLETED":
       return (
         <div className="flex flex-col items-center gap-3 py-10 text-center">
-          <PartyPopper className="w-10 h-10 text-emerald-400" />
+          <PartyPopper className="w-10 h-10 text-emerald-600" />
           <p className="text-base font-semibold">Job complete</p>
-          <p className="text-sm text-white/50 max-w-xs">Nice work -- this job is done and the customer has been notified.</p>
+          <p className="text-sm text-admin-muted max-w-xs">Nice work -- this job is done and the customer has been notified.</p>
         </div>
       );
 
     default:
-      return <p className="text-sm text-white/50">Unrecognised step: {state}</p>;
+      return <p className="text-sm text-admin-muted">Unrecognised step: {state}</p>;
   }
 }
 
@@ -424,7 +424,7 @@ function PrimaryButton({ children, busy, onClick }: { children: React.ReactNode;
     <button
       onClick={onClick}
       disabled={busy}
-      className="w-full flex items-center justify-center gap-2 rounded-xl bg-brand hover:bg-brand-dark transition-colors py-3.5 text-sm font-semibold disabled:opacity-50"
+      className="w-full flex items-center justify-center gap-2 rounded-xl bg-brand hover:bg-brand-dark transition-colors py-3.5 text-sm font-semibold text-white disabled:opacity-50"
     >
       {busy && <Loader2 className="w-4 h-4 animate-spin" />}
       {children}
@@ -435,19 +435,19 @@ function PrimaryButton({ children, busy, onClick }: { children: React.ReactNode;
 function YesNo({ question, busy, onYes, onNo }: { question: string; busy: boolean; onYes: () => void; onNo: () => void }) {
   return (
     <div className="flex flex-col gap-4">
-      <p className="text-sm text-white/70">{question}</p>
+      <p className="text-sm text-admin-ink-2">{question}</p>
       <div className="flex gap-3">
         <button
           onClick={onNo}
           disabled={busy}
-          className="flex-1 rounded-xl border border-white/15 py-3.5 text-sm font-semibold hover:border-white/30 disabled:opacity-50"
+          className="flex-1 rounded-xl border border-admin-line bg-white py-3.5 text-sm font-semibold hover:border-admin-muted/50 disabled:opacity-50"
         >
           No
         </button>
         <button
           onClick={onYes}
           disabled={busy}
-          className="flex-1 rounded-xl bg-amber-500/20 border border-amber-500/40 text-amber-400 py-3.5 text-sm font-semibold hover:bg-amber-500/30 disabled:opacity-50"
+          className="flex-1 rounded-xl bg-admin-status-amber-bg border border-admin-status-amber/40 text-admin-status-amber py-3.5 text-sm font-semibold hover:bg-amber-100 disabled:opacity-50"
         >
           Yes
         </button>
@@ -472,13 +472,13 @@ function ExtraChargesForm({ busy, onSubmit }: { busy: boolean; onSubmit: (values
 
   return (
     <div className="flex flex-col gap-4">
-      <p className="text-sm text-white/60">Select every extra charge that applies to this job.</p>
+      <p className="text-sm text-admin-muted">Select every extra charge that applies to this job.</p>
       <div className="flex flex-col gap-2">
         {EXTRA_CHARGE_OPTIONS.map(option => (
           <label
             key={option}
             className={`flex items-center gap-3 rounded-xl border px-4 py-3.5 cursor-pointer transition-colors ${
-              selected.includes(option) ? "bg-brand/15 border-brand" : "bg-white/5 border-white/10"
+              selected.includes(option) ? "bg-admin-brand-soft border-brand" : "bg-white border-admin-line"
             }`}
           >
             <input
@@ -506,7 +506,7 @@ function OvertimeForm({
   return (
     <div className="flex flex-col gap-4">
       <label className="flex flex-col gap-1.5">
-        <span className="text-xs font-medium text-white/60 pl-1">Overtime minutes</span>
+        <span className="text-xs font-medium text-admin-ink-2 pl-1">Overtime minutes</span>
         <input
           type="number"
           inputMode="numeric"
@@ -514,18 +514,18 @@ function OvertimeForm({
           value={minutes}
           onChange={e => setMinutes(e.target.value)}
           placeholder="e.g. 30"
-          className="w-full rounded-xl bg-white/5 border border-white/10 px-4 py-3 text-sm placeholder:text-white/30 focus:outline-none focus:border-brand"
+          className="w-full rounded-xl bg-white border border-admin-line px-4 py-3 text-sm placeholder:text-admin-muted/60 focus:outline-none focus:border-brand"
         />
       </label>
 
       <div className="flex flex-col gap-1.5">
-        <span className="text-xs font-medium text-white/60 pl-1">Crew size for this overtime</span>
+        <span className="text-xs font-medium text-admin-ink-2 pl-1">Crew size for this overtime</span>
         <div className="flex flex-col gap-2">
           {CREW_SIZE_OPTIONS.map(option => (
             <label
               key={option.value}
               className={`flex items-center gap-3 rounded-xl border px-4 py-3.5 cursor-pointer transition-colors ${
-                crewSize === option.value ? "bg-brand/15 border-brand" : "bg-white/5 border-white/10"
+                crewSize === option.value ? "bg-admin-brand-soft border-brand" : "bg-white border-admin-line"
               }`}
             >
               <input
@@ -554,16 +554,16 @@ function TotalChargesForm({
   const [total, setTotal] = useState(suggestedTotal ? String(suggestedTotal) : "");
   return (
     <div className="flex flex-col gap-4">
-      <p className="text-xs text-white/40">Suggested total: £{suggestedTotal.toFixed(2)}</p>
+      <p className="text-xs text-admin-muted">Suggested total: £{suggestedTotal.toFixed(2)}</p>
       <label className="flex flex-col gap-1.5">
-        <span className="text-xs font-medium text-white/60 pl-1">Total charges (£)</span>
+        <span className="text-xs font-medium text-admin-ink-2 pl-1">Total charges (£)</span>
         <input
           type="text"
           inputMode="decimal"
           value={total}
           onChange={e => setTotal(e.target.value)}
           placeholder="e.g. 196.00"
-          className="w-full rounded-xl bg-white/5 border border-white/10 px-4 py-3 text-sm placeholder:text-white/30 focus:outline-none focus:border-brand"
+          className="w-full rounded-xl bg-white border border-admin-line px-4 py-3 text-sm placeholder:text-admin-muted/60 focus:outline-none focus:border-brand"
         />
       </label>
       <PrimaryButton busy={busy} onClick={() => onSubmit(total)}>
@@ -582,7 +582,7 @@ function PaymentForm({ busy, onSubmit }: { busy: boolean; onSubmit: (method: str
           <label
             key={option}
             className={`flex items-center gap-3 rounded-xl border px-4 py-3.5 cursor-pointer transition-colors ${
-              method === option ? "bg-brand/15 border-brand" : "bg-white/5 border-white/10"
+              method === option ? "bg-admin-brand-soft border-brand" : "bg-white border-admin-line"
             }`}
           >
             <input
@@ -619,7 +619,7 @@ function SignatureForm({
 
   return (
     <div className="flex flex-col gap-4">
-      <p className="text-xs text-white/50 leading-relaxed">{confirmationText}</p>
+      <p className="text-xs text-admin-muted leading-relaxed">{confirmationText}</p>
       <SignaturePad ref={padRef} onChange={setHasSignature} />
       <PrimaryButton
         busy={busy}

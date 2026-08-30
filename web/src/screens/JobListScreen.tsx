@@ -76,21 +76,21 @@ export function JobListScreen({ driver, onLoggedOut, onOpenJob }: JobListScreenP
   }
 
   return (
-    <div className="h-screen-safe flex flex-col bg-[#0A1A2F] text-white pt-safe pb-safe pl-safe pr-safe">
-      <div className="flex items-center justify-between px-5 py-4 border-b border-white/10 shrink-0">
+    <div className="h-screen-safe flex flex-col bg-admin-bg text-admin-ink pt-safe pb-safe pl-safe pr-safe">
+      <div className="flex items-center justify-between px-5 py-4 border-b border-admin-line bg-white shrink-0">
         <div className="flex items-center gap-3 min-w-0">
-          <div className="w-9 h-9 rounded-full bg-brand/20 flex items-center justify-center text-xs font-bold text-brand shrink-0">
+          <div className="w-9 h-9 rounded-full bg-brand/10 flex items-center justify-center text-xs font-bold text-brand shrink-0">
             {driver.initials || driver.fullName.slice(0, 2).toUpperCase()}
           </div>
           <div className="min-w-0">
             <div className="text-sm font-semibold leading-tight truncate">{driver.fullName}</div>
-            <div className="text-xs text-white/40 leading-tight truncate">{driver.email}</div>
+            <div className="text-xs text-admin-muted leading-tight truncate">{driver.email}</div>
           </div>
         </div>
         <button
           onClick={handleLogout}
           disabled={loggingOut}
-          className="flex items-center gap-1.5 text-xs text-white/50 hover:text-white/80 disabled:opacity-50 px-2 py-1.5 shrink-0"
+          className="flex items-center gap-1.5 text-xs text-admin-muted hover:text-admin-ink disabled:opacity-50 px-2 py-1.5 shrink-0"
         >
           <LogOut className="w-3.5 h-3.5" />
           {loggingOut ? "Signing out…" : "Sign out"}
@@ -103,7 +103,7 @@ export function JobListScreen({ driver, onLoggedOut, onOpenJob }: JobListScreenP
           <button
             onClick={() => load(false)}
             disabled={refreshing}
-            className="flex items-center gap-1.5 text-xs text-white/50 hover:text-white/80 disabled:opacity-50"
+            className="flex items-center gap-1.5 text-xs text-admin-muted hover:text-admin-ink disabled:opacity-50"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? "animate-spin" : ""}`} />
             Refresh
@@ -112,17 +112,17 @@ export function JobListScreen({ driver, onLoggedOut, onOpenJob }: JobListScreenP
 
         {loading ? (
           <div className="flex-1 flex items-center justify-center py-10">
-            <Loader2 className="w-6 h-6 animate-spin text-white/40" />
+            <Loader2 className="w-6 h-6 animate-spin text-admin-muted" />
           </div>
         ) : error ? (
-          <div className="flex items-center gap-2 text-sm text-red-400 bg-red-400/10 border border-red-400/20 rounded-lg px-3 py-3">
+          <div className="flex items-center gap-2 text-sm text-admin-status-red bg-admin-status-red-bg border border-admin-status-red/20 rounded-lg px-3 py-3">
             <AlertCircle className="w-4 h-4 shrink-0" />
             {error}
           </div>
         ) : (
           <>
             <section className="flex flex-col gap-2">
-              <h2 className="text-xs font-semibold uppercase tracking-wide text-white/40">Today</h2>
+              <h2 className="text-xs font-semibold uppercase tracking-wide text-admin-muted">Today</h2>
               {today.length > 0 ? (
                 <div className="flex flex-col gap-2">
                   {today.map(j => (
@@ -130,7 +130,7 @@ export function JobListScreen({ driver, onLoggedOut, onOpenJob }: JobListScreenP
                   ))}
                 </div>
               ) : (
-                <div className="rounded-xl bg-white/5 border border-white/10 px-4 py-6 text-center text-sm text-white/50">
+                <div className="rounded-xl bg-white border border-admin-line px-4 py-6 text-center text-sm text-admin-muted">
                   No job assigned right now. Pull to refresh once you're dispatched.
                 </div>
               )}
@@ -138,7 +138,7 @@ export function JobListScreen({ driver, onLoggedOut, onOpenJob }: JobListScreenP
 
             {past.length > 0 && (
               <section className="flex flex-col gap-2">
-                <h2 className="text-xs font-semibold uppercase tracking-wide text-amber-400/80">Past</h2>
+                <h2 className="text-xs font-semibold uppercase tracking-wide text-admin-status-amber">Past</h2>
                 <div className="flex flex-col gap-2">
                   {past.map(j => (
                     <JobCard key={j.jobId} job={j} onClick={() => onOpenJob(j.jobId)} overdue />
@@ -149,7 +149,7 @@ export function JobListScreen({ driver, onLoggedOut, onOpenJob }: JobListScreenP
 
             {next.length > 0 && (
               <section className="flex flex-col gap-2">
-                <h2 className="text-xs font-semibold uppercase tracking-wide text-white/40">Next</h2>
+                <h2 className="text-xs font-semibold uppercase tracking-wide text-admin-muted">Next</h2>
                 <div className="flex flex-col gap-2">
                   {next.map(j => (
                     <JobCard key={j.jobId} job={j} onClick={() => onOpenJob(j.jobId)} muted />
@@ -168,41 +168,41 @@ function JobCard({ job, onClick, muted, overdue }: { job: Job; onClick: () => vo
   return (
     <button
       onClick={onClick}
-      className={`w-full text-left rounded-xl border px-4 py-4 flex items-center gap-3 transition-colors ${
+      className={`w-full text-left rounded-xl border px-4 py-4 flex items-center gap-3 transition-colors shadow-primary ${
         overdue
-          ? "bg-amber-400/10 border-amber-400/30 hover:border-amber-400"
+          ? "bg-admin-status-amber-bg border-admin-status-amber/30 hover:border-admin-status-amber"
           : muted
-          ? "bg-white/5 border-white/10 hover:border-white/20"
-          : "bg-brand/10 border-brand/30 hover:border-brand"
+          ? "bg-white border-admin-line hover:border-admin-muted/50"
+          : "bg-admin-brand-soft border-brand/30 hover:border-brand"
       }`}
     >
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2 mb-1">
           <span className="text-sm font-semibold truncate">{job.customerName || "Unnamed customer"}</span>
           {job.status === "IN_PROGRESS" && (
-            <span className="text-[10px] font-bold uppercase tracking-wide text-emerald-400 bg-emerald-400/10 px-1.5 py-0.5 rounded shrink-0">
+            <span className="text-[10px] font-bold uppercase tracking-wide text-admin-status-green bg-admin-status-green-bg px-1.5 py-0.5 rounded shrink-0">
               In progress
             </span>
           )}
           {overdue && (
-            <span className="text-[10px] font-bold uppercase tracking-wide text-amber-400 bg-amber-400/10 px-1.5 py-0.5 rounded shrink-0">
+            <span className="text-[10px] font-bold uppercase tracking-wide text-admin-status-amber bg-white px-1.5 py-0.5 rounded shrink-0">
               Overdue
             </span>
           )}
         </div>
-        <div className="flex items-center gap-1.5 text-xs text-white/50 mb-1">
-          <MapPin className="w-3 h-3 shrink-0" />
+        <div className="flex items-center gap-1.5 text-xs text-admin-ink-2 mb-1">
+          <MapPin className="w-3 h-3 shrink-0 text-emerald-600" />
           <span className="truncate"><span className="font-semibold">Pickup:</span> {job.pickup || "TBC"}</span>
         </div>
-        <div className="flex items-center gap-1.5 text-xs text-white/50 mb-1">
-          <MapPin className="w-3 h-3 shrink-0" />
+        <div className="flex items-center gap-1.5 text-xs text-admin-ink-2 mb-1">
+          <MapPin className="w-3 h-3 shrink-0 text-red-600" />
           <span className="truncate"><span className="font-semibold">Drop-off:</span> {job.dropoff || "TBC"}</span>
         </div>
-        <div className="text-xs text-white/40">
+        <div className="text-xs text-admin-muted">
           {formatDate(job.bookedStart)} · {formatTime(job.bookedStart)} · {job.crewSize || "?"} crew · {formatGBP(job.basePrice)}
         </div>
       </div>
-      <ChevronRight className="w-4 h-4 text-white/30 shrink-0" />
+      <ChevronRight className="w-4 h-4 text-admin-muted shrink-0" />
     </button>
   );
 }

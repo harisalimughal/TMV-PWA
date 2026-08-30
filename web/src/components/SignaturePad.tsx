@@ -115,7 +115,7 @@ export const SignaturePad = React.forwardRef<SignaturePadHandle, SignaturePadPro
 
   return (
     <div className="flex flex-col gap-2">
-      <div className="relative rounded-xl bg-white border-2 border-dashed border-white/20 overflow-hidden touch-none" style={{ height: 200 }}>
+      <div className="relative rounded-xl bg-white border-2 border-dashed border-admin-line overflow-hidden touch-none" style={{ height: 200 }}>
         <canvas
           ref={canvasRef}
           className="absolute inset-0 w-full h-full touch-none"
@@ -134,7 +134,7 @@ export const SignaturePad = React.forwardRef<SignaturePadHandle, SignaturePadPro
         type="button"
         onClick={clear}
         disabled={empty}
-        className="self-end flex items-center gap-1.5 text-xs text-white/50 hover:text-white/80 disabled:opacity-30 px-2 py-1"
+        className="self-end flex items-center gap-1.5 text-xs text-admin-muted hover:text-admin-ink disabled:opacity-30 px-2 py-1"
       >
         <Eraser className="w-3.5 h-3.5" />
         Clear
