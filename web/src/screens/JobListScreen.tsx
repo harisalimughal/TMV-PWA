@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { AlertCircle, ChevronRight, Loader2, LogOut, MapPin, RefreshCw } from "lucide-react";
 import { logout, type DriverProfile } from "../api/auth";
 import { fetchJobsList, type Job } from "../api/jobs";
@@ -43,6 +43,19 @@ export function JobListScreen({ driver, onLoggedOut, onOpenJob }: JobListScreenP
   const [next, setNext] = useState<Job[]>([]);
   const [loggingOut, setLoggingOut] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  // Close the profile menu on an outside tap/click -- standard dropdown behaviour, and
+  // the only way to dismiss it besides logging out or picking nowhere in particular.
+  useEffect(() => {
+    if (!menuOpen) return;
+    function handlePointerDown(event: PointerEvent) {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) setMenuOpen(false);
+    }
+    document.addEventListener("pointerdown", handlePointerDown);
+    return () => document.removeEventListener("pointerdown", handlePointerDown);
+  }, [menuOpen]);
 
   async function load(showSpinner: boolean) {
     if (showSpinner) setLoading(true);
@@ -78,23 +91,40 @@ export function JobListScreen({ driver, onLoggedOut, onOpenJob }: JobListScreenP
   return (
     <div className="h-screen-safe flex flex-col bg-admin-bg text-admin-ink pt-safe pb-safe pl-safe pr-safe">
       <div className="flex items-center justify-between px-5 py-4 border-b border-admin-line bg-white shrink-0">
-        <div className="flex items-center gap-3 min-w-0">
-          <div className="w-9 h-9 rounded-full bg-brand/10 flex items-center justify-center text-xs font-bold text-brand shrink-0">
-            {driver.initials || driver.fullName.slice(0, 2).toUpperCase()}
+        <div className="flex items-center gap-2.5 min-w-0">
+          <div className="w-8 h-8 rounded-lg bg-white border border-admin-line p-1 shrink-0 flex items-center justify-center">
+            <img src="/tmv-logo.png" alt="" className="w-full h-full object-contain" />
           </div>
-          <div className="min-w-0">
-            <div className="text-sm font-semibold leading-tight truncate">{driver.fullName}</div>
-            <div className="text-xs text-admin-muted leading-tight truncate">{driver.email}</div>
-          </div>
+          <span className="text-sm font-bold tracking-tight truncate">The Man Van</span>
         </div>
-        <button
-          onClick={handleLogout}
-          disabled={loggingOut}
-          className="flex items-center gap-1.5 text-xs text-admin-muted hover:text-admin-ink disabled:opacity-50 px-2 py-1.5 shrink-0"
-        >
-          <LogOut className="w-3.5 h-3.5" />
-          {loggingOut ? "Signing out…" : "Sign out"}
-        </button>
+
+        <div className="relative shrink-0" ref={menuRef}>
+          <button
+            onClick={() => setMenuOpen(v => !v)}
+            className="w-9 h-9 rounded-full bg-brand/10 flex items-center justify-center text-xs font-bold text-brand hover:bg-brand/15 transition-colors"
+            aria-label="Account menu"
+            aria-expanded={menuOpen}
+          >
+            {driver.initials || driver.fullName.slice(0, 2).toUpperCase()}
+          </button>
+
+          {menuOpen && (
+            <div className="absolute right-0 top-full mt-2 w-60 rounded-xl bg-white border border-admin-line shadow-floating overflow-hidden z-10">
+              <div className="px-4 py-3.5 border-b border-admin-line">
+                <div className="text-sm font-semibold leading-tight truncate">{driver.fullName}</div>
+                <div className="text-xs text-admin-muted leading-tight truncate mt-0.5">{driver.email}</div>
+              </div>
+              <button
+                onClick={handleLogout}
+                disabled={loggingOut}
+                className="w-full flex items-center gap-2 px-4 py-3 text-sm font-medium text-admin-status-red hover:bg-admin-status-red-bg disabled:opacity-50 transition-colors"
+              >
+                <LogOut className="w-4 h-4" />
+                {loggingOut ? "Signing out…" : "Log out"}
+              </button>
+            </div>
+          )}
+        </div>
       </div>
 
       <div className="flex-1 overflow-y-auto px-4 py-5 flex flex-col gap-6">
