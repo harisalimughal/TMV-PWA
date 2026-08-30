@@ -106,9 +106,25 @@ body {
   body > * {
     visibility: hidden;
   }
+
+  /* .print-content is only ever reachable from print by chasing up through however
+   * many modal/drawer wrappers happen to be mounted at the time (e.g.
+   * JobDetailDrawer's own fixed wrapper, containing PdfPreviewModal's own fixed
+   * wrapper, containing this) -- position:fixed on ANY of them still pins that
+   * ancestor to one viewport-sized box during print, which caps .print-content's own
+   * position:absolute to that same box no matter how many levels up the fixed
+   * ancestor actually is. Rather than hunting down and patching every wrapper
+   * (component structure that can grow another layer at any time), flatten every
+   * element's positioning to static here -- visibility:hidden doesn't do this on its
+   * own, an invisible element still establishes a containing block for its
+   * descendants exactly as if it were visible -- then re-elevate only .print-content
+   * itself, which then has no positioned ancestor left to be trapped inside. */
+  * {
+    position: static !important;
+  }
   .print-content {
     visibility: visible;
-    position: absolute;
+    position: absolute !important;
     top: 0;
     left: 0;
     width: 100%;
@@ -123,7 +139,7 @@ body {
     visibility: visible;
   }
   .paper-sheet {
-    position: absolute;
+    position: absolute !important;
     left: 0;
     top: 0;
     width: 100% !important;
