@@ -70,6 +70,12 @@ export const env = {
   /** Sender ID shown as the "from" on the text -- 3-11 alphanumeric characters, no spaces. */
   firetextSenderId: process.env.FIRETEXT_SENDER_ID?.trim() || "",
 
+  /** GPSLive (gpslive.app) live van tracking, for the admin dashboard's Live Fleet
+   * page (admin/dashboard/*). Blank means fetchGpsLiveDevices() just returns an empty
+   * fleet -- same "not configured yet" pattern as the other optional integrations. */
+  gpsApiKey: process.env.GPS_API?.trim() || "",
+  gpsTimeoutMs: numberEnv("TMV_GPS_TIMEOUT_MS", 5_000),
+
   // ---------------------------------------------------------------------------
   // Background processing
   // ---------------------------------------------------------------------------

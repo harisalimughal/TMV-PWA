@@ -16,8 +16,18 @@ import { log } from "./utils/logger";
 import { ensureIndexes } from "./db/mongo";
 import { authRoutes } from "./auth/auth.routes";
 import { adminRoutes } from "./auth/admin.routes";
+import { requireAdminAuth } from "./auth/require-admin-auth";
 import { jobsRoutes } from "./jobs/jobs.routes";
 import { syncTodayBookings } from "./jobs/booking.service";
+import { dashboardActivityRoutes } from "./admin/dashboard/activity.routes";
+import { dashboardDriversSummaryRoutes } from "./admin/dashboard/drivers-summary.routes";
+import { dashboardExceptionsRoutes } from "./admin/dashboard/exceptions.routes";
+import { dashboardFinanceRoutes } from "./admin/dashboard/finance.routes";
+import { dashboardFleetRoutes } from "./admin/dashboard/fleet.routes";
+import { dashboardJobsRoutes } from "./admin/dashboard/jobs.routes";
+import { dashboardNotificationsRoutes } from "./admin/dashboard/notifications.routes";
+import { dashboardScenariosRoutes } from "./admin/dashboard/scenarios.routes";
+import { dashboardSummaryRoutes } from "./admin/dashboard/summary.routes";
 
 const app = express();
 app.use(express.json({ limit: "2mb" }));
@@ -28,6 +38,20 @@ app.get("/healthz", (_req, res) => res.status(200).json({ ok: true }));
 app.use("/api/auth", authRoutes());
 app.use("/api/admin", adminRoutes());
 app.use("/api/jobs", jobsRoutes());
+
+// The ported admin dashboard (Overview/Jobs/Live Fleet/Exceptions/Reports/Activity/
+// Messaging/Scenarios/Finance/driver performance stats) -- same requireAdminAuth
+// session as adminRoutes() above, just a different set of (mostly read-only) endpoints.
+// See admin/dashboard/*.
+app.use("/api/admin/jobs", requireAdminAuth, dashboardJobsRoutes());
+app.use("/api/admin/drivers", requireAdminAuth, dashboardDriversSummaryRoutes());
+app.use("/api/admin/summary", requireAdminAuth, dashboardSummaryRoutes());
+app.use("/api/admin/finance", requireAdminAuth, dashboardFinanceRoutes());
+app.use("/api/admin/exceptions", requireAdminAuth, dashboardExceptionsRoutes());
+app.use("/api/admin/fleet", requireAdminAuth, dashboardFleetRoutes());
+app.use("/api/admin/scenarios", requireAdminAuth, dashboardScenariosRoutes());
+app.use("/api/admin/activity", requireAdminAuth, dashboardActivityRoutes());
+app.use("/api/admin/notifications", requireAdminAuth, dashboardNotificationsRoutes());
 
 // Serve the built PWA frontend (web/dist), if present. This whole domain IS the app --
 // unlike TMV-Chat-bot's /ops, there's no separate public marketing site sharing the

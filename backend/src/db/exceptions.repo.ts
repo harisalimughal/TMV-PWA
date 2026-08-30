@@ -20,3 +20,9 @@ export async function recordException(doc: ExceptionDoc): Promise<void> {
   const col = await exceptionsCollection();
   await col.insertOne(doc);
 }
+
+/** Read side of the same Exceptions page -- newest first. */
+export async function listExceptions(): Promise<ExceptionDoc[]> {
+  const col = await exceptionsCollection();
+  return col.find({}).sort({ timestamp: -1 }).toArray();
+}

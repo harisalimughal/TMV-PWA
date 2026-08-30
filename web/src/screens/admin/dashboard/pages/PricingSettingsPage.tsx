@@ -1,24 +1,22 @@
 import React, { useEffect, useState } from "react";
-import { AlertTriangle, Box, Clock, FileText, Loader2, Save, Users } from "lucide-react";
-import { fetchSettings, saveSetting, type AdminSetting } from "../../api/admin";
+import { AlertTriangle, Box, Clock, Loader2, Save, Users } from "lucide-react";
+import { fetchSettings, saveSetting, type EditableSetting } from "../api";
 
 /**
- * Ported from TMV-Chat-bot's dashboard/web/src/pages/PricingSettingsPage.tsx -- same
- * card layout, section grouping and sticky "unsaved changes" save bar. Two real
- * differences from that source:
- *  1. The source's handleSaveAll() was a UI mock ("In a real app, API call goes
- *     here") -- every field there was local-only state with nothing persisted. This
- *     saves for real, through tmv-pwa's own /api/admin/settings (Mongo).
- *  2. Added a Templates card for the email/confirmation-text settings, which the
- *     source's Pricing page didn't cover (and its sibling SettingsPage.tsx's
- *     equivalent cards were Google-Sheets-schema info panels that don't apply here).
- * Dropped: the "Impact Preview" calculator column -- a nice-to-have, not part of what
- * was asked for.
+ * Rebuilt, not ported: the source's PricingSettingsPage.tsx and SettingsPage.tsx were
+ * both non-functional UI mockups -- every rate field was local-only state, and
+ * handleSaveAll()'s only comment was "In a real app, API call goes here". Nothing was
+ * ever actually persisted. This keeps the same card layout and sticky "unsaved
+ * changes" save bar, but saves for real through tmv-pwa's own /api/admin/settings
+ * (Mongo) -- see backend/src/admin/settings-spec.ts for the exact key list. Used for
+ * both the "Pricing Settings" and "Settings" nav entries (the source's two separate
+ * pages covered the same ground -- rates here, Sheets-schema/caching trivia there that
+ * doesn't apply to a Sheets-free backend).
  */
-export function SettingsTab() {
+export function PricingSettingsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [settings, setSettings] = useState<AdminSetting[]>([]);
+  const [settings, setSettings] = useState<EditableSetting[]>([]);
   const [values, setValues] = useState<Record<string, string>>({});
   const [dirty, setDirty] = useState<Set<string>>(new Set());
   const [saving, setSaving] = useState(false);
@@ -27,7 +25,7 @@ export function SettingsTab() {
     setLoading(true);
     setError(null);
     try {
-      const list = await fetchSettings();
+      const { settings: list } = await fetchSettings();
       setSettings(list);
       setValues(Object.fromEntries(list.map(s => [s.key, s.value])));
       setDirty(new Set());
@@ -52,9 +50,7 @@ export function SettingsTab() {
     setSaving(true);
     setError(null);
     try {
-      for (const key of dirty) {
-        await saveSetting(key, values[key] ?? "");
-      }
+      for (const key of dirty) await saveSetting(key, values[key] ?? "");
       setDirty(new Set());
     } catch (err: any) {
       setError(err?.message || "Couldn't save changes. Try again.");
@@ -68,7 +64,7 @@ export function SettingsTab() {
     setDirty(new Set());
   }
 
-  function byKey(key: string): AdminSetting | undefined {
+  function byKey(key: string): EditableSetting | undefined {
     return settings.find(s => s.key === key);
   }
 
@@ -81,15 +77,15 @@ export function SettingsTab() {
   }
 
   const crewKeys = ["CREW_RATE_1_MAN", "CREW_RATE_2_MAN", "CREW_RATE_3_MAN"];
-  const templateKeys = ["CUSTOMER_CONFIRMATION_TEXT", "JOB_COMPLETION_EMAIL_TEXT", "REVIEW_REQUEST_EMAIL_TEXT"];
 
   return (
     <div className="space-y-6 max-w-[1440px] mx-auto pb-24">
       <div className="bg-white p-6 rounded-[20px] border border-admin-line shadow-sm flex items-start justify-between">
         <div>
-          <h2 className="text-[20px] font-bold text-admin-ink mb-1">Settings</h2>
+          <h2 className="text-[20px] font-bold text-admin-ink mb-1">Pricing Settings</h2>
           <p className="text-[14px] text-admin-muted max-w-3xl">
-            Configure crew rates, packing pricing, overtime rules, and customer-facing text. Changes apply to new jobs immediately.
+            Configure crew rates, packing service pricing, and overtime rules. Changes apply to all new jobs
+            immediately — no developer or redeployment required.
           </p>
         </div>
         {dirty.size > 0 && (
@@ -107,7 +103,6 @@ export function SettingsTab() {
       )}
 
       <div className="space-y-6">
-        {/* CREW RATES */}
         <SettingsCard icon={<Users className="w-4 h-4 text-admin-brand" />} title="Base Crew Rates">
           <div className="space-y-5">
             {crewKeys.map(key => {
@@ -125,11 +120,19 @@ export function SettingsTab() {
                 </div>
               );
             })}
-            <UnitRow label="Billing Unit" settingKey="CREW_BILLING_UNIT" spec={byKey("CREW_BILLING_UNIT")} value={values.CREW_BILLING_UNIT ?? ""} onChange={v => setValue("CREW_BILLING_UNIT", v)} />
+            <div className="flex justify-between items-center py-3 px-1">
+              <span className="text-[13px] font-medium text-admin-ink-2">Billing Unit</span>
+              <input
+                type="text"
+                value={values.CREW_BILLING_UNIT ?? ""}
+                onChange={e => setValue("CREW_BILLING_UNIT", e.target.value)}
+                placeholder={byKey("CREW_BILLING_UNIT")?.fallback}
+                className="w-48 h-9 px-3 rounded-lg border border-admin-line bg-white text-[13px] text-admin-ink outline-none focus:border-admin-brand transition text-right"
+              />
+            </div>
           </div>
         </SettingsCard>
 
-        {/* PACKING */}
         <SettingsCard icon={<Box className="w-4 h-4 text-admin-brand" />} title="Full / Packing Service">
           <div className="flex flex-wrap md:flex-nowrap items-start gap-4 p-4 rounded-xl border border-admin-brand/20 bg-admin-brand-soft/40">
             <div className="w-full md:w-1/3">
@@ -149,7 +152,6 @@ export function SettingsTab() {
           </div>
         </SettingsCard>
 
-        {/* OVERTIME */}
         <SettingsCard icon={<Clock className="w-4 h-4 text-admin-brand" />} title="Overtime Rules">
           <div className="flex flex-wrap md:flex-nowrap items-start gap-6">
             <div className="w-full md:w-1/2">
@@ -173,29 +175,6 @@ export function SettingsTab() {
               />
               <p className="text-[11px] text-admin-muted mt-1.5">Allow N minutes over booked time before charges apply.</p>
             </div>
-          </div>
-        </SettingsCard>
-
-        {/* TEMPLATES */}
-        <SettingsCard icon={<FileText className="w-4 h-4 text-admin-brand" />} title="Customer Text &amp; Email Templates">
-          <div className="space-y-5">
-            {templateKeys.map(key => {
-              const spec = byKey(key);
-              if (!spec) return null;
-              return (
-                <div key={key}>
-                  <label className="block text-[12px] font-semibold text-admin-muted uppercase tracking-wider mb-1.5">{spec.label}</label>
-                  <textarea
-                    value={values[key] ?? ""}
-                    onChange={e => setValue(key, e.target.value)}
-                    placeholder={spec.fallback}
-                    rows={4}
-                    className="w-full px-3 py-2.5 rounded-lg border border-admin-line bg-white text-[13px] text-admin-ink outline-none focus:border-admin-brand transition resize-y"
-                  />
-                  {spec.hint && <p className="text-[11px] text-admin-muted mt-1.5 leading-relaxed">{spec.hint}</p>}
-                </div>
-              );
-            })}
           </div>
         </SettingsCard>
       </div>
@@ -249,23 +228,6 @@ function MoneyInput({ value, placeholder, onChange }: { value: string; placehold
         onChange={e => onChange(e.target.value)}
         placeholder={placeholder}
         className="w-full h-10 pl-8 pr-3 rounded-lg border border-admin-line bg-white text-[14px] font-mono text-admin-ink outline-none focus:border-admin-brand transition"
-      />
-    </div>
-  );
-}
-
-function UnitRow({
-  label, spec, value, onChange
-}: { label: string; settingKey: string; spec: AdminSetting | undefined; value: string; onChange: (v: string) => void }) {
-  return (
-    <div className="flex justify-between items-center py-3 px-1">
-      <span className="text-[13px] font-medium text-admin-ink-2">{label}</span>
-      <input
-        type="text"
-        value={value}
-        onChange={e => onChange(e.target.value)}
-        placeholder={spec?.fallback}
-        className="w-48 h-9 px-3 rounded-lg border border-admin-line bg-white text-[13px] text-admin-ink outline-none focus:border-admin-brand transition text-right"
       />
     </div>
   );

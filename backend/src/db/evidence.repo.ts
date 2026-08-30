@@ -26,6 +26,15 @@ export async function listEvidenceForJob(jobId: string): Promise<EvidenceRecord[
   return docs.map(({ _id, ...record }: any) => record as EvidenceRecord);
 }
 
+/** Every evidence record across every job -- the admin dashboard's cross-job views
+ * (Jobs, Finished Jobs, Exceptions, Reports) join this against jobs by jobId
+ * client-side rather than issuing a query per job. */
+export async function listAllEvidence(): Promise<EvidenceRecord[]> {
+  const col = await evidenceCollection();
+  const docs = await col.find({}).toArray();
+  return docs.map(({ _id, ...record }: any) => record as EvidenceRecord);
+}
+
 /** Same contract as google/sheets.ts's readEvidenceSummary -- counts per evidence type,
  * bucketed by status, plus whether a signature exists. workflow.engine.ts's
  * assertCompletionGate() is unchanged and reads this shape directly.

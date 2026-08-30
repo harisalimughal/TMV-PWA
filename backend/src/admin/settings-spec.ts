@@ -1,5 +1,5 @@
 import { env } from "../config/env";
-import { JOB_COMPLETION_EMAIL_TEMPLATE, REVIEW_REQUEST_EMAIL_TEMPLATE } from "../notifications/message";
+import { JOB_COMPLETION_EMAIL_TEMPLATE, JOB_STARTED_MESSAGE_TEMPLATE, REVIEW_REQUEST_EMAIL_TEMPLATE } from "../notifications/message";
 import { DEFAULT_CUSTOMER_CONFIRMATION_TEXT } from "../workflow/workflow.engine";
 
 export interface SettingFieldSpec {
@@ -62,5 +62,22 @@ export const SETTINGS_SPEC: SettingFieldSpec[] = [
     fallback: String(env.overtimeRatePer30Minutes),
     hint: "Leave blank to use the relevant crew/packing rate above instead."
   },
-  { key: "OVERTIME_GRACE_MINS", label: "Overtime Grace (minutes)", type: "number", fallback: String(env.overtimeGraceMinutes) }
+  { key: "OVERTIME_GRACE_MINS", label: "Overtime Grace (minutes)", type: "number", fallback: String(env.overtimeGraceMinutes) },
+  {
+    key: "JOB_STARTED_MESSAGE_TEXT",
+    label: "Customer Message — On My Way",
+    type: "textarea",
+    fallback: JOB_STARTED_MESSAGE_TEMPLATE,
+    hint: "Ported from the classic dashboard's Settings tab for parity -- not currently sent by tmv-pwa's own " +
+      "workflow (no \"On my way\" step exists there yet). Placeholders: {customerName} {companyName} {pickup} " +
+      "{dropoff} {driverPhone} {vanRegistration}."
+  },
+  {
+    key: "CLIENT_NOTIFICATION_OFFSET_MINUTES",
+    label: "Client Notification — Minutes Before Job",
+    type: "number",
+    fallback: "60",
+    hint: "Ported from the classic dashboard's Settings tab for parity -- tmv-pwa doesn't run the scheduled " +
+      "client-reminder job this configured, so changing it currently has no effect."
+  }
 ];

@@ -19,3 +19,10 @@ export async function listActivityForJob(jobId: string): Promise<ActivityDoc[]> 
   const col = await activityCollection();
   return col.find({ jobId }).sort({ timestamp: 1 }).toArray();
 }
+
+/** Every activity row across every job -- backs the admin dashboard's Activity Log
+ * page and the cross-job joins in the normalize layer (jobs/finance/exceptions/summary). */
+export async function listAllActivity(): Promise<ActivityDoc[]> {
+  const col = await activityCollection();
+  return col.find({}).sort({ timestamp: -1 }).toArray();
+}
