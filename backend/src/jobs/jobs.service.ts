@@ -38,6 +38,17 @@ function isDueByToday(iso: string): boolean {
   return dt <= DateTime.now().setZone(env.timezone).endOf("day");
 }
 
+/** True only for a job booked strictly after today (in the operating timezone) --
+ * i.e. tomorrow or later. Used to stop a driver starting a future job early, e.g. one
+ * tapped from the "Tomorrow" list. Deliberately the mirror image of isDueByToday, not
+ * its negation: an overdue job from an earlier day is neither "due by today" nor
+ * "future" -- it's still meant to be startable. */
+function isFutureDay(iso: string): boolean {
+  if (!iso) return false;
+  const dt = DateTime.fromISO(iso).setZone(env.timezone);
+  return dt > DateTime.now().setZone(env.timezone).endOf("day");
+}
+
 // ---------------------------------------------------------------------------
 // Calendar sync throttle
 // ---------------------------------------------------------------------------
@@ -191,6 +202,15 @@ export async function startJob(jobId: string, identifier: string): Promise<Job> 
     if (job.status === JobStatus.IN_PROGRESS) {
       log.info("start job ignored; already started", { job_id: job.jobId, state: job.currentState });
       return job;
+    }
+
+    // A job tapped from the "Tomorrow" list is still just for browsing -- starting it
+    // early would set actualStart today, corrupting delay/duration figures computed
+    // against its real booked time. Overdue jobs from an earlier day are unaffected
+    // (isFutureDay, not the negation of isDueByToday).
+    if (isFutureDay(job.bookedStart)) {
+      const bookedDay = DateTime.fromISO(job.bookedStart).setZone(env.timezone).toFormat("cccc d LLLL");
+      throw new ValidationError(`This job is booked for ${bookedDay}. You can't start it until then.`);
     }
 
     // An unassigned booking must not be a free-for-all. First claim wins, and it

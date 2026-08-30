@@ -38,21 +38,27 @@ function defaultOvertimeCrewSize(job: Job): "1" | "2" | "3" {
   return "2";
 }
 
-/** True when bookedStart isn't today, in the driver's own local time -- flags a job
- * opened a day early (e.g. tapped from the "Tomorrow" list) so it isn't mistaken for
- * today's work. Relies on the phone's local timezone matching the job's operating
- * timezone (Europe/London), same assumption the rest of the driver-facing UI already
- * makes for anything not computed server-side. */
+/** "yyyy-MM-dd" for a Date, as seen in Europe/London -- the operating timezone,
+ * regardless of the device's own local timezone setting. A device set to a different
+ * zone (seen in practice: +05:00) previously made isNotToday compare calendar days in
+ * the WRONG timezone, e.g. an evening London booking rolling into "tomorrow" on a
+ * device several hours ahead -- flagging today's own job as "not today". */
+function londonDateKey(d: Date): string {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/London" }).format(d);
+}
+
+/** True when bookedStart isn't today in Europe/London -- flags a job opened a day
+ * early (e.g. tapped from the "Tomorrow" list) so it isn't mistaken for today's work. */
 function isNotToday(bookedStart: string): boolean {
   if (!bookedStart) return false;
   const booked = new Date(bookedStart);
   if (isNaN(booked.getTime())) return false;
-  return booked.toDateString() !== new Date().toDateString();
+  return londonDateKey(booked) !== londonDateKey(new Date());
 }
 
 function formatBookedDay(bookedStart: string): string {
   try {
-    return new Date(bookedStart).toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long" });
+    return new Date(bookedStart).toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long", timeZone: "Europe/London" });
   } catch {
     return "";
   }
