@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-import { AlertCircle, AlertTriangle, ArrowLeft, ChevronLeft, ClipboardList, Loader2, MapPin, PartyPopper, PenLine } from "lucide-react";
+import { AlertCircle, AlertTriangle, ArrowLeft, ChevronLeft, Loader2, MapPin, PartyPopper, PenLine } from "lucide-react";
 import {
   fetchJobDetail, sendAction, startJob, uploadEvidencePhotos, uploadSignature, type Job
 } from "../api/jobs";
@@ -237,29 +237,6 @@ export function JobWorkflowScreen({ jobId, onBack }: JobWorkflowScreenProps) {
             Go back a step
           </button>
         )}
-
-        {/* Check In/Check Out are standalone storage-job actions, not part of the
-            linear move workflow above -- always reachable regardless of job state. */}
-        <div className="mt-8 pt-5 border-t border-admin-line">
-          <div className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-admin-muted mb-3">
-            <ClipboardList className="w-3.5 h-3.5" />
-            Storage forms
-          </div>
-          <div className="flex gap-3">
-            <button
-              onClick={() => setOpenScenario("checkin")}
-              className="flex-1 rounded-xl border border-admin-line bg-white py-3 text-sm font-medium hover:border-admin-muted/50"
-            >
-              Check In
-            </button>
-            <button
-              onClick={() => setOpenScenario("checkout")}
-              className="flex-1 rounded-xl border border-admin-line bg-white py-3 text-sm font-medium hover:border-admin-muted/50"
-            >
-              Check Out
-            </button>
-          </div>
-        </div>
       </div>
 
       {signatureModalOpen && (

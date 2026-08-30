@@ -1,12 +1,16 @@
 import React, { useRef, useState } from "react";
 import { AlertCircle, AlertTriangle, ArrowLeft, Loader2 } from "lucide-react";
-import { submitScenario } from "../api/jobs";
+import { submitScenario, submitStorageScenario } from "../api/jobs";
 import { SCENARIOS, MULTISELECT_DELIMITER, type ScenarioKey } from "../scenarioSpec";
 import { PhotoPicker } from "../components/PhotoPicker";
 import { SignaturePad, type SignaturePadHandle } from "../components/SignaturePad";
 
 interface ScenarioFormScreenProps {
-  jobId: string;
+  /** Present only for job-scoped scenarios (Parking Liability / Liability Report,
+   * reached from a job's own "any issues?" detour). Check In/Check Out are standalone
+   * storage-job forms with no jobId at all -- omitting this is what tells this screen
+   * to post to /api/storage instead of /api/jobs/:jobId/scenarios. */
+  jobId?: string;
   scenario: ScenarioKey;
   onDone: () => void;
   onCancel: () => void;
@@ -35,7 +39,11 @@ export function ScenarioFormScreen({ jobId, scenario, onDone, onCancel }: Scenar
     try {
       const blob = await padRef.current?.toBlob();
       if (!blob) throw new Error("Couldn't read the signature. Try signing again.");
-      await submitScenario(jobId, scenario, fields, photos, blob);
+      if (jobId) {
+        await submitScenario(jobId, scenario, fields, photos, blob);
+      } else {
+        await submitStorageScenario(scenario as "checkin" | "checkout", fields, photos, blob);
+      }
       onDone();
     } catch (err: any) {
       setError(err?.message || "Couldn't submit this form. Try again.");

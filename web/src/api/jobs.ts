@@ -168,6 +168,29 @@ export async function submitScenario(
   return body;
 }
 
+/** Check In / Check Out -- standalone storage-job forms, not tied to any move job (see
+ * backend/src/jobs/scenario.service.ts's submitStorageScenario doc comment). Posts to
+ * /api/storage, not /api/jobs/:jobId/scenarios, since there's no jobId to scope under. */
+export async function submitStorageScenario(
+  scenario: "checkin" | "checkout",
+  fields: Record<string, string>,
+  photos: File[],
+  signature: Blob
+): Promise<{ submission: unknown }> {
+  const form = new FormData();
+  for (const [key, value] of Object.entries(fields)) form.append(key, value);
+  photos.forEach(file => form.append("photos", file));
+  form.append("signature", signature, "signature.png");
+  const res = await fetch(`/api/storage/${encodeURIComponent(scenario)}`, {
+    method: "POST",
+    credentials: "same-origin",
+    body: form
+  });
+  const body = await parseJson(res);
+  await throwIfError(res, body);
+  return body;
+}
+
 export async function sendAction(
   jobId: string,
   action: string,

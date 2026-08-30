@@ -6,6 +6,7 @@ import { ForgotPasswordScreen } from "./screens/ForgotPasswordScreen";
 import { ResetPasswordScreen } from "./screens/ResetPasswordScreen";
 import { JobListScreen } from "./screens/JobListScreen";
 import { JobWorkflowScreen } from "./screens/JobWorkflowScreen";
+import { ScenarioFormScreen } from "./screens/ScenarioFormScreen";
 import { AdminApp } from "./screens/admin/AdminApp";
 
 type View =
@@ -14,7 +15,10 @@ type View =
   | { name: "login" }
   | { name: "forgot-password" }
   | { name: "jobs"; driver: DriverProfile }
-  | { name: "job"; driver: DriverProfile; jobId: string };
+  | { name: "job"; driver: DriverProfile; jobId: string }
+  // Check In/Check Out -- standalone storage-job forms, not attached to any job (see
+  // ScenarioFormScreen's jobId doc comment). Reachable directly from the jobs list.
+  | { name: "storage"; driver: DriverProfile; scenario: "checkin" | "checkout" };
 
 /** Only one real "deep link" this app needs to honour outside its own in-app
  * navigation: the password-reset email points at /reset-password?token=... A tiny
@@ -104,11 +108,22 @@ export function App() {
     return <JobWorkflowScreen jobId={view.jobId} onBack={() => setView({ name: "jobs", driver: view.driver })} />;
   }
 
+  if (view.name === "storage") {
+    return (
+      <ScenarioFormScreen
+        scenario={view.scenario}
+        onCancel={() => setView({ name: "jobs", driver: view.driver })}
+        onDone={() => setView({ name: "jobs", driver: view.driver })}
+      />
+    );
+  }
+
   return (
     <JobListScreen
       driver={view.driver}
       onLoggedOut={() => setView({ name: "login" })}
       onOpenJob={jobId => setView({ name: "job", driver: view.driver, jobId })}
+      onOpenStorageScenario={scenario => setView({ name: "storage", driver: view.driver, scenario })}
     />
   );
 }

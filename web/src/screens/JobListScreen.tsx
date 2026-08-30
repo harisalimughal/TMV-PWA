@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-import { AlertCircle, ChevronRight, Loader2, LogOut, MapPin, RefreshCw } from "lucide-react";
+import { AlertCircle, ChevronRight, Loader2, LogOut, MapPin, PackageMinus, PackagePlus, RefreshCw } from "lucide-react";
 import { logout, type DriverProfile } from "../api/auth";
 import { fetchJobsList, type Job } from "../api/jobs";
 
@@ -7,6 +7,8 @@ interface JobListScreenProps {
   driver: DriverProfile;
   onLoggedOut: () => void;
   onOpenJob: (jobId: string) => void;
+  /** Check In/Check Out -- standalone storage-job forms, not attached to any job. */
+  onOpenStorageScenario: (scenario: "checkin" | "checkout") => void;
 }
 
 function formatGBP(value: number): string {
@@ -35,7 +37,7 @@ function formatDate(iso: string): string {
   }
 }
 
-export function JobListScreen({ driver, onLoggedOut, onOpenJob }: JobListScreenProps) {
+export function JobListScreen({ driver, onLoggedOut, onOpenJob, onOpenStorageScenario }: JobListScreenProps) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [today, setToday] = useState<Job[]>([]);
@@ -128,6 +130,28 @@ export function JobListScreen({ driver, onLoggedOut, onOpenJob }: JobListScreenP
       </div>
 
       <div className="flex-1 overflow-y-auto px-4 py-5 flex flex-col gap-6">
+        {/* Check In/Check Out -- standalone storage-job forms, unrelated to any move
+            job, so they live here at the top level rather than nested inside one. */}
+        <section className="flex flex-col gap-2">
+          <h2 className="text-xs font-semibold uppercase tracking-wide text-admin-muted">Storage forms</h2>
+          <div className="flex gap-3">
+            <button
+              onClick={() => onOpenStorageScenario("checkin")}
+              className="flex-1 flex items-center justify-center gap-2 rounded-xl border border-admin-line bg-white py-3 text-sm font-medium hover:border-admin-muted/50 shadow-primary"
+            >
+              <PackagePlus className="w-4 h-4 text-admin-muted" />
+              Check In
+            </button>
+            <button
+              onClick={() => onOpenStorageScenario("checkout")}
+              className="flex-1 flex items-center justify-center gap-2 rounded-xl border border-admin-line bg-white py-3 text-sm font-medium hover:border-admin-muted/50 shadow-primary"
+            >
+              <PackageMinus className="w-4 h-4 text-admin-muted" />
+              Check Out
+            </button>
+          </div>
+        </section>
+
         <div className="flex items-center justify-between">
           <h1 className="text-lg font-bold">Your jobs</h1>
           <button
