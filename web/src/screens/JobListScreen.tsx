@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { AlertCircle, ChevronRight, Loader2, LogOut, MapPin, RefreshCw } from "lucide-react";
 import { logout, type DriverProfile } from "../api/auth";
-import { fetchNextJob, fetchTomorrowJobs, type Job } from "../api/jobs";
+import { fetchJobsList, type Job } from "../api/jobs";
 
 interface JobListScreenProps {
   driver: DriverProfile;
@@ -16,7 +16,20 @@ function formatGBP(value: number): string {
 function formatTime(iso: string): string {
   if (!iso) return "";
   try {
-    return new Date(iso).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
+    return new Date(iso).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/London" });
+  } catch {
+    return "";
+  }
+}
+
+/** "Sat 29 Aug" in Europe/London -- the operating timezone, regardless of the device's
+ * own local timezone (see JobWorkflowScreen's londonDateKey for why that distinction
+ * matters). Shown on every card now that jobs from more than one day can appear
+ * together in the same list. */
+function formatDate(iso: string): string {
+  if (!iso) return "";
+  try {
+    return new Date(iso).toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short", timeZone: "Europe/London" });
   } catch {
     return "";
   }
@@ -25,8 +38,9 @@ function formatTime(iso: string): string {
 export function JobListScreen({ driver, onLoggedOut, onOpenJob }: JobListScreenProps) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [job, setJob] = useState<Job | null>(null);
-  const [tomorrow, setTomorrow] = useState<Job[]>([]);
+  const [today, setToday] = useState<Job[]>([]);
+  const [past, setPast] = useState<Job[]>([]);
+  const [next, setNext] = useState<Job[]>([]);
   const [loggingOut, setLoggingOut] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -35,9 +49,10 @@ export function JobListScreen({ driver, onLoggedOut, onOpenJob }: JobListScreenP
     else setRefreshing(true);
     setError(null);
     try {
-      const [nextJobResult, tomorrowResult] = await Promise.all([fetchNextJob(), fetchTomorrowJobs()]);
-      setJob(nextJobResult.job);
-      setTomorrow(tomorrowResult.jobs);
+      const result = await fetchJobsList();
+      setToday(result.today);
+      setPast(result.past);
+      setNext(result.next);
     } catch (err: any) {
       setError(err?.message || "Couldn't load your jobs.");
     } finally {
@@ -108,8 +123,12 @@ export function JobListScreen({ driver, onLoggedOut, onOpenJob }: JobListScreenP
           <>
             <section className="flex flex-col gap-2">
               <h2 className="text-xs font-semibold uppercase tracking-wide text-white/40">Today</h2>
-              {job ? (
-                <JobCard job={job} onClick={() => onOpenJob(job.jobId)} />
+              {today.length > 0 ? (
+                <div className="flex flex-col gap-2">
+                  {today.map(j => (
+                    <JobCard key={j.jobId} job={j} onClick={() => onOpenJob(j.jobId)} />
+                  ))}
+                </div>
               ) : (
                 <div className="rounded-xl bg-white/5 border border-white/10 px-4 py-6 text-center text-sm text-white/50">
                   No job assigned right now. Pull to refresh once you're dispatched.
@@ -117,11 +136,22 @@ export function JobListScreen({ driver, onLoggedOut, onOpenJob }: JobListScreenP
               )}
             </section>
 
-            {tomorrow.length > 0 && (
+            {past.length > 0 && (
               <section className="flex flex-col gap-2">
-                <h2 className="text-xs font-semibold uppercase tracking-wide text-white/40">Tomorrow</h2>
+                <h2 className="text-xs font-semibold uppercase tracking-wide text-amber-400/80">Past</h2>
                 <div className="flex flex-col gap-2">
-                  {tomorrow.map(j => (
+                  {past.map(j => (
+                    <JobCard key={j.jobId} job={j} onClick={() => onOpenJob(j.jobId)} overdue />
+                  ))}
+                </div>
+              </section>
+            )}
+
+            {next.length > 0 && (
+              <section className="flex flex-col gap-2">
+                <h2 className="text-xs font-semibold uppercase tracking-wide text-white/40">Next</h2>
+                <div className="flex flex-col gap-2">
+                  {next.map(j => (
                     <JobCard key={j.jobId} job={j} onClick={() => onOpenJob(j.jobId)} muted />
                   ))}
                 </div>
@@ -134,12 +164,16 @@ export function JobListScreen({ driver, onLoggedOut, onOpenJob }: JobListScreenP
   );
 }
 
-function JobCard({ job, onClick, muted }: { job: Job; onClick: () => void; muted?: boolean }) {
+function JobCard({ job, onClick, muted, overdue }: { job: Job; onClick: () => void; muted?: boolean; overdue?: boolean }) {
   return (
     <button
       onClick={onClick}
       className={`w-full text-left rounded-xl border px-4 py-4 flex items-center gap-3 transition-colors ${
-        muted ? "bg-white/5 border-white/10 hover:border-white/20" : "bg-brand/10 border-brand/30 hover:border-brand"
+        overdue
+          ? "bg-amber-400/10 border-amber-400/30 hover:border-amber-400"
+          : muted
+          ? "bg-white/5 border-white/10 hover:border-white/20"
+          : "bg-brand/10 border-brand/30 hover:border-brand"
       }`}
     >
       <div className="flex-1 min-w-0">
@@ -148,6 +182,11 @@ function JobCard({ job, onClick, muted }: { job: Job; onClick: () => void; muted
           {job.status === "IN_PROGRESS" && (
             <span className="text-[10px] font-bold uppercase tracking-wide text-emerald-400 bg-emerald-400/10 px-1.5 py-0.5 rounded shrink-0">
               In progress
+            </span>
+          )}
+          {overdue && (
+            <span className="text-[10px] font-bold uppercase tracking-wide text-amber-400 bg-amber-400/10 px-1.5 py-0.5 rounded shrink-0">
+              Overdue
             </span>
           )}
         </div>
@@ -160,7 +199,7 @@ function JobCard({ job, onClick, muted }: { job: Job; onClick: () => void; muted
           <span className="truncate"><span className="font-semibold">Drop-off:</span> {job.dropoff || "TBC"}</span>
         </div>
         <div className="text-xs text-white/40">
-          {formatTime(job.bookedStart)} · {job.crewSize || "?"} crew · {formatGBP(job.basePrice)}
+          {formatDate(job.bookedStart)} · {formatTime(job.bookedStart)} · {job.crewSize || "?"} crew · {formatGBP(job.basePrice)}
         </div>
       </div>
       <ChevronRight className="w-4 h-4 text-white/30 shrink-0" />

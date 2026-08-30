@@ -154,6 +154,55 @@ export async function getTomorrowJobsForDriver(identifier: string): Promise<{
   return { jobs: tomorrow, driver, unassignedCount };
 }
 
+/** Europe/London calendar-day key (YYYY-MM-DD) for a booking's ISO timestamp. Grouping
+ * by this string (not by elapsed hours) is what keeps "today" correct regardless of
+ * what time of day the driver opens the app or what timezone their device is set to. */
+function londonDayKey(iso: string): string | null {
+  if (!iso) return null;
+  return DateTime.fromISO(iso).setZone(env.timezone).toISODate();
+}
+
+/**
+ * The driver's full job list, bucketed by calendar day relative to today (Europe/
+ * London) instead of the single-"next job" model getNextJobForDriver uses for the
+ * active-job workflow screen. Today and Past both include unassigned bookings (still
+ * up for grabs, same rule as getNextJobForDriver) since a job overdue from an earlier
+ * day is just as claimable as one due today; Next stays assigned-only, mirroring the
+ * old tomorrow-only rule now extended to every future day, not just tomorrow.
+ */
+export async function getJobsGroupedForDriver(identifier: string): Promise<{
+  driver: DriverProfile;
+  today: Job[];
+  past: Job[];
+  next: Job[];
+}> {
+  const [driver, jobs] = await Promise.all([resolveDriver(identifier), listJobs()]);
+  const todayKey = DateTime.now().setZone(env.timezone).toISODate();
+
+  const relevant = jobs
+    .filter(j => j.status !== JobStatus.COMPLETED && j.status !== JobStatus.CANCELLED)
+    .filter(j => !j.driverInitials || j.driverInitials === driver.initials);
+
+  const today: Job[] = [];
+  const past: Job[] = [];
+  const next: Job[] = [];
+
+  for (const job of relevant) {
+    const dayKey = londonDayKey(job.bookedStart);
+    if (!dayKey || !todayKey) continue;
+    if (dayKey === todayKey) today.push(job);
+    else if (dayKey < todayKey) past.push(job);
+    else if (job.driverInitials === driver.initials) next.push(job);
+  }
+
+  const byBookedStart = (a: Job, b: Job) => a.bookedStart.localeCompare(b.bookedStart);
+  today.sort(byBookedStart);
+  past.sort(byBookedStart);
+  next.sort(byBookedStart);
+
+  return { driver, today, past, next };
+}
+
 export interface JobLookupOptions {
   /** No-op now (Mongo has no read cache to bypass); kept so call sites that pass it
    * (carried over from the Sheets version) don't need editing. */

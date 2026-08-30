@@ -2,7 +2,7 @@ import { Request, Response, Router } from "express";
 import multer from "multer";
 import { env } from "../config/env";
 import { requireDriverAuth } from "../auth/require-driver-auth";
-import { getJobForDriver, getNextJobForDriver, getTomorrowJobsForDriver, startJob } from "./jobs.service";
+import { getJobForDriver, getJobsGroupedForDriver, getNextJobForDriver, getTomorrowJobsForDriver, startJob } from "./jobs.service";
 import { uploadEvidenceImage } from "../storage/cloudinary";
 import { looksLikeImage } from "./evidence.service";
 import {
@@ -78,6 +78,21 @@ export function jobsRoutes(): Router {
     try {
       const { job, driver } = await getNextJobForDriver(req.driverEmail!, { sync: true });
       res.status(200).json({ job, driver: { fullName: driver.fullName, initials: driver.initials } });
+    } catch (error) {
+      errorResponse(res, error);
+    }
+  });
+
+  // Full job list for the "Your jobs" screen, bucketed into Today / Past / Next -- see
+  // getJobsGroupedForDriver's own doc comment for the day-boundary rules. Distinct from
+  // GET "/" above, which stays single-job (the active-workflow entry point).
+  router.get("/list", async (req: Request, res: Response) => {
+    try {
+      const { driver, today, past, next } = await getJobsGroupedForDriver(req.driverEmail!);
+      res.status(200).json({
+        driver: { fullName: driver.fullName, initials: driver.initials },
+        today, past, next
+      });
     } catch (error) {
       errorResponse(res, error);
     }

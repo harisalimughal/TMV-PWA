@@ -86,6 +86,19 @@ export async function fetchTomorrowJobs(): Promise<{ jobs: Job[]; unassignedCoun
   return body;
 }
 
+/** The "Your jobs" screen's own listing -- every one of the driver's jobs, bucketed
+ * into Today / Past / Next by calendar day. See jobs.service.ts's
+ * getJobsGroupedForDriver for the day-boundary rules. */
+export async function fetchJobsList(): Promise<{
+  driver: { fullName: string; initials: string };
+  today: Job[]; past: Job[]; next: Job[];
+}> {
+  const res = await fetch("/api/jobs/list", { credentials: "same-origin" });
+  const body = await parseJson(res);
+  await throwIfError(res, body);
+  return body;
+}
+
 export async function fetchJobDetail(
   jobId: string
 ): Promise<{
