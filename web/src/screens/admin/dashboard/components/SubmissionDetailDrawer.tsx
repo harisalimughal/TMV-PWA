@@ -164,7 +164,13 @@ export function SubmissionDetailDrawer({ job, isOpen, onClose, onNavigate, hasNe
   );
 
   return (
-    <div className="fixed inset-0 z-[100] flex bg-admin-ink/30 backdrop-blur-[2px] animate-in fade-in duration-200">
+    // print:static -- this wrapper being position:fixed on screen previously defeated
+    // .print-content's own position:absolute fix (see below): .print-content is
+    // absolutely positioned relative to its nearest positioned ancestor, and this
+    // outer div being position:fixed at print time meant that ancestor was itself
+    // pinned to one viewport-sized box, silently capping the printed report to a
+    // single page regardless of .print-content's own positioning.
+    <div className="fixed inset-0 print:static z-[100] flex bg-admin-ink/30 backdrop-blur-[2px] animate-in fade-in duration-200">
       <div className="flex w-full h-full print:hidden">
       
       {toast && (

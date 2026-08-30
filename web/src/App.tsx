@@ -29,22 +29,24 @@ function resetTokenFromUrl(): string | null {
 export function App() {
   const [view, setView] = useState<View>({ name: "checking" });
 
-  // /admin is a whole separate app (its own login, its own session cookie) -- bail out
+  // Admin is a whole separate app (its own login, its own session cookie) -- bail out
   // before ever touching the driver session check below, same reasoning as
-  // /reset-password's early return. Trailing slash tolerated -- a bare "/admin"
-  // exact-match missed "/admin/" (what a browser address bar normalises typed/pasted
-  // URLs to), silently falling through to the ordinary driver login flow instead.
+  // /reset-password's early return.
   //
-  // Gated on hostname too: this same server/bundle answers both chat.themanvan.co.uk
-  // (nginx -> this container's driver-app port) and dashboard.themanvan.co.uk (nginx
-  // -> this same container, repointed off the old TMV-Chat-bot dashboard) -- /admin is
-  // deliberately only reachable on the dashboard domain, matching where ops already
-  // expect the admin panel to live.
+  // This same server/bundle answers both chat.themanvan.co.uk (nginx -> this
+  // container's driver-app port) and dashboard.themanvan.co.uk (nginx -> this same
+  // container, repointed off the old TMV-Chat-bot dashboard). On the dashboard domain
+  // the admin app owns every path, not just /admin -- that domain's whole purpose is
+  // the dashboard now, so the bare root ("dashboard.themanvan.co.uk/" with no path)
+  // should land there too, not silently fall through to the driver login screen as if
+  // it were an unrecognised path. localhost keeps the path-gated check instead (dev
+  // convenience: lets a local server still switch between driver app and admin by
+  // path alone, matching how chat.themanvan.co.uk continues to work everywhere else).
   const path = window.location.pathname;
   const hostname = window.location.hostname;
   const isAdmin =
-    (path === "/admin" || path === "/admin/") &&
-    (hostname === "dashboard.themanvan.co.uk" || hostname === "localhost");
+    hostname === "dashboard.themanvan.co.uk" ||
+    (hostname === "localhost" && (path === "/admin" || path === "/admin/"));
 
   useEffect(() => {
     if (isAdmin) return;

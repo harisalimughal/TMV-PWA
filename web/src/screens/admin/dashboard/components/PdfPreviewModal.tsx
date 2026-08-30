@@ -14,7 +14,12 @@ export function PdfPreviewModal({ job, isOpen, onClose, onDownload }: Props) {
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-[200] flex flex-col bg-[#525659] backdrop-blur-sm animate-in fade-in duration-200">
+    // print:static -- this wrapper being position:fixed on screen previously defeated
+    // .print-content's own position:absolute fix below: .print-content is absolutely
+    // positioned relative to its nearest positioned ancestor, and this outer div being
+    // position:fixed at print time meant that ancestor was itself pinned to one
+    // viewport-sized box, silently capping the printed report to a single page.
+    <div className="fixed inset-0 print:static z-[200] flex flex-col bg-[#525659] backdrop-blur-sm animate-in fade-in duration-200">
       
       {/* Top Toolbar (Acrobat-style) */}
       <div className="h-14 bg-[#323639] border-b border-[#202124] shadow-md flex items-center justify-between px-4 shrink-0">
