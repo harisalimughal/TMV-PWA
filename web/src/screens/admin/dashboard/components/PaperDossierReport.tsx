@@ -74,10 +74,19 @@ export function PaperDossierReport({ job, isPreview = false }: Props) {
     );
   };
 
-  // Common wrapper for each page
+  // Common wrapper for each page. display:flex used to live directly on this element
+  // -- the one page-break-after:always boundary Chromium's print engine has to
+  // respect -- alongside that page-break. Flex (and grid) containers have long had
+  // unreliable print pagination in Chromium when combined with page-break-after on
+  // the same element: page 1 prints fine (there's no boundary to get wrong yet), but
+  // page 2 onward silently drops or collapses, which is exactly "only the first photo
+  // shows" for any report with more than one page. The page-break boundary now sits on
+  // a plain block element; flex (for the header/content/footer stack, with the footer
+  // pinned via mt-auto) moved to a plain inner wrapper that isn't part of that
+  // boundary.
   const Page = ({ page, totalPages, children }: { page: number, totalPages: number, children: React.ReactNode }) => (
-    <div 
-      className={`bg-white text-admin-ink flex flex-col mx-auto ${isPreview ? 'w-full shadow-lg border border-admin-line mb-8 overflow-hidden rounded-control' : 'print-page'}`}
+    <div
+      className={`bg-white text-admin-ink mx-auto ${isPreview ? 'w-full shadow-lg border border-admin-line mb-8 overflow-hidden rounded-control' : 'print-page'}`}
       style={{
         width: isPreview ? '100%' : '210mm',
         height: isPreview ? 'auto' : '297mm',
@@ -87,11 +96,13 @@ export function PaperDossierReport({ job, isPreview = false }: Props) {
         boxSizing: 'border-box'
       }}
     >
-      <Header />
-      {page === 1 && <SubmitterCard />}
-      {children}
-      <div className="pt-4 mt-auto border-t border-[#E5E7EB] flex justify-end shrink-0">
-        <span className="text-[12px] font-semibold text-admin-muted">{page}/{totalPages}</span>
+      <div className="flex h-full flex-col">
+        <Header />
+        {page === 1 && <SubmitterCard />}
+        {children}
+        <div className="pt-4 mt-auto border-t border-[#E5E7EB] flex justify-end shrink-0">
+          <span className="text-[12px] font-semibold text-admin-muted">{page}/{totalPages}</span>
+        </div>
       </div>
     </div>
   );
@@ -105,16 +116,13 @@ export function PaperDossierReport({ job, isPreview = false }: Props) {
         @media print {
           @page { size: A4 portrait; margin: 0; }
           body { -webkit-print-color-adjust: exact; print-color-adjust: exact; background: white; }
-          .print-page { 
-            width: 210mm !important; 
-            height: 297mm !important; 
-            padding: 20mm !important; 
-            margin: 0 !important; 
+          .print-page {
+            width: 210mm !important;
+            height: 297mm !important;
+            padding: 20mm !important;
+            margin: 0 !important;
             page-break-after: always;
-            page-break-inside: avoid;
             box-sizing: border-box;
-            display: flex;
-            flex-direction: column;
             background-color: white;
           }
         }
