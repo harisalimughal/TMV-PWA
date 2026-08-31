@@ -56,14 +56,18 @@ export function PaperScenarioReport({ item, kind }: Props) {
 
       <style>{`
         @media print {
-          .print-page-container {
-            height: 100vh;
-            display: flex;
-            flex-direction: column;
-            padding: 20px;
-            box-sizing: border-box;
-          }
-          body { background: white; }
+          /* Was height: 100vh here -- unlike a physical mm/in unit, vh resolves against
+             the print engine's own notion of "viewport", which is unreliable across
+             browsers and print-to-PDF paths. When the resolved height came out shorter
+             than the actual content (any real submission with photos), the overflow
+             got pushed onto a second page that was then almost entirely blank -- the
+             report itself never overflowed logical content, just the box that was
+             supposed to contain it on one page. min-height (below) already sizes this
+             correctly for one physical A4 page; print only needs the @page rule and
+             color-adjust so backgrounds/shadows aren't stripped for ink-saving. */
+          @page { size: A4 portrait; margin: 0; }
+          body { background: white; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+          .print-page-container { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
         }
         .print-page-container {
           min-height: 297mm;
@@ -72,7 +76,7 @@ export function PaperScenarioReport({ item, kind }: Props) {
           padding: 40px;
           margin-bottom: 24px;
           background: white;
-          border: 1px solid var(--admin-line);
+          border: 1px solid var(--line);
           border-radius: 8px;
           box-shadow: var(--shadow-sm);
         }
