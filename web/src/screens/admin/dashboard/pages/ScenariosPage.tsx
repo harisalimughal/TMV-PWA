@@ -18,6 +18,7 @@ import { PaperDossierReport } from "../components/PaperDossierReport";
 import { NormalizedJob } from "../types";
 import { fetchScenarios } from "../api";
 import { PaperScenarioReport } from "../components/PaperScenarioReport";
+import { waitForPrintImages } from "../utils/printReady";
 import { formatLondonDateTime } from "../utils/date";
 import { DateRangePicker } from "../components/DateRangePicker";
 import { LiabilityConfigModal } from "../components/LiabilityConfigModal";
@@ -403,7 +404,8 @@ export function ScenariosPage({ kind }: Props) {
       onPreview={() => setPreviewJob(item)}
       onDownload={() => {
         setPreviewJob(item);
-        setTimeout(() => {
+        setTimeout(async () => {
+          await waitForPrintImages();
           window.print();
         }, 500);
       }}

@@ -25,6 +25,7 @@ import { DelayBandBadge } from "./StatusBadge";
 import { EvidenceCompletenessPill } from "./EvidenceCompletenessPill";
 import { PaperDossierReport } from "./PaperDossierReport";
 import { PdfPreviewModal } from "./PdfPreviewModal";
+import { waitForPrintImages } from "../utils/printReady";
 import { PhotoModal } from "./PhotoModal";
 import { ThumbnailPreview } from "./ThumbnailPreview";
 import { resolveDriver, formatVanReg, getAvatarColor } from "../utils/drivers";
@@ -103,10 +104,16 @@ export function JobDetailDrawer({ job: initialJob, isOpen, onClose, onUpdated }:
   };
   
   const handleActualDownload = () => {
-    setIsPreviewOpen(false);
+    // Was: setIsPreviewOpen(false) here, immediately. PdfPreviewModal (and the hidden
+    // .print-content it renders) unmounts entirely as soon as isOpen goes false, so by
+    // the time the setTimeout below fired 800ms later there was nothing left in the
+    // DOM for window.print() to print -- the modal has to stay open, and the photos
+    // loaded, until AFTER print() has been called.
     setIsGeneratingPdf(true);
-    setTimeout(() => {
+    setTimeout(async () => {
+      await waitForPrintImages();
       window.print();
+      setIsPreviewOpen(false);
       setIsGeneratingPdf(false);
       showToast(`Report generated — ${job.jobId}_Dossier.pdf downloaded`);
     }, 800);

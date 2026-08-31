@@ -1,5 +1,6 @@
 import React from "react";
 import { formatLondonDateTime } from "../utils/date";
+import { resolveDriver } from "../utils/drivers";
 
 interface Props {
   item: any;
@@ -16,8 +17,14 @@ export function PaperScenarioReport({ item, kind }: Props) {
   const raw = item.rawRecord || item;
 
   const clientName = item.clientName || raw["Client Name"] || raw["Client Full Name"] || "Not recorded";
-  const driverInitials = item.driver || raw["Driver"] || "UN";
-  const driverName = raw["Driver Name"] || `${driverInitials} Driver`;
+  // A scenario submission's `driver` field is free text -- sometimes initials,
+  // sometimes an email, sometimes a full name. resolveDriver() is the shared place
+  // this is already handled correctly: `code` is always capped to 2 characters, so
+  // it can't overflow the fixed-size avatar circle below and collide with the
+  // reference badge next to it (as the raw value did when it was long).
+  const driverResolved = resolveDriver(item.driver || raw["Driver"]);
+  const driverInitials = driverResolved.code;
+  const driverName = raw["Driver Name"] || driverResolved.name;
   const timestampStr = item.timestamp || raw["Timestamp"] || raw["Date"] || "";
   const formattedTime = formatLondonDateTime(timestampStr);
   const containerNum = item.containerNumber || raw["Container Number"] || "—";
@@ -94,17 +101,17 @@ export function PaperScenarioReport({ item, kind }: Props) {
         </div>
 
         {/* META ROW */}
-        <div className="flex items-start justify-between p-4 border border-admin-line rounded-card mb-6 bg-white shadow-sm">
-          <div className="flex items-center gap-3">
-            <div className={`w-9 h-9 rounded-full ${driverColor} text-white flex items-center justify-center text-[13px] font-bold`}>
+        <div className="flex items-start justify-between gap-3 p-4 border border-admin-line rounded-card mb-6 bg-white shadow-sm">
+          <div className="flex min-w-0 items-center gap-3">
+            <div className={`w-9 h-9 shrink-0 overflow-hidden rounded-full ${driverColor} text-white flex items-center justify-center text-[13px] font-bold`}>
               {driverInitials}
             </div>
-            <div>
-              <div className="text-[14px] font-bold text-[#1A1A1A]">{driverName}</div>
+            <div className="min-w-0">
+              <div className="truncate text-[14px] font-bold text-[#1A1A1A]">{driverName}</div>
               <div className="text-[12px] text-[#8A8A8A] mt-0.5">{formattedTime} | Europe/London</div>
             </div>
           </div>
-          <div className="px-3 py-1 bg-admin-surface text-[#1A1A1A] text-[13px] font-semibold rounded-card border border-admin-line">
+          <div className="shrink-0 px-3 py-1 bg-admin-surface text-[#1A1A1A] text-[13px] font-semibold rounded-card border border-admin-line">
             {refId ? `#${refId}` : "Reference pending"}
           </div>
         </div>

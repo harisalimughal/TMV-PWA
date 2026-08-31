@@ -5,6 +5,8 @@ import { PaperDossierReport } from "./PaperDossierReport";
 import { PaperScenarioReport } from "./PaperScenarioReport";
 import { NormalizedJob, ScenarioItem } from "../types";
 import { formatLondonDateTime } from "../utils/date";
+import { waitForPrintImages } from "../utils/printReady";
+import { resolveDriver } from "../utils/drivers";
 
 type ScenarioKind = "checkin" | "checkout" | "parking" | "liability";
 
@@ -49,11 +51,18 @@ export function SubmissionDetailDrawer({ job, isOpen, onClose, onNavigate, hasNe
   const rawRecord: Record<string, any> = isScenario ? (scenarioItem.rawRecord || scenarioItem) : {};
 
   const displayId = isScenario ? (scenarioItem.id || "—") : (job as NormalizedJob).jobId;
+  // A scenario submission's `driver` field is a free-text string -- sometimes
+  // initials, sometimes an email, sometimes a full name -- not a guaranteed-short
+  // code. Dumping it straight into a fixed-size avatar circle (as this used to)
+  // overflowed the circle and visually collided with the text next to it for
+  // anything longer than ~2 characters. resolveDriver() is the shared, correct
+  // place this is already handled: `code` is always capped to 2 chars.
+  const scenarioDriver = isScenario ? resolveDriver(scenarioItem.driver || rawRecord["Driver"]) : null;
   const driverInitials = isScenario
-    ? (scenarioItem.driver || rawRecord["Driver"] || "UN")
+    ? scenarioDriver!.code
     : ((job as NormalizedJob).driverInitials || "UN");
   const driverName = isScenario
-    ? (rawRecord["Driver Name"] || `${driverInitials} Driver`)
+    ? (rawRecord["Driver Name"] || scenarioDriver!.name)
     : ((job as NormalizedJob).driverName || "Unknown");
   const customerName = isScenario
     ? (scenarioItem.clientName || rawRecord["Client Name"] || rawRecord["Client Full Name"] || "Not recorded")
@@ -84,8 +93,12 @@ export function SubmissionDetailDrawer({ job, isOpen, onClose, onNavigate, hasNe
 
   const handleDownload = () => {
     setIsGeneratingPdf(true);
-    // Render the report and trigger print
-    setTimeout(() => {
+    // Give the hidden print DOM a tick to mount, then wait for its actual photos to
+    // finish loading -- a fixed setTimeout before print() left real evidence photos
+    // blank on the printed/downloaded page whenever they hadn't loaded in time.
+    setTimeout(async () => {
+      await waitForPrintImages();
+
       // Temporarily set document title for nice PDF filename
       const originalTitle = document.title;
       const dateStr = new Date().toISOString().slice(0, 10);
@@ -141,11 +154,11 @@ export function SubmissionDetailDrawer({ job, isOpen, onClose, onNavigate, hasNe
           <div className="relative pl-4 space-y-6 before:absolute before:left-0 before:top-2 before:bottom-0 before:w-px before:bg-admin-line">
             <div className="relative flex flex-col">
                <div className="absolute -left-[21px] top-1.5 w-2.5 h-2.5 rounded-full bg-admin-brand ring-4 ring-white" />
-               <div className="flex items-center gap-2 mb-1">
-                 <div className="w-6 h-6 rounded-full bg-admin-brand-soft text-admin-brand font-bold text-[9px] flex items-center justify-center">
+               <div className="flex items-center gap-2 mb-1 min-w-0">
+                 <div className="w-6 h-6 shrink-0 rounded-full bg-admin-brand-soft text-admin-brand font-bold text-[9px] flex items-center justify-center overflow-hidden">
                     {driverInitials}
                  </div>
-                 <span className="text-[13px] font-bold text-admin-ink">{driverName || 'Unknown Driver'}</span>
+                 <span className="min-w-0 truncate text-[13px] font-bold text-admin-ink">{driverName || 'Unknown Driver'}</span>
                </div>
                <span className="text-[13px] text-admin-muted mb-1">submitted the form</span>
                <span className="text-[11px] font-medium text-admin-muted/60">{formattedTime}</span>
@@ -273,7 +286,7 @@ export function SubmissionDetailDrawer({ job, isOpen, onClose, onNavigate, hasNe
         {/* TOP HEADER */}
         <div className="min-h-[72px] bg-white border-b border-admin-line shadow-sm px-3 sm:px-6 py-2 flex flex-wrap items-center justify-between gap-2 shrink-0 relative z-20">
           <div className="flex items-center gap-3 sm:gap-4 min-w-0">
-             <div className="w-10 h-10 shrink-0 rounded-full bg-admin-brand-soft text-admin-brand border border-admin-brand/20 flex items-center justify-center font-bold text-[14px]">
+             <div className="w-10 h-10 shrink-0 overflow-hidden rounded-full bg-admin-brand-soft text-admin-brand border border-admin-brand/20 flex items-center justify-center font-bold text-[14px]">
                {driverInitials}
              </div>
              <div className="min-w-0">

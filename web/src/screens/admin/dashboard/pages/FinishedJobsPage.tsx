@@ -12,6 +12,7 @@ import {
 import { SubmissionDetailDrawer } from "../components/SubmissionDetailDrawer";
 import { FolderActionDropdown } from "../components/FolderActionDropdown";
 import { PaperDossierReport } from "../components/PaperDossierReport";
+import { waitForPrintImages } from "../utils/printReady";
 import { FileText } from "lucide-react";
 import { fetchJobs } from "../api";
 import { NormalizedJob, toPounds } from "../types";
@@ -268,7 +269,8 @@ export function FinishedJobsPage() {
         onPreview={() => setPreviewJob(job)}
         onDownload={() => {
           setPreviewJob(job);
-          setTimeout(() => {
+          setTimeout(async () => {
+            await waitForPrintImages();
             const originalTitle = document.title;
             const dateStr = new Date().toISOString().slice(0, 10);
             document.title = `Job_Completed_${job.jobId}_${job.driverName?.replace(/\s+/g, '')}_${dateStr}`;
