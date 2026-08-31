@@ -24,7 +24,9 @@ import {
 import { fetchJobs, fetchSummary, fetchExceptions } from "../api";
 import { DateRangePicker } from "../components/DateRangePicker";
 import { formatLondonDate, formatLondonDateTime } from "../utils/date";
+import { completionRate } from "../utils/kpi";
 import { GenerateReportModal } from "../components/GenerateReportModal";
+import { Button, Spinner } from "../../../../ui";
 
 interface Props {
   onSelectSection?: (id: string) => void;
@@ -47,28 +49,29 @@ export function OverviewPage({ onSelectSection }: Props) {
 
   if (isLoading) {
     return (
-      <div className="py-24 text-center">
-        <div className="w-8 h-8 border-2 border-admin-ink border-t-transparent rounded-full animate-spin mx-auto mb-3" />
-        <p className="text-[14px] text-admin-muted">Loading telemetry...</p>
+      <div className="flex flex-col items-center gap-3 py-24 text-center text-fg-subtle">
+        <Spinner size="lg" />
+        <p className="text-body text-fg-muted">Loading telemetry…</p>
       </div>
     );
   }
 
   if (error || !data) {
     return (
-      <div className="p-8 bg-white rounded-3xl text-center shadow-[0_8px_30px_rgb(0,0,0,0.04)]">
+      <div className="p-8 bg-white rounded-module text-center shadow-[0_8px_30px_rgb(0,0,0,0.04)]">
         <AlertTriangle className="w-6 h-6 text-admin-status-red mx-auto mb-2" />
-        <h3 className="text-[16px] font-semibold text-admin-ink">Failed to load overview data</h3>
-        <p className="text-red-500 mt-4 text-xs font-mono max-w-lg mx-auto break-words">{error instanceof Error ? error.message : String(error)}</p>
-        <button onClick={() => refetch()} className="mt-6 px-4 py-2 bg-admin-ink text-white text-[13px] font-semibold rounded-lg hover:bg-gray-800 transition">
+        <h3 className="text-heading text-fg">Failed to load overview data</h3>
+        <p className="mx-auto mt-4 max-w-lg break-words font-mono text-meta text-danger">{error instanceof Error ? error.message : String(error)}</p>
+        <Button variant="secondary" onClick={() => refetch()} className="mt-6">
           Retry
-        </button>
+        </Button>
       </div>
     );
   }
 
   const { kpis, charts } = data;
-  const completionRate = kpis.totalJobs > 0 ? Math.round((kpis.completed / kpis.totalJobs) * 100) : 98;
+  // null when there are no jobs in range -- rendered as "N/A", never a stand-in number.
+  const completionPct = completionRate(kpis.completed, kpis.totalJobs);
   const totalRevenue = kpis.revenuePounds || 0;
   const activityFeed = exceptionsData?.items.slice(0, 5) || [];
 
@@ -78,14 +81,12 @@ export function OverviewPage({ onSelectSection }: Props) {
       {/* HEADER SECTION */}
       <div className="flex flex-wrap items-center justify-between gap-4 px-2">
         <div className="space-y-1">
-          <h2 className="text-[24px] font-bold text-admin-ink tracking-tight">Analytics Overview</h2>
-          <p className="text-[14px] text-admin-muted">Real-time performance and financial metrics.</p>
+          <h2 className="text-title text-fg">Analytics Overview</h2>
+          <p className="text-body text-fg-muted">Real-time performance and financial metrics.</p>
         </div>
         <div className="flex items-center gap-3">
           <DateRangePicker from={from} to={to} onChange={(f, t) => { setFrom(f); setTo(t); }} />
-          <button onClick={() => setIsReportModalOpen(true)} className="px-6 py-2 bg-admin-ink text-white rounded-full text-[14px] font-semibold hover:bg-black transition shadow-md">
-            Generate Report
-          </button>
+          <Button onClick={() => setIsReportModalOpen(true)}>Generate report</Button>
         </div>
       </div>
 
@@ -98,9 +99,9 @@ export function OverviewPage({ onSelectSection }: Props) {
           {/* STATS GRID */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
             
-            <div className="bg-white p-8 rounded-[24px] shadow-[0_8px_30px_rgb(0,0,0,0.03)] flex flex-col justify-between hover:shadow-[0_12px_40px_rgb(0,0,0,0.06)] transition">
+            <div className="bg-white p-8 rounded-module shadow-[0_8px_30px_rgb(0,0,0,0.03)] flex flex-col justify-between hover:shadow-[0_12px_40px_rgb(0,0,0,0.06)] transition">
               <div className="flex items-center justify-between mb-4">
-                <span className="text-[16px] font-semibold text-admin-ink">Gross Revenue</span>
+                <span className="text-heading text-fg">Gross Revenue</span>
                 <Banknote className="w-5 h-5 text-admin-muted" />
               </div>
               <div className="text-[44px] leading-none font-bold text-admin-ink tracking-tighter mb-2">
@@ -112,9 +113,9 @@ export function OverviewPage({ onSelectSection }: Props) {
               </div>
             </div>
 
-            <div className="bg-white p-8 rounded-[24px] shadow-[0_8px_30px_rgb(0,0,0,0.03)] flex flex-col justify-between hover:shadow-[0_12px_40px_rgb(0,0,0,0.06)] transition">
+            <div className="bg-white p-8 rounded-module shadow-[0_8px_30px_rgb(0,0,0,0.03)] flex flex-col justify-between hover:shadow-[0_12px_40px_rgb(0,0,0,0.06)] transition">
               <div className="flex items-center justify-between mb-4">
-                <span className="text-[16px] font-semibold text-admin-ink">Total Moves</span>
+                <span className="text-heading text-fg">Total Moves</span>
                 <Truck className="w-5 h-5 text-admin-muted" />
               </div>
               <div className="text-[44px] leading-none font-bold text-admin-ink tracking-tighter mb-2">
@@ -126,23 +127,29 @@ export function OverviewPage({ onSelectSection }: Props) {
               </div>
             </div>
 
-            <div className="bg-white p-8 rounded-[24px] shadow-[0_8px_30px_rgb(0,0,0,0.03)] flex flex-col justify-between hover:shadow-[0_12px_40px_rgb(0,0,0,0.06)] transition">
+            <div className="bg-white p-8 rounded-module shadow-[0_8px_30px_rgb(0,0,0,0.03)] flex flex-col justify-between hover:shadow-[0_12px_40px_rgb(0,0,0,0.06)] transition">
               <div className="flex items-center justify-between mb-4">
-                <span className="text-[16px] font-semibold text-admin-ink">Completion Rate</span>
+                <span className="text-heading text-fg">Completion Rate</span>
                 <CheckCircle2 className="w-5 h-5 text-admin-muted" />
               </div>
               <div className="text-[44px] leading-none font-bold text-admin-ink tracking-tighter mb-2">
-                {completionRate}%
+                {completionPct === null ? "N/A" : `${completionPct}%`}
               </div>
-              <div className="flex items-center gap-2 text-[13px] font-medium text-admin-status-green">
-                <span className="px-2 py-0.5 rounded-full bg-admin-status-green/10">Optimal</span>
-                <span className="text-admin-muted font-normal">SLA Target &gt;95%</span>
-              </div>
+              {completionPct === null ? (
+                <div className="flex items-center gap-2 text-label font-medium text-fg-muted">
+                  <span className="font-normal">No jobs in the selected range</span>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2 text-[13px] font-medium text-admin-status-green">
+                  <span className="px-2 py-0.5 rounded-full bg-admin-status-green/10">Optimal</span>
+                  <span className="text-admin-muted font-normal">SLA Target &gt;95%</span>
+                </div>
+              )}
             </div>
 
-            <div className="bg-white p-8 rounded-[24px] shadow-[0_8px_30px_rgb(0,0,0,0.03)] flex flex-col justify-between hover:shadow-[0_12px_40px_rgb(0,0,0,0.06)] transition">
+            <div className="bg-white p-8 rounded-module shadow-[0_8px_30px_rgb(0,0,0,0.03)] flex flex-col justify-between hover:shadow-[0_12px_40px_rgb(0,0,0,0.06)] transition">
               <div className="flex items-center justify-between mb-4">
-                <span className="text-[16px] font-semibold text-admin-ink">Avg Arrival Delay</span>
+                <span className="text-heading text-fg">Avg Arrival Delay</span>
                 <Clock className="w-5 h-5 text-admin-muted" />
               </div>
               <div className="text-[44px] leading-none font-bold text-admin-ink tracking-tighter mb-2">
@@ -157,15 +164,12 @@ export function OverviewPage({ onSelectSection }: Props) {
           </div>
 
           {/* MAIN CHART CARD */}
-          <div className="bg-white p-8 rounded-[24px] shadow-[0_8px_30px_rgb(0,0,0,0.03)]">
+          <div className="bg-white p-8 rounded-module shadow-[0_8px_30px_rgb(0,0,0,0.03)]">
             <div className="flex items-center justify-between mb-8">
               <div>
-                <h3 className="text-[16px] font-semibold text-admin-ink">Revenue Velocity</h3>
+                <h3 className="text-heading text-fg">Revenue Velocity</h3>
                 <p className="text-[14px] text-admin-muted mt-1">Daily billed move turnover</p>
               </div>
-              <button className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-admin-bg transition text-admin-muted">
-                <MoreHorizontal className="w-5 h-5" />
-              </button>
             </div>
             <div className="h-[300px] w-full">
               <ResponsiveContainer width="100%" height="100%">
@@ -195,10 +199,16 @@ export function OverviewPage({ onSelectSection }: Props) {
         <div className="lg:col-span-1 space-y-6">
           
           {/* RANKED LIST CARD */}
-          <div className="bg-white p-8 rounded-[24px] shadow-[0_8px_30px_rgb(0,0,0,0.03)]">
+          <div className="bg-white p-8 rounded-module shadow-[0_8px_30px_rgb(0,0,0,0.03)]">
             <div className="flex items-center justify-between mb-6">
-              <h3 className="text-[16px] font-semibold text-admin-ink">Top Drivers</h3>
-              <button className="text-[13px] font-medium text-admin-ink hover:underline">View all</button>
+              <h3 className="text-heading text-fg">Top Drivers</h3>
+              {/* "View all" had no handler. It now goes where it says it goes. */}
+              <button
+                onClick={() => onSelectSection?.("drivers")}
+                className="text-label font-semibold text-brand hover:underline"
+              >
+                View all
+              </button>
             </div>
             <div className="space-y-5">
               {charts.jobsByDriver.filter((d: any) => d.driverName !== 'Unassigned' && d.initials !== 'UN').slice(0, 5).map((d: any, i: number) => (
@@ -208,7 +218,7 @@ export function OverviewPage({ onSelectSection }: Props) {
                       {d.initials}
                     </div>
                     <div>
-                      <div className="text-[14px] font-semibold text-admin-ink">{d.initials} Driver</div>
+                      <div className="text-card text-fg">{d.initials} Driver</div>
                       <div className="text-[12px] text-admin-muted">{d.completed} delivered</div>
                     </div>
                   </div>
@@ -219,9 +229,9 @@ export function OverviewPage({ onSelectSection }: Props) {
           </div>
 
           {/* ACTIVITY FEED CARD */}
-          <div className="bg-white p-8 rounded-[24px] shadow-[0_8px_30px_rgb(0,0,0,0.03)]">
+          <div className="bg-white p-8 rounded-module shadow-[0_8px_30px_rgb(0,0,0,0.03)]">
             <div className="flex items-center justify-between mb-6">
-              <h3 className="text-[16px] font-semibold text-admin-ink">Recent Activity</h3>
+              <h3 className="text-heading text-fg">Recent Activity</h3>
               <span className="w-2 h-2 rounded-full bg-admin-status-green animate-pulse"></span>
             </div>
             <div className="space-y-6">

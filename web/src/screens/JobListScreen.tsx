@@ -1,66 +1,40 @@
-import React, { useEffect, useRef, useState } from "react";
-import { AlertCircle, ChevronRight, Loader2, LogOut, MapPin, PackageMinus, PackagePlus, RefreshCw } from "lucide-react";
-import { logout, type DriverProfile } from "../api/auth";
-import { fetchJobsList, type Job } from "../api/jobs";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { type DriverProfile } from "../api/auth";
+import { fetchJobsList, type ApiError, type Job } from "../api/jobs";
+import { PullToRefresh } from "../app/PullToRefresh";
+import { AppShell } from "../app/AppShell";
+import { OfflineBanner } from "../app/OfflineBanner";
+import {
+  FeaturedJobCard,
+  MobileHeader,
+  ScheduleRow,
+  ScheduleRowSkeleton,
+  ScheduleSection
+} from "../components/driver";
+import { Alert, Button } from "../ui";
 
 interface JobListScreenProps {
   driver: DriverProfile;
-  onLoggedOut: () => void;
   onOpenJob: (jobId: string) => void;
-  /** Check In/Check Out -- standalone storage-job forms, not attached to any job. */
-  onOpenStorageScenario: (scenario: "checkin" | "checkout") => void;
+  onOpenProfile: () => void;
 }
 
-function formatGBP(value: number): string {
-  return `£${value.toFixed(2)}`;
+/** The job that matters right now: in progress first, else next on the clock. */
+function pickFeatured(today: Job[], past: Job[], next: Job[]): Job | null {
+  const all = [...past, ...today, ...next];
+  return all.find(j => j.status === "IN_PROGRESS") ?? today[0] ?? next[0] ?? past[0] ?? null;
 }
 
-function formatTime(iso: string): string {
-  if (!iso) return "";
-  try {
-    return new Date(iso).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/London" });
-  } catch {
-    return "";
-  }
-}
-
-/** "Sat 29 Aug" in Europe/London -- the operating timezone, regardless of the device's
- * own local timezone (see JobWorkflowScreen's londonDateKey for why that distinction
- * matters). Shown on every card now that jobs from more than one day can appear
- * together in the same list. */
-function formatDate(iso: string): string {
-  if (!iso) return "";
-  try {
-    return new Date(iso).toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short", timeZone: "Europe/London" });
-  } catch {
-    return "";
-  }
-}
-
-export function JobListScreen({ driver, onLoggedOut, onOpenJob, onOpenStorageScenario }: JobListScreenProps) {
+export function JobListScreen({ driver, onOpenJob, onOpenProfile }: JobListScreenProps) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [today, setToday] = useState<Job[]>([]);
   const [past, setPast] = useState<Job[]>([]);
   const [next, setNext] = useState<Job[]>([]);
-  const [loggingOut, setLoggingOut] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
-  const [menuOpen, setMenuOpen] = useState(false);
-  const menuRef = useRef<HTMLDivElement>(null);
 
-  // Close the profile menu on an outside tap/click -- standard dropdown behaviour, and
-  // the only way to dismiss it besides logging out or picking nowhere in particular.
-  useEffect(() => {
-    if (!menuOpen) return;
-    function handlePointerDown(event: PointerEvent) {
-      if (menuRef.current && !menuRef.current.contains(event.target as Node)) setMenuOpen(false);
-    }
-    document.addEventListener("pointerdown", handlePointerDown);
-    return () => document.removeEventListener("pointerdown", handlePointerDown);
-  }, [menuOpen]);
-
-  async function load(showSpinner: boolean) {
-    if (showSpinner) setLoading(true);
+  const load = useCallback(async (mode: "initial" | "refresh") => {
+    if (mode === "initial") setLoading(true);
     else setRefreshing(true);
     setError(null);
     try {
@@ -68,195 +42,104 @@ export function JobListScreen({ driver, onLoggedOut, onOpenJob, onOpenStorageSce
       setToday(result.today);
       setPast(result.past);
       setNext(result.next);
-    } catch (err: any) {
-      setError(err?.message || "Couldn't load your jobs.");
+    } catch (err) {
+      setError((err as ApiError)?.message || "Couldn't load your jobs.");
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }
-
-  useEffect(() => {
-    load(true);
   }, []);
 
-  async function handleLogout() {
-    if (loggingOut) return;
-    setLoggingOut(true);
-    try {
-      await logout();
-    } finally {
-      onLoggedOut();
-    }
-  }
+  useEffect(() => {
+    void load("initial");
+  }, [load]);
+
+  const featured = useMemo(() => pickFeatured(today, past, next), [today, past, next]);
+  const featuredId = featured?.jobId;
+  const rest = {
+    past: past.filter(j => j.jobId !== featuredId),
+    today: today.filter(j => j.jobId !== featuredId),
+    next: next.filter(j => j.jobId !== featuredId)
+  };
+  const totalJobs = today.length + past.length + next.length;
 
   return (
-    <div className="h-screen-safe flex flex-col bg-admin-bg text-admin-ink pt-safe pb-safe pl-safe pr-safe">
-      <div className="flex items-center justify-between px-5 py-4 border-b border-admin-line bg-white shrink-0">
-        <div className="flex items-center gap-2.5 min-w-0">
-          <div className="w-8 h-8 rounded-lg bg-white border border-admin-line p-1 shrink-0 flex items-center justify-center">
-            <img src="/tmv-logo.png" alt="" className="w-full h-full object-contain" />
-          </div>
-          <span className="text-sm font-bold tracking-tight truncate">The Man Van</span>
-        </div>
+    <AppShell banner={<OfflineBanner />} contentWidth="content">
+      <PullToRefresh onRefresh={() => load("refresh")}>
+        <div className="flex flex-col gap-6 px-4 pb-4 pt-4 scroll-pb-nav">
+          <MobileHeader
+            driver={driver}
+            onOpenProfile={onOpenProfile}
+            onRefresh={() => load("refresh")}
+            refreshing={refreshing}
+            jobCount={loading ? undefined : totalJobs}
+          />
 
-        <div className="relative shrink-0" ref={menuRef}>
-          <button
-            onClick={() => setMenuOpen(v => !v)}
-            className="w-9 h-9 rounded-full bg-brand/10 flex items-center justify-center text-xs font-bold text-brand hover:bg-brand/15 transition-colors"
-            aria-label="Account menu"
-            aria-expanded={menuOpen}
-          >
-            {driver.initials || driver.fullName.slice(0, 2).toUpperCase()}
-          </button>
-
-          {menuOpen && (
-            <div className="absolute right-0 top-full mt-2 w-60 rounded-xl bg-white border border-admin-line shadow-floating overflow-hidden z-10">
-              <div className="px-4 py-3.5 border-b border-admin-line">
-                <div className="text-sm font-semibold leading-tight truncate">{driver.fullName}</div>
-                <div className="text-xs text-admin-muted leading-tight truncate mt-0.5">{driver.email}</div>
-              </div>
-              <button
-                onClick={handleLogout}
-                disabled={loggingOut}
-                className="w-full flex items-center gap-2 px-4 py-3 text-sm font-medium text-admin-status-red hover:bg-admin-status-red-bg disabled:opacity-50 transition-colors"
-              >
-                <LogOut className="w-4 h-4" />
-                {loggingOut ? "Signing out…" : "Log out"}
-              </button>
+          {loading ? (
+            <div>
+              <ScheduleRowSkeleton />
+              <ScheduleRowSkeleton />
+              <ScheduleRowSkeleton />
             </div>
-          )}
-        </div>
-      </div>
-
-      <div className="flex-1 overflow-y-auto px-4 py-5 flex flex-col gap-6">
-        {/* Check In/Check Out -- standalone storage-job forms, unrelated to any move
-            job, so they live here at the top level rather than nested inside one. */}
-        <section className="flex flex-col gap-2">
-          <h2 className="text-xs font-semibold uppercase tracking-wide text-admin-muted">Storage forms</h2>
-          <div className="flex gap-3">
-            <button
-              onClick={() => onOpenStorageScenario("checkin")}
-              className="flex-1 flex items-center justify-center gap-2 rounded-xl border border-admin-line bg-white py-3 text-sm font-medium hover:border-admin-muted/50 shadow-primary"
+          ) : error ? (
+            <Alert
+              tone="danger"
+              title="Couldn't load your jobs"
+              action={
+                <Button size="sm" variant="secondary" onClick={() => load("refresh")}>
+                  Retry
+                </Button>
+              }
             >
-              <PackagePlus className="w-4 h-4 text-admin-muted" />
-              Check In
-            </button>
-            <button
-              onClick={() => onOpenStorageScenario("checkout")}
-              className="flex-1 flex items-center justify-center gap-2 rounded-xl border border-admin-line bg-white py-3 text-sm font-medium hover:border-admin-muted/50 shadow-primary"
-            >
-              <PackageMinus className="w-4 h-4 text-admin-muted" />
-              Check Out
-            </button>
-          </div>
-        </section>
+              {error}
+            </Alert>
+          ) : totalJobs === 0 ? (
+            <div className="rounded-xl border border-line bg-surface py-12 text-center shadow-xs">
+              <p className="text-heading text-fg">Nothing assigned yet</p>
+              <p className="mx-auto mt-1.5 max-w-xs text-body text-fg-muted">
+                New work appears here as soon as the office dispatches it.
+              </p>
+              <Button size="sm" variant="secondary" className="mt-4" onClick={() => load("refresh")}>
+                Refresh
+              </Button>
+            </div>
+          ) : (
+            <>
+              {featured && <FeaturedJobCard job={featured} onOpen={() => onOpenJob(featured.jobId)} />}
 
-        <div className="flex items-center justify-between">
-          <h1 className="text-lg font-bold">Your jobs</h1>
-          <button
-            onClick={() => load(false)}
-            disabled={refreshing}
-            className="flex items-center gap-1.5 text-xs text-admin-muted hover:text-admin-ink disabled:opacity-50"
-          >
-            <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? "animate-spin" : ""}`} />
-            Refresh
-          </button>
-        </div>
-
-        {loading ? (
-          <div className="flex-1 flex items-center justify-center py-10">
-            <Loader2 className="w-6 h-6 animate-spin text-admin-muted" />
-          </div>
-        ) : error ? (
-          <div className="flex items-center gap-2 text-sm text-admin-status-red bg-admin-status-red-bg border border-admin-status-red/20 rounded-lg px-3 py-3">
-            <AlertCircle className="w-4 h-4 shrink-0" />
-            {error}
-          </div>
-        ) : (
-          <>
-            <section className="flex flex-col gap-2">
-              <h2 className="text-xs font-semibold uppercase tracking-wide text-admin-muted">Today</h2>
-              {today.length > 0 ? (
-                <div className="flex flex-col gap-2">
-                  {today.map(j => (
-                    <JobCard key={j.jobId} job={j} onClick={() => onOpenJob(j.jobId)} />
+              {rest.past.length > 0 && (
+                <ScheduleSection title="Needs finishing" tone="attention" meta={`${rest.past.length}`}>
+                  {rest.past.map(job => (
+                    <ScheduleRow key={job.jobId} job={job} bucket="past" onOpen={() => onOpenJob(job.jobId)} />
                   ))}
-                </div>
-              ) : (
-                <div className="rounded-xl bg-white border border-admin-line px-4 py-6 text-center text-sm text-admin-muted">
-                  No job assigned right now. Pull to refresh once you're dispatched.
-                </div>
+                </ScheduleSection>
               )}
-            </section>
 
-            {past.length > 0 && (
-              <section className="flex flex-col gap-2">
-                <h2 className="text-xs font-semibold uppercase tracking-wide text-admin-status-amber">Past</h2>
-                <div className="flex flex-col gap-2">
-                  {past.map(j => (
-                    <JobCard key={j.jobId} job={j} onClick={() => onOpenJob(j.jobId)} overdue />
+              {rest.today.length > 0 && (
+                <ScheduleSection
+                  title="Today"
+                  meta={`${rest.today.length} ${rest.today.length === 1 ? "job" : "jobs"}`}
+                >
+                  {rest.today.map(job => (
+                    <ScheduleRow key={job.jobId} job={job} bucket="today" onOpen={() => onOpenJob(job.jobId)} />
                   ))}
-                </div>
-              </section>
-            )}
+                </ScheduleSection>
+              )}
 
-            {next.length > 0 && (
-              <section className="flex flex-col gap-2">
-                <h2 className="text-xs font-semibold uppercase tracking-wide text-admin-muted">Next</h2>
-                <div className="flex flex-col gap-2">
-                  {next.map(j => (
-                    <JobCard key={j.jobId} job={j} onClick={() => onOpenJob(j.jobId)} muted />
+              {rest.next.length > 0 && (
+                <ScheduleSection
+                  title="Coming up"
+                  meta={`${rest.next.length} ${rest.next.length === 1 ? "job" : "jobs"}`}
+                >
+                  {rest.next.map(job => (
+                    <ScheduleRow key={job.jobId} job={job} bucket="next" onOpen={() => onOpenJob(job.jobId)} />
                   ))}
-                </div>
-              </section>
-            )}
-          </>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function JobCard({ job, onClick, muted, overdue }: { job: Job; onClick: () => void; muted?: boolean; overdue?: boolean }) {
-  return (
-    <button
-      onClick={onClick}
-      className={`w-full text-left rounded-xl border px-4 py-4 flex items-center gap-3 transition-colors shadow-primary ${
-        overdue
-          ? "bg-admin-status-amber-bg border-admin-status-amber/30 hover:border-admin-status-amber"
-          : muted
-          ? "bg-white border-admin-line hover:border-admin-muted/50"
-          : "bg-admin-brand-soft border-brand/30 hover:border-brand"
-      }`}
-    >
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2 mb-1">
-          <span className="text-sm font-semibold truncate">{job.customerName || "Unnamed customer"}</span>
-          {job.status === "IN_PROGRESS" && (
-            <span className="text-[10px] font-bold uppercase tracking-wide text-admin-status-green bg-admin-status-green-bg px-1.5 py-0.5 rounded shrink-0">
-              In progress
-            </span>
-          )}
-          {overdue && (
-            <span className="text-[10px] font-bold uppercase tracking-wide text-admin-status-amber bg-white px-1.5 py-0.5 rounded shrink-0">
-              Overdue
-            </span>
+                </ScheduleSection>
+              )}
+            </>
           )}
         </div>
-        <div className="flex items-center gap-1.5 text-xs text-admin-ink-2 mb-1">
-          <MapPin className="w-3 h-3 shrink-0 text-emerald-600" />
-          <span className="truncate"><span className="font-semibold">Pickup:</span> {job.pickup || "TBC"}</span>
-        </div>
-        <div className="flex items-center gap-1.5 text-xs text-admin-ink-2 mb-1">
-          <MapPin className="w-3 h-3 shrink-0 text-red-600" />
-          <span className="truncate"><span className="font-semibold">Drop-off:</span> {job.dropoff || "TBC"}</span>
-        </div>
-        <div className="text-xs text-admin-muted">
-          {formatDate(job.bookedStart)} · {formatTime(job.bookedStart)} · {job.crewSize || "?"} crew · {formatGBP(job.basePrice)}
-        </div>
-      </div>
-      <ChevronRight className="w-4 h-4 text-admin-muted shrink-0" />
-    </button>
+      </PullToRefresh>
+    </AppShell>
   );
 }

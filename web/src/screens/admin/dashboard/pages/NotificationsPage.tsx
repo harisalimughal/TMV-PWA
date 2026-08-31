@@ -12,6 +12,7 @@ import { fetchNotifications, NotificationRow } from "../api";
 import { DateRangePicker } from "../components/DateRangePicker";
 import { formatLondonDateTime } from "../utils/date";
 import { getAvatarColor } from "../utils/drivers";
+import { downloadCsv, toCsv } from "../utils/csv";
 
 const STATUS_PILL: Record<NotificationRow["email"]["state"], string> = {
   sent: "bg-admin-status-green-bg text-admin-status-green",
@@ -42,27 +43,19 @@ const normalizePhone = (phone?: string) => {
   return { formatted: phone, isInvalid: false };
 };
 
-function downloadCsv(filename: string, rows: NotificationRow[]) {
-  const columns = ["Job ID", "Customer", "Driver", "Started", "Email address", "Email", "Phone number", "SMS"];
-  const csvValue = (v: unknown) => {
-    let s = v == null ? "" : String(v);
-    if (/[",\n]/.test(s)) s = `"${s.replace(/"/g, '""')}"`;
-    return s;
-  };
-  const lines = [columns.join(",")];
-  for (const r of rows) {
-    lines.push([
-      r.jobId, r.customerName, r.driverInitials, formatLondonDateTime(r.actualStart),
-      r.customerEmail, STATUS_LABEL[r.email.state], r.customerPhone, STATUS_LABEL[r.sms.state]
-    ].map(csvValue).join(","));
-  }
-  const blob = new Blob(["﻿" + lines.join("\r\n")], { type: "text/csv;charset=utf-8;" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url; a.download = filename;
-  document.body.appendChild(a); a.click(); document.body.removeChild(a);
-  setTimeout(() => URL.revokeObjectURL(url), 2000);
-}
+// Columns for the notifications export. Cell encoding (CSV quoting + spreadsheet
+// formula-injection guard) is handled centrally by toCsv/sanitizeCsvCell -- this file
+// no longer carries its own escaper.
+const NOTIFICATION_CSV_COLUMNS: Array<{ header: string; value: (r: NotificationRow) => unknown }> = [
+  { header: "Job ID", value: r => r.jobId },
+  { header: "Customer", value: r => r.customerName },
+  { header: "Driver", value: r => r.driverInitials },
+  { header: "Started", value: r => formatLondonDateTime(r.actualStart) },
+  { header: "Email address", value: r => r.customerEmail },
+  { header: "Email", value: r => STATUS_LABEL[r.email.state] },
+  { header: "Phone number", value: r => r.customerPhone },
+  { header: "SMS", value: r => STATUS_LABEL[r.sms.state] }
+];
 
 // Real email/SMS delivery status, from the classic bot's own ActivityLog rows (see
 // dashboard/server/routes/notifications.route.ts) -- not a fabricated per-job hash.
@@ -106,14 +99,19 @@ export function NotificationsPage() {
       <div className="flex flex-wrap items-center justify-between gap-3 px-2">
         <div className="flex items-center gap-3">
           <Bell className="w-6 h-6 text-admin-brand" />
-          <h1 className="text-[20px] font-bold text-admin-ink">Notifications</h1>
+          <h1 className="text-title text-fg">Notifications</h1>
         </div>
 
         <div className="flex items-center gap-3">
           <button
-            onClick={() => downloadCsv(`notifications-${new Date().toISOString().slice(0, 10)}.csv`, filtered)}
+            onClick={() =>
+              downloadCsv(
+                `notifications-${new Date().toISOString().slice(0, 10)}.csv`,
+                toCsv(filtered, NOTIFICATION_CSV_COLUMNS)
+              )
+            }
             disabled={!filtered.length}
-            className="h-10 px-4 rounded-[12px] border border-admin-line bg-white hover:bg-admin-surface text-admin-ink text-[13px] font-medium shadow-sm transition flex items-center gap-2 disabled:opacity-50"
+            className="h-10 px-4 rounded-control border border-line-strong bg-surface hover:bg-surface-sunken text-fg text-button shadow-sm transition flex items-center gap-2 disabled:opacity-50"
           >
             <Download className="w-4 h-4" /> Export CSV
           </button>
@@ -121,13 +119,13 @@ export function NotificationsPage() {
       </div>
 
       {/* TOOLBAR */}
-      <div className="p-2 bg-white rounded-[16px] shadow-sm border border-admin-line flex flex-wrap items-center gap-4">
-        <div className="flex items-center gap-1 bg-admin-surface p-1 rounded-xl">
+      <div className="p-2 bg-white rounded-module shadow-sm border border-admin-line flex flex-wrap items-center gap-4">
+        <div className="flex items-center gap-1 bg-admin-surface p-1 rounded-card">
           {["All", "Sent", "Failed", "Pending"].map((s) => (
             <button
               key={s}
               onClick={() => { setStatusFilter(s); setPage(1); }}
-              className={`px-3 py-1.5 rounded-[8px] text-[12px] font-medium transition ${
+              className={`px-3 py-1.5 rounded-control text-[12px] font-medium transition ${
                 statusFilter === s ? "bg-white text-admin-ink shadow-sm" : "text-admin-muted hover:text-admin-ink"
               }`}
             >
@@ -149,7 +147,7 @@ export function NotificationsPage() {
             placeholder="Search Job ID or Customer..."
             value={searchQuery}
             onChange={e => { setSearchQuery(e.target.value); setPage(1); }}
-            className="w-full h-9 pl-9 pr-3 rounded-[8px] border border-admin-line bg-white text-[13px] outline-none focus:border-admin-brand focus:ring-1 focus:ring-admin-brand transition"
+            className="w-full h-9 pl-9 pr-3 rounded-control border border-admin-line bg-white text-[13px] outline-none focus:border-admin-brand focus:ring-1 focus:ring-admin-brand transition"
           />
         </div>
 
@@ -159,19 +157,19 @@ export function NotificationsPage() {
       </div>
 
       {isLoading && (
-        <div className="h-64 bg-white rounded-[24px] border border-admin-line animate-pulse flex items-center justify-center">
+        <div className="h-64 bg-white rounded-module border border-admin-line animate-pulse flex items-center justify-center">
           <span className="text-admin-muted font-medium">Loading notifications...</span>
         </div>
       )}
 
       {error && (
-        <div className="p-8 text-center text-admin-status-red bg-admin-status-red-bg rounded-[24px] border border-admin-status-red/20 shadow-sm">
+        <div className="p-8 text-center text-admin-status-red bg-admin-status-red-bg rounded-module border border-admin-status-red/20 shadow-sm">
           Failed to load notification logs.
         </div>
       )}
 
       {!isLoading && !error && (
-        <div className="bg-white rounded-[20px] shadow-[0_4px_20px_rgb(0,0,0,0.03)] border border-admin-line overflow-hidden">
+        <div className="bg-white rounded-module shadow-[0_4px_20px_rgb(0,0,0,0.03)] border border-admin-line overflow-hidden">
           <div className="overflow-x-auto custom-scrollbar">
             <table className="w-full text-left text-[14px] border-collapse whitespace-nowrap">
               <thead>
@@ -268,8 +266,8 @@ export function NotificationsPage() {
         <div className="flex flex-wrap items-center justify-between gap-2 px-2 text-[13px] text-admin-muted pb-8">
           <span>Showing {(page - 1) * pageSize + 1} to {Math.min(page * pageSize, filtered.length)} of {filtered.length}</span>
           <div className="flex gap-2 shrink-0">
-            <button disabled={page === 1} onClick={() => setPage(p => p - 1)} className="px-3 py-1.5 border border-admin-line rounded-[8px] bg-white hover:bg-admin-surface disabled:opacity-50 transition font-medium text-admin-ink shadow-sm">Previous</button>
-            <button disabled={page * pageSize >= filtered.length} onClick={() => setPage(p => p + 1)} className="px-3 py-1.5 border border-admin-line rounded-[8px] bg-white hover:bg-admin-surface disabled:opacity-50 transition font-medium text-admin-ink shadow-sm">Next</button>
+            <button disabled={page === 1} onClick={() => setPage(p => p - 1)} className="px-3 py-1.5 border border-line-strong rounded-control bg-surface hover:bg-surface-sunken disabled:opacity-50 transition text-button text-fg shadow-xs">Previous</button>
+            <button disabled={page * pageSize >= filtered.length} onClick={() => setPage(p => p + 1)} className="px-3 py-1.5 border border-line-strong rounded-control bg-surface hover:bg-surface-sunken disabled:opacity-50 transition text-button text-fg shadow-xs">Next</button>
           </div>
         </div>
       )}

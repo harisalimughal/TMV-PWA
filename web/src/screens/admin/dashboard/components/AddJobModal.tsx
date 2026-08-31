@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { addJob, fetchDrivers } from "../api";
 import { getAvatarColor } from "../utils/drivers";
+import { Button, IconButton } from "../../../../ui";
 
 interface Props {
   isOpen: boolean;
@@ -130,21 +131,19 @@ export function AddJobModal({ isOpen, onClose }: Props) {
 
   return (
     <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-admin-ink/40 backdrop-blur-sm p-4">
-      <div className="bg-white rounded-[24px] shadow-2xl w-full max-w-[520px] flex flex-col max-h-[85vh] animate-in fade-in zoom-in-95 duration-200">
+      <div className="bg-white rounded-module shadow-2xl w-full max-w-[520px] flex flex-col max-h-[85vh] animate-in fade-in zoom-in-95 duration-200">
         
         {/* HEADER */}
-        <div className="px-6 py-5 border-b border-admin-line flex items-center justify-between bg-white rounded-t-[24px] z-10 sticky top-0">
-          <h2 className="text-[18px] font-bold text-admin-ink">Add Job</h2>
-          <button onClick={onClose} className="p-2 -mr-2 text-admin-muted hover:text-admin-ink hover:bg-admin-surface rounded-full transition">
-            <X className="w-5 h-5" />
-          </button>
+        <div className="px-6 py-5 border-b border-admin-line flex items-center justify-between bg-white rounded-t-module z-10 sticky top-0">
+          <h2 className="text-title text-fg">Add Job</h2>
+          <IconButton aria-label="Close" icon={<X />} onClick={onClose} className="-mr-2" />
         </div>
 
         {/* BODY */}
         <div className="p-6 overflow-y-auto custom-scrollbar flex-1 space-y-6">
           
           {/* 1. CUSTOMER DETAILS */}
-          <section className="bg-[#F7F7F7] p-5 rounded-[12px]">
+          <section className="bg-[#F7F7F7] p-5 rounded-card">
             <h3 className="text-[12px] font-semibold uppercase text-admin-muted tracking-wider flex items-center gap-1.5 mb-4">
               <User className="w-3.5 h-3.5" /> Customer Details
             </h3>
@@ -157,7 +156,7 @@ export function AddJobModal({ isOpen, onClose }: Props) {
                   type="text" 
                   value={form.customerName}
                   onChange={e => setForm({...form, customerName: e.target.value})}
-                  className={`w-full h-10 px-3 rounded-[8px] border bg-white text-[14px] outline-none transition placeholder:text-admin-muted/50 ${
+                  className={`w-full h-10 px-3 rounded-control border bg-white text-[14px] outline-none transition placeholder:text-admin-muted/50 ${
                     isInvalid("customerName") ? "border-admin-status-red ring-1 ring-admin-status-red" : "border-admin-line focus:border-admin-brand focus:ring-1 focus:ring-admin-brand"
                   }`} 
                   placeholder="e.g. John Smith" 
@@ -171,7 +170,7 @@ export function AddJobModal({ isOpen, onClose }: Props) {
                     type="email" 
                     value={form.customerEmail}
                     onChange={e => setForm({...form, customerEmail: e.target.value})}
-                    className="w-full h-10 px-3 rounded-[8px] border border-admin-line bg-white text-[14px] outline-none focus:border-admin-brand focus:ring-1 focus:ring-admin-brand transition placeholder:text-admin-muted/50" 
+                    className="w-full h-10 px-3 rounded-control border border-admin-line bg-white text-[14px] outline-none focus:border-admin-brand focus:ring-1 focus:ring-admin-brand transition placeholder:text-admin-muted/50" 
                     placeholder="john@example.com" 
                   />
                 </div>
@@ -181,7 +180,7 @@ export function AddJobModal({ isOpen, onClose }: Props) {
                     type="tel" 
                     value={form.customerPhone}
                     onChange={e => setForm({...form, customerPhone: e.target.value})}
-                    className="w-full h-10 px-3 rounded-[8px] border border-admin-line bg-white text-[14px] outline-none focus:border-admin-brand focus:ring-1 focus:ring-admin-brand transition placeholder:text-admin-muted/50" 
+                    className="w-full h-10 px-3 rounded-control border border-admin-line bg-white text-[14px] outline-none focus:border-admin-brand focus:ring-1 focus:ring-admin-brand transition placeholder:text-admin-muted/50" 
                     placeholder="07123 456789" 
                   />
                 </div>
@@ -190,7 +189,7 @@ export function AddJobModal({ isOpen, onClose }: Props) {
           </section>
 
           {/* 2. ROUTE */}
-          <section className="bg-[#F7F7F7] p-5 rounded-[12px]">
+          <section className="bg-[#F7F7F7] p-5 rounded-card">
             <h3 className="text-[12px] font-semibold uppercase text-admin-muted tracking-wider flex items-center gap-1.5 mb-4">
               <MapPin className="w-3.5 h-3.5" /> Route
             </h3>
@@ -203,7 +202,7 @@ export function AddJobModal({ isOpen, onClose }: Props) {
                   type="text" 
                   value={form.pickup}
                   onChange={e => setForm({...form, pickup: e.target.value})}
-                  className={`w-full h-10 px-3 rounded-[8px] border bg-white text-[14px] outline-none transition placeholder:text-admin-muted/50 ${
+                  className={`w-full h-10 px-3 rounded-control border bg-white text-[14px] outline-none transition placeholder:text-admin-muted/50 ${
                     isInvalid("pickup") ? "border-admin-status-red ring-1 ring-admin-status-red" : "border-admin-line focus:border-admin-brand focus:ring-1 focus:ring-admin-brand"
                   }`} 
                   placeholder="e.g. 12 High Street, London, SW1A 1AA" 
@@ -218,7 +217,7 @@ export function AddJobModal({ isOpen, onClose }: Props) {
                   type="text" 
                   value={form.dropoff}
                   onChange={e => setForm({...form, dropoff: e.target.value})}
-                  className={`w-full h-10 px-3 rounded-[8px] border bg-white text-[14px] outline-none transition placeholder:text-admin-muted/50 ${
+                  className={`w-full h-10 px-3 rounded-control border bg-white text-[14px] outline-none transition placeholder:text-admin-muted/50 ${
                     isInvalid("dropoff") ? "border-admin-status-red ring-1 ring-admin-status-red" : "border-admin-line focus:border-admin-brand focus:ring-1 focus:ring-admin-brand"
                   }`} 
                   placeholder="e.g. 45 Park Road, Manchester, M1 2AB" 
@@ -229,7 +228,7 @@ export function AddJobModal({ isOpen, onClose }: Props) {
           </section>
 
           {/* 3. JOB DETAILS */}
-          <section className="bg-[#F7F7F7] p-5 rounded-[12px]">
+          <section className="bg-[#F7F7F7] p-5 rounded-card">
             <h3 className="text-[12px] font-semibold uppercase text-admin-muted tracking-wider flex items-center gap-1.5 mb-4">
               <ClipboardList className="w-3.5 h-3.5" /> Job Details
             </h3>
@@ -238,7 +237,7 @@ export function AddJobModal({ isOpen, onClose }: Props) {
                 <label className="block text-[13px] font-medium text-admin-ink mb-1.5">
                   Crew size <span className="text-admin-status-red">*</span>
                 </label>
-                <div className="flex items-center h-10 bg-white border border-admin-line rounded-[8px] overflow-hidden">
+                <div className="flex items-center h-10 bg-white border border-admin-line rounded-control overflow-hidden">
                   <button 
                     onClick={() => setForm({...form, crewSize: Math.max(1, form.crewSize - 1)})}
                     className="w-10 h-full flex items-center justify-center text-admin-muted hover:bg-admin-surface hover:text-admin-ink transition border-r border-admin-line"
@@ -260,7 +259,7 @@ export function AddJobModal({ isOpen, onClose }: Props) {
                 <label className="block text-[13px] font-medium text-admin-ink mb-1.5">
                   Price <span className="text-admin-status-red">*</span>
                 </label>
-                <div className={`relative flex items-center h-10 bg-white border rounded-[8px] overflow-hidden transition focus-within:border-admin-brand focus-within:ring-1 focus-within:ring-admin-brand ${isInvalid("price") ? "border-admin-status-red ring-1 ring-admin-status-red" : "border-admin-line"}`}>
+                <div className={`relative flex items-center h-10 bg-white border rounded-control overflow-hidden transition focus-within:border-admin-brand focus-within:ring-1 focus-within:ring-admin-brand ${isInvalid("price") ? "border-admin-status-red ring-1 ring-admin-status-red" : "border-admin-line"}`}>
                   <span className="absolute left-3 text-admin-muted">£</span>
                   <input 
                     type="number" 
@@ -285,7 +284,7 @@ export function AddJobModal({ isOpen, onClose }: Props) {
           </section>
 
           {/* 4. SCHEDULE */}
-          <section className="bg-[#F7F7F7] p-5 rounded-[12px]">
+          <section className="bg-[#F7F7F7] p-5 rounded-card">
             <h3 className="text-[12px] font-semibold uppercase text-admin-muted tracking-wider flex items-center gap-1.5 mb-4">
               <Clock className="w-3.5 h-3.5" /> Schedule
             </h3>
@@ -299,7 +298,7 @@ export function AddJobModal({ isOpen, onClose }: Props) {
                     type="datetime-local" 
                     value={form.start}
                     onChange={e => setForm({...form, start: e.target.value})}
-                    className={`w-full h-10 px-3 rounded-[8px] border bg-white text-[14px] outline-none transition ${
+                    className={`w-full h-10 px-3 rounded-control border bg-white text-[14px] outline-none transition ${
                       isInvalid("start") ? "border-admin-status-red ring-1 ring-admin-status-red" : "border-admin-line focus:border-admin-brand focus:ring-1 focus:ring-admin-brand"
                     }`} 
                   />
@@ -313,7 +312,7 @@ export function AddJobModal({ isOpen, onClose }: Props) {
                     type="datetime-local" 
                     value={form.finish}
                     onChange={e => setForm({...form, finish: e.target.value})}
-                    className={`w-full h-10 px-3 rounded-[8px] border bg-white text-[14px] outline-none transition ${
+                    className={`w-full h-10 px-3 rounded-control border bg-white text-[14px] outline-none transition ${
                       isInvalid("finish") || isFinishBeforeStart() ? "border-admin-status-red ring-1 ring-admin-status-red" : "border-admin-line focus:border-admin-brand focus:ring-1 focus:ring-admin-brand"
                     }`} 
                   />
@@ -334,7 +333,7 @@ export function AddJobModal({ isOpen, onClose }: Props) {
           </section>
 
           {/* 5. ASSIGNMENT */}
-          <section className="bg-[#F7F7F7] p-5 rounded-[12px]">
+          <section className="bg-[#F7F7F7] p-5 rounded-card">
             <h3 className="text-[12px] font-semibold uppercase text-admin-muted tracking-wider flex items-center gap-1.5 mb-4">
               <User className="w-3.5 h-3.5" /> Assignment
             </h3>
@@ -347,11 +346,11 @@ export function AddJobModal({ isOpen, onClose }: Props) {
               {/* Select Trigger */}
               <button 
                 onClick={() => setDriverSearchOpen(!driverSearchOpen)}
-                className="w-full min-h-[40px] p-1 pr-3 bg-white border border-admin-line rounded-[8px] flex items-center justify-between outline-none focus:border-admin-brand focus:ring-1 focus:ring-admin-brand transition hover:bg-admin-surface/50"
+                className="w-full min-h-[40px] p-1 pr-3 bg-white border border-admin-line rounded-control flex items-center justify-between outline-none focus:border-admin-brand focus:ring-1 focus:ring-admin-brand transition hover:bg-admin-surface/50"
               >
                 {selectedDriver ? (
                   <div className="flex items-center gap-2.5">
-                    <div className={`w-8 h-8 rounded-[6px] flex items-center justify-center text-[11px] font-bold ${getAvatarColor(selectedDriver.initials)}`}>
+                    <div className={`w-8 h-8 rounded-control flex items-center justify-center text-[11px] font-bold ${getAvatarColor(selectedDriver.initials)}`}>
                       {selectedDriver.initials}
                     </div>
                     <div className="text-left">
@@ -371,7 +370,7 @@ export function AddJobModal({ isOpen, onClose }: Props) {
 
               {/* Dropdown Menu */}
               {driverSearchOpen && (
-                <div className="absolute top-full left-0 right-0 mt-2 bg-white rounded-[12px] border border-admin-line shadow-xl z-20 overflow-hidden flex flex-col max-h-[260px]">
+                <div className="absolute top-full left-0 right-0 mt-2 bg-white rounded-card border border-admin-line shadow-xl z-20 overflow-hidden flex flex-col max-h-[260px]">
                   <div className="p-2 border-b border-admin-line sticky top-0 bg-white">
                     <div className="relative">
                       <Search className="w-4 h-4 text-admin-muted absolute left-3 top-2.5" />
@@ -381,7 +380,7 @@ export function AddJobModal({ isOpen, onClose }: Props) {
                         value={driverSearchQuery}
                         onChange={e => setDriverSearchQuery(e.target.value)}
                         placeholder="Search roster..."
-                        className="w-full h-9 pl-9 pr-3 bg-admin-surface border-transparent rounded-[8px] text-[13px] outline-none focus:bg-white focus:border-admin-brand focus:ring-1 focus:ring-admin-brand transition"
+                        className="w-full h-9 pl-9 pr-3 bg-admin-surface border-transparent rounded-control text-[13px] outline-none focus:bg-white focus:border-admin-brand focus:ring-1 focus:ring-admin-brand transition"
                       />
                     </div>
                   </div>
@@ -389,7 +388,7 @@ export function AddJobModal({ isOpen, onClose }: Props) {
                   <div className="overflow-y-auto custom-scrollbar p-1">
                     <button 
                       onClick={() => { setForm({...form, driverId: ""}); setDriverSearchOpen(false); }}
-                      className={`w-full flex items-center gap-3 p-2 rounded-[8px] hover:bg-admin-surface transition ${!form.driverId ? "bg-admin-surface" : ""}`}
+                      className={`w-full flex items-center gap-3 p-2 rounded-control hover:bg-admin-surface transition ${!form.driverId ? "bg-admin-surface" : ""}`}
                     >
                       <div className="w-8 h-8 rounded-full border border-dashed border-admin-muted/50 flex items-center justify-center text-admin-muted shrink-0">
                         <User className="w-4 h-4" />
@@ -405,9 +404,9 @@ export function AddJobModal({ isOpen, onClose }: Props) {
                       <button
                         key={driver.initials}
                         onClick={() => { setForm({...form, driverId: driver.initials}); setDriverSearchOpen(false); }}
-                        className={`w-full flex items-center gap-3 p-2 rounded-[8px] hover:bg-admin-surface transition ${form.driverId === driver.initials ? "bg-admin-surface" : ""}`}
+                        className={`w-full flex items-center gap-3 p-2 rounded-control hover:bg-admin-surface transition ${form.driverId === driver.initials ? "bg-admin-surface" : ""}`}
                       >
-                        <div className={`w-8 h-8 rounded-[6px] flex items-center justify-center text-[12px] font-bold shrink-0 ${getAvatarColor(driver.initials)}`}>
+                        <div className={`w-8 h-8 rounded-control flex items-center justify-center text-[12px] font-bold shrink-0 ${getAvatarColor(driver.initials)}`}>
                           {driver.initials}
                         </div>
                         <div className="flex-1 text-left">
@@ -415,7 +414,7 @@ export function AddJobModal({ isOpen, onClose }: Props) {
                           <div className="text-[11px] text-admin-muted flex items-center gap-1 mt-0.5">
                             {driver.vanRegistration && (
                               <>
-                                <span className="bg-admin-line/50 px-1.5 py-[1px] rounded-[4px] font-mono font-bold uppercase text-[10px] text-admin-ink">{driver.vanRegistration}</span>
+                                <span className="bg-admin-line/50 px-1.5 py-[1px] rounded-control font-mono font-bold uppercase text-[10px] text-admin-ink">{driver.vanRegistration}</span>
                                 <span>•</span>
                               </>
                             )}
@@ -443,29 +442,25 @@ export function AddJobModal({ isOpen, onClose }: Props) {
         </div>
 
         {/* FOOTER */}
-        <div className="px-6 py-4 border-t border-admin-line bg-white shadow-[0_-4px_10px_rgba(0,0,0,0.02)] rounded-b-[24px] z-10 sticky bottom-0">
+        <div className="px-6 py-4 border-t border-admin-line bg-white shadow-[0_-4px_10px_rgba(0,0,0,0.02)] rounded-b-module z-10 sticky bottom-0">
           {saveError && (
             <p className="text-[12px] text-admin-status-red font-medium mb-3 flex items-center gap-1.5">
               <AlertTriangle className="w-3.5 h-3.5 shrink-0" /> {saveError}
             </p>
           )}
           <div className="flex items-center justify-between">
-            <span className="text-[12px] text-admin-muted">* Required fields</span>
+            <span className="text-meta text-fg-subtle">* Required fields</span>
             <div className="flex items-center gap-3">
-              <button
-                onClick={onClose}
-                disabled={isSaving}
-                className="px-5 py-2.5 rounded-[8px] border border-admin-line bg-white font-medium text-admin-ink hover:bg-admin-surface transition text-[13px] disabled:opacity-50"
-              >
+              <Button variant="secondary" onClick={onClose} disabled={isSaving}>
                 Cancel
-              </button>
-              <button
+              </Button>
+              <Button
                 onClick={handleSave}
-                disabled={isSaving || (attemptedSubmit && !isFormValid())}
-                className="px-5 py-2.5 rounded-[8px] font-medium bg-admin-brand text-white hover:bg-admin-brand-dark shadow-sm transition text-[13px] disabled:opacity-50 disabled:cursor-not-allowed"
+                loading={isSaving}
+                disabled={attemptedSubmit && !isFormValid()}
               >
-                {isSaving ? "Creating…" : "Create Job"}
-              </button>
+                {isSaving ? "Creating…" : "Create job"}
+              </Button>
             </div>
           </div>
         </div>

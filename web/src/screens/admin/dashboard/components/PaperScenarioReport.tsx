@@ -35,7 +35,10 @@ export function PaperScenarioReport({ item, kind }: Props) {
     liability: "Liability Report"
   };
   const title = titleMap[kind] || "Report";
-  const refId = item.id || item.jobId?.split("-")[1] || Math.floor(Math.random()*10000);
+  // Audit document -- the reference must be stable and real. If the record carries no
+  // id and no job number, show "Reference pending" rather than a random number that
+  // changes on every render.
+  const refId: string | null = item.id || item.jobId?.split("-")[1] || null;
 
   const driverColor = driverInitials === "UN" ? "bg-amber-500" : "bg-[#F59E0B]"; 
 
@@ -43,9 +46,9 @@ export function PaperScenarioReport({ item, kind }: Props) {
     <div className="paper-document bg-white font-sans text-[#1A1A1A]">
       
       {/* NO-PRINT CONTROLS */}
-      <div className="no-print flex items-center justify-between p-4 mb-4 bg-admin-surface rounded-xl border border-admin-line">
-        <div className="text-[14px] font-semibold text-admin-ink">Preview Large-Format Report</div>
-        <button onClick={() => window.print()} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-admin-line bg-white hover:bg-admin-surface text-[13px] font-medium text-admin-ink transition shadow-sm">
+      <div className="no-print flex items-center justify-between p-4 mb-4 bg-admin-surface rounded-card border border-admin-line">
+        <div className="text-card text-fg">Preview Large-Format Report</div>
+        <button onClick={() => window.print()} className="flex items-center gap-1.5 px-3 py-1.5 rounded-control border border-line-strong bg-surface hover:bg-surface-sunken text-button text-fg transition shadow-sm">
           Print / Save PDF
         </button>
       </div>
@@ -86,7 +89,7 @@ export function PaperScenarioReport({ item, kind }: Props) {
         </div>
 
         {/* META ROW */}
-        <div className="flex items-start justify-between p-4 border border-admin-line rounded-xl mb-6 bg-white shadow-sm">
+        <div className="flex items-start justify-between p-4 border border-admin-line rounded-card mb-6 bg-white shadow-sm">
           <div className="flex items-center gap-3">
             <div className={`w-9 h-9 rounded-full ${driverColor} text-white flex items-center justify-center text-[13px] font-bold`}>
               {driverInitials}
@@ -96,14 +99,14 @@ export function PaperScenarioReport({ item, kind }: Props) {
               <div className="text-[12px] text-[#8A8A8A] mt-0.5">{formattedTime} | Europe/London</div>
             </div>
           </div>
-          <div className="px-3 py-1 bg-admin-surface text-[#1A1A1A] text-[13px] font-semibold rounded-lg border border-admin-line">
-            #{refId}
+          <div className="px-3 py-1 bg-admin-surface text-[#1A1A1A] text-[13px] font-semibold rounded-card border border-admin-line">
+            {refId ? `#${refId}` : "Reference pending"}
           </div>
         </div>
 
         {/* PARKING LIABILITY TEXT */}
         {kind === "parking" && (
-          <div className="bg-[#FFFBEB] border border-[#FDE68A] p-4 rounded-xl mb-6 shadow-sm">
+          <div className="bg-[#FFFBEB] border border-[#FDE68A] p-4 rounded-card mb-6 shadow-sm">
             <h3 className="text-[13px] font-bold text-amber-600 mb-2">Penalty Charge Liability Notice</h3>
             <p className="text-[12px] text-amber-900">
               In the event a fine is received, You will cover the cost directly, ensuring the company and drivers are not held liable. (Penalty Charge Notice) fines typically start at £60 and can go up to £180, depending on the severity of the offence. If paid within 14 days, most fines are reduced by 50%, making the lowest payable amount £45 and the highest £90.
@@ -117,11 +120,11 @@ export function PaperScenarioReport({ item, kind }: Props) {
             <div className="text-[13px] font-semibold text-[#8A8A8A] mb-3">
               Submitted Image / Evidence
             </div>
-            <div className="flex items-center justify-center border border-admin-line rounded-xl p-2 shadow-sm bg-[#FAFAFA] h-[45vh]">
+            <div className="flex items-center justify-center border border-admin-line rounded-card p-2 shadow-sm bg-[#FAFAFA] h-[45vh]">
               <img 
                 src={photoUrl.startsWith('http') ? photoUrl : '/placeholder.png'} 
                 alt="Evidence" 
-                className="max-w-[90%] max-h-full object-contain rounded-lg"
+                className="max-w-[90%] max-h-full object-contain rounded-card"
               />
             </div>
           </div>
@@ -129,7 +132,7 @@ export function PaperScenarioReport({ item, kind }: Props) {
 
         {/* DATA & SIGNATURE */}
         <div className="flex gap-6">
-          <div className="flex-1 bg-[#F7F7F7] rounded-xl border border-admin-line p-6 shadow-sm">
+          <div className="flex-1 bg-[#F7F7F7] rounded-card border border-admin-line p-6 shadow-sm">
             <h3 className="text-[13px] font-semibold text-[#2563EB] mb-4">CLIENT DETAILS</h3>
             <div className="flex flex-col gap-3">
               <div className="flex justify-between py-1 border-b border-admin-line/50">
@@ -173,7 +176,7 @@ export function PaperScenarioReport({ item, kind }: Props) {
                 : "By signing this document, you confirm that all items listed have been checked in and stored."}
             </p>
             <div className="text-[12px] font-semibold text-[#8A8A8A] mb-2">Client Signature:</div>
-            <div className="w-full h-[120px] border border-admin-line rounded-xl bg-white p-4 shadow-sm flex items-center justify-center">
+            <div className="w-full h-[120px] border border-admin-line rounded-card bg-white p-4 shadow-sm flex items-center justify-center">
               {signature ? (
                 <img src={signature} alt="Signature" className="max-w-full max-h-full object-contain mix-blend-multiply" />
               ) : (

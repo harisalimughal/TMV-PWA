@@ -1,120 +1,125 @@
 import React, { useState } from "react";
-import { Eye, EyeOff, Loader2, Lock } from "lucide-react";
-import { resetPassword, type DriverProfile } from "../api/auth";
+import { Lock } from "lucide-react";
+import { resetPassword, type ApiError, type DriverProfile } from "../api/auth";
+import { Alert, Button, cx, Field, Input } from "../ui";
+import { AuthBrand, AuthHeading, AuthLayout, PasswordToggle, usePasswordVisibility } from "./auth/AuthKit";
 
 interface ResetPasswordScreenProps {
   token: string;
   onDone: (driver: DriverProfile) => void;
 }
 
+const MIN_LENGTH = 8;
+
+/** A three-step meter is enough guidance without pretending to be a security audit. */
+function strengthOf(password: string): { score: 0 | 1 | 2 | 3; label: string; tone: string } {
+  if (password.length < MIN_LENGTH) return { score: 0, label: "Too short", tone: "bg-danger" };
+  let score = 1;
+  if (/[a-z]/.test(password) && /[A-Z]/.test(password)) score += 1;
+  if (/\d/.test(password) || /[^A-Za-z0-9]/.test(password)) score += 1;
+  if (password.length >= 12) score = 3;
+  if (score >= 3) return { score: 3, label: "Strong", tone: "bg-success" };
+  if (score === 2) return { score: 2, label: "Good", tone: "bg-success" };
+  return { score: 1, label: "Weak", tone: "bg-warning" };
+}
+
 export function ResetPasswordScreen({ token, onDone }: ResetPasswordScreenProps) {
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
-  const [showPassword, setShowPassword] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const pw = usePasswordVisibility();
 
-  const tooShort = password.length > 0 && password.length < 8;
+  const tooShort = password.length > 0 && password.length < MIN_LENGTH;
   const mismatch = confirm.length > 0 && password !== confirm;
+  const strength = strengthOf(password);
 
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
     if (submitting) return;
     setError(null);
-
-    if (password.length < 8) {
-      setError("Password must be at least 8 characters.");
+    if (password.length < MIN_LENGTH) {
+      setError(`Password must be at least ${MIN_LENGTH} characters.`);
       return;
     }
     if (password !== confirm) {
       setError("Passwords don't match.");
       return;
     }
-
     setSubmitting(true);
     try {
-      const driver = await resetPassword(token, password);
-      onDone(driver);
-    } catch (err: any) {
-      setError(err?.message || "Couldn't reset your password. The link may have expired.");
+      onDone(await resetPassword(token, password));
+    } catch (err) {
+      setError((err as ApiError)?.message || "Couldn't reset your password. The link may have expired.");
     } finally {
       setSubmitting(false);
     }
   }
 
   return (
-    <div className="h-screen-safe flex flex-col bg-admin-bg text-admin-ink pt-safe pb-safe pl-safe pr-safe">
-      <div className="flex-1 flex flex-col justify-center px-6">
-        <div className="w-full max-w-sm mx-auto">
-          <div className="flex flex-col items-center gap-3 mb-8">
-            <div className="w-20 h-20 rounded-2xl bg-white border border-admin-line p-2 shadow-elevated flex items-center justify-center">
-              <img src="/tmv-logo.png" alt="The Man Van" className="w-full h-full object-contain" />
-            </div>
-            <h1 className="text-xl font-bold">Set a new password</h1>
-            <p className="text-sm text-admin-muted text-center">Choose a new password for your driver account.</p>
-          </div>
+    <AuthLayout>
+      <AuthBrand />
+      <AuthHeading title="Set a new password" hint="Choose a new password for your driver account." />
 
-          <form onSubmit={handleSubmit} className="flex flex-col gap-4" noValidate>
-            <label className="flex flex-col gap-1.5">
-              <span className="text-xs font-medium text-admin-ink-2 pl-1">New password</span>
-              <div className="relative">
-                <Lock className="w-4 h-4 text-admin-muted absolute left-3.5 top-1/2 -translate-y-1/2" />
-                <input
-                  type={showPassword ? "text" : "password"}
-                  autoComplete="new-password"
-                  value={password}
-                  onChange={e => setPassword(e.target.value)}
-                  disabled={submitting}
-                  placeholder="At least 8 characters"
-                  className="w-full rounded-xl bg-white border border-admin-line pl-10 pr-11 py-3 text-sm placeholder:text-admin-muted/60 focus:outline-none focus:border-brand disabled:opacity-50"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(v => !v)}
-                  tabIndex={-1}
-                  className="absolute right-3.5 top-1/2 -translate-y-1/2 text-admin-muted hover:text-admin-ink"
-                  aria-label={showPassword ? "Hide password" : "Show password"}
-                >
-                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                </button>
-              </div>
-              {tooShort && <span className="text-xs text-admin-status-amber pl-1">At least 8 characters.</span>}
-            </label>
-
-            <label className="flex flex-col gap-1.5">
-              <span className="text-xs font-medium text-admin-ink-2 pl-1">Confirm password</span>
-              <div className="relative">
-                <Lock className="w-4 h-4 text-admin-muted absolute left-3.5 top-1/2 -translate-y-1/2" />
-                <input
-                  type={showPassword ? "text" : "password"}
-                  autoComplete="new-password"
-                  value={confirm}
-                  onChange={e => setConfirm(e.target.value)}
-                  disabled={submitting}
-                  placeholder="Re-enter your new password"
-                  className="w-full rounded-xl bg-white border border-admin-line pl-10 pr-4 py-3 text-sm placeholder:text-admin-muted/60 focus:outline-none focus:border-brand disabled:opacity-50"
-                />
-              </div>
-              {mismatch && <span className="text-xs text-admin-status-amber pl-1">Passwords don't match.</span>}
-            </label>
-
-            {error && (
-              <div className="text-sm text-admin-status-red bg-admin-status-red-bg border border-admin-status-red/20 rounded-lg px-3 py-2">
-                {error}
-              </div>
-            )}
-
-            <button
-              type="submit"
+      <form onSubmit={handleSubmit} className="flex flex-col gap-4" noValidate>
+        <Field
+          label="New password"
+          hint={`At least ${MIN_LENGTH} characters`}
+          error={tooShort ? `At least ${MIN_LENGTH} characters.` : undefined}
+        >
+          {p => (
+            <Input
+              {...p}
+              type={pw.type}
+              autoComplete="new-password"
+              prefix={<Lock />}
+              suffix={<PasswordToggle shown={pw.shown} onToggle={pw.toggle} />}
+              value={password}
+              onChange={e => setPassword(e.target.value)}
               disabled={submitting}
-              className="mt-2 flex items-center justify-center gap-2 rounded-xl bg-brand hover:bg-brand-dark active:bg-brand-dark transition-colors py-3.5 text-sm font-semibold text-white disabled:opacity-60"
-            >
-              {submitting && <Loader2 className="w-4 h-4 animate-spin" />}
-              {submitting ? "Saving…" : "Save new password"}
-            </button>
-          </form>
-        </div>
-      </div>
-    </div>
+              placeholder={`At least ${MIN_LENGTH} characters`}
+            />
+          )}
+        </Field>
+
+        {password.length > 0 && (
+          <div className="-mt-1 flex items-center gap-2">
+            <div className="flex flex-1 gap-1" aria-hidden>
+              {[1, 2, 3].map(step => (
+                <span
+                  key={step}
+                  className={cx(
+                    "h-1.5 flex-1 rounded-pill transition-colors",
+                    strength.score >= step ? strength.tone : "bg-line"
+                  )}
+                />
+              ))}
+            </div>
+            <span className="w-14 text-right text-meta font-medium text-fg-subtle">{strength.label}</span>
+          </div>
+        )}
+
+        <Field label="Confirm password" error={mismatch ? "Passwords don't match." : undefined}>
+          {p => (
+            <Input
+              {...p}
+              type={pw.type}
+              autoComplete="new-password"
+              prefix={<Lock />}
+              value={confirm}
+              onChange={e => setConfirm(e.target.value)}
+              disabled={submitting}
+              placeholder="Re-enter your new password"
+            />
+          )}
+        </Field>
+
+        {error && <Alert tone="danger">{error}</Alert>}
+
+        <Button type="submit" size="lg" fullWidth loading={submitting} className="mt-1">
+          {submitting ? "Saving…" : "Save new password"}
+        </Button>
+      </form>
+    </AuthLayout>
   );
 }

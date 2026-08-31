@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import {
   ChevronDown,
   ChevronRight,
-  Download,
+  Download, Printer,
   FolderOpen,
   Camera,
   AlertTriangle,
@@ -49,54 +49,108 @@ export function FinishedJobsPage() {
     <div className="space-y-6 max-w-[1440px] mx-auto">
       {/* PAGE HEADER */}
       <div className="flex flex-wrap items-center justify-between gap-y-3 gap-x-3 px-2">
-        <h1 className="text-[20px] font-bold text-admin-ink">Finished Jobs</h1>
+        <h1 className="text-title text-fg">Finished Jobs</h1>
 
         <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
           <DateRangePicker from={from} to={to} onChange={(f, t) => { setFrom(f); setTo(t); setPage(1); }} />
           <div className="hidden sm:block w-px h-6 bg-admin-line mx-2 shrink-0" />
           <button
             onClick={() => { window.location.href = "/api/admin/jobs/export.csv?status=COMPLETED"; }}
-            className="shrink-0 whitespace-nowrap h-10 px-2.5 sm:px-4 rounded-[12px] border border-admin-line bg-white hover:bg-admin-surface text-admin-ink text-[13px] font-medium shadow-sm transition flex items-center gap-2"
+            className="shrink-0 whitespace-nowrap h-10 px-2.5 sm:px-4 rounded-control border border-line-strong bg-surface hover:bg-surface-sunken text-fg text-button shadow-sm transition flex items-center gap-2"
           >
             <Download className="w-4 h-4" /> <span className="hidden sm:inline">Export </span>CSV
           </button>
+          {/* Was dead. The print stylesheet already formats this table for paper, so
+              the browser's own Save-as-PDF is a genuine export. */}
           <button
-            className="shrink-0 whitespace-nowrap h-10 px-2.5 sm:px-4 rounded-[12px] border border-admin-line bg-white hover:bg-admin-surface text-admin-ink text-[13px] font-medium shadow-sm transition flex items-center gap-2"
+            onClick={() => window.print()}
+            className="shrink-0 whitespace-nowrap h-10 px-2.5 sm:px-4 rounded-control border border-line-strong bg-surface hover:bg-surface-sunken text-fg text-button shadow-sm transition flex items-center gap-2"
           >
-            <Download className="w-4 h-4" /> <span className="hidden sm:inline">Export </span>PDF
+            <Printer className="w-4 h-4" /> <span className="hidden sm:inline">Print / </span>PDF
           </button>
         </div>
       </div>
 
       {isLoading && (
-        <div className="h-64 bg-white rounded-[24px] border border-admin-line animate-pulse flex items-center justify-center">
+        <div className="h-64 bg-white rounded-module border border-admin-line animate-pulse flex items-center justify-center">
           <span className="text-admin-muted font-medium">Loading records...</span>
         </div>
       )}
 
       {error && (
-        <div className="p-8 text-center text-admin-status-red bg-admin-status-red-bg rounded-[24px] border border-admin-status-red/20 shadow-sm">
+        <div className="p-8 text-center text-admin-status-red bg-admin-status-red-bg rounded-module border border-admin-status-red/20 shadow-sm">
           Failed to load finished jobs.
         </div>
       )}
 
       {/* Main Table View */}
       {!isLoading && !error && (
-        <div className="bg-white rounded-[20px] shadow-[0_4px_20px_rgb(0,0,0,0.03)] border border-admin-line overflow-hidden">
-          <div className="overflow-x-auto custom-scrollbar">
+        <div className="bg-white rounded-module shadow-[0_4px_20px_rgb(0,0,0,0.03)] border border-admin-line overflow-hidden">
+          {/* Mobile: cards. An 11-column table behind a horizontal scrollbar is not a
+              usable phone layout, so below md the same rows render as cards showing
+              the four fields that actually matter on a small screen. */}
+          <ul className="md:hidden list-none m-0 p-3 space-y-3">
+            {(data?.items || []).map((job: NormalizedJob) => {
+              const driver = resolveDriver(job.driverName, job.driverInitials);
+              const total = toPounds(job.totalCharges);
+              const photoCount =
+                job.evidenceItems?.filter((e: any) => e.type === "IMAGE" && (e.thumbProxyUrl || e.driveUrl)).length || 0;
+              return (
+                <li key={job.jobId}>
+                  <button
+                    onClick={() => setPreviewJob(job)}
+                    className="w-full text-left rounded-module border border-admin-line bg-white p-4 active:bg-admin-surface transition"
+                  >
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="font-semibold text-admin-brand text-[14px]">{job.jobId}</span>
+                      <span className="font-mono text-[14px] font-bold tabular-nums">
+                        {total === 0 ? "—" : `£${total.toLocaleString("en-GB", { minimumFractionDigits: 2 })}`}
+                      </span>
+                    </div>
+                    <p className="text-card text-fg mt-1.5 truncate">
+                      {job.customerName || "Not recorded"}
+                    </p>
+                    <p className="text-[13px] text-admin-muted mt-1 leading-snug">
+                      {job.pickup || "—"} <span className="text-admin-line-strong">→</span> {job.dropoff || "—"}
+                    </p>
+                    <div className="flex items-center gap-2 mt-3 pt-3 border-t border-admin-line text-[12px] text-admin-muted">
+                      <span
+                        className={`w-6 h-6 rounded-full flex items-center justify-center font-bold text-[10px] shrink-0 ${driver.color}`}
+                      >
+                        {driver.code}
+                      </span>
+                      <span className="truncate">{driver.name}</span>
+                      <span className="ml-auto shrink-0 flex items-center gap-2">
+                        <span>{photoCount} photo{photoCount === 1 ? "" : "s"}</span>
+                        {job.signatureUrl && <span className="text-admin-status-green font-semibold">Signed</span>}
+                      </span>
+                    </div>
+                  </button>
+                </li>
+              );
+            })}
+            {(data?.items || []).length === 0 && (
+              <li className="text-center py-12">
+                <p className="text-card text-fg">No finished jobs in this range</p>
+                <p className="text-[13px] text-admin-muted mt-1">Try widening the dates.</p>
+              </li>
+            )}
+          </ul>
+
+          <div className="hidden md:block overflow-x-auto custom-scrollbar">
             <table className="w-full text-left text-[14px] border-collapse whitespace-nowrap">
               <thead>
                 <tr className="border-b border-admin-line bg-[#F7F7F7]/50">
-                  <th className="py-4 px-4 w-12 text-center font-semibold text-[12px] font-semibold text-admin-muted uppercase tracking-[0.03em]">#</th>
-                  <th className="py-4 px-4 font-semibold text-[12px] font-semibold text-admin-muted uppercase tracking-[0.03em]">Driver</th>
-                  <th className="py-4 px-4 font-semibold text-[12px] font-semibold text-admin-muted uppercase tracking-[0.03em]">Customer</th>
-                  <th className="py-4 px-4 font-semibold text-[12px] font-semibold text-admin-muted uppercase tracking-[0.03em] min-w-[240px]">Pickup → Drop-off</th>
-                  <th className="py-4 px-4 font-semibold text-[12px] font-semibold text-admin-muted uppercase tracking-[0.03em]">Started</th>
-                  <th className="py-4 px-4 font-semibold text-[12px] font-semibold text-admin-muted uppercase tracking-[0.03em]">Finished</th>
-                  <th className="py-4 px-6 font-semibold text-[12px] font-semibold text-admin-muted uppercase tracking-[0.03em] text-right">Total (£)</th>
-                  <th className="py-4 px-4 font-semibold text-[12px] font-semibold text-admin-muted uppercase tracking-[0.03em] text-center">Photos</th>
-                  <th className="py-4 px-4 font-semibold text-[12px] font-semibold text-admin-muted uppercase tracking-[0.03em] text-center">Signature</th>
-                  <th className="py-4 px-4 font-semibold text-[12px] font-semibold text-admin-muted uppercase tracking-[0.03em] text-center">Docs</th>
+                  <th className="py-4 px-4 w-12 text-center font-semibold text-eyebrow text-fg-subtle tracking-[0.03em]">#</th>
+                  <th className="py-4 px-4 font-semibold text-eyebrow text-fg-subtle tracking-[0.03em]">Driver</th>
+                  <th className="py-4 px-4 font-semibold text-eyebrow text-fg-subtle tracking-[0.03em]">Customer</th>
+                  <th className="py-4 px-4 font-semibold text-eyebrow text-fg-subtle tracking-[0.03em] min-w-[240px]">Pickup → Drop-off</th>
+                  <th className="py-4 px-4 font-semibold text-eyebrow text-fg-subtle tracking-[0.03em]">Started</th>
+                  <th className="py-4 px-4 font-semibold text-eyebrow text-fg-subtle tracking-[0.03em]">Finished</th>
+                  <th className="py-4 px-6 font-semibold text-eyebrow text-fg-subtle tracking-[0.03em] text-right">Total (£)</th>
+                  <th className="py-4 px-4 font-semibold text-eyebrow text-fg-subtle tracking-[0.03em] text-center">Photos</th>
+                  <th className="py-4 px-4 font-semibold text-eyebrow text-fg-subtle tracking-[0.03em] text-center">Signature</th>
+                  <th className="py-4 px-4 font-semibold text-eyebrow text-fg-subtle tracking-[0.03em] text-center">Docs</th>
                   <th className="py-4 px-4 w-10"></th>
                 </tr>
               </thead>
@@ -141,7 +195,7 @@ export function FinishedJobsPage() {
                               <span className="bg-admin-line/50 px-1 py-[1px] mt-0.5 rounded-[3px] font-mono font-bold uppercase text-[9px] text-admin-ink">{formatVanReg(resolvedDriver.vehicleReg)}</span>
                             )}
                             {resolvedDriver.needsReassignment && (
-                              <span className="text-[11px] uppercase tracking-[0.02em] font-semibold text-amber-700 bg-amber-100 px-2.5 py-1 mt-2 rounded-[6px]">Needs Reassignment</span>
+                              <span className="text-[11px] uppercase tracking-[0.02em] font-semibold text-amber-700 bg-amber-100 px-2.5 py-1 mt-2 rounded-control">Needs Reassignment</span>
                             )}
                           </div>
                         </td>
@@ -150,7 +204,7 @@ export function FinishedJobsPage() {
                           <div className="flex items-center gap-2">
                             <span className="truncate max-w-[150px]">{job.customerName || "—"}</span>
                             {isTest && (
-                              <span className="px-1.5 py-0.5 rounded-[4px] bg-admin-surface border border-admin-line text-admin-muted text-[10px] font-semibold uppercase tracking-wider" title="Test or Incomplete Record">
+                              <span className="px-1.5 py-0.5 rounded-control bg-admin-surface border border-admin-line text-admin-muted text-[10px] font-semibold uppercase tracking-wider" title="Test or Incomplete Record">
                                 Test
                               </span>
                             )}
@@ -179,12 +233,12 @@ export function FinishedJobsPage() {
                             {photos.length > 0 ? (
                               <div className="flex items-center">
                                 {photos.slice(0, 3).map((p, i) => (
-                                  <div key={i} className={`w-8 h-8 rounded-lg overflow-hidden border-2 border-white bg-admin-surface ${i > 0 ? "-ml-3" : ""}`}>
+                                  <div key={i} className={`w-8 h-8 rounded-card overflow-hidden border-2 border-white bg-admin-surface ${i > 0 ? "-ml-3" : ""}`}>
                                     <img src={(p.thumbProxyUrl || p.driveUrl)} alt="" className="w-full h-full object-cover" />
                                   </div>
                                 ))}
                                 {photos.length > 3 && (
-                                  <div className="w-8 h-8 rounded-lg border-2 border-white bg-admin-surface flex items-center justify-center text-[11px] font-medium text-admin-muted -ml-3 z-10">
+                                  <div className="w-8 h-8 rounded-card border-2 border-white bg-admin-surface flex items-center justify-center text-[11px] font-medium text-admin-muted -ml-3 z-10">
                                     +{photos.length - 3}
                                   </div>
                                 )}
@@ -200,10 +254,10 @@ export function FinishedJobsPage() {
                             <img
                               src={job.signatureUrl}
                               alt="Sig"
-                              className="w-12 h-6 object-contain mx-auto border border-admin-line bg-white rounded-[4px] p-0.5"
+                              className="w-12 h-6 object-contain mx-auto border border-admin-line bg-white rounded-control p-0.5"
                             />
                           ) : (
-                            <div className="w-12 h-6 rounded-[4px] border border-dashed border-admin-line-strong mx-auto" />
+                            <div className="w-12 h-6 rounded-control border border-dashed border-admin-line-strong mx-auto" />
                           )}
                         </td>
                         
@@ -247,8 +301,8 @@ export function FinishedJobsPage() {
          <div className="flex flex-wrap items-center justify-between gap-2 px-2 text-[13px] text-admin-muted">
            <span>Showing {(page - 1) * pageSize + 1} to {Math.min(page * pageSize, data.pagination.total)} of {data.pagination.total}</span>
            <div className="flex gap-2 shrink-0">
-             <button disabled={page === 1} onClick={() => setPage(p => p - 1)} className="px-3 py-1.5 border border-admin-line rounded-[8px] bg-white hover:bg-admin-surface disabled:opacity-50 transition font-medium text-admin-ink">Previous</button>
-             <button disabled={page * pageSize >= data.pagination.total} onClick={() => setPage(p => p + 1)} className="px-3 py-1.5 border border-admin-line rounded-[8px] bg-white hover:bg-admin-surface disabled:opacity-50 transition font-medium text-admin-ink">Next</button>
+             <button disabled={page === 1} onClick={() => setPage(p => p - 1)} className="px-3 py-1.5 border border-line-strong rounded-control bg-surface hover:bg-surface-sunken disabled:opacity-50 transition text-button text-fg">Previous</button>
+             <button disabled={page * pageSize >= data.pagination.total} onClick={() => setPage(p => p + 1)} className="px-3 py-1.5 border border-line-strong rounded-control bg-surface hover:bg-surface-sunken disabled:opacity-50 transition text-button text-fg">Next</button>
            </div>
          </div>
       )}

@@ -1,5 +1,6 @@
 import React from "react";
 import { Search, Filter, Download, X } from "lucide-react";
+import { Button } from "../../../../ui";
 
 interface Props {
   search: string;
@@ -35,7 +36,7 @@ export function SearchFilterBar({
   hasActiveFilters
 }: Props) {
   return (
-    <div className="flex flex-wrap items-center justify-between gap-3 p-4 bg-white rounded-lg border border-admin-line mb-6 shadow-white">
+    <div className="flex flex-wrap items-center justify-between gap-3 p-4 bg-white rounded-card border border-admin-line mb-6 shadow-white">
       <div className="flex flex-wrap items-center gap-3 flex-1 min-w-[280px]">
         {/* Search Input */}
         <div className="relative flex-1 max-w-sm">
@@ -45,7 +46,7 @@ export function SearchFilterBar({
             value={search}
             onChange={e => onSearchChange(e.target.value)}
             placeholder="Search Job ID, customer, driver, address..."
-            className="w-full pl-9 pr-8 py-2 bg-admin-surface rounded-lg text-xs border border-admin-line focus:bg-white focus:border-tmv-blue focus:outline-none transition"
+            className="w-full pl-9 pr-8 py-2 bg-admin-surface rounded-card text-xs border border-admin-line focus:bg-white focus:border-tmv-blue focus:outline-none transition"
           />
           {search && (
             <button
@@ -61,7 +62,7 @@ export function SearchFilterBar({
         <select
           value={status}
           onChange={e => onStatusChange(e.target.value)}
-          className="px-3 py-2 bg-admin-surface rounded-lg text-xs border border-admin-line text-admin-ink-2 font-medium focus:outline-none"
+          className="px-3 py-2 bg-admin-surface rounded-card text-xs border border-admin-line text-admin-ink-2 font-medium focus:outline-none"
         >
           <option value="ALL">All Statuses</option>
           <option value="READY">Scheduled (Ready)</option>
@@ -74,7 +75,7 @@ export function SearchFilterBar({
         <select
           value={driver}
           onChange={e => onDriverChange(e.target.value)}
-          className="px-3 py-2 bg-admin-surface rounded-lg text-xs border border-admin-line text-admin-ink-2 font-medium focus:outline-none"
+          className="px-3 py-2 bg-admin-surface rounded-card text-xs border border-admin-line text-admin-ink-2 font-medium focus:outline-none"
         >
           <option value="ALL">All Drivers</option>
           {driversList.map(d => (
@@ -88,7 +89,7 @@ export function SearchFilterBar({
         <select
           value={payMethod}
           onChange={e => onPayMethodChange(e.target.value)}
-          className="px-3 py-2 bg-admin-surface rounded-lg text-xs border border-admin-line text-admin-ink-2 font-medium focus:outline-none"
+          className="px-3 py-2 bg-admin-surface rounded-card text-xs border border-admin-line text-admin-ink-2 font-medium focus:outline-none"
         >
           <option value="ALL">All Payments</option>
           <option value="Cash">Cash</option>
@@ -101,7 +102,7 @@ export function SearchFilterBar({
         <select
           value={evidence}
           onChange={e => onEvidenceChange(e.target.value)}
-          className="px-3 py-2 bg-admin-surface rounded-lg text-xs border border-admin-line text-admin-ink-2 font-medium focus:outline-none"
+          className="px-3 py-2 bg-admin-surface rounded-card text-xs border border-admin-line text-admin-ink-2 font-medium focus:outline-none"
         >
           <option value="ALL">All Evidence</option>
           <option value="complete">100% Complete</option>
@@ -121,13 +122,9 @@ export function SearchFilterBar({
       </div>
 
       {onExportCsv && (
-        <button
-          onClick={onExportCsv}
-          className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-navy-900 text-white text-btn hover:bg-navy-800 transition shadow-sm ml-auto"
-        >
-          <Download className="w-4 h-4 text-tmv-cyan" />
+        <Button variant="secondary" size="sm" onClick={onExportCsv} iconLeft={<Download />} className="ml-auto">
           Export CSV
-        </button>
+        </Button>
       )}
     </div>
   );

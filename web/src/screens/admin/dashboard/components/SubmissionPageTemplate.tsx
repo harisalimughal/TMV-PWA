@@ -1,8 +1,7 @@
 import React from "react";
-import { 
-  Eye, Edit3, Settings, MoreHorizontal, 
-  Table as TableIcon, Inbox, Search, Filter, 
-  Download, RefreshCw, ChevronLeft, ChevronRight 
+import {
+  Table as TableIcon, Inbox, Search,
+  Download, Printer, RefreshCw, ChevronLeft, ChevronRight
 } from "lucide-react";
 import { DateRangePicker } from "./DateRangePicker";
 
@@ -42,6 +41,10 @@ interface Props {
   // Table Content
   tableHeader: React.ReactNode;
   tableBody: React.ReactNode;
+
+  /** Supplied by pages that can export. Omit it and the CSV button isn't rendered at
+   *  all -- better than a button that looks available and does nothing. */
+  onExportCsv?: () => void;
 }
 
 export function SubmissionPageTemplate({
@@ -51,7 +54,7 @@ export function SubmissionPageTemplate({
   from, to, onDateChange, groupBy, onGroupByChange,
   itemCount, isFetching, onRefresh,
   page, pageSize, totalItems, onPageChange,
-  tableHeader, tableBody
+  tableHeader, tableBody, onExportCsv
 }: Props) {
   
   const totalPages = Math.ceil(totalItems / pageSize);
@@ -68,40 +71,26 @@ export function SubmissionPageTemplate({
       {/* STANDARD PAGE HEADER */}
       <div className="flex flex-wrap items-center justify-between gap-y-3 gap-x-2 px-2">
         <div className="flex items-center gap-4 min-w-0">
-          <div className="w-10 h-10 shrink-0 rounded-xl bg-admin-brand text-white flex items-center justify-center shadow-sm">
+          <div className="w-10 h-10 shrink-0 rounded-card bg-admin-brand text-white flex items-center justify-center shadow-sm">
             <Icon className="w-5 h-5" />
           </div>
           <div className="flex items-center gap-3 min-w-0">
-            <h1 className="text-[18px] font-bold text-admin-ink truncate">{title}</h1>
-            <span className={`shrink-0 px-2 py-0.5 rounded-md text-[11px] font-bold uppercase tracking-wider ${statusColors[statusColor]}`}>
+            <h1 className="text-title text-fg truncate">{title}</h1>
+            <span className={`shrink-0 px-2 py-0.5 rounded-control text-[11px] font-bold uppercase tracking-wider ${statusColors[statusColor]}`}>
               {status}
             </span>
           </div>
         </div>
 
-        <div className="flex items-center gap-2 flex-wrap">
-          <div className="flex items-center gap-2 sm:mr-2">
-            <span className="hidden sm:inline text-[12px] font-semibold text-admin-muted">Progress</span>
-            <span className="px-2 py-0.5 bg-admin-surface border border-admin-line rounded-full text-[12px] font-bold text-admin-muted">0/4</span>
-          </div>
-
-          <button className="shrink-0 whitespace-nowrap h-9 px-2.5 sm:px-3 rounded-[10px] border border-admin-line bg-white hover:bg-admin-surface text-admin-ink text-[13px] font-medium transition flex items-center gap-1.5 shadow-sm">
-            <Eye className="w-4 h-4 text-admin-muted" /> <span className="hidden sm:inline">Preview</span>
-          </button>
-          <button className="shrink-0 whitespace-nowrap h-9 px-2.5 sm:px-3 rounded-[10px] border border-admin-line bg-white hover:bg-admin-surface text-admin-ink text-[13px] font-medium transition flex items-center gap-1.5 shadow-sm">
-            <Edit3 className="w-4 h-4 text-admin-muted" /> <span className="hidden sm:inline">Edit Form</span>
-          </button>
-          <button className="shrink-0 whitespace-nowrap h-9 px-2.5 sm:px-3 rounded-[10px] border border-admin-line bg-white hover:bg-admin-surface text-admin-ink text-[13px] font-medium transition flex items-center gap-1.5 shadow-sm">
-            <Settings className="w-4 h-4 text-admin-muted" /> <span className="hidden sm:inline">Settings</span>
-          </button>
-          <button className="shrink-0 h-9 w-9 rounded-[10px] border border-admin-line bg-white hover:bg-admin-surface text-admin-muted transition flex items-center justify-center shadow-sm">
-            <MoreHorizontal className="w-4 h-4" />
-          </button>
-        </div>
+        {/* The Preview / Edit Form / Settings / overflow buttons and a hardcoded
+            "0/4" progress pill used to live here. None of them had a handler and the
+            pill never moved off 0/4, so the whole cluster was decoration that read as
+            functionality. Removed rather than stubbed -- an honest toolbar with three
+            working controls beats a rich one where half do nothing. */}
       </div>
 
       {/* MAIN CARD CONTAINER */}
-      <div className="bg-white rounded-[20px] shadow-[0_4px_24px_rgb(0,0,0,0.04)] border border-admin-line overflow-hidden flex flex-col">
+      <div className="bg-white rounded-module shadow-[0_4px_24px_rgb(0,0,0,0.04)] border border-admin-line overflow-hidden flex flex-col">
         
         {/* STANDARD TAB NAVIGATION -- horizontal scroll fallback so tabs never wrap/compress */}
         <div className="flex items-center px-4 sm:px-6 border-b border-admin-line overflow-x-auto custom-scrollbar">
@@ -125,11 +114,11 @@ export function SubmissionPageTemplate({
 
           {/* Row 1: Core Controls */}
           <div className="flex flex-wrap items-center gap-3">
-            <div className="flex items-center gap-1 p-1 bg-admin-surface border border-admin-line rounded-xl shrink-0">
-              <button onClick={() => onViewModeChange("table")} className={`shrink-0 whitespace-nowrap flex items-center gap-1.5 px-3 py-1.5 rounded-[8px] text-[13px] font-medium transition ${viewMode === 'table' ? 'bg-white shadow-sm text-admin-ink' : 'text-admin-muted hover:text-admin-ink'}`}>
+            <div className="flex items-center gap-1 p-1 bg-admin-surface border border-admin-line rounded-card shrink-0">
+              <button onClick={() => onViewModeChange("table")} className={`shrink-0 whitespace-nowrap flex items-center gap-1.5 px-3 py-1.5 rounded-control text-[13px] font-medium transition ${viewMode === 'table' ? 'bg-white shadow-sm text-admin-ink' : 'text-admin-muted hover:text-admin-ink'}`}>
                 <TableIcon className="w-4 h-4" /> Table
               </button>
-              <button onClick={() => onViewModeChange("inbox")} className={`shrink-0 whitespace-nowrap flex items-center gap-1.5 px-3 py-1.5 rounded-[8px] text-[13px] font-medium transition ${viewMode === 'inbox' ? 'bg-white shadow-sm text-admin-ink' : 'text-admin-muted hover:text-admin-ink'}`}>
+              <button onClick={() => onViewModeChange("inbox")} className={`shrink-0 whitespace-nowrap flex items-center gap-1.5 px-3 py-1.5 rounded-control text-[13px] font-medium transition ${viewMode === 'inbox' ? 'bg-white shadow-sm text-admin-ink' : 'text-admin-muted hover:text-admin-ink'}`}>
                 <Inbox className="w-4 h-4" /> Inbox
               </button>
             </div>
@@ -145,10 +134,6 @@ export function SubmissionPageTemplate({
               />
             </div>
 
-            <button className="shrink-0 w-9 h-9 flex items-center justify-center bg-admin-surface border border-admin-line rounded-full text-admin-muted hover:text-admin-ink transition">
-              <Filter className="w-4 h-4" />
-            </button>
-
             <div className="hidden sm:block w-px h-6 bg-admin-line mx-1 shrink-0" />
 
             <DateRangePicker from={from} to={to} onChange={(f, t) => onDateChange(f, t)} />
@@ -158,7 +143,7 @@ export function SubmissionPageTemplate({
               <select
                 value={groupBy}
                 onChange={e => onGroupByChange(e.target.value)}
-                className="h-9 px-3 rounded-[10px] bg-admin-surface border border-admin-line text-[13px] font-medium text-admin-ink outline-none focus:border-admin-brand"
+                className="h-9 px-3 rounded-card bg-admin-surface border border-admin-line text-[13px] font-medium text-admin-ink outline-none focus:border-admin-brand"
               >
                 <option value="None">None</option>
                 <option value="Driver">Driver</option>
@@ -171,7 +156,7 @@ export function SubmissionPageTemplate({
           {/* Row 2: Secondary Controls */}
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="flex items-center gap-3 shrink-0">
-              <span className="text-[13px] font-medium text-admin-muted whitespace-nowrap">
+              <span className="text-label font-medium text-fg-muted whitespace-nowrap">
                 {itemCount} record{itemCount !== 1 ? 's' : ''}
               </span>
               <button
@@ -184,12 +169,26 @@ export function SubmissionPageTemplate({
             </div>
 
             {/* Standardized Export Controls (Icon+Text Pair) */}
-            <div className="flex items-center bg-admin-surface border border-admin-line rounded-[10px] overflow-hidden shrink-0">
-              <button className="whitespace-nowrap px-3 h-9 text-[12px] font-medium text-admin-ink hover:bg-white transition border-r border-admin-line flex items-center gap-1.5">
-                <Download className="w-3.5 h-3.5 text-admin-muted" /> CSV
-              </button>
-              <button className="whitespace-nowrap px-3 h-9 text-[12px] font-medium text-admin-ink hover:bg-white transition flex items-center gap-1.5">
-                PDF
+            <div className="flex items-center bg-admin-surface border border-admin-line rounded-card overflow-hidden shrink-0">
+              {onExportCsv && (
+                <button
+                  onClick={onExportCsv}
+                  disabled={itemCount === 0}
+                  className="whitespace-nowrap px-3 h-9 text-[12px] font-medium text-admin-ink hover:bg-white transition border-r border-admin-line flex items-center gap-1.5 disabled:opacity-40"
+                  title={`Export ${itemCount} records as CSV`}
+                >
+                  <Download className="w-3.5 h-3.5 text-admin-muted" /> CSV
+                </button>
+              )}
+              {/* "PDF" now prints. The print stylesheet in index.css already lays the
+                  table out for paper, so the browser's own Save-as-PDF is a real
+                  export rather than a placeholder. */}
+              <button
+                onClick={() => window.print()}
+                className="whitespace-nowrap px-3 h-9 text-[12px] font-medium text-admin-ink hover:bg-white transition flex items-center gap-1.5"
+                title="Print or save as PDF"
+              >
+                <Printer className="w-3.5 h-3.5 text-admin-muted" /> PDF
               </button>
             </div>
           </div>
@@ -216,21 +215,21 @@ export function SubmissionPageTemplate({
         {/* STANDARD PAGINATION */}
         {totalItems > 0 && (
           <div className="px-6 py-4 border-t border-admin-line bg-[#FAFAFA] flex items-center justify-between">
-            <span className="text-[13px] font-medium text-admin-muted">
+            <span className="text-label font-medium text-fg-muted">
               Showing {(page - 1) * pageSize + 1}-{Math.min(page * pageSize, totalItems)} of {totalItems} records
             </span>
             <div className="flex items-center gap-2">
               <button 
                 disabled={page === 1}
                 onClick={() => onPageChange(Math.max(1, page - 1))}
-                className="px-4 h-8 rounded-[8px] border border-admin-line bg-white hover:bg-admin-surface disabled:opacity-50 text-[12px] font-medium text-admin-ink transition"
+                className="px-4 h-8 rounded-control border border-admin-line bg-white hover:bg-admin-surface disabled:opacity-50 text-[12px] font-medium text-admin-ink transition"
               >
                 Prev
               </button>
               <button 
                 disabled={page >= totalPages}
                 onClick={() => onPageChange(Math.min(totalPages, page + 1))}
-                className="px-4 h-8 rounded-[8px] border border-admin-line bg-white hover:bg-admin-surface disabled:opacity-50 text-[12px] font-medium text-admin-ink transition"
+                className="px-4 h-8 rounded-control border border-admin-line bg-white hover:bg-admin-surface disabled:opacity-50 text-[12px] font-medium text-admin-ink transition"
               >
                 Next
               </button>

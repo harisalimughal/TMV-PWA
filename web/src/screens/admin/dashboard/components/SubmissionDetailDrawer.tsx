@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { X, Download, Eye, Maximize2, ZoomIn, ZoomOut, Check, ChevronLeft, ChevronRight, RefreshCw } from "lucide-react";
+import { IconButton } from "../../../../ui";
 import { PaperDossierReport } from "./PaperDossierReport";
 import { NormalizedJob } from "../types";
 import { formatLondonDateTime } from "../utils/date";
@@ -16,6 +17,7 @@ interface Props {
 export function SubmissionDetailDrawer({ job, isOpen, onClose, onNavigate, hasNext, hasPrev }: Props) {
   const [isPreviewing, setIsPreviewing] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [zoom, setZoom] = useState(100);
   const [activeTab, setActiveTab] = useState<"Activity" | "Comments">("Activity");
   const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
@@ -50,14 +52,16 @@ export function SubmissionDetailDrawer({ job, isOpen, onClose, onNavigate, hasNe
     <div className="w-full lg:w-[300px] lg:flex-shrink-0 border-b lg:border-b-0 lg:border-r border-admin-line bg-white flex flex-col p-6 overflow-y-auto custom-scrollbar relative z-10">
       <h3 className="text-[14px] font-bold text-admin-ink mb-6">Manager fields</h3>
       <div className="space-y-6">
-        <div className="bg-[#F8F9FA] border border-admin-line rounded-[16px] p-4 relative shadow-sm">
-          <label className="flex items-center gap-2 text-[13px] font-semibold text-admin-ink mb-3">Note <Eye className="w-4 h-4 text-admin-muted" /></label>
-          <textarea className="w-full bg-white border border-admin-line rounded-xl p-3 text-[13px] text-admin-ink placeholder-admin-muted focus:outline-none focus:ring-2 focus:ring-admin-brand/20 min-h-[100px] resize-none" placeholder="Type here..." />
-          <button className="absolute bottom-4 right-4 bg-admin-brand hover:bg-admin-brand-dark text-white text-[12px] font-bold px-4 py-1.5 rounded-full transition shadow-sm">Save</button>
+        <div className="bg-[#F8F9FA] border border-admin-line rounded-module p-4 relative shadow-sm">
+          <label className="flex items-center gap-2 text-label font-semibold text-fg mb-3">Note <Eye className="w-4 h-4 text-admin-muted" /></label>
+          <textarea className="w-full bg-white border border-admin-line rounded-card p-3 text-[13px] text-admin-ink placeholder-admin-muted focus:outline-none focus:ring-2 focus:ring-admin-brand/20 min-h-[100px] resize-none" placeholder="Type here..." />
+          {/* The Save button here had no handler, so a note typed into this box was
+              silently discarded on close -- worse than offering no note field. Left as
+              a scratch pad until there's an endpoint to persist it to. */}
         </div>
-        <div className="bg-[#F8F9FA] border border-admin-line rounded-[16px] p-4 flex items-center justify-between shadow-sm">
-          <label className="flex items-center gap-2 text-[13px] font-semibold text-admin-ink">Status <Eye className="w-4 h-4 text-admin-muted" /></label>
-          <select className="bg-white border border-admin-line rounded-lg px-3 py-1.5 text-[13px] font-medium text-admin-ink focus:outline-none focus:ring-2 focus:ring-admin-brand/20 outline-none">
+        <div className="bg-[#F8F9FA] border border-admin-line rounded-module p-4 flex items-center justify-between shadow-sm">
+          <label className="flex items-center gap-2 text-label font-semibold text-fg">Status <Eye className="w-4 h-4 text-admin-muted" /></label>
+          <select className="bg-white border border-admin-line rounded-card px-3 py-1.5 text-[13px] font-medium text-admin-ink focus:outline-none focus:ring-2 focus:ring-admin-brand/20 outline-none">
             <option>Select</option>
             <option>Approved</option>
             <option>Flagged</option>
@@ -98,7 +102,7 @@ export function SubmissionDetailDrawer({ job, isOpen, onClose, onNavigate, hasNe
 
   const FormAnswersView = () => (
     <div className="max-w-2xl mx-auto space-y-6 w-full py-6 sm:py-8 px-4 sm:px-6">
-      <div className="bg-white rounded-[20px] p-4 sm:p-6 shadow-sm border border-admin-line">
+      <div className="bg-white rounded-module p-4 sm:p-6 shadow-sm border border-admin-line">
          <label className="text-[13px] font-semibold text-admin-muted block mb-2">Customer & Details</label>
          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
            <div>
@@ -120,7 +124,7 @@ export function SubmissionDetailDrawer({ job, isOpen, onClose, onNavigate, hasNe
          </div>
       </div>
 
-      <div className="bg-white rounded-[20px] p-4 sm:p-6 shadow-sm border border-admin-line">
+      <div className="bg-white rounded-module p-4 sm:p-6 shadow-sm border border-admin-line">
          <label className="text-[13px] font-semibold text-admin-muted block mb-4">Evidence that the items have been loaded.</label>
          {photos.length > 0 ? (
            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
@@ -129,7 +133,7 @@ export function SubmissionDetailDrawer({ job, isOpen, onClose, onNavigate, hasNe
                  key={i} 
                  href={p.driveUrl || p.thumbProxyUrl || `/admin/api/jobs/${job.jobId}/photos/${p.fileId}`}
                  target="_blank" rel="noreferrer"
-                 className="aspect-square rounded-[12px] bg-admin-surface overflow-hidden border border-admin-line shadow-sm hover:ring-2 hover:ring-admin-brand/50 transition cursor-pointer block relative group"
+                 className="aspect-square rounded-card bg-admin-surface overflow-hidden border border-admin-line shadow-sm hover:ring-2 hover:ring-admin-brand/50 transition cursor-pointer block relative group"
                >
                  <img src={p.thumbProxyUrl || `/admin/api/jobs/${job.jobId}/photos/${p.fileId}`} className="w-full h-full object-cover" alt={p.category} />
                  <div className="absolute inset-0 bg-admin-ink/50 opacity-0 group-hover:opacity-100 transition flex items-center justify-center">
@@ -142,20 +146,20 @@ export function SubmissionDetailDrawer({ job, isOpen, onClose, onNavigate, hasNe
              ))}
            </div>
          ) : (
-           <div className="p-8 text-center bg-admin-surface border border-dashed border-admin-line rounded-xl">
+           <div className="p-8 text-center bg-admin-surface border border-dashed border-admin-line rounded-card">
               <span className="text-admin-muted text-[13px]">No photos captured.</span>
            </div>
          )}
       </div>
 
-      <div className="bg-white rounded-[20px] p-4 sm:p-6 shadow-sm border border-admin-line">
+      <div className="bg-white rounded-module p-4 sm:p-6 shadow-sm border border-admin-line">
          <label className="text-[13px] font-semibold text-admin-muted block mb-4">Client Signature</label>
          {job.signatureUrl ? (
-            <div className="border border-admin-line rounded-xl p-4 bg-admin-surface max-w-sm flex justify-center">
+            <div className="border border-admin-line rounded-card p-4 bg-admin-surface max-w-sm flex justify-center">
               <img src={job.signatureUrl} alt="Signature" className="max-h-24 mix-blend-multiply" />
             </div>
          ) : (
-            <div className="p-8 text-center bg-admin-surface border border-dashed border-admin-line rounded-xl max-w-sm">
+            <div className="p-8 text-center bg-admin-surface border border-dashed border-admin-line rounded-card max-w-sm">
               <span className="text-admin-muted text-[13px]">No physical signature captured.</span>
             </div>
          )}
@@ -174,7 +178,7 @@ export function SubmissionDetailDrawer({ job, isOpen, onClose, onNavigate, hasNe
       <div className="flex w-full h-full print:hidden">
       
       {toast && (
-        <div className="fixed top-6 right-6 z-[200] bg-admin-ink text-white px-5 py-3 rounded-xl shadow-2xl flex items-center gap-3 animate-in fade-in slide-in-from-top-4">
+        <div className="fixed top-6 right-6 z-[200] bg-admin-ink text-white px-5 py-3 rounded-card shadow-2xl flex items-center gap-3 animate-in fade-in slide-in-from-top-4">
           <Check className="w-4 h-4 text-admin-status-green" />
           <span className="text-[14px] font-semibold">{toast}</span>
         </div>
@@ -190,35 +194,33 @@ export function SubmissionDetailDrawer({ job, isOpen, onClose, onNavigate, hasNe
                {job.driverInitials || "UN"}
              </div>
              <div className="min-w-0">
-               <h2 className="text-[15px] font-bold text-admin-ink leading-tight truncate">{job.driverName || "Unknown"}</h2>
+               <h2 className="text-card text-fg leading-tight truncate">{job.driverName || "Unknown"}</h2>
                <div className="text-[12px] text-admin-muted mt-0.5 truncate">{formattedTime}, Job ID: {job.jobId}</div>
              </div>
           </div>
           <div className="flex items-center gap-2 sm:gap-3">
              {onNavigate && (
-               <div className="flex items-center gap-1 sm:mr-4 bg-admin-surface rounded-xl border border-admin-line p-1">
-                 <button onClick={() => onNavigate('prev')} disabled={!hasPrev} className="p-1.5 rounded-lg text-admin-muted hover:text-admin-ink hover:bg-white disabled:opacity-30 transition"><ChevronLeft className="w-4 h-4" /></button>
-                 <button onClick={() => onNavigate('next')} disabled={!hasNext} className="p-1.5 rounded-lg text-admin-muted hover:text-admin-ink hover:bg-white disabled:opacity-30 transition"><ChevronRight className="w-4 h-4" /></button>
+               <div className="flex items-center gap-1 sm:mr-4 bg-admin-surface rounded-card border border-admin-line p-1">
+                 <button onClick={() => onNavigate('prev')} disabled={!hasPrev} className="p-1.5 rounded-card text-admin-muted hover:text-admin-ink hover:bg-white disabled:opacity-30 transition"><ChevronLeft className="w-4 h-4" /></button>
+                 <button onClick={() => onNavigate('next')} disabled={!hasNext} className="p-1.5 rounded-card text-admin-muted hover:text-admin-ink hover:bg-white disabled:opacity-30 transition"><ChevronRight className="w-4 h-4" /></button>
                </div>
              )}
              <button
                onClick={() => setIsPreviewing(!isPreviewing)}
-               className={`h-10 px-2.5 sm:px-4 rounded-xl border font-bold text-[13px] transition flex items-center gap-2 shadow-sm ${isPreviewing ? 'bg-admin-surface border-admin-line text-admin-ink' : 'border-admin-line bg-white hover:bg-admin-surface text-admin-ink'}`}
+               className={`h-10 px-2.5 sm:px-4 rounded-card border font-bold text-[13px] transition flex items-center gap-2 shadow-sm ${isPreviewing ? 'bg-admin-surface border-admin-line text-admin-ink' : 'border-admin-line bg-white hover:bg-admin-surface text-admin-ink'}`}
              >
                <Eye className="w-4 h-4 text-admin-muted" /> <span className="hidden sm:inline">{isPreviewing ? "Back to Form" : "Preview PDF"}</span>
              </button>
              <button
                onClick={handleDownload}
                disabled={isGeneratingPdf}
-               className="h-10 px-2.5 sm:px-4 rounded-xl border border-transparent bg-admin-brand hover:bg-admin-brand-dark text-white font-bold text-[13px] transition flex items-center gap-2 shadow-sm disabled:opacity-70"
+               className="h-10 px-2.5 sm:px-4 rounded-card border border-transparent bg-admin-brand hover:bg-admin-brand-dark text-white font-bold text-[13px] transition flex items-center gap-2 shadow-sm disabled:opacity-70"
              >
                {isGeneratingPdf ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
                <span className="hidden sm:inline">Download PDF</span>
              </button>
              <div className="hidden sm:block w-px h-6 bg-admin-line mx-2" />
-             <button onClick={onClose} className="p-2 -mr-2 rounded-full text-admin-muted hover:text-admin-ink hover:bg-admin-surface transition">
-               <X className="w-5 h-5" />
-             </button>
+             <IconButton aria-label="Close" icon={<X />} onClick={onClose} className="-mr-2" />
           </div>
         </div>
 
@@ -232,17 +234,38 @@ export function SubmissionDetailDrawer({ job, isOpen, onClose, onNavigate, hasNe
           <div className="flex-1 overflow-y-auto relative bg-[#F5F5F5] custom-scrollbar">
              {isPreviewing ? (
                <div className="min-h-full py-8 flex flex-col items-center">
-                  <div className="w-full max-w-[210mm] relative">
+                  {/* transform-origin top so zooming grows downward rather than
+                      pushing the top of the page off-screen. */}
+                  <div
+                    className="w-full max-w-[210mm] relative transition-transform duration-150"
+                    style={{ transform: `scale(${zoom / 100})`, transformOrigin: "top center" }}
+                  >
                      <PaperDossierReport job={job} isPreview={true} />
                   </div>
                   
                   {/* Floating Toolbar */}
-                  <div className="fixed bottom-8 right-1/2 translate-x-1/2 flex items-center gap-2 p-2 bg-admin-ink/90 rounded-2xl shadow-xl backdrop-blur-md">
-                     <button className="w-10 h-10 rounded-xl text-white/80 hover:text-white hover:bg-white/10 transition flex items-center justify-center"><ZoomOut className="w-4 h-4" /></button>
-                     <span className="text-[12px] font-bold text-white/90 px-2 font-mono">100%</span>
-                     <button className="w-10 h-10 rounded-xl text-white/80 hover:text-white hover:bg-white/10 transition flex items-center justify-center"><ZoomIn className="w-4 h-4" /></button>
+                  <div className="fixed bottom-8 right-1/2 translate-x-1/2 flex items-center gap-2 p-2 bg-admin-ink/90 rounded-module shadow-xl backdrop-blur-md">
+                     {/* These two had no handlers and the readout was hardcoded to
+                         100%, so the zoom control was purely decorative. It now zooms. */}
+                     <button
+                       onClick={() => setZoom(z => Math.max(50, z - 10))}
+                       disabled={zoom <= 50}
+                       aria-label="Zoom out"
+                       className="w-10 h-10 rounded-card text-white/80 hover:text-white hover:bg-white/10 transition flex items-center justify-center disabled:opacity-40"
+                     >
+                       <ZoomOut className="w-4 h-4" />
+                     </button>
+                     <span className="text-[12px] font-bold text-white/90 px-2 font-mono tabular-nums">{zoom}%</span>
+                     <button
+                       onClick={() => setZoom(z => Math.min(200, z + 10))}
+                       disabled={zoom >= 200}
+                       aria-label="Zoom in"
+                       className="w-10 h-10 rounded-card text-white/80 hover:text-white hover:bg-white/10 transition flex items-center justify-center disabled:opacity-40"
+                     >
+                       <ZoomIn className="w-4 h-4" />
+                     </button>
                      <div className="w-px h-6 bg-white/20 mx-1" />
-                     <button onClick={() => setIsFullscreen(!isFullscreen)} className="w-10 h-10 rounded-xl text-white/80 hover:text-white hover:bg-white/10 transition flex items-center justify-center" title="Toggle Fullscreen">
+                     <button onClick={() => setIsFullscreen(!isFullscreen)} className="w-10 h-10 rounded-card text-white/80 hover:text-white hover:bg-white/10 transition flex items-center justify-center" title="Toggle Fullscreen">
                        <Maximize2 className="w-4 h-4" />
                      </button>
                   </div>

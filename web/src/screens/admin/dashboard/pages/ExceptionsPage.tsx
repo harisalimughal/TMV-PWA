@@ -18,6 +18,7 @@ import { fetchExceptions } from "../api";
 import { ExceptionItem } from "../types";
 import { DateRangePicker } from "../components/DateRangePicker";
 import { formatLondonDateTime } from "../utils/date";
+import { Button } from "../../../../ui";
 
 interface Props {
   onOpenJob?: (jobId: string) => void;
@@ -39,22 +40,19 @@ export function ExceptionsPage({ onOpenJob }: Props) {
     return (
       <div className="py-20 text-center">
         <div className="w-8 h-8 border-2 border-admin-brand border-t-transparent rounded-full animate-spin mx-auto mb-3" />
-        <span className="text-[13px] font-medium text-admin-muted">Auditing operational exception logs...</span>
+        <span className="text-label font-medium text-fg-muted">Auditing operational exception logs...</span>
       </div>
     );
   }
 
   if (error || !data) {
     return (
-      <div className="p-8 text-center text-admin-status-red bg-white rounded-xl border border-admin-line shadow-sm hover:shadow-md transition">
+      <div className="p-8 text-center text-admin-status-red bg-white rounded-card border border-admin-line shadow-sm hover:shadow-md transition">
         <AlertCircle className="w-6 h-6 mx-auto mb-2 text-admin-status-red" />
-        <h3 className="text-[12px] font-semibold text-admin-ink">Failed to load exceptions</h3>
-        <button
-          onClick={() => refetch()}
-          className="mt-3 px-3 py-1.5 rounded-lg bg-admin-brand text-white text-[13px] font-medium hover:bg-admin-brand-dark transition"
-        >
+        <h3 className="text-card text-fg">Failed to load exceptions</h3>
+        <Button variant="secondary" size="sm" onClick={() => refetch()} className="mt-3">
           Retry
-        </button>
+        </Button>
       </div>
     );
   }
@@ -84,7 +82,7 @@ export function ExceptionsPage({ onOpenJob }: Props) {
         {/* Critical Card */}
         <div
           onClick={() => setSelectedSeverity(selectedSeverity === "CRITICAL" ? "ALL" : "CRITICAL")}
-          className={`p-4 rounded-xl border transition cursor-pointer shadow-sm hover:shadow-md flex items-center justify-between ${
+          className={`p-4 rounded-card border transition cursor-pointer shadow-sm hover:shadow-md flex items-center justify-between ${
             selectedSeverity === "CRITICAL"
               ? "bg-admin-status-red-bg border-admin-status-red/40 ring-2 ring-admin-status-red/20"
               : "bg-white border-admin-line hover:border-admin-status-red/30"
@@ -106,7 +104,7 @@ export function ExceptionsPage({ onOpenJob }: Props) {
         {/* Warning Card */}
         <div
           onClick={() => setSelectedSeverity(selectedSeverity === "WARNING" ? "ALL" : "WARNING")}
-          className={`p-4 rounded-xl border transition cursor-pointer shadow-sm hover:shadow-md flex items-center justify-between ${
+          className={`p-4 rounded-card border transition cursor-pointer shadow-sm hover:shadow-md flex items-center justify-between ${
             selectedSeverity === "WARNING"
               ? "bg-admin-status-amber-bg border-admin-status-amber/40 ring-2 ring-admin-status-amber/20"
               : "bg-white border-admin-line hover:border-admin-status-amber/30"
@@ -128,7 +126,7 @@ export function ExceptionsPage({ onOpenJob }: Props) {
         {/* Informational Card */}
         <div
           onClick={() => setSelectedSeverity(selectedSeverity === "INFO" ? "ALL" : "INFO")}
-          className={`p-4 rounded-xl border transition cursor-pointer shadow-sm hover:shadow-md flex items-center justify-between ${
+          className={`p-4 rounded-card border transition cursor-pointer shadow-sm hover:shadow-md flex items-center justify-between ${
             selectedSeverity === "INFO"
               ? "bg-admin-brand-soft border-admin-brand/40 ring-2 ring-admin-brand/20"
               : "bg-white border-admin-line hover:border-admin-brand/30"
@@ -149,7 +147,7 @@ export function ExceptionsPage({ onOpenJob }: Props) {
       </div>
 
       {/* 2. FILTER TOOLBAR */}
-      <div className="bg-white p-4 rounded-lg border border-admin-line flex flex-wrap items-center justify-between gap-3 shadow-sm hover:shadow-md transition">
+      <div className="bg-white p-4 rounded-card border border-admin-line flex flex-wrap items-center justify-between gap-3 shadow-sm hover:shadow-md transition">
         <div className="flex flex-wrap items-center gap-3">
           {/* Search */}
           <div className="relative w-64">
@@ -158,7 +156,7 @@ export function ExceptionsPage({ onOpenJob }: Props) {
               value={search}
               onChange={e => setSearch(e.target.value)}
               placeholder="Search exceptions..."
-              className="w-full h-8 pl-3 pr-7 bg-admin-surface border border-admin-line rounded-lg text-[13px] text-admin-ink placeholder:text-admin-muted focus:bg-white focus:border-admin-brand transition"
+              className="w-full h-8 pl-3 pr-7 bg-admin-surface border border-admin-line rounded-card text-[13px] text-admin-ink placeholder:text-admin-muted focus:bg-white focus:border-admin-brand transition"
             />
             {search && (
               <button onClick={() => setSearch("")} className="absolute right-2 top-2 text-admin-muted hover:text-admin-ink">
@@ -168,10 +166,10 @@ export function ExceptionsPage({ onOpenJob }: Props) {
           </div>
 
           {/* Category Pills */}
-          <div className="flex flex-wrap items-center gap-1 p-0.5 bg-admin-surface rounded-lg border border-admin-line text-[13px]">
+          <div className="flex flex-wrap items-center gap-1 p-0.5 bg-admin-surface rounded-card border border-admin-line text-[13px]">
             <button
               onClick={() => setSelectedType("ALL")}
-              className={`px-2.5 py-1 rounded-md text-[13px] font-medium transition ${
+              className={`px-2.5 py-1 rounded-control text-[13px] font-medium transition ${
                 selectedType === "ALL" ? "bg-white text-admin-ink shadow-2xs font-semibold" : "text-admin-muted hover:text-admin-ink"
               }`}
             >
@@ -181,7 +179,7 @@ export function ExceptionsPage({ onOpenJob }: Props) {
               <button
                 key={t.type}
                 onClick={() => setSelectedType(t.type)}
-                className={`px-2.5 py-1 rounded-md text-[13px] font-medium font-mono transition ${
+                className={`px-2.5 py-1 rounded-control text-[13px] font-medium font-mono transition ${
                   selectedType === t.type ? "bg-white text-admin-brand shadow-2xs font-semibold" : "text-admin-muted hover:text-admin-ink"
                 }`}
               >
@@ -199,8 +197,68 @@ export function ExceptionsPage({ onOpenJob }: Props) {
       </div>
 
       {/* 3. EXCEPTIONS DATA TABLE */}
-      <div className="bg-white rounded-xl border border-admin-line shadow-sm hover:shadow-md transition overflow-hidden">
-        <div className="overflow-x-auto max-h-[calc(100vh-280px)]">
+      <div className="bg-white rounded-card border border-admin-line shadow-sm hover:shadow-md transition overflow-hidden">
+        {/* Mobile: cards. Exceptions are the page managers act on fastest, and often
+            from a phone -- an 8-column table behind a horizontal scrollbar made that
+            close to impossible. Severity leads, because it's what drives triage. */}
+        <ul className="md:hidden list-none m-0 p-3 space-y-3 max-h-[calc(100vh-280px)] overflow-y-auto custom-scrollbar">
+          {filteredItems.length === 0 && (
+            <li className="text-center py-12">
+              <div className="w-10 h-10 rounded-full bg-admin-surface flex items-center justify-center mx-auto mb-2 text-admin-status-green">
+                <CheckCircle2 className="w-6 h-6" />
+              </div>
+              <p className="text-card text-fg">Zero exceptions found</p>
+              <p className="text-[13px] text-admin-muted mt-1">All moves in this filter scope are running smoothly.</p>
+            </li>
+          )}
+          {filteredItems.map((ex: ExceptionItem) => (
+            <li key={ex.id}>
+              <div
+                className={`rounded-module border p-4 ${
+                  ex.severity === "CRITICAL"
+                    ? "border-admin-status-red/35 bg-admin-status-red-bg"
+                    : ex.severity === "WARNING"
+                    ? "border-admin-status-amber/35 bg-admin-status-amber-bg"
+                    : "border-admin-line bg-white"
+                }`}
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <span
+                    className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold ${
+                      ex.severity === "CRITICAL"
+                        ? "bg-white text-admin-status-red"
+                        : ex.severity === "WARNING"
+                        ? "bg-white text-admin-status-amber"
+                        : "bg-admin-surface text-admin-ink-2"
+                    }`}
+                  >
+                    {ex.severity === "CRITICAL" ? (
+                      <AlertCircle className="w-3 h-3" />
+                    ) : ex.severity === "WARNING" ? (
+                      <AlertTriangle className="w-3 h-3" />
+                    ) : (
+                      <Info className="w-3 h-3" />
+                    )}
+                    {ex.severity.charAt(0) + ex.severity.slice(1).toLowerCase()}
+                  </span>
+                  <span className="font-mono text-[12px] font-semibold text-admin-brand">{ex.jobId}</span>
+                </div>
+
+                <p className="font-mono text-[13px] font-medium text-admin-ink mt-2.5">{ex.type}</p>
+                <p className="text-[13px] text-admin-ink-2 mt-1 leading-snug">{ex.detail}</p>
+
+                <div className="flex items-center justify-between gap-3 mt-3 pt-3 border-t border-black/[0.07] text-[12px] text-admin-muted">
+                  <span className="truncate">
+                    {ex.customerName || "—"} · {ex.driverName || "Unassigned"}
+                  </span>
+                  <span className="font-mono shrink-0">{formatLondonDateTime(ex.timestamp)}</span>
+                </div>
+              </div>
+            </li>
+          ))}
+        </ul>
+
+        <div className="hidden md:block overflow-x-auto max-h-[calc(100vh-280px)]">
           <table className="w-full text-left text-[13px] border-collapse">
             <thead className="bg-admin-surface/80 backdrop-blur-xs border-b border-admin-line text-admin-muted text-[12px] font-semibold sticky top-0 z-20">
               <tr className="h-10">
@@ -283,7 +341,7 @@ export function ExceptionsPage({ onOpenJob }: Props) {
                     {ex.jobId !== "UNKNOWN" && onOpenJob ? (
                       <button
                         onClick={() => onOpenJob(ex.jobId)}
-                        className="px-2.5 py-1 rounded-lg bg-admin-surface hover:bg-admin-brand hover:text-white text-admin-brand text-[12px] font-semibold transition"
+                        className="px-2.5 py-1 rounded-control bg-surface-sunken hover:bg-brand hover:text-brand-fg text-brand text-meta font-semibold transition"
                       >
                         Inspect
                       </button>

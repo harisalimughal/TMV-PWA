@@ -1,3 +1,8 @@
+import { request, postJson, isOffline, type ApiError } from "../lib/http";
+import { enqueue } from "../lib/outbox";
+
+export type { ApiError };
+
 export interface Job {
   jobId: string;
   calendarEventId: string;
@@ -50,159 +55,123 @@ export interface EvidenceSummary {
   hasSignature: boolean;
 }
 
-export interface ApiError {
-  code: string;
-  message: string;
-  pending?: string[];
-  failedTypes?: string[];
-}
-
-async function parseJson(res: Response): Promise<any> {
-  try {
-    return await res.json();
-  } catch {
-    return null;
-  }
-}
-
-async function throwIfError(res: Response, body: any): Promise<void> {
-  if (!res.ok) {
-    const error: ApiError = body?.error ?? { code: "UNKNOWN", message: "Something went wrong. Try again." };
-    throw error;
-  }
-}
-
-export async function fetchNextJob(): Promise<{ job: Job | null; driver: { fullName: string; initials: string } }> {
-  const res = await fetch("/api/jobs", { credentials: "same-origin" });
-  const body = await parseJson(res);
-  await throwIfError(res, body);
-  return body;
-}
-
-export async function fetchTomorrowJobs(): Promise<{ jobs: Job[]; unassignedCount: number }> {
-  const res = await fetch("/api/jobs/tomorrow", { credentials: "same-origin" });
-  const body = await parseJson(res);
-  await throwIfError(res, body);
-  return body;
-}
-
-/** The "Your jobs" screen's own listing -- every one of the driver's jobs, bucketed
- * into Today / Past / Next by calendar day. See jobs.service.ts's
- * getJobsGroupedForDriver for the day-boundary rules. */
-export async function fetchJobsList(): Promise<{
+/** The "Your jobs" listing -- every one of the driver's jobs, bucketed into
+ *  Today / Past / Next by calendar day in Europe/London. */
+export function fetchJobsList(): Promise<{
   driver: { fullName: string; initials: string };
-  today: Job[]; past: Job[]; next: Job[];
+  today: Job[];
+  past: Job[];
+  next: Job[];
 }> {
-  const res = await fetch("/api/jobs/list", { credentials: "same-origin" });
-  const body = await parseJson(res);
-  await throwIfError(res, body);
-  return body;
+  return request("/api/jobs/list");
 }
 
-export async function fetchJobDetail(
-  jobId: string
-): Promise<{
-  job: Job; activity: ActivityEntry[]; evidence: EvidenceSummary; suggestedTotal: number; confirmationText: string
+export function fetchJobDetail(jobId: string): Promise<{
+  job: Job;
+  activity: ActivityEntry[];
+  evidence: EvidenceSummary;
+  suggestedTotal: number;
+  confirmationText: string;
 }> {
-  const res = await fetch(`/api/jobs/${encodeURIComponent(jobId)}`, { credentials: "same-origin" });
-  const body = await parseJson(res);
-  await throwIfError(res, body);
-  return body;
+  return request(`/api/jobs/${encodeURIComponent(jobId)}`);
 }
 
-export async function startJob(jobId: string): Promise<{ job: Job }> {
-  const res = await fetch(`/api/jobs/${encodeURIComponent(jobId)}/start`, {
-    method: "POST",
-    credentials: "same-origin"
-  });
-  const body = await parseJson(res);
-  await throwIfError(res, body);
-  return body;
+export function startJob(jobId: string): Promise<{ job: Job }> {
+  return request(`/api/jobs/${encodeURIComponent(jobId)}/start`, { method: "POST" });
 }
 
-export async function uploadEvidencePhotos(jobId: string, files: File[]): Promise<{ job: Job }> {
+export function uploadEvidencePhotos(
+  jobId: string,
+  files: File[],
+  onProgress?: (fraction: number) => void
+): Promise<{ job: Job }> {
   const form = new FormData();
   files.forEach(file => form.append("photos", file));
-  const res = await fetch(`/api/jobs/${encodeURIComponent(jobId)}/evidence`, {
+  return request(`/api/jobs/${encodeURIComponent(jobId)}/evidence`, {
     method: "POST",
-    credentials: "same-origin",
-    body: form
+    body: form,
+    onUploadProgress: onProgress
   });
-  const body = await parseJson(res);
-  await throwIfError(res, body);
-  return body;
 }
 
-export async function uploadSignature(jobId: string, customerName: string, blob: Blob): Promise<{ job: Job }> {
+export function uploadSignature(
+  jobId: string,
+  customerName: string,
+  blob: Blob,
+  onProgress?: (fraction: number) => void
+): Promise<{ job: Job }> {
   const form = new FormData();
   form.append("customerName", customerName);
   form.append("signature", blob, "signature.png");
-  const res = await fetch(`/api/jobs/${encodeURIComponent(jobId)}/signature`, {
+  return request(`/api/jobs/${encodeURIComponent(jobId)}/signature`, {
     method: "POST",
-    credentials: "same-origin",
-    body: form
+    body: form,
+    onUploadProgress: onProgress
   });
-  const body = await parseJson(res);
-  await throwIfError(res, body);
-  return body;
 }
 
-export async function submitScenario(
-  jobId: string,
-  scenario: string,
-  fields: Record<string, string>,
-  photos: File[],
-  signature: Blob
-): Promise<{ job: Job }> {
-  const form = new FormData();
-  for (const [key, value] of Object.entries(fields)) form.append(key, value);
-  photos.forEach(file => form.append("photos", file));
-  form.append("signature", signature, "signature.png");
-  const res = await fetch(`/api/jobs/${encodeURIComponent(jobId)}/scenarios/${encodeURIComponent(scenario)}`, {
-    method: "POST",
-    credentials: "same-origin",
-    body: form
-  });
-  const body = await parseJson(res);
-  await throwIfError(res, body);
-  return body;
-}
-
-/** Check In / Check Out -- standalone storage-job forms, not tied to any move job (see
- * backend/src/jobs/scenario.service.ts's submitStorageScenario doc comment). Posts to
- * /api/storage, not /api/jobs/:jobId/scenarios, since there's no jobId to scope under. */
-export async function submitStorageScenario(
-  scenario: "checkin" | "checkout",
-  fields: Record<string, string>,
-  photos: File[],
-  signature: Blob
-): Promise<{ submission: unknown }> {
-  const form = new FormData();
-  for (const [key, value] of Object.entries(fields)) form.append(key, value);
-  photos.forEach(file => form.append("photos", file));
-  form.append("signature", signature, "signature.png");
-  const res = await fetch(`/api/storage/${encodeURIComponent(scenario)}`, {
-    method: "POST",
-    credentials: "same-origin",
-    body: form
-  });
-  const body = await parseJson(res);
-  await throwIfError(res, body);
-  return body;
-}
-
-export async function sendAction(
+export function sendAction(
   jobId: string,
   action: string,
   input: Record<string, string[]> = {}
 ): Promise<{ job: Job }> {
-  const res = await fetch(`/api/jobs/${encodeURIComponent(jobId)}/actions`, {
-    method: "POST",
-    credentials: "same-origin",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ action, input })
-  });
-  const body = await parseJson(res);
-  await throwIfError(res, body);
-  return body;
+  return postJson(`/api/jobs/${encodeURIComponent(jobId)}/actions`, { action, input });
+}
+
+/* ------------------------------------------------------------ scenario submission -- */
+
+export type ScenarioSubmitResult = "sent" | "queued";
+
+function scenarioUrl(scenario: string, jobId?: string): string {
+  // Check In / Check Out are standalone storage-job forms with no jobId to scope
+  // under, so they post to /api/storage instead.
+  return jobId
+    ? `/api/jobs/${encodeURIComponent(jobId)}/scenarios/${encodeURIComponent(scenario)}`
+    : `/api/storage/${encodeURIComponent(scenario)}`;
+}
+
+/**
+ * Submits a scenario form, falling back to the offline outbox.
+ *
+ * These are the submissions worth queueing: they're terminal (nothing downstream
+ * depends on the response) and they're the legal evidence for a damage or parking
+ * claim. Losing one because the van was parked in a basement is the single most
+ * expensive failure this app can have, and that's exactly what used to happen.
+ *
+ * Returns "queued" when it went to the outbox so the caller can say so plainly rather
+ * than claiming it was sent.
+ */
+export async function submitScenario(
+  scenario: string,
+  fields: Record<string, string>,
+  photos: File[],
+  signature: Blob | null,
+  options: { jobId?: string; label: string; onProgress?: (fraction: number) => void } = { label: "Form" }
+): Promise<ScenarioSubmitResult> {
+  const url = scenarioUrl(scenario, options.jobId);
+
+  if (isOffline()) {
+    await enqueue({ url, label: options.label, fields, photos, signature });
+    return "queued";
+  }
+
+  const form = new FormData();
+  for (const [key, value] of Object.entries(fields)) form.append(key, value);
+  photos.forEach(photo => form.append("photos", photo));
+  if (signature) form.append("signature", signature, "signature.png");
+
+  try {
+    await request(url, { method: "POST", body: form, onUploadProgress: options.onProgress });
+    return "sent";
+  } catch (err) {
+    const error = err as ApiError;
+    // Connection failures get queued and retried. A rejection from the server (a 4xx)
+    // does not -- replaying it would fail identically every time, so it surfaces to
+    // the driver to fix now, while the customer is still standing there.
+    if (error?.offline) {
+      await enqueue({ url, label: options.label, fields, photos, signature });
+      return "queued";
+    }
+    throw error;
+  }
 }

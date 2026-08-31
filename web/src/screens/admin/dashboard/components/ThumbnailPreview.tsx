@@ -16,7 +16,7 @@ export function ThumbnailPreview({ src, alt, category, state, onClick, size = "m
   const sizeClasses = {
     sm: "w-7 h-7 text-[9px] rounded",
     md: "w-8 h-8 text-[10px] rounded",
-    lg: "w-16 h-16 text-xs rounded-lg"
+    lg: "w-16 h-16 text-xs rounded-card"
   }[size];
 
   // If explicitly declared state is PROCESSING

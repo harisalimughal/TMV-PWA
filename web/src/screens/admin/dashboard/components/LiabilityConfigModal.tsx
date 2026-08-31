@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { X, GripVertical, Trash2, Plus, Search, Filter, Download, Upload } from "lucide-react";
+import { Button, IconButton } from "../../../../ui";
 
 interface Props {
   isOpen: boolean;
@@ -91,14 +92,12 @@ export function LiabilityConfigModal({ isOpen, onClose }: Props) {
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
-      <div className="bg-white rounded-[20px] shadow-2xl w-full max-w-[520px] flex flex-col max-h-[90vh] overflow-hidden">
+      <div className="bg-white rounded-module shadow-2xl w-full max-w-[520px] flex flex-col max-h-[90vh] overflow-hidden">
         
         {/* Header */}
         <div className="px-6 py-4 border-b border-admin-line flex items-center justify-between shrink-0 bg-white">
-          <h2 className="text-[16px] font-bold text-admin-ink">Manage Damage Categories</h2>
-          <button onClick={onClose} className="p-2 -mr-2 text-admin-muted hover:text-admin-ink hover:bg-admin-surface rounded-full transition">
-            <X className="w-5 h-5" />
-          </button>
+          <h2 className="text-heading text-fg">Manage Damage Categories</h2>
+          <IconButton aria-label="Close" icon={<X />} onClick={onClose} className="-mr-2" />
         </div>
 
         <div className="overflow-y-auto custom-scrollbar flex-1 p-6 space-y-6 bg-[#FAFAFA]">
@@ -106,15 +105,15 @@ export function LiabilityConfigModal({ isOpen, onClose }: Props) {
           {/* Top Selectors */}
           <div className="space-y-4">
             <div>
-              <label className="block text-[12px] font-semibold text-admin-muted uppercase tracking-wider mb-1.5">Primary Form Type</label>
-              <select className="w-full h-10 px-3 rounded-[8px] border border-admin-line bg-white text-[13px] text-admin-ink outline-none focus:border-admin-brand shadow-sm">
+              <label className="block text-eyebrow text-fg-subtle tracking-wider mb-1.5">Primary Form Type</label>
+              <select className="w-full h-10 px-3 rounded-control border border-admin-line bg-white text-[13px] text-admin-ink outline-none focus:border-admin-brand shadow-sm">
                 <option>Damage Liability & Assembly Risk Notice</option>
                 <option>Waiver of Liability: Furniture Handling & Protection Etc</option>
               </select>
             </div>
             <div>
-              <label className="block text-[12px] font-semibold text-admin-muted uppercase tracking-wider mb-1.5">Fallback Form Type</label>
-              <select className="w-full h-10 px-3 rounded-[8px] border border-admin-line bg-white text-[13px] text-admin-ink outline-none focus:border-admin-brand shadow-sm">
+              <label className="block text-eyebrow text-fg-subtle tracking-wider mb-1.5">Fallback Form Type</label>
+              <select className="w-full h-10 px-3 rounded-control border border-admin-line bg-white text-[13px] text-admin-ink outline-none focus:border-admin-brand shadow-sm">
                 <option>Waiver of Liability: Furniture Handling & Protection Etc</option>
                 <option>Damage Liability & Assembly Risk Notice</option>
               </select>
@@ -127,18 +126,9 @@ export function LiabilityConfigModal({ isOpen, onClose }: Props) {
           <div>
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-[14px] font-bold text-admin-ink">Category Items</h3>
-              <div className="flex items-center gap-2">
-                <button className="text-[12px] font-medium text-admin-brand hover:text-admin-brand-dark transition flex items-center gap-1">
-                  <Filter className="w-3.5 h-3.5" /> Sort
-                </button>
-                <span className="text-admin-line-strong">|</span>
-                <button className="text-[12px] font-medium text-admin-brand hover:text-admin-brand-dark transition flex items-center gap-1">
-                  <Download className="w-3.5 h-3.5" /> Export
-                </button>
-                <button className="text-[12px] font-medium text-admin-brand hover:text-admin-brand-dark transition flex items-center gap-1">
-                  <Upload className="w-3.5 h-3.5" /> Import
-                </button>
-              </div>
+              {/* Sort / Export / Import sat here with no handlers. Removed rather
+                  than stubbed -- three inert links next to the list they claim to act
+                  on is worse than not offering them. */}
             </div>
 
             <div className="relative mb-6">
@@ -156,7 +146,7 @@ export function LiabilityConfigModal({ isOpen, onClose }: Props) {
             <div className="space-y-6">
               {filteredGroups.map(({ group, items }) => (
                 <div key={group} className="space-y-2">
-                  <h4 className="text-[12px] font-semibold text-admin-muted uppercase tracking-wider">{group}</h4>
+                  <h4 className="text-eyebrow text-fg-subtle tracking-wider">{group}</h4>
                   <div className="space-y-2">
                     {items.map((item, idx) => (
                       <div key={idx} className="flex items-center gap-2 group/row">
@@ -167,12 +157,12 @@ export function LiabilityConfigModal({ isOpen, onClose }: Props) {
                           type="text"
                           value={item}
                           onChange={(e) => handleUpdateItem(group as keyof typeof INITIAL_CATEGORIES, idx, e.target.value)}
-                          className="flex-1 h-10 px-3 rounded-[8px] border border-admin-line bg-white shadow-sm text-[13px] text-admin-ink outline-none focus:border-admin-brand transition"
+                          className="flex-1 h-10 px-3 rounded-control border border-admin-line bg-white shadow-sm text-[13px] text-admin-ink outline-none focus:border-admin-brand transition"
                           placeholder="Category name"
                         />
                         <button 
                           onClick={() => handleDeleteItem(group as keyof typeof INITIAL_CATEGORIES, idx)}
-                          className="p-2 text-admin-muted hover:text-admin-status-red hover:bg-admin-status-red-bg rounded-lg transition opacity-0 group-hover/row:opacity-100"
+                          className="p-2 text-admin-muted hover:text-admin-status-red hover:bg-admin-status-red-bg rounded-card transition opacity-0 group-hover/row:opacity-100"
                         >
                           <Trash2 className="w-4 h-4" />
                         </button>
@@ -189,21 +179,16 @@ export function LiabilityConfigModal({ isOpen, onClose }: Props) {
               ))}
             </div>
 
-            <button className="w-full mt-6 py-3 border-2 border-dashed border-admin-line-strong rounded-xl text-[13px] font-semibold text-admin-muted hover:border-admin-brand hover:text-admin-brand transition flex items-center justify-center gap-2">
-              <Plus className="w-4 h-4" /> Add New Group
-            </button>
 
           </div>
         </div>
 
         {/* Footer */}
-        <div className="px-6 py-4 border-t border-admin-line bg-white flex items-center justify-end gap-3 shrink-0">
-          <button onClick={onClose} className="px-4 py-2 rounded-[8px] text-[13px] font-semibold text-admin-muted hover:bg-admin-surface hover:text-admin-ink transition">
+        <div className="flex shrink-0 items-center justify-end gap-3 border-t border-line bg-surface px-6 py-4">
+          <Button variant="ghost" onClick={onClose}>
             Cancel
-          </button>
-          <button onClick={onClose} className="px-5 py-2 rounded-[8px] bg-[#2563EB] hover:bg-blue-700 text-white text-[13px] font-semibold shadow-sm transition">
-            Confirm Changes
-          </button>
+          </Button>
+          <Button onClick={onClose}>Confirm changes</Button>
         </div>
 
       </div>

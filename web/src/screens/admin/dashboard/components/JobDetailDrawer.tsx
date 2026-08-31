@@ -18,6 +18,7 @@ import {
   Info
 } from "lucide-react";
 import { NormalizedJob, DriverSummaryItem } from "../types";
+import { Button } from "../../../../ui";
 import { formatLondonDateTime } from "../utils/date";
 import { JobStatusBadge } from "./StatusBadge";
 import { DelayBandBadge } from "./StatusBadge";
@@ -199,7 +200,7 @@ export function JobDetailDrawer({ job: initialJob, isOpen, onClose, onUpdated }:
       
       {/* Toast Notification */}
       {toast && (
-        <div className="fixed top-6 right-6 z-[200] bg-admin-ink text-white px-5 py-3 rounded-xl shadow-2xl flex items-center gap-3 animate-in fade-in slide-in-from-top-4">
+        <div className="fixed top-6 right-6 z-[200] bg-admin-ink text-white px-5 py-3 rounded-card shadow-2xl flex items-center gap-3 animate-in fade-in slide-in-from-top-4">
           <Check className="w-4 h-4 text-admin-status-green" />
           <span className="text-[14px] font-semibold">{toast}</span>
         </div>
@@ -215,7 +216,7 @@ export function JobDetailDrawer({ job: initialJob, isOpen, onClose, onUpdated }:
         <div className="px-6 py-5 bg-white border-b border-admin-line shadow-[0_4px_20px_rgb(0,0,0,0.03)] z-10 flex flex-col gap-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <h3 className="text-[18px] font-bold text-admin-ink leading-tight">{job.jobId}</h3>
+              <h3 className="text-title text-fg leading-tight">{job.jobId}</h3>
               <button
                 onClick={handleCopyJobId}
                 className="p-1 rounded text-admin-muted hover:text-admin-ink hover:bg-admin-surface transition"
@@ -251,7 +252,7 @@ export function JobDetailDrawer({ job: initialJob, isOpen, onClose, onUpdated }:
           
           {/* Key Metrics Strip */}
           <div className="grid grid-cols-3 gap-4">
-            <div className="bg-white p-4 rounded-[16px] border border-admin-line shadow-[0_2px_10px_rgb(0,0,0,0.02)] flex flex-col justify-between transition-all">
+            <div className="bg-white p-4 rounded-module border border-admin-line shadow-[0_2px_10px_rgb(0,0,0,0.02)] flex flex-col justify-between transition-all">
               <div className="flex items-center justify-between mb-2">
                 <span className="text-[11px] uppercase text-admin-muted font-bold tracking-wider flex items-center gap-1.5">
                   <DollarSign className="w-3 h-3" /> Billed
@@ -260,14 +261,14 @@ export function JobDetailDrawer({ job: initialJob, isOpen, onClose, onUpdated }:
               {isEditing ? (
                 <div className="relative mt-1">
                   <span className="absolute left-2 top-1/2 -translate-y-1/2 text-admin-muted font-bold text-[14px]">£</span>
-                  <input type="number" className="w-full h-8 pl-6 pr-2 rounded-md border border-admin-line text-[14px] font-bold font-mono outline-none focus:border-admin-brand" value={editData.billed} onChange={e => setEditData({...editData, billed: e.target.value})} />
+                  <input type="number" className="w-full h-8 pl-6 pr-2 rounded-control border border-admin-line text-[14px] font-bold font-mono outline-none focus:border-admin-brand" value={editData.billed} onChange={e => setEditData({...editData, billed: e.target.value})} />
                 </div>
               ) : (
                 <span className="text-[20px] font-bold font-mono text-admin-ink">£{totalPounds.toFixed(2)}</span>
               )}
             </div>
             
-            <div className="bg-white p-4 rounded-[16px] border border-admin-line shadow-[0_2px_10px_rgb(0,0,0,0.02)] flex flex-col justify-between">
+            <div className="bg-white p-4 rounded-module border border-admin-line shadow-[0_2px_10px_rgb(0,0,0,0.02)] flex flex-col justify-between">
               <span className="text-[11px] uppercase text-admin-muted font-bold tracking-wider flex items-center gap-1.5 mb-2">
                 <User className="w-3 h-3" /> Driver
               </span>
@@ -276,19 +277,19 @@ export function JobDetailDrawer({ job: initialJob, isOpen, onClose, onUpdated }:
               </span>
               <div className="flex items-center justify-between mt-2">
                 {isEditing ? (
-                   <input type="number" className="w-12 h-6 px-1 rounded-md border border-admin-line text-[12px] text-center outline-none focus:border-admin-brand" value={editData.crew} onChange={e => setEditData({...editData, crew: e.target.value})} />
+                   <input type="number" className="w-12 h-6 px-1 rounded-control border border-admin-line text-[12px] text-center outline-none focus:border-admin-brand" value={editData.crew} onChange={e => setEditData({...editData, crew: e.target.value})} />
                 ) : (
                    <span className="text-[12px] text-admin-muted">{job.crewSize} Crew</span>
                 )}
                 {job.driverName && job.driverName !== "Unassigned" && (
-                  <span className="px-1.5 py-0.5 rounded-[4px] bg-admin-status-green-bg text-admin-status-green font-bold text-[9px] uppercase tracking-wider">
+                  <span className="px-1.5 py-0.5 rounded-control bg-admin-status-green-bg text-admin-status-green font-bold text-[9px] uppercase tracking-wider">
                     Sent (SMS)
                   </span>
                 )}
               </div>
             </div>
             
-            <div className="bg-white p-4 rounded-[16px] border border-admin-line shadow-[0_2px_10px_rgb(0,0,0,0.02)] flex flex-col justify-between">
+            <div className="bg-white p-4 rounded-module border border-admin-line shadow-[0_2px_10px_rgb(0,0,0,0.02)] flex flex-col justify-between">
               <span className="text-[11px] uppercase text-admin-muted font-bold tracking-wider flex items-center gap-1.5 mb-2">
                 <Clock className="w-3 h-3" /> Punctuality
               </span>
@@ -300,7 +301,7 @@ export function JobDetailDrawer({ job: initialJob, isOpen, onClose, onUpdated }:
 
           {/* Reassign Modal / Dropdown (Inline) */}
           {isReassigning && (
-             <div className="bg-white p-4 rounded-[16px] border border-admin-brand shadow-sm animate-in fade-in slide-in-from-top-2">
+             <div className="bg-white p-4 rounded-module border border-admin-brand shadow-sm animate-in fade-in slide-in-from-top-2">
                <h4 className="text-[13px] font-bold text-admin-ink mb-3">Reassign Driver</h4>
                <div className="space-y-2 max-h-48 overflow-y-auto pr-2 custom-scrollbar">
                  {roster.length === 0 && <div className="text-[12px] text-admin-muted p-2">Loading drivers…</div>}
@@ -309,7 +310,7 @@ export function JobDetailDrawer({ job: initialJob, isOpen, onClose, onUpdated }:
                      key={d.initials}
                      disabled={reassigning}
                      onClick={() => handleReassign(d.initials)}
-                     className="w-full flex items-center justify-between p-2 rounded-xl hover:bg-admin-surface border border-transparent hover:border-admin-line transition text-left disabled:opacity-50"
+                     className="w-full flex items-center justify-between p-2 rounded-card hover:bg-admin-surface border border-transparent hover:border-admin-line transition text-left disabled:opacity-50"
                    >
                      <div className="flex items-center gap-3">
                        <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-[11px] ${getAvatarColor(d.initials)}`}>{d.initials}</div>
@@ -323,7 +324,7 @@ export function JobDetailDrawer({ job: initialJob, isOpen, onClose, onUpdated }:
                  ))}
                </div>
                <div className="mt-3 text-right">
-                 <button onClick={() => setIsReassigning(false)} className="text-[12px] font-semibold text-admin-muted hover:text-admin-ink">Cancel</button>
+                 <button onClick={() => setIsReassigning(false)} className="text-label font-semibold text-fg-muted hover:text-fg">Cancel</button>
                </div>
              </div>
           )}
@@ -334,10 +335,10 @@ export function JobDetailDrawer({ job: initialJob, isOpen, onClose, onUpdated }:
               <MapPin className="w-4 h-4 text-admin-brand" /> Route Corridors
             </h4>
             
-            <div className="bg-white rounded-[16px] border border-admin-line border-l-4 border-l-admin-status-green shadow-[0_2px_10px_rgb(0,0,0,0.02)] p-4">
+            <div className="bg-white rounded-module border border-admin-line border-l-4 border-l-admin-status-green shadow-[0_2px_10px_rgb(0,0,0,0.02)] p-4">
               <span className="text-[10px] font-bold text-admin-status-green uppercase tracking-wider block mb-1">Pickup</span>
               {isEditing ? (
-                 <input type="text" className="w-full h-8 px-2 rounded-md border border-admin-line text-[13px] outline-none focus:border-admin-brand" value={editData.pickup} onChange={e => setEditData({...editData, pickup: e.target.value})} placeholder="Search address..." />
+                 <input type="text" className="w-full h-8 px-2 rounded-control border border-admin-line text-[13px] outline-none focus:border-admin-brand" value={editData.pickup} onChange={e => setEditData({...editData, pickup: e.target.value})} placeholder="Search address..." />
               ) : isInvalidAddress(job.pickup) ? (
                  <div className="flex items-center gap-1.5 text-admin-muted/70 text-[13px]"><AlertTriangle className="w-3.5 h-3.5" /> Address not properly recorded</div>
               ) : (
@@ -345,10 +346,10 @@ export function JobDetailDrawer({ job: initialJob, isOpen, onClose, onUpdated }:
               )}
             </div>
             
-            <div className="bg-white rounded-[16px] border border-admin-line border-l-4 border-l-[#2563EB] shadow-[0_2px_10px_rgb(0,0,0,0.02)] p-4">
+            <div className="bg-white rounded-module border border-admin-line border-l-4 border-l-[#2563EB] shadow-[0_2px_10px_rgb(0,0,0,0.02)] p-4">
               <span className="text-[10px] font-bold text-[#2563EB] uppercase tracking-wider block mb-1">Dropoff</span>
               {isEditing ? (
-                 <input type="text" className="w-full h-8 px-2 rounded-md border border-admin-line text-[13px] outline-none focus:border-admin-brand" value={editData.dropoff} onChange={e => setEditData({...editData, dropoff: e.target.value})} placeholder="Search address..." />
+                 <input type="text" className="w-full h-8 px-2 rounded-control border border-admin-line text-[13px] outline-none focus:border-admin-brand" value={editData.dropoff} onChange={e => setEditData({...editData, dropoff: e.target.value})} placeholder="Search address..." />
               ) : isInvalidAddress(job.dropoff) ? (
                  <div className="flex items-center gap-1.5 text-admin-muted/70 text-[13px]"><AlertTriangle className="w-3.5 h-3.5" /> Address not properly recorded</div>
               ) : (
@@ -358,7 +359,7 @@ export function JobDetailDrawer({ job: initialJob, isOpen, onClose, onUpdated }:
           </div>
 
           {/* 10-Stage Lifecycle Timeline */}
-          <div className="bg-white rounded-[16px] border border-admin-line shadow-[0_2px_10px_rgb(0,0,0,0.02)] flex flex-col overflow-hidden">
+          <div className="bg-white rounded-module border border-admin-line shadow-[0_2px_10px_rgb(0,0,0,0.02)] flex flex-col overflow-hidden">
             <div className="p-5 border-b border-admin-line">
               <h4 className="text-[12px] font-bold text-admin-muted uppercase tracking-wider flex items-center gap-1.5">
                 <Clock className="w-4 h-4 text-admin-brand" /> Audit Lifecycle Timeline
@@ -394,7 +395,7 @@ export function JobDetailDrawer({ job: initialJob, isOpen, onClose, onUpdated }:
                         </span>
                         
                         {expanded && isComp && (
-                          <div className="mt-2 p-3 rounded-xl bg-admin-surface border border-admin-line text-[12px] text-admin-ink shadow-inner animate-in fade-in slide-in-from-top-1">
+                          <div className="mt-2 p-3 rounded-card bg-admin-surface border border-admin-line text-[12px] text-admin-ink shadow-inner animate-in fade-in slide-in-from-top-1">
                              <div className="flex items-center gap-2 mb-1"><User className="w-3 h-3 text-admin-muted" /> <span className="font-semibold text-admin-muted">Actor:</span> {stg.actor}</div>
                              <div className="flex items-center gap-2"><Info className="w-3 h-3 text-admin-muted" /> <span className="font-semibold text-admin-muted">Detail:</span> {stg.detail || "No additional logs"}</div>
                           </div>
@@ -420,7 +421,7 @@ export function JobDetailDrawer({ job: initialJob, isOpen, onClose, onUpdated }:
           </div>
 
           {/* Photographic Evidence Grid */}
-          <div className="bg-white p-5 rounded-[16px] border border-admin-line shadow-[0_2px_10px_rgb(0,0,0,0.02)] space-y-4">
+          <div className="bg-white p-5 rounded-module border border-admin-line shadow-[0_2px_10px_rgb(0,0,0,0.02)] space-y-4">
             <div className="flex items-center justify-between">
               <h4 className="text-[12px] font-bold text-admin-muted uppercase tracking-wider flex items-center gap-1.5">
                 <Camera className="w-4 h-4 text-admin-brand" /> Evidence Photographs
@@ -430,7 +431,7 @@ export function JobDetailDrawer({ job: initialJob, isOpen, onClose, onUpdated }:
 
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               {job.evidenceItems?.map((ev, i) => (
-                <div key={ev.id || i} className="p-2 bg-admin-surface rounded-[12px] border border-admin-line text-center space-y-2">
+                <div key={ev.id || i} className="p-2 bg-admin-surface rounded-card border border-admin-line text-center space-y-2">
                   <span className="text-[11px] font-semibold text-admin-muted block truncate">{ev.category}</span>
                   <ThumbnailPreview
                     src={ev.fileId ? `/admin/api/jobs/${encodeURIComponent(job.jobId)}/photos/${encodeURIComponent(ev.fileId)}` : undefined}
@@ -461,7 +462,7 @@ export function JobDetailDrawer({ job: initialJob, isOpen, onClose, onUpdated }:
             <button
               onClick={handlePdfDownload}
               disabled={isGeneratingPdf}
-              className="h-10 px-4 rounded-xl bg-admin-ink hover:bg-black text-white text-[13px] font-semibold transition flex items-center gap-2 shadow-sm disabled:opacity-70"
+              className="h-10 px-4 rounded-card bg-admin-ink hover:bg-black text-white text-[13px] font-semibold transition flex items-center gap-2 shadow-sm disabled:opacity-70"
             >
               {isGeneratingPdf ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
               <span>{isGeneratingPdf ? "Generating..." : "Download PDF"}</span>
@@ -469,28 +470,28 @@ export function JobDetailDrawer({ job: initialJob, isOpen, onClose, onUpdated }:
 
             {!isEditing ? (
               <>
-                <button onClick={() => setIsReassigning(!isReassigning)} className="h-10 px-3 rounded-xl border border-admin-line bg-white hover:bg-admin-surface text-admin-ink text-[13px] font-bold transition flex items-center gap-1.5 shadow-sm">
-                  <User className="w-4 h-4 text-admin-muted" /> Reassign
-                </button>
-                <button onClick={() => setIsEditing(true)} className="h-10 px-3 rounded-xl border border-admin-line bg-white hover:bg-admin-surface text-admin-ink text-[13px] font-bold transition flex items-center gap-1.5 shadow-sm">
-                  <Edit2 className="w-4 h-4 text-admin-muted" /> Edit
-                </button>
+                <Button variant="secondary" onClick={() => setIsReassigning(!isReassigning)} iconLeft={<User />}>
+                  Reassign
+                </Button>
+                <Button variant="secondary" onClick={() => setIsEditing(true)} iconLeft={<Edit2 />}>
+                  Edit
+                </Button>
               </>
             ) : (
               <>
-                <button onClick={handleSaveEdit} className="h-10 px-4 rounded-xl bg-admin-brand hover:bg-admin-brand-dark text-white text-[13px] font-bold transition flex items-center gap-1.5 shadow-sm">
-                  <Save className="w-4 h-4" /> Save
-                </button>
-                <button onClick={() => setIsEditing(false)} className="h-10 px-4 rounded-xl border border-admin-line bg-white hover:bg-admin-surface text-admin-ink text-[13px] font-bold transition shadow-sm">
+                <Button onClick={handleSaveEdit} iconLeft={<Save />}>
+                  Save
+                </Button>
+                <Button variant="secondary" onClick={() => setIsEditing(false)}>
                   Cancel
-                </button>
+                </Button>
               </>
             )}
           </div>
 
           <button
             onClick={onClose}
-            className="h-10 px-5 rounded-xl border border-transparent hover:bg-admin-surface hover:text-admin-ink text-admin-muted text-[13px] font-bold transition"
+            className="h-10 px-5 rounded-card border border-transparent hover:bg-admin-surface hover:text-admin-ink text-admin-muted text-[13px] font-bold transition"
           >
             Close
           </button>

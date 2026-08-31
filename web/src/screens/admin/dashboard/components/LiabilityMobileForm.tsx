@@ -93,7 +93,7 @@ export function LiabilityMobileForm({ isOpen, onClose }: Props) {
   return (
     <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
       {/* Phone Simulator Frame */}
-      <div className="bg-[#F5F5F7] rounded-[40px] shadow-2xl w-full max-w-[390px] h-[844px] overflow-hidden flex flex-col relative border-[8px] border-black">
+      <div className="bg-[#F5F5F7] rounded-module shadow-2xl w-full max-w-[390px] h-[844px] overflow-hidden flex flex-col relative border-[8px] border-black">
         
         {/* Fake iOS Status Bar */}
         <div className="h-12 w-full flex items-center justify-between px-6 shrink-0 relative z-20 bg-white">
@@ -112,8 +112,8 @@ export function LiabilityMobileForm({ isOpen, onClose }: Props) {
 
         {/* Header */}
         <div className="bg-white px-5 pb-4 pt-2 border-b border-admin-line shrink-0 z-10 flex items-center justify-between">
-          <h1 className="text-[20px] font-bold text-admin-ink">Liability report</h1>
-          <button onClick={onClose} className="text-[14px] font-medium text-admin-brand hover:underline">Close</button>
+          <h1 className="text-title text-fg">Liability report</h1>
+          <button onClick={onClose} className="text-label font-semibold text-brand hover:underline">Close</button>
         </div>
 
         {/* Content Area */}
@@ -121,12 +121,12 @@ export function LiabilityMobileForm({ isOpen, onClose }: Props) {
           
           {/* Summary / Header inside scroll */}
           <div className="p-5">
-             <div className="bg-white rounded-2xl p-5 shadow-sm border border-admin-line mb-4 flex items-center gap-4">
+             <div className="bg-white rounded-module p-5 shadow-sm border border-admin-line mb-4 flex items-center gap-4">
                 <div className="w-12 h-12 rounded-full bg-admin-status-red-bg text-admin-status-red flex items-center justify-center shrink-0">
                   <ShieldAlert className="w-6 h-6" />
                 </div>
                 <div>
-                   <h2 className="text-[16px] font-bold text-admin-ink">Liability for Damage</h2>
+                   <h2 className="text-heading text-fg">Liability for Damage</h2>
                    <p className="text-[13px] text-admin-muted leading-tight mt-0.5">Please select all categories that apply to this notice.</p>
                 </div>
              </div>
@@ -140,7 +140,7 @@ export function LiabilityMobileForm({ isOpen, onClose }: Props) {
                     placeholder="Search categories..." 
                     value={searchQuery}
                     onChange={e => setSearchQuery(e.target.value)}
-                    className="w-full h-11 pl-10 pr-4 rounded-xl border border-admin-line bg-white shadow-sm text-[15px] outline-none focus:border-admin-brand transition"
+                    className="w-full h-11 pl-10 pr-4 rounded-card border border-admin-line bg-white shadow-sm text-[15px] outline-none focus:border-admin-brand transition"
                   />
                 </div>
              </div>
@@ -148,7 +148,7 @@ export function LiabilityMobileForm({ isOpen, onClose }: Props) {
              {/* Selected Chips */}
              {selectedItems.size > 0 && (
                 <div className="mb-4">
-                  <h3 className="text-[12px] font-semibold text-admin-muted uppercase tracking-wider mb-2">Selected ({selectedItems.size})</h3>
+                  <h3 className="text-eyebrow text-fg-subtle tracking-wider mb-2">Selected ({selectedItems.size})</h3>
                   <div className="flex flex-wrap gap-2">
                     {Array.from(selectedItems).map(item => (
                       <span key={item} onClick={() => toggleItem(item)} className="px-3 py-1.5 rounded-full bg-admin-brand-soft text-admin-brand text-[13px] font-medium border border-admin-brand/20 active:opacity-70 transition">
@@ -166,13 +166,13 @@ export function LiabilityMobileForm({ isOpen, onClose }: Props) {
                  const selectedCount = items.filter(i => selectedItems.has(i)).length;
 
                  return (
-                   <div key={group} className="bg-white rounded-2xl shadow-sm border border-admin-line overflow-hidden transition-all">
+                   <div key={group} className="bg-white rounded-module shadow-sm border border-admin-line overflow-hidden transition-all">
                      <button 
                        onClick={() => toggleGroup(group)}
                        className="w-full px-4 py-4 flex items-center justify-between text-left active:bg-admin-surface transition"
                      >
                        <div className="flex items-center gap-2">
-                         <h4 className="text-[15px] font-semibold text-admin-ink">{group}</h4>
+                         <h4 className="text-card text-fg">{group}</h4>
                          {selectedCount > 0 && (
                            <span className="w-5 h-5 rounded-full bg-admin-brand text-white flex items-center justify-center text-[10px] font-bold">
                              {selectedCount}
@@ -190,7 +190,7 @@ export function LiabilityMobileForm({ isOpen, onClose }: Props) {
                              <button
                                key={item}
                                onClick={() => toggleItem(item)}
-                               className="w-full flex items-start gap-3 p-3 active:bg-admin-surface rounded-xl transition text-left"
+                               className="w-full flex items-start gap-3 p-3 active:bg-admin-surface rounded-card transition text-left"
                              >
                                <div className={`mt-0.5 w-5 h-5 rounded-full border flex items-center justify-center shrink-0 transition ${
                                  isSelected ? "bg-admin-brand border-admin-brand text-white" : "border-admin-line-strong bg-white"
@@ -216,13 +216,13 @@ export function LiabilityMobileForm({ isOpen, onClose }: Props) {
         <div className="absolute inset-x-0 bottom-0 bg-white border-t border-admin-line px-5 pt-4 pb-8 flex flex-col gap-3 shadow-[0_-10px_30px_rgba(0,0,0,0.05)] z-30">
           <button 
             disabled={selectedItems.size === 0}
-            className="w-full h-14 rounded-2xl bg-[#2563EB] disabled:bg-admin-surface disabled:text-admin-muted disabled:border-admin-line disabled:border hover:bg-blue-700 text-white text-[16px] font-bold shadow-sm transition flex items-center justify-center gap-2"
+            className="w-full h-14 rounded-module bg-[#2563EB] disabled:bg-admin-surface disabled:text-admin-muted disabled:border-admin-line disabled:border hover:bg-blue-700 text-white text-[16px] font-bold shadow-sm transition flex items-center justify-center gap-2"
           >
             <Send className="w-5 h-5" /> 
             {selectedItems.size > 0 ? `Send (${selectedItems.size} selected)` : "Send"}
           </button>
           
-          <button onClick={resetForm} className="py-2 text-[13px] font-medium text-[#2563EB] flex items-center justify-center gap-1.5 active:opacity-70 transition mx-auto">
+          <button onClick={resetForm} className="py-2 text-label font-semibold text-brand flex items-center justify-center gap-1.5 active:opacity-70 transition mx-auto">
             <RotateCcw className="w-3.5 h-3.5" /> Reset preview
           </button>
         </div>

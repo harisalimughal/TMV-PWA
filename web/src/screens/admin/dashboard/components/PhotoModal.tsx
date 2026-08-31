@@ -26,7 +26,7 @@ export function PhotoModal({ isOpen, onClose, title, photoUrl, driveUrl }: Props
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-navy-900/80 backdrop-blur-sm p-4 animate-in fade-in duration-200">
-      <div className="relative max-w-4xl w-full bg-white rounded-lg shadow-2xl border border-admin-line overflow-hidden flex flex-col max-h-[90vh]">
+      <div className="relative max-w-4xl w-full bg-white rounded-card shadow-2xl border border-admin-line overflow-hidden flex flex-col max-h-[90vh]">
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-admin-line bg-admin-surface">
           <div>
@@ -36,7 +36,7 @@ export function PhotoModal({ isOpen, onClose, title, photoUrl, driveUrl }: Props
           <div className="flex items-center gap-2">
             <button
               onClick={() => setZoomed(!zoomed)}
-              className="p-2 rounded-lg hover:bg-admin-surface-2 text-admin-ink-2 transition"
+              className="p-2 rounded-card hover:bg-admin-surface-2 text-admin-ink-2 transition"
               title={zoomed ? "Zoom out" : "Zoom in"}
             >
               {zoomed ? <ZoomOut className="w-4 h-4" /> : <ZoomIn className="w-4 h-4" />}
@@ -46,7 +46,7 @@ export function PhotoModal({ isOpen, onClose, title, photoUrl, driveUrl }: Props
                 href={driveUrl}
                 target="_blank"
                 rel="noreferrer"
-                className="p-2 rounded-lg hover:bg-admin-surface-2 text-tmv-blue transition"
+                className="p-2 rounded-card hover:bg-admin-surface-2 text-tmv-blue transition"
                 title="Open in Google Drive"
               >
                 <ExternalLink className="w-4 h-4" />
@@ -54,7 +54,7 @@ export function PhotoModal({ isOpen, onClose, title, photoUrl, driveUrl }: Props
             )}
             <button
               onClick={onClose}
-              className="p-2 rounded-lg hover:bg-admin-status-red-bg text-admin-status-red transition ml-2"
+              className="p-2 rounded-card hover:bg-admin-status-red-bg text-admin-status-red transition ml-2"
             >
               <X className="w-5 h-5" />
             </button>
@@ -66,7 +66,7 @@ export function PhotoModal({ isOpen, onClose, title, photoUrl, driveUrl }: Props
           <img
             src={photoUrl}
             alt={title}
-            className={`transition-transform duration-200 rounded-lg max-h-[70vh] object-contain shadow ${
+            className={`transition-transform duration-200 rounded-card max-h-[70vh] object-contain shadow ${
               zoomed ? "scale-150 cursor-zoom-out" : "cursor-zoom-in"
             }`}
             onClick={() => setZoomed(!zoomed)}

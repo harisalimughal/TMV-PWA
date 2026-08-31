@@ -32,27 +32,27 @@ export function DateRangePicker({ from, to, onChange }: Props) {
 
   return (
     <div className="flex flex-wrap items-center gap-2 text-xs">
-      <div className="flex items-center gap-1 bg-admin-surface p-1 rounded-lg border border-admin-line">
+      <div className="flex items-center gap-1 bg-admin-surface p-1 rounded-card border border-admin-line">
         <button
           onClick={() => setPreset("all")}
-          className={`px-2.5 py-1 rounded-md font-medium transition ${
+          className={`px-2.5 py-1 rounded-control font-medium transition ${
             !from && !to ? "bg-white text-admin-brand shadow-sm font-bold" : "text-admin-muted hover:text-admin-ink"
           }`}
         >
           All Time
         </button>
-        <button onClick={() => setPreset("today")} className="px-2.5 py-1 rounded-md font-medium text-admin-muted hover:text-admin-ink transition">
+        <button onClick={() => setPreset("today")} className="px-2.5 py-1 rounded-control font-medium text-admin-muted hover:text-admin-ink transition">
           Today
         </button>
-        <button onClick={() => setPreset("7d")} className="px-2.5 py-1 rounded-md font-medium text-admin-muted hover:text-admin-ink transition">
+        <button onClick={() => setPreset("7d")} className="px-2.5 py-1 rounded-control font-medium text-admin-muted hover:text-admin-ink transition">
           7 Days
         </button>
-        <button onClick={() => setPreset("30d")} className="px-2.5 py-1 rounded-md font-medium text-admin-muted hover:text-admin-ink transition">
+        <button onClick={() => setPreset("30d")} className="px-2.5 py-1 rounded-control font-medium text-admin-muted hover:text-admin-ink transition">
           30 Days
         </button>
       </div>
 
-      <div className="flex items-center gap-1 bg-white px-2 py-1 rounded-lg border border-admin-line text-admin-ink">
+      <div className="flex items-center gap-1 bg-white px-2 py-1 rounded-card border border-admin-line text-admin-ink">
         <Calendar className="w-3.5 h-3.5 text-admin-muted" />
         <input
           type="date"

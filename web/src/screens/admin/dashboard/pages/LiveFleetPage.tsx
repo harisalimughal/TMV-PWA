@@ -36,7 +36,7 @@ export function LiveFleetPage({ onSelectSection }: Props) {
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-admin-status-green opacity-75"></span>
               <span className="relative inline-flex rounded-full h-3 w-3 bg-admin-status-green"></span>
             </span>
-            <h2 className="text-base font-semibold text-admin-ink">Live Fleet GPS &amp; Driver Telemetry</h2>
+            <h2 className="text-heading text-fg">Live Fleet GPS &amp; Driver Telemetry</h2>
           </div>
           <p className="text-xs text-admin-muted mt-0.5">
             Real-time van positions from GPSLive, cross-referenced with today's in-progress moves

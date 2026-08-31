@@ -1,18 +1,16 @@
 import React, { useState } from "react";
 import { AlertTriangle, Eye, EyeOff, Lock } from "lucide-react";
 import { adminLogin, type ApiError } from "../../api/admin";
+import { Button, IconButton } from "../../ui";
 
 interface AdminLoginScreenProps {
   onLoggedIn: () => void;
 }
 
 /**
- * Ported verbatim (layout, copy, colors) from TMV-Chat-bot's dashboard/web/src/pages
- * /LoginPage.tsx, at the user's explicit request -- same "Sign in to Operations" card,
- * same admin-* color tokens (see tailwind.config.js). Only the submit call changed:
- * this posts to tmv-pwa's own /api/admin/login (Mongo-backed, no Sheets dependency),
- * not TMV-Chat-bot's /admin/api/auth/login. The one deliberate improvement over the
- * source: the real logo (tmv-logo.png) in place of the generic "MV" letter badge.
+ * Ported from TMV-Chat-bot's dashboard LoginPage, then brought onto the shared
+ * design system: the app <Button>, the semantic type scale and one control radius,
+ * so it reads as the same product as the driver app rather than a separate port.
  */
 export function AdminLoginScreen({ onLoggedIn }: AdminLoginScreenProps) {
   const [password, setPassword] = useState("");
@@ -40,66 +38,64 @@ export function AdminLoginScreen({ onLoggedIn }: AdminLoginScreenProps) {
   }
 
   return (
-    <div className="min-h-screen bg-admin-bg flex flex-col items-center justify-center p-4 sm:p-8 font-sans">
-      {/* LOGO */}
+    <div className="flex min-h-screen flex-col items-center justify-center bg-bg p-4 font-sans sm:p-8">
       <div className="mb-8 flex items-center justify-center">
-        <div className="w-20 h-20 bg-white rounded-2xl flex items-center justify-center shadow-lg p-2">
-          <img src="/tmv-logo.png" alt="The Man Van" className="w-full h-full object-contain" />
+        <div className="flex size-20 items-center justify-center rounded-panel bg-surface p-2 shadow-md">
+          <img src="/tmv-logo.png" alt="The Man Van" className="h-full w-full object-contain" />
         </div>
       </div>
 
-      {/* CARD */}
-      <div className="w-full max-w-[440px] bg-white rounded-[24px] shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-admin-line p-8 sm:p-10">
-        <div>
-          <div className="text-center mb-8">
-            <h1 className="text-[20px] font-bold text-admin-ink mb-2">Sign in to Operations</h1>
-            <p className="text-[14px] text-admin-muted">Enter the admin password to access the dashboard</p>
+      <div className="w-full max-w-[440px] rounded-module border border-line bg-surface p-8 shadow-sm sm:p-10">
+        <div className="mb-8 text-center">
+          <h1 className="mb-1.5 text-title text-fg">Sign in to Operations</h1>
+          <p className="text-body text-fg-muted">Enter the admin password to access the dashboard</p>
+        </div>
+
+        {error && (
+          <div className="mb-6 flex items-center gap-3 rounded-card border border-danger-line bg-danger-subtle p-3 text-danger">
+            <AlertTriangle className="size-4 shrink-0" />
+            <span className="text-label font-medium">{error}</span>
+          </div>
+        )}
+
+        <form onSubmit={handleSubmit} className="flex flex-col gap-5">
+          <div className="flex flex-col gap-1.5">
+            <label htmlFor="admin-pw" className="text-label font-semibold text-fg">
+              Password
+            </label>
+            <div className="relative">
+              <Lock className="absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-fg-subtle" />
+              <input
+                id="admin-pw"
+                type={showPassword ? "text" : "password"}
+                value={password}
+                onChange={e => {
+                  setPassword(e.target.value);
+                  setError("");
+                }}
+                placeholder="••••••••"
+                autoFocus
+                className="h-control w-full rounded-control border border-line bg-surface-sunken pl-10 pr-12 text-fg outline-none transition-colors focus:border-brand focus:bg-surface"
+              />
+              <IconButton
+                aria-label={showPassword ? "Hide password" : "Show password"}
+                icon={showPassword ? <EyeOff /> : <Eye />}
+                size="sm"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-2 top-1/2 -translate-y-1/2"
+              />
+            </div>
           </div>
 
-          {error && (
-            <div className="mb-6 p-3 bg-admin-status-red-bg border border-[#FECACA] rounded-xl flex items-center gap-3 text-[#B91C1C]">
-              <AlertTriangle className="w-4 h-4 shrink-0" />
-              <span className="text-[13px] font-medium">{error}</span>
-            </div>
-          )}
-
-          <form onSubmit={handleSubmit} className="space-y-5">
-            <div className="space-y-1.5">
-              <label className="block text-[13px] font-semibold text-admin-ink">Password</label>
-              <div className="relative">
-                <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-admin-muted" />
-                <input
-                  type={showPassword ? "text" : "password"}
-                  value={password}
-                  onChange={e => { setPassword(e.target.value); setError(""); }}
-                  placeholder="••••••••"
-                  autoFocus
-                  className="w-full h-11 pl-10 pr-12 rounded-full bg-admin-surface border border-admin-line text-[14px] text-admin-ink focus:border-admin-brand focus:bg-white outline-none transition-colors"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3.5 top-1/2 -translate-y-1/2 text-admin-muted hover:text-admin-ink transition-colors"
-                >
-                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                </button>
-              </div>
-            </div>
-
-            <button
-              type="submit"
-              disabled={isLoading}
-              className="w-full h-[46px] mt-2 rounded-full bg-[#1A1A1A] hover:bg-black text-white text-[14px] font-bold shadow-sm transition-all flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed"
-            >
-              {isLoading ? "Signing in..." : "Sign In"}
-            </button>
-          </form>
-        </div>
+          <Button type="submit" size="lg" fullWidth loading={isLoading} className="mt-1">
+            {isLoading ? "Signing in…" : "Sign in"}
+          </Button>
+        </form>
       </div>
 
-      <div className="mt-8 text-center space-y-2">
-        <p className="text-[12px] text-admin-muted font-medium">© {new Date().getFullYear()} The Man Van Operations</p>
-      </div>
+      <p className="mt-8 text-meta font-medium text-fg-subtle">
+        © {new Date().getFullYear()} The Man Van Operations
+      </p>
     </div>
   );
 }

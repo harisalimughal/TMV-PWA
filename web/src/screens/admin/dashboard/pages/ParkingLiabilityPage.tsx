@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { fetchScenarios } from "../api";
 import { formatLondonDateTime } from "../utils/date";
 import { resolveDriver } from "../utils/drivers";
+import { evidencePhotoCount } from "../utils/evidence";
 import { SubmissionDetailDrawer } from "../components/SubmissionDetailDrawer";
 import { SubmissionPageTemplate } from "../components/SubmissionPageTemplate";
 import { ClipboardList, Search } from "lucide-react";
@@ -59,12 +60,12 @@ export function ParkingLiabilityPage() {
 
   const tableHeader = (
     <>
-      <th className="py-4 px-4 text-[12px] font-semibold text-admin-muted uppercase tracking-[0.03em]">Driver</th>
-      <th className="py-4 px-4 text-[12px] font-semibold text-admin-muted uppercase tracking-[0.03em]">Date Submitted</th>
-      <th className="py-4 px-4 text-[12px] font-semibold text-admin-muted uppercase tracking-[0.03em]">Address</th>
-      <th className="py-4 px-4 text-[12px] font-semibold text-admin-muted uppercase tracking-[0.03em]">Full Client Name</th>
-      <th className="py-4 px-4 text-[12px] font-semibold text-admin-muted uppercase tracking-[0.03em]">Parking Restriction Photos</th>
-      <th className="py-4 px-4 text-[12px] font-semibold text-admin-muted uppercase tracking-[0.03em]">Signature</th>
+      <th className="py-4 px-4 text-eyebrow text-fg-subtle tracking-[0.03em]">Driver</th>
+      <th className="py-4 px-4 text-eyebrow text-fg-subtle tracking-[0.03em]">Date Submitted</th>
+      <th className="py-4 px-4 text-eyebrow text-fg-subtle tracking-[0.03em]">Address</th>
+      <th className="py-4 px-4 text-eyebrow text-fg-subtle tracking-[0.03em]">Full Client Name</th>
+      <th className="py-4 px-4 text-eyebrow text-fg-subtle tracking-[0.03em]">Parking Restriction Photos</th>
+      <th className="py-4 px-4 text-eyebrow text-fg-subtle tracking-[0.03em]">Signature</th>
       <th className="py-4 px-4 w-16"></th>
     </>
   );
@@ -84,7 +85,7 @@ export function ParkingLiabilityPage() {
           <div className="w-12 h-12 bg-admin-surface text-admin-muted rounded-full flex items-center justify-center mx-auto mb-3">
             <Search className="w-5 h-5" />
           </div>
-          <h3 className="text-[15px] font-bold text-admin-ink mb-1">No records match your filters</h3>
+          <h3 className="text-card text-fg mb-1">No records match your filters</h3>
           <p className="text-[13px] text-admin-muted mb-4">Try adjusting your search or clearing filters.</p>
         </td>
       </tr>
@@ -99,7 +100,9 @@ export function ParkingLiabilityPage() {
         const rawAddress = item.address || raw["Address"] || "Not recorded";
         const invalidAddr = isInvalidAddress(rawAddress);
         const clientName = toTitleCase(item.clientName || raw["Client Full Name"] || raw["Client Name"] || "Not recorded");
-        const photoCount = item.photos?.length || Math.floor(Math.random() * 4); 
+        // Real photo count from the payload -- null when the record carries no photos
+        // array, which is shown as "Not recorded" rather than an invented number.
+        const photoCount = evidencePhotoCount(item);
         const hasSig = !!(item.signature?.url || item.signatureUrl || raw["Signature Url"]);
 
         return (
@@ -120,7 +123,7 @@ export function ParkingLiabilityPage() {
                 <div>
                   <span className="font-semibold text-admin-brand text-[14px] block">{resolvedDriver.name}</span>
                   {resolvedDriver.needsReassignment && (
-                    <span className="text-[11px] uppercase tracking-[0.02em] font-semibold text-amber-700 bg-amber-100 px-2.5 py-1 rounded-[6px] mt-2 block w-max">
+                    <span className="text-[11px] uppercase tracking-[0.02em] font-semibold text-amber-700 bg-amber-100 px-2.5 py-1 rounded-control mt-2 block w-max">
                       Needs Reassignment
                     </span>
                   )}
@@ -143,20 +146,26 @@ export function ParkingLiabilityPage() {
               </span>
             </td>
             <td className="px-4">
-              <div className="flex items-center gap-2">
-                <div className="flex -space-x-2">
-                  {Array.from({ length: Math.max(1, Math.min(3, photoCount)) }).map((_, i) => (
-                    <div key={i} className="w-7 h-7 rounded-md bg-admin-surface border border-admin-line flex items-center justify-center overflow-hidden">
-                      <div className="w-full h-full bg-black/5" />
-                    </div>
-                  ))}
+              {photoCount === null ? (
+                <span className="text-[13px] text-admin-muted italic">Not recorded</span>
+              ) : (
+                <div className="flex items-center gap-2">
+                  <div className="flex -space-x-2">
+                    {Array.from({ length: Math.min(3, photoCount) }).map((_, i) => (
+                      <div key={i} className="w-7 h-7 rounded-control bg-admin-surface border border-admin-line flex items-center justify-center overflow-hidden">
+                        <div className="w-full h-full bg-black/5" />
+                      </div>
+                    ))}
+                  </div>
+                  <span className="text-label font-medium text-fg-muted">
+                    {photoCount} photo{photoCount === 1 ? "" : "s"}
+                  </span>
                 </div>
-                <span className="text-[13px] font-medium text-admin-muted">{photoCount} photos</span>
-              </div>
+              )}
             </td>
             <td className="px-4">
               {hasSig ? (
-                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-[6px] bg-admin-status-green-bg text-admin-status-green text-[12px] font-semibold">
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-control bg-admin-status-green-bg text-admin-status-green text-[12px] font-semibold">
                   Signed
                 </span>
               ) : (

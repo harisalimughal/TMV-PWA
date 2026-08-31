@@ -1,0 +1,200 @@
+/* ============================================================================
+ * Design tokens — single source of truth for colour, radius, shadow, motion, type.
+ *
+ * Colours are stored as space-separated RGB channel triplets ("27 117 188"), NOT
+ * hex, so Tailwind can apply opacity modifiers: tailwind.config.js maps each colour
+ * name to `rgb(var(--token) / <alpha-value>)`. In raw CSS, use `rgb(var(--token))`
+ * or `rgb(var(--token) / 0.5)`.
+ *
+ * Light values live on :root / [data-theme="light"]; dark values under
+ * [data-theme="dark"]. Scoping to the attribute (not just :root) means a subtree can
+ * force a theme regardless of the document — used to pin the not-yet-redesigned admin
+ * dashboard to light, and by the device-frame preview to theme its contents.
+ *
+ * The ThemeProvider (src/ui/theme.tsx) — and an inline script in index.html for the
+ * first paint — always set an explicit data-theme on <html>, so there is no
+ * prefers-color-scheme media block here.
+ * ========================================================================== */
+
+/* Metric-matched stand-in for Inter, shown for the ~1 frame before the woff2 lands.
+ * The overrides stretch a local Arial to Inter's exact ascent/descent/advance so the
+ * swap doesn't nudge a single line of text. Values are the standard Inter→Arial set. */
+@font-face {
+  font-family: "Inter Fallback";
+  src: local("Arial");
+  ascent-override: 90%;
+  descent-override: 22.43%;
+  line-gap-override: 0%;
+  size-adjust: 107.64%;
+}
+
+:root,
+[data-theme="light"] {
+  color-scheme: light;
+
+  /* ---- neutrals — enterprise slate --------------------------------------
+   * Cool slate scale (Tailwind slate). White surfaces on a faint slate ground,
+   * one-step sunken for headers/wells, hairline slate borders. Text is slate-900
+   * for primary, slate-600 for secondary, slate-500 for metadata. */
+  --bg: 248 250 252;            /* #F8FAFC  slate-50 */
+  --surface: 255 255 255;
+  --surface-sunken: 241 245 249; /* #F1F5F9  slate-100 */
+  --line: 226 232 240;          /* #E2E8F0  slate-200 */
+  --line-strong: 203 213 225;   /* #CBD5E1  slate-300 */
+  --fg: 15 23 42;               /* #0F172A  slate-900 */
+  --fg-muted: 71 85 105;        /* #475569  slate-600 */
+  --fg-subtle: 100 116 139;     /* #64748B  slate-500 */
+
+  /* ---- accent — one restrained blue, used sparingly -------------------
+   * Primary buttons, links, the active nav item, focus. Not on cards, not as
+   * a fill on tiles. */
+  --brand: 37 99 235;          /* #2563EB  blue-600 */
+  --brand-hover: 29 78 216;    /* #1D4ED8  blue-700 */
+  --brand-active: 30 64 175;   /* #1E40AF  blue-800 */
+  --brand-fg: 255 255 255;
+  --brand-subtle: 239 246 255; /* #EFF6FF  blue-50 */
+  --brand-subtle-fg: 30 64 175;/* #1E40AF */
+  --brand-line: 191 219 254;   /* #BFDBFE  blue-200 */
+
+  /* ---- status tints — muted, enterprise ----------------------------------- */
+  --success-fg: 21 128 61;        /* #157A3D  green-700 */
+  --success-signal: 22 163 74;    /* #16A34A  green-600 */
+  --success-subtle: 240 253 244;  /* #F0FDF4  green-50 */
+  --success-line: 187 231 200;    /* green-200 */
+
+  --warning-fg: 180 83 9;         /* #B45309  amber-700 */
+  --warning-signal: 217 119 6;    /* #D97706  amber-600 */
+  --warning-subtle: 255 251 235;  /* #FFFBEB  amber-50 */
+  --warning-line: 253 230 178;    /* amber-200 */
+
+  --danger-fg: 185 28 28;         /* #B91C1C  red-700 */
+  --danger-signal: 220 38 38;     /* #DC2626  red-600 */
+  --danger-subtle: 254 242 242;   /* #FEF2F2  red-50 */
+  --danger-line: 254 202 202;     /* red-200 */
+
+  --info-fg: 29 78 216;
+  --info-subtle: 239 246 255;
+  --info-line: 191 219 254;
+
+  --neutral-fg: 71 85 105;
+  --neutral-subtle: 241 245 249;
+  --neutral-line: 226 232 240;
+
+  /* ---- radius — tight, enterprise. Controls 6, cards 8, panels 10. ------ */
+  --radius-sm: 4px;
+  --radius: 6px;
+  --radius-md: 8px;
+  --radius-lg: 8px;
+  --radius-card-lg: 8px;
+  --radius-xl: 10px;
+  --radius-pill: 9999px;
+
+  /* ---- dark slate — only for a dense header strip if needed ------------- */
+  --surface-dark: 30 41 59;      /* #1E293B  slate-800 */
+  --surface-dark-fg: 248 250 252;
+  --surface-dark-muted: 148 163 184;
+  --surface-dark-line: 51 65 85;
+
+  /* ---- shadow — subtle real elevation for cards / docks / the modal ---- */
+  --shadow-xs: 0 1px 2px rgb(15 17 21 / 0.05);
+  --shadow-sm: 0 1px 2px rgb(15 17 21 / 0.06), 0 4px 12px -6px rgb(15 17 21 / 0.08);
+  --shadow-md: 0 10px 30px -12px rgb(15 17 21 / 0.18);
+  --shadow-dock: 0 -1px 0 rgb(var(--line)), 0 -12px 28px -20px rgb(15 17 21 / 0.14);
+
+  /* ---- focus ring ---------------------------------------------------------- */
+  --ring: 0 0 0 3px rgb(var(--brand) / 0.28);
+
+  /* ---- motion ---------------------------------------------------------- */
+  --ease-out: cubic-bezier(0.2, 0, 0, 1);
+  --ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
+  --dur-fast: 130ms;
+  --dur: 170ms;
+  --dur-slow: 220ms;
+
+  /* ---- type -----------------------------------------------------------
+   * Inter is the application typeface (self-hosted variable woff2, see index.css).
+   * "Inter Fallback" is the metric-matched Arial stand-in for the pre-load frame;
+   * the platform stack after it is the true fallback if the woff2 never arrives. */
+  --font-sans: "Inter Variable", "Inter Fallback", -apple-system, BlinkMacSystemFont, "Segoe UI",
+    Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", "SFMono-Regular", "Roboto Mono", Menlo, Consolas, monospace;
+
+  /* ---- controls --------------------------------------------------------------
+   * One set of control heights, used by buttons, inputs, choice rows and taps.
+   * `md` is the 44px WCAG 2.5.5 floor; `lg` is the comfortable one-handed size
+   * for a driver standing next to a van, sometimes in gloves. */
+  --control-h-sm: 36px;
+  --control-h-md: 44px;
+  --control-h-lg: 52px;
+  --tap-target: 44px;
+
+  /* ---- layout ------------------------------------------------------------- */
+  --dock-height: 76px;
+  --app-max-width: 520px;    /* centred column for a flow screen */
+  --content-max-width: 760px; /* centred column for the jobs workspace on desktop */
+  --bottom-nav-height: 60px;  /* mobile tab bar, before safe-area */
+  --sidebar-width: 244px;     /* desktop nav rail */
+}
+
+[data-theme="dark"] {
+  color-scheme: dark;
+
+  /* ---- neutrals — layered dark, not pure black -------------------------
+   * bg (page) < surface-sunken (wells / inputs / hover) < surface (cards).
+   * Elevation reads as a lighter step, the way a screen actually behaves. */
+  --bg: 13 15 19;               /* #0D0F13 */
+  --surface: 28 31 38;          /* #1C1F26  cards, headers, docks */
+  --surface-sunken: 22 25 31;   /* #16191F  inset wells, inputs, hover */
+  --line: 40 44 52;             /* #282C34  hairline */
+  --line-strong: 56 62 72;      /* #383E48 */
+  --fg: 237 239 243;            /* #EDEFF3  primary text — not #FFF */
+  --fg-muted: 160 167 178;      /* #A0A7B2 */
+  --fg-subtle: 122 129 141;     /* #7A818D */
+
+  /* ---- accent — brighter blue so it lifts off a dark surface ---------- */
+  --brand: 96 165 250;         /* #60A5FA  blue-400 */
+  --brand-hover: 129 186 253;  /* #81BAFD */
+  --brand-active: 59 130 246;  /* #3B82F6 */
+  --brand-fg: 8 12 20;         /* dark text on a bright-blue button */
+  --brand-subtle: 24 39 61;    /* #18273D  faint blue panel */
+  --brand-subtle-fg: 147 197 253; /* #93C5FD blue-300 */
+  --brand-line: 41 66 99;      /* #294263 */
+
+  /* ---- status — brighter signals, deep tinted grounds ---------------- */
+  --success-fg: 74 222 128;      /* #4ADE80 green-400 */
+  --success-signal: 34 197 94;   /* #22C55E green-500 */
+  --success-subtle: 16 34 24;    /* #102218 */
+  --success-line: 30 66 44;      /* #1E422C */
+
+  --warning-fg: 251 191 36;      /* #FBBF24 amber-400 */
+  --warning-signal: 245 158 11;  /* #F59E0B amber-500 */
+  --warning-subtle: 42 33 15;    /* #2A210F */
+  --warning-line: 74 58 24;      /* #4A3A18 */
+
+  --danger-fg: 248 113 113;      /* #F87171 red-400 */
+  --danger-signal: 239 68 68;    /* #EF4444 red-500 */
+  --danger-subtle: 44 22 22;     /* #2C1616 */
+  --danger-line: 78 40 40;       /* #4E2828 */
+
+  --info-fg: 96 165 250;
+  --info-subtle: 24 39 61;
+  --info-line: 41 66 99;
+
+  --neutral-fg: 160 167 178;
+  --neutral-subtle: 22 25 31;
+  --neutral-line: 40 44 52;
+
+  /* featured-job accent surface — one step above the card */
+  --surface-dark: 35 40 49;      /* #232831 */
+  --surface-dark-fg: 237 239 243;
+  --surface-dark-muted: 155 163 175;
+  --surface-dark-line: 60 66 77;
+
+  --shadow-xs: 0 1px 2px rgb(0 0 0 / 0.4);
+  --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.4), 0 6px 16px -8px rgb(0 0 0 / 0.55);
+  --shadow-md: 0 12px 34px -12px rgb(0 0 0 / 0.7);
+  --shadow-dock: 0 -1px 0 rgb(var(--line)), 0 -14px 30px -20px rgb(0 0 0 / 0.6);
+
+  /* softer focus ring on dark */
+  --ring: 0 0 0 3px rgb(var(--brand) / 0.32);
+}

@@ -22,7 +22,7 @@ const ITEMS: Array<{ key: keyof Props["completeness"]; label: string; short: str
 
 export function EvidenceCompletenessPill({ completeness }: Props) {
   return (
-    <div className="inline-flex items-center gap-1 p-1 bg-admin-surface-2/80 rounded-lg border border-admin-line shadow-2xs">
+    <div className="inline-flex items-center gap-1 p-1 bg-admin-surface-2/80 rounded-card border border-admin-line shadow-2xs">
       {ITEMS.map(({ key, label, short }) => {
         const state = completeness[key];
 

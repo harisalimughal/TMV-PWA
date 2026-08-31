@@ -1,15 +1,24 @@
-/* Leaflet's own base stylesheet -- required for the admin dashboard's Live Fleet map
-   (screens/admin/dashboard/components/LiveFleetMap.tsx) to render at all; without it
-   the map is an unstyled, broken mess of overlapping tiles/controls. */
-@import "leaflet/dist/leaflet.css";
+/* Design tokens (CSS custom properties) must load before Tailwind's layers so the
+   `rgb(var(--token))` values they define are available to every generated utility. */
+@import "./styles/tokens.css";
+
+/* Inter — the application typeface. `wght.css` is the weight axis only (no optical
+   size, no italics — the UI uses neither), split into unicode-range subsets so a
+   browser rendering English only ever fetches the ~50 kB latin file. Self-hosted:
+   Vite fingerprints the woff2 and the service worker precaches it, so the font is
+   present offline and there is no third-party request. `font-display: swap` (set by
+   the package) pairs with the metric-matched "Inter Fallback" face in tokens.css to
+   keep the swap from shifting layout. */
+@import "@fontsource-variable/inter/wght.css";
+
+/* Leaflet's stylesheet is NOT imported here any more. It used to be, which meant 45kB
+   of map CSS shipped to every driver's phone for a map only /admin ever renders. It's
+   now imported inside LiveFleetMap.tsx itself, so it rides along with the lazily
+   loaded admin chunk. */
 
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
-
-:root {
-  color-scheme: light;
-}
 
 html,
 body,
@@ -19,44 +28,174 @@ body,
 
 body {
   margin: 0;
-  /* -webkit-fill-available is iOS Safari's fix for 100vh including the address bar
-     height, which pushes content below the visible viewport. Fall back to 100% for
-     everything else. */
   min-height: -webkit-fill-available;
   overscroll-behavior-y: none; /* stops the iOS "rubber-band" bounce feeling non-native */
   -webkit-tap-highlight-color: transparent; /* no grey flash on tap */
-  -webkit-text-size-adjust: 100%; /* iOS auto-enlarging text on rotate, looks broken in an app shell */
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  -webkit-text-size-adjust: 100%;
+  font-family: var(--font-sans);
+  background: rgb(var(--bg));
+  color: rgb(var(--fg));
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  /* Never let the browser fake a bold/italic — with a variable font every weight is
+     real, and a synthesised one looks muddy. */
+  font-synthesis: none;
+  letter-spacing: -0.006em; /* Inter reads a touch tight at UI sizes; a hair negative */
+  /* Tabular numerals everywhere — this is an operations tool: times, distances,
+     prices and job numbers should align in columns. "cv05" gives Inter a lowercase
+     l with a tail so it can't be confused with a capital I or a 1 on a job sheet. */
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1, "cv05" 1;
 }
 
-/* Safe-area utility classes -- pt-safe/pb-safe etc. for iOS notch/home-indicator
-   clearance. Tailwind's arbitrary-value env() works too (e.g. pt-[env(safe-area-inset-top)])
-   but named utilities read better at call sites used repeatedly (header, composer bar). */
+/* Small section eyebrow — used sparingly, e.g. "PICKUP" / "DELIVER" on a route. */
+.op-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: rgb(var(--fg-subtle));
+}
+
+/* ---------------------------------------------------------------------------
+ * Form controls at 16px.
+ *
+ * iOS Safari auto-zooms the viewport whenever a focused input's font-size is under
+ * 16px. The previous fix for that was `user-scalable=no, maximum-scale=1` in
+ * index.html -- which stopped the zoom, but also stopped the user pinch-zooming
+ * anything at all (a WCAG 2.1 AA failure, 1.4.4 Resize Text). Drivers read legal
+ * liability copy on this screen, outdoors, sometimes in gloves; they need to zoom.
+ *
+ * So the viewport meta no longer blocks zoom, and the auto-zoom is prevented the
+ * correct way instead: every text-entry control is at least 16px. Tailwind's
+ * `text-sm` on an input would re-break this, hence the !important.
+ * ------------------------------------------------------------------------- */
+input:not([type="checkbox"]):not([type="radio"]),
+select,
+textarea {
+  font-size: 16px !important;
+}
+
+/* ---------------------------------------------------------------------------
+ * Focus.
+ *
+ * There were 19 `focus:outline-none` in the codebase and zero focus-visible rules, so
+ * keyboard users had no idea where they were. This restores a visible ring for
+ * keyboard/AT navigation only -- it does not come back on touch or mouse, which is
+ * why the component-level `focus:outline-none` are harmless to leave in place.
+ * ------------------------------------------------------------------------- */
+:focus-visible {
+  outline: 2px solid rgb(var(--brand));
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* Safe-area utilities for iOS notch / home-indicator clearance. */
 .pt-safe { padding-top: env(safe-area-inset-top); }
 .pb-safe { padding-bottom: env(safe-area-inset-bottom); }
 .pl-safe { padding-left: env(safe-area-inset-left); }
 .pr-safe { padding-right: env(safe-area-inset-right); }
+/* For a sticky bottom action bar: its own padding plus the home-indicator inset. */
+.pb-dock { padding-bottom: calc(env(safe-area-inset-bottom) + 12px); }
+/* Bottom spacer inside a scroll area so the last item clears the sticky dock. */
+.scroll-pb-dock { padding-bottom: calc(var(--dock-height) + env(safe-area-inset-bottom)); }
+/* Bottom spacer inside a tab screen's scroll area so content clears the mobile tab bar. */
+.scroll-pb-nav { padding-bottom: calc(var(--bottom-nav-height) + env(safe-area-inset-bottom) + 12px); }
+@media (min-width: 1024px) { .scroll-pb-nav { padding-bottom: 32px; } }
 
-/* Keyboard-safe viewport height. 100dvh (dynamic viewport height) accounts for the
-   mobile keyboard/address-bar resizing the visible area -- 100vh does not, and is the
-   #1 cause of a chat composer bar hiding behind the keyboard on mobile. Fall back for
-   older browsers that don't support dvh. */
+/* Keyboard-safe viewport height. 100dvh accounts for the mobile keyboard and address
+   bar resizing the visible area; 100vh does not. */
 .h-screen-safe {
   height: 100vh;
   height: 100dvh;
 }
+.max-h-screen-safe {
+  max-height: 100vh;
+  max-height: 100dvh;
+}
+
+/* Momentum scrolling + no scroll chaining into the page behind a sheet. */
+.scroll-touch {
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+}
 
 /* ---------------------------------------------------------------------------
- * Ported from TMV-Chat-bot's dashboard/web/src/index.css -- global CSS the admin
- * dashboard port (screens/admin/dashboard/*) needs that lives outside any component's
- * own className, so it was missed by the earlier component-by-component port. Scoped
- * to exactly what those components reference (checked before adding), and written
- * with literal values instead of the source's CSS custom-property theme (--ink, --bg,
- * etc.) so nothing here leaks new global variables into the driver-facing app.
+ * Animation utilities.
+ *
+ * The dashboard used `animate-in fade-in slide-in-from-right-10 zoom-in-95` in 12
+ * places -- those are tailwindcss-animate class names, and that plugin was never in
+ * package.json, so every drawer and modal appeared instantly with no transition. The
+ * keyframes live in tailwind.config.js; these aliases keep the existing call sites
+ * working (now driven by the motion tokens) without adding a dependency.
+ * ------------------------------------------------------------------------- */
+.animate-in { animation-duration: var(--dur-slow); animation-fill-mode: both; }
+.fade-in { animation-name: fade-in; }
+.zoom-in-95 { animation-name: zoom-in-95; }
+.slide-in-from-right-10 { animation-name: slide-in-right; }
+.slide-in-from-bottom-5 { animation-name: slide-in-bottom; }
+.slide-in-from-top-4 { animation-name: slide-in-top; }
+
+/* Subtle route/screen entry — a small rise + fade, 240ms. */
+@keyframes screen-enter {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.screen-enter {
+  animation: screen-enter var(--dur-slow) var(--ease-out) both;
+}
+
+/* Ease the page backdrop + primary text over on a theme switch — the dominant
+   surface transitions, everything else snaps (so interactions never feel slow). */
+body {
+  transition: background-color 220ms var(--ease-out), color 220ms var(--ease-out);
+}
+
+/* Referenced in 14 places, never defined. A slim scrollbar for dashboard panes. */
+.custom-scrollbar::-webkit-scrollbar { width: 8px; height: 8px; }
+.custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: rgb(var(--line-strong));
+  border-radius: 9999px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb:hover { background: rgb(var(--fg-subtle)); background-clip: content-box; }
+
+/* Skeleton shimmer for loading placeholders (replaces bare spinners on list screens,
+   which give no sense of what's coming). Themed via tokens: a translucent-ink base
+   block with a surface-coloured sheen sweeping across it. */
+.skeleton {
+  position: relative;
+  overflow: hidden;
+  background: rgb(var(--fg) / 0.07);
+}
+.skeleton::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent, rgb(var(--surface) / 0.6), transparent);
+  animation: shimmer 1.6s infinite;
+}
+
+/* Anyone who's set "Reduce Motion" gets none of the above. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+ * Admin dashboard globals (Live Fleet map + print/PDF export).
  * ------------------------------------------------------------------------- */
 
-/* Live Fleet map (LiveFleetMap.tsx): van marker hover scale + the pulsing "live"
- * beacon ring animation. */
 .van-marker-container {
   display: flex;
   align-items: center;
@@ -77,9 +216,9 @@ body {
   animation: ping-slow 2s cubic-bezier(0, 0, 0.2, 1) infinite;
 }
 .leaflet-popup-content-wrapper {
-  background: #fff !important;
-  color: #0f172a !important;
-  border: 1px solid #e2e8f0 !important;
+  background: rgb(var(--surface)) !important;
+  color: rgb(var(--fg)) !important;
+  border: 1px solid rgb(var(--line)) !important;
   border-radius: 8px !important;
   padding: 0 !important;
 }
@@ -88,17 +227,15 @@ body {
   line-height: 1.4 !important;
 }
 .leaflet-popup-tip {
-  background: #fff !important;
-  border: 1px solid #e2e8f0 !important;
+  background: rgb(var(--surface)) !important;
+  border: 1px solid rgb(var(--line)) !important;
 }
 
-/* PDF/print export (PdfPreviewModal.tsx, SubmissionDetailDrawer.tsx -- both render a
- * hidden .print-content wrapper around PaperDossierReport, only shown via @media
- * print). This is the exact fix from TMV-Chat-bot's "PDF download only produced page 1
- * of a multi-page report": position: fixed on .print-content made browsers repeat it
- * identically on every printed page (the mechanism print stylesheets use for running
- * headers/footers) instead of letting its content paginate -- position: absolute
- * removes it from flow the same way without that per-page repeat. */
+/* PDF/print export. position:fixed on ANY ancestor pins .print-content to a single
+ * viewport-sized box during print, capping a multi-page report at page 1 -- and
+ * visibility:hidden doesn't remove that containing block. So flatten every element to
+ * static, then re-elevate only .print-content, which then has no positioned ancestor
+ * left to be trapped inside. */
 @media print {
   aside, header, .no-print, button {
     display: none !important;
@@ -106,19 +243,6 @@ body {
   body > * {
     visibility: hidden;
   }
-
-  /* .print-content is only ever reachable from print by chasing up through however
-   * many modal/drawer wrappers happen to be mounted at the time (e.g.
-   * JobDetailDrawer's own fixed wrapper, containing PdfPreviewModal's own fixed
-   * wrapper, containing this) -- position:fixed on ANY of them still pins that
-   * ancestor to one viewport-sized box during print, which caps .print-content's own
-   * position:absolute to that same box no matter how many levels up the fixed
-   * ancestor actually is. Rather than hunting down and patching every wrapper
-   * (component structure that can grow another layer at any time), flatten every
-   * element's positioning to static here -- visibility:hidden doesn't do this on its
-   * own, an invisible element still establishes a containing block for its
-   * descendants exactly as if it were visible -- then re-elevate only .print-content
-   * itself, which then has no positioned ancestor left to be trapped inside. */
   * {
     position: static !important;
   }

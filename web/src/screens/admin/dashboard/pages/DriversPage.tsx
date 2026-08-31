@@ -15,6 +15,7 @@ import { DateRangePicker } from "../components/DateRangePicker";
 import { getAvatarColor, formatVanReg } from "../utils/drivers";
 import { AddDriverModal } from "../components/AddDriverModal";
 import { DriverSummaryItem } from "../types";
+import { Button } from "../../../../ui";
 
 export function DriversPage() {
   const queryClient = useQueryClient();
@@ -56,18 +57,15 @@ export function DriversPage() {
     <div className="space-y-6 max-w-[1440px] mx-auto pb-12">
       <div className="flex items-center justify-between px-2">
         <div>
-          <h2 className="text-[20px] font-bold text-admin-ink">Drivers</h2>
+          <h2 className="text-title text-fg">Drivers</h2>
         </div>
-        <button
-          onClick={() => setIsAddModalOpen(true)}
-          className="flex items-center gap-2 px-5 py-2.5 bg-[#2563EB] text-white rounded-full font-semibold shadow-sm hover:bg-blue-700 transition"
-        >
-          <Plus className="w-4 h-4" /> Add Driver
-        </button>
+        <Button onClick={() => setIsAddModalOpen(true)} iconLeft={<Plus />}>
+          Add driver
+        </Button>
       </div>
 
       {/* TOOLBAR */}
-      <div className="p-2 bg-white rounded-[16px] shadow-sm border border-transparent flex flex-wrap items-center gap-4">
+      <div className="p-2 bg-white rounded-module shadow-sm border border-transparent flex flex-wrap items-center gap-4">
         <DateRangePicker from={from} to={to} onChange={(f, t) => { setFrom(f); setTo(t); }} />
 
         <div className="w-[1px] h-6 bg-admin-line ml-2 mr-2" />
@@ -79,7 +77,7 @@ export function DriversPage() {
 
       {/* UNASSIGNED QUEUE (Isolated Top Tile) */}
       {unassigned && unassigned.assigned > 0 && (
-        <div className="bg-[#FFFBEB] border border-amber-200 rounded-[16px] p-5 flex items-center justify-between shadow-sm">
+        <div className="bg-[#FFFBEB] border border-amber-200 rounded-module p-5 flex items-center justify-between shadow-sm">
           <div className="flex items-center gap-4">
             <div className="w-12 h-12 rounded-full bg-amber-100 flex items-center justify-center text-amber-600 border border-amber-200 border-dashed">
               <Inbox className="w-6 h-6" />
@@ -107,7 +105,7 @@ export function DriversPage() {
         {!isLoading && roster.map((driver) => (
           <div
             key={driver.initials}
-            className="bg-white rounded-[20px] shadow-[0_4px_20px_rgb(0,0,0,0.03)] border border-admin-line p-6 flex flex-col justify-between hover:-translate-y-0.5 hover:shadow-md transition-all cursor-pointer relative group"
+            className="bg-white rounded-module shadow-[0_4px_20px_rgb(0,0,0,0.03)] border border-admin-line p-6 flex flex-col justify-between hover:-translate-y-0.5 hover:shadow-md transition-all cursor-pointer relative group"
           >
             {/* Header Row */}
             <div className="flex items-start justify-between mb-4">
@@ -128,7 +126,7 @@ export function DriversPage() {
               </div>
 
               <div className="flex flex-col items-end gap-2">
-                <span className={`px-2 py-0.5 rounded-[4px] text-[11px] font-bold uppercase tracking-wider ${
+                <span className={`px-2 py-0.5 rounded-control text-[11px] font-bold uppercase tracking-wider ${
                   driver.active ? "bg-admin-status-green-bg text-admin-status-green" : "bg-admin-surface text-admin-muted"
                 }`}>
                   {driver.active ? "Active" : "Inactive"}
@@ -163,7 +161,7 @@ export function DriversPage() {
               {driver.vanRegistration && (
                 <div className="flex items-center gap-1.5 mt-1">
                   <Truck className="w-4 h-4 text-admin-ink-2" />
-                  <span className="px-2 py-1 rounded-[4px] border border-admin-line bg-admin-surface font-mono font-bold text-admin-ink tracking-widest text-[12px] shadow-sm uppercase">
+                  <span className="px-2 py-1 rounded-control border border-admin-line bg-admin-surface font-mono font-bold text-admin-ink tracking-widest text-[12px] shadow-sm uppercase">
                     {formatVanReg(driver.vanRegistration)}
                   </span>
                 </div>
@@ -211,7 +209,7 @@ export function DriversPage() {
 
             {/* Evidence Banner */}
             {driver.missingEvidenceCount > 0 && (
-              <div className={`mt-5 p-2.5 rounded-[8px] flex items-center gap-2 text-[12px] font-semibold border ${
+              <div className={`mt-5 p-2.5 rounded-control flex items-center gap-2 text-[12px] font-semibold border ${
                 driver.missingEvidenceCount >= 10
                   ? "bg-[#FEF2F2] text-admin-status-red border-[#FECACA]"
                   : "bg-[#FFFBEB] text-amber-700 border-[#FDE68A]"

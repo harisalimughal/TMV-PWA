@@ -1,6 +1,7 @@
 /** Ported verbatim from TMV-Chat-bot's dashboard/web/src/components/ShortcutsModal.tsx. */
 import React, { useEffect } from "react";
 import { Keyboard, X } from "lucide-react";
+import { IconButton } from "../../../../ui";
 
 interface Props {
   isOpen: boolean;
@@ -41,9 +42,7 @@ export function ShortcutsModal({ isOpen, onClose }: Props) {
             <Keyboard className="w-4 h-4 text-admin-brand" />
             <h3 className="text-btn text-admin-ink">Keyboard Shortcuts</h3>
           </div>
-          <button onClick={onClose} className="p-1 rounded text-admin-muted hover:text-admin-ink hover:bg-admin-surface transition">
-            <X className="w-4 h-4" />
-          </button>
+          <IconButton aria-label="Close" icon={<X />} size="sm" onClick={onClose} />
         </div>
 
         <div className="p-4 space-y-1.5">

@@ -3,9 +3,39 @@
   <head>
     <meta charset="UTF-8" />
     <!-- viewport-fit=cover is required for env(safe-area-inset-*) to have any effect on
-         iOS -- without it the safe-area env() variables just resolve to 0. -->
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0, user-scalable=no" />
-    <meta name="theme-color" content="#F8FAFC" />
+         iOS -- without it the safe-area env() variables just resolve to 0.
+         maximum-scale/user-scalable were deliberately REMOVED: they were there to stop
+         iOS auto-zooming on focused inputs, but they also disabled pinch-zoom entirely,
+         which is a WCAG 2.1 AA failure (1.4.4 Resize Text) and a real problem for
+         drivers reading liability copy outdoors. The auto-zoom is now prevented the
+         correct way instead -- every input is 16px, see index.css. -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#FFFFFF" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="description" content="The Man Van driver app - jobs, evidence photos and customer sign-off." />
+
+    <!-- Apply the theme before first paint so there is no flash. "dark" / "light"
+         are explicit; anything else (unset, "system") follows the OS. The React
+         ThemeProvider (src/ui/theme.tsx) takes over and keeps this in sync. -->
+    <script>
+      (function () {
+        try {
+          var pref = localStorage.getItem("tmv-theme");
+          var dark =
+            pref === "dark" ||
+            ((!pref || pref === "system") &&
+              window.matchMedia &&
+              window.matchMedia("(prefers-color-scheme: dark)").matches);
+          var theme = dark ? "dark" : "light";
+          document.documentElement.dataset.theme = theme;
+          document.documentElement.style.colorScheme = theme;
+          var m = document.querySelector('meta[name="theme-color"]');
+          if (m) m.setAttribute("content", dark ? "#0D0F13" : "#FFFFFF");
+        } catch (e) {
+          /* no-op: falls back to the :root (light) tokens */
+        }
+      })();
+    </script>
 
     <!-- iOS ignores manifest.json's display:standalone in some older versions -- these
          meta tags are the belt-and-braces iOS-specific way to force standalone mode and

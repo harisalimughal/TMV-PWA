@@ -41,17 +41,28 @@ export function AdminApp() {
       .finally(() => setChecking(false));
   }, []);
 
+  /**
+   * Section state lives in ?section=. pushState was already being called on every
+   * change, but nothing listened for popstate -- so the browser's Back button changed
+   * the URL and left the UI on the same page, which is worse than not pushing history
+   * at all. This listener closes that loop.
+   */
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const sec = params.get("section");
-    if (sec) setActiveSection(sec);
+    const readSection = () => {
+      const sec = new URLSearchParams(window.location.search).get("section");
+      setActiveSection(sec || "overview");
+    };
+    readSection();
+    window.addEventListener("popstate", readSection);
+    return () => window.removeEventListener("popstate", readSection);
   }, []);
 
   function handleSelectSection(section: string) {
+    if (section === activeSection) return; // don't stack duplicate history entries
     setActiveSection(section);
     const url = new URL(window.location.href);
     url.searchParams.set("section", section);
-    window.history.pushState({}, "", url.toString());
+    window.history.pushState({ section }, "", url.toString());
   }
 
   async function handleLogout() {

@@ -82,6 +82,23 @@ export function Layout({ activeSection, onSelectSection, onLogout, children }: P
     return () => clearInterval(timer);
   }, []);
 
+  // Mobile nav drawer: Escape closes it, and the page behind it stops scrolling.
+  // Neither was handled before, so the drawer trapped nothing and the content behind
+  // it scrolled under the user's finger.
+  useEffect(() => {
+    if (!mobileNavOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setMobileNavOpen(false);
+    };
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [mobileNavOpen]);
+
   const { data: exData } = useQuery({
     queryKey: ["exceptions_badge"],
     queryFn: () => fetchExceptions(undefined, undefined, undefined, true),
@@ -98,29 +115,63 @@ export function Layout({ activeSection, onSelectSection, onLogout, children }: P
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (["INPUT", "TEXTAREA"].includes((e.target as HTMLElement).tagName)) return;
-      if ((e.metaKey || e.ctrlKey) && e.key === "k") {
-        e.preventDefault();
-        setPaletteOpen(prev => !prev);
-      } else if (e.key === "?") {
-        e.preventDefault();
-        setShortcutsOpen(prev => !prev);
-      } else if (e.key === "r" || e.key === "R") {
-        e.preventDefault();
-        refreshMutation.mutate();
-      } else if (e.key === "o" || e.key === "O") {
-        onSelectSection("overview");
-      } else if (e.key === "j" || e.key === "J") {
-        onSelectSection("jobs");
-      } else if (e.key === "d" || e.key === "D") {
-        onSelectSection("drivers");
-      } else if (e.key === "e" || e.key === "E") {
-        onSelectSection("exceptions");
+      const target = e.target as HTMLElement | null;
+      // Typing anywhere -- including a <select> or a contentEditable cell -- must never
+      // trigger a navigation shortcut. The old guard only covered INPUT and TEXTAREA.
+      if (
+        target &&
+        (["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName) || target.isContentEditable)
+      ) {
+        return;
+      }
+
+      // Cmd/Ctrl+K opens the palette. Everything below is a BARE letter, so any other
+      // modifier combination must fall through to the browser untouched.
+      //
+      // This was the bug: the modifier check only guarded the "k" branch, so Cmd+R fell
+      // into the "r" branch, got preventDefault()ed, and hijacked the browser's own
+      // reload. Refreshing the dashboard with Cmd+R silently did the wrong thing.
+      if (e.metaKey || e.ctrlKey) {
+        if (e.key.toLowerCase() === "k") {
+          e.preventDefault();
+          setPaletteOpen(prev => !prev);
+        }
+        return;
+      }
+      if (e.altKey) return;
+
+      // Don't fire navigation shortcuts while a modal/palette owns the screen -- the
+      // driver of that surface should get the keystroke, not the page behind it.
+      if (paletteOpen || shortcutsOpen) return;
+
+      switch (e.key.toLowerCase()) {
+        case "?":
+          e.preventDefault();
+          setShortcutsOpen(prev => !prev);
+          break;
+        case "r":
+          e.preventDefault();
+          refreshMutation.mutate();
+          break;
+        case "o":
+          onSelectSection("overview");
+          break;
+        case "j":
+          onSelectSection("jobs");
+          break;
+        case "d":
+          onSelectSection("drivers");
+          break;
+        case "e":
+          onSelectSection("exceptions");
+          break;
+        default:
+          break;
       }
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [onSelectSection, refreshMutation]);
+  }, [onSelectSection, refreshMutation, paletteOpen, shortcutsOpen]);
 
   const rawBadgeCount = exData?.activeBadgeCount ?? exData?.total ?? 0;
   const exceptionsBadgeLabel = rawBadgeCount > 999 ? "999+" : rawBadgeCount > 99 ? "99+" : rawBadgeCount > 0 ? String(rawBadgeCount) : null;
@@ -134,6 +185,8 @@ export function Layout({ activeSection, onSelectSection, onLogout, children }: P
       )}
 
       <aside
+        aria-label="Main navigation"
+        aria-hidden={isMobile && !mobileNavOpen}
         className={`bg-admin-bg text-admin-ink flex flex-col justify-between transition-all duration-300 z-40 fixed inset-y-0 left-0 h-screen md:sticky md:top-0 md:z-30 w-[260px] ${
           collapsed ? "md:w-16" : "md:w-[260px]"
         } ${mobileNavOpen ? "translate-x-0" : "-translate-x-full"} md:translate-x-0`}
@@ -141,13 +194,13 @@ export function Layout({ activeSection, onSelectSection, onLogout, children }: P
         <div className="flex flex-col min-h-0">
           <div className="pt-6 pb-4 px-6 flex items-center justify-between bg-transparent">
             <div className={`flex items-center overflow-hidden ${collapsed ? "md:hidden" : ""}`}>
-              <img src="/tmv-logo.png" alt="The Man Van" className="h-14 w-auto object-contain flex-shrink-0 rounded-lg" />
+              <img src="/tmv-logo.png" alt="The Man Van" className="h-14 w-auto object-contain flex-shrink-0 rounded-card" />
             </div>
             {collapsed && (
               <img
                 src="/tmv-logo.png"
                 alt="TMV"
-                className="hidden md:block w-8 h-8 rounded-lg object-contain bg-admin-surface border border-admin-line p-0.5 mx-auto shadow-primary"
+                className="hidden md:block w-8 h-8 rounded-card object-contain bg-admin-surface border border-admin-line p-0.5 mx-auto shadow-primary"
                 title="The Man Van Operations"
               />
             )}
@@ -172,7 +225,7 @@ export function Layout({ activeSection, onSelectSection, onLogout, children }: P
               if (item.type === "header") {
                 if (effectiveCollapsed) return <div key={idx} className="my-4 border-t border-admin-line" />;
                 return (
-                  <div key={idx} className="pt-6 pb-2 px-3 text-[12px] font-semibold text-admin-muted uppercase tracking-[0.1em]">
+                  <div key={idx} className="pt-6 pb-2 px-3 text-eyebrow text-fg-subtle">
                     {item.label}
                   </div>
                 );
@@ -185,7 +238,7 @@ export function Layout({ activeSection, onSelectSection, onLogout, children }: P
                 <button
                   key={item.id}
                   onClick={() => { onSelectSection(item.id!); setMobileNavOpen(false); }}
-                  className={`w-full h-11 flex items-center gap-3 px-4 rounded-xl text-[14px] font-medium transition group relative ${
+                  className={`w-full h-11 flex items-center gap-3 px-4 rounded-card text-[14px] font-medium transition group relative ${
                     isActive ? "text-admin-ink font-semibold bg-white shadow-primary" : "text-admin-muted hover:bg-white/50 hover:text-admin-ink"
                   }`}
                   title={effectiveCollapsed ? item.label : undefined}
@@ -195,7 +248,7 @@ export function Layout({ activeSection, onSelectSection, onLogout, children }: P
                   {!effectiveCollapsed && <span className="truncate">{item.label}</span>}
 
                   {!effectiveCollapsed && item.isLive && (
-                    <span className="ml-auto flex items-center gap-1 px-1.5 py-0.2 rounded-pill bg-admin-status-green-bg text-admin-status-green text-[9px] font-mono font-bold">
+                    <span className="ml-auto flex items-center gap-1 px-1.5 py-0.5 rounded-pill bg-admin-status-green-bg text-admin-status-green text-[9px] font-mono font-bold">
                       <span className="w-1.5 h-1.5 rounded-full bg-admin-status-green animate-ping" />
                       LIVE
                     </span>
@@ -250,21 +303,26 @@ export function Layout({ activeSection, onSelectSection, onLogout, children }: P
           <div className="flex items-center gap-4 min-w-0">
             <button
               onClick={() => setMobileNavOpen(true)}
-              className="md:hidden w-9 h-9 -ml-1 shrink-0 rounded-full hover:bg-admin-surface flex items-center justify-center text-admin-muted hover:text-admin-ink transition"
+              className="md:hidden w-11 h-11 -ml-1 shrink-0 rounded-full hover:bg-admin-surface flex items-center justify-center text-admin-muted hover:text-admin-ink transition"
               title="Open menu"
+              aria-label="Open navigation menu"
+              aria-expanded={mobileNavOpen}
             >
               <Menu className="w-5 h-5" />
             </button>
-            <div className="relative hidden md:block w-[320px]">
-              <Search className="w-4 h-4 text-admin-muted absolute left-4 top-3 pointer-events-none" />
-              <input
-                type="text"
-                placeholder="Search anything"
-                onClick={() => setPaletteOpen(true)}
-                readOnly
-                className="w-full h-10 pl-10 pr-4 bg-admin-surface border-transparent rounded-full text-sm text-admin-ink placeholder:text-admin-muted cursor-pointer transition"
-              />
-            </div>
+            {/* A button, not a readOnly input. As an input it was focusable but did
+                nothing on Enter, so keyboard users could reach it and not open it. */}
+            <button
+              type="button"
+              onClick={() => setPaletteOpen(true)}
+              className="relative hidden md:flex items-center w-[320px] h-10 pl-10 pr-4 bg-admin-surface rounded-full text-sm text-admin-muted hover:bg-admin-line/40 transition text-left"
+            >
+              <Search className="w-4 h-4 text-admin-muted absolute left-4 pointer-events-none" aria-hidden />
+              Search anything
+              <kbd className="ml-auto text-[11px] font-sans font-medium text-admin-muted bg-white border border-admin-line rounded px-1.5 py-0.5">
+                ⌘K
+              </kbd>
+            </button>
           </div>
 
           <div className="flex items-center gap-4">
@@ -296,9 +354,10 @@ export function Layout({ activeSection, onSelectSection, onLogout, children }: P
 
               <button
                 onClick={() => onSelectSection("exceptions")}
-                className="relative w-9 h-9 rounded-full hover:bg-admin-surface flex items-center justify-center text-admin-muted hover:text-admin-ink transition"
+                className="relative w-11 h-11 rounded-full hover:bg-admin-surface flex items-center justify-center text-admin-muted hover:text-admin-ink transition"
+                aria-label={rawBadgeCount > 0 ? `Exceptions, ${rawBadgeCount} open` : "Exceptions"}
               >
-                <Bell className="w-4 h-4" />
+                <Bell className="w-4 h-4" aria-hidden />
                 {rawBadgeCount > 0 && <span className="absolute top-1.5 right-1.5 w-2.5 h-2.5 bg-admin-status-red rounded-full ring-2 ring-white" />}
               </button>
 
@@ -313,7 +372,7 @@ export function Layout({ activeSection, onSelectSection, onLogout, children }: P
               <div className="text-admin-brand shrink-0">
                 <currentNav.icon className="w-5 h-5 md:w-6 md:h-6" />
               </div>
-              <h1 className="text-[17px] md:text-[20px] font-bold text-admin-ink tracking-tight truncate">{currentNav.label}</h1>
+              <h1 className="text-[17px] md:text-title text-fg tracking-tight truncate">{currentNav.label}</h1>
             </div>
             <div className="flex items-center gap-3" />
           </div>

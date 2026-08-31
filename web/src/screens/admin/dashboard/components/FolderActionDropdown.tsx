@@ -28,7 +28,7 @@ export function FolderActionDropdown({ onPreview, onDownload, onOpenFolder, hasF
     <div className="relative inline-block text-left" ref={dropdownRef}>
       <button
         onClick={(e) => { e.stopPropagation(); setIsOpen(!isOpen); }}
-        className={`flex items-center gap-1.5 p-1.5 px-2 rounded-lg transition border border-transparent ${isOpen ? 'bg-admin-surface border-admin-line shadow-sm' : 'hover:bg-admin-surface hover:border-admin-line'}`}
+        className={`flex items-center gap-1.5 p-1.5 px-2 rounded-card transition border border-transparent ${isOpen ? 'bg-admin-surface border-admin-line shadow-sm' : 'hover:bg-admin-surface hover:border-admin-line'}`}
         title="View job documents"
       >
         <FolderOpen className={`w-4 h-4 ${isOpen ? 'text-admin-brand fill-admin-brand/10' : 'text-admin-muted'}`} />
@@ -36,16 +36,16 @@ export function FolderActionDropdown({ onPreview, onDownload, onOpenFolder, hasF
       </button>
 
       {isOpen && (
-        <div className="absolute right-0 mt-2 w-48 rounded-xl bg-white border border-admin-line shadow-[0_8px_30px_rgb(0,0,0,0.12)] z-50 py-1 overflow-hidden animate-in fade-in slide-in-from-top-2">
+        <div className="absolute right-0 mt-2 w-48 rounded-card bg-white border border-admin-line shadow-[0_8px_30px_rgb(0,0,0,0.12)] z-50 py-1 overflow-hidden animate-in fade-in slide-in-from-top-2">
           <button
             onClick={(e) => { e.stopPropagation(); setIsOpen(false); onPreview(); }}
-            className="w-full text-left px-4 py-2.5 text-[13px] font-semibold text-admin-ink hover:bg-admin-surface transition flex items-center gap-2"
+            className="w-full text-left px-4 py-2.5 text-label font-semibold text-fg hover:bg-admin-surface transition flex items-center gap-2"
           >
             <FileText className="w-4 h-4 text-admin-muted" /> Preview PDF
           </button>
           <button
             onClick={(e) => { e.stopPropagation(); setIsOpen(false); onDownload(); }}
-            className="w-full text-left px-4 py-2.5 text-[13px] font-semibold text-admin-ink hover:bg-admin-surface transition flex items-center gap-2"
+            className="w-full text-left px-4 py-2.5 text-label font-semibold text-fg hover:bg-admin-surface transition flex items-center gap-2"
           >
             <Download className="w-4 h-4 text-admin-muted" /> Download PDF
           </button>
@@ -55,7 +55,7 @@ export function FolderActionDropdown({ onPreview, onDownload, onOpenFolder, hasF
               <div className="h-px w-full bg-admin-line my-1" />
               <button
                 onClick={(e) => { e.stopPropagation(); setIsOpen(false); onOpenFolder?.(); }}
-                className="w-full text-left px-4 py-2.5 text-[13px] font-semibold text-admin-ink hover:bg-admin-surface transition flex items-center gap-2"
+                className="w-full text-left px-4 py-2.5 text-label font-semibold text-fg hover:bg-admin-surface transition flex items-center gap-2"
               >
                 <ExternalLink className="w-4 h-4 text-admin-muted" /> Open Drive Folder
               </button>

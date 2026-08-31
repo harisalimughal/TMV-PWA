@@ -35,7 +35,7 @@ export function PaperDossierReport({ job, isPreview = false }: Props) {
   );
 
   const SubmitterCard = () => (
-    <div className="flex items-center justify-between p-4 mb-8 bg-[#F8F9FA] rounded-[12px] border border-[#E5E7EB] shrink-0">
+    <div className="flex items-center justify-between p-4 mb-8 bg-[#F8F9FA] rounded-card border border-[#E5E7EB] shrink-0">
       <div className="flex items-center gap-3">
         <div className="w-10 h-10 rounded-full bg-admin-brand-soft text-admin-brand font-bold text-[14px] flex items-center justify-center border border-admin-brand/20">
           {submitterInitials}
@@ -56,12 +56,12 @@ export function PaperDossierReport({ job, isPreview = false }: Props) {
     return (
       <div className="flex-1 flex flex-col mb-8 min-h-0">
         <h2 className="text-[14px] font-semibold text-[#1F2937] mb-3">{title}</h2>
-        <div className="flex-1 w-full bg-[#F3F4F6] rounded-[12px] border border-[#E5E7EB] shadow-sm overflow-hidden flex items-center justify-center p-2">
+        <div className="flex-1 w-full bg-[#F3F4F6] rounded-card border border-[#E5E7EB] shadow-sm overflow-hidden flex items-center justify-center p-2">
            {src && !failed ? (
              <img
                src={src}
                alt={title}
-               className="max-w-full max-h-[100%] rounded-[8px] object-contain shadow-[0_2px_8px_rgba(0,0,0,0.08)] bg-white"
+               className="max-w-full max-h-[100%] rounded-control object-contain shadow-[0_2px_8px_rgba(0,0,0,0.08)] bg-white"
                onError={() => setFailed(true)}
              />
            ) : (
@@ -77,7 +77,7 @@ export function PaperDossierReport({ job, isPreview = false }: Props) {
   // Common wrapper for each page
   const Page = ({ page, totalPages, children }: { page: number, totalPages: number, children: React.ReactNode }) => (
     <div 
-      className={`bg-white text-admin-ink flex flex-col mx-auto ${isPreview ? 'w-full shadow-lg border border-admin-line mb-8 overflow-hidden rounded-md' : 'print-page'}`}
+      className={`bg-white text-admin-ink flex flex-col mx-auto ${isPreview ? 'w-full shadow-lg border border-admin-line mb-8 overflow-hidden rounded-control' : 'print-page'}`}
       style={{
         width: isPreview ? '100%' : '210mm',
         height: isPreview ? 'auto' : '297mm',
@@ -132,30 +132,30 @@ export function PaperDossierReport({ job, isPreview = false }: Props) {
             
             {/* Inject data blocks on specific pages if possible, or at the end */}
             {pageNum === 1 && (
-              <div className="mb-4 border border-[#E5E7EB] rounded-[12px] overflow-hidden shrink-0">
+              <div className="mb-4 border border-[#E5E7EB] rounded-card overflow-hidden shrink-0">
                 <div className="flex items-center justify-between p-4 border-b border-[#E5E7EB] bg-white">
-                  <span className="text-[13px] font-medium text-admin-muted">Customer Name</span>
+                  <span className="text-label font-medium text-fg-muted">Customer Name</span>
                   <span className="text-[13px] font-bold text-admin-ink">{job.customerName || "N/A"}</span>
                 </div>
                 <div className="flex items-center justify-between p-4 border-b border-[#E5E7EB] bg-white">
-                  <span className="text-[13px] font-medium text-admin-muted">Pickup</span>
+                  <span className="text-label font-medium text-fg-muted">Pickup</span>
                   <span className="text-[13px] font-bold text-admin-ink truncate max-w-[200px]">{job.pickup || "N/A"}</span>
                 </div>
                 <div className="flex items-center justify-between p-4 bg-white">
-                  <span className="text-[13px] font-medium text-admin-muted">Dropoff</span>
+                  <span className="text-label font-medium text-fg-muted">Dropoff</span>
                   <span className="text-[13px] font-bold text-admin-ink truncate max-w-[200px]">{job.dropoff || "N/A"}</span>
                 </div>
               </div>
             )}
 
             {pageNum === 2 && (
-              <div className="mb-4 border border-[#E5E7EB] rounded-[12px] overflow-hidden shrink-0">
+              <div className="mb-4 border border-[#E5E7EB] rounded-card overflow-hidden shrink-0">
                 <div className="flex items-center justify-between p-4 border-b border-[#E5E7EB] bg-white">
-                  <span className="text-[13px] font-medium text-admin-muted">Total Charges</span>
+                  <span className="text-label font-medium text-fg-muted">Total Charges</span>
                   <span className="text-[13px] font-bold text-admin-ink">{formatPounds(job.totalCharges)}</span>
                 </div>
                 <div className="flex items-center justify-between p-4 border-b border-[#E5E7EB] bg-white">
-                  <span className="text-[13px] font-medium text-admin-muted">Payment Method</span>
+                  <span className="text-label font-medium text-fg-muted">Payment Method</span>
                   <span className="text-[13px] font-bold text-admin-ink">{job.paymentMethod || "Not recorded"}</span>
                 </div>
               </div>
@@ -163,8 +163,8 @@ export function PaperDossierReport({ job, isPreview = false }: Props) {
 
             {(pageNum === totalPages || (pageNum === 3 && totalPages >= 3)) && index === photoPages.length - 1 && (
               <div className="mb-4 shrink-0">
-                <h2 className="text-[13px] font-medium text-admin-muted mb-2">Client Signature:</h2>
-                <div className="border border-[#E5E7EB] rounded-[12px] p-6 bg-[#F8F9FA] flex flex-col items-center justify-center min-h-[120px]">
+                <h2 className="text-label font-medium text-fg-muted mb-2">Client Signature:</h2>
+                <div className="border border-[#E5E7EB] rounded-card p-6 bg-[#F8F9FA] flex flex-col items-center justify-center min-h-[120px]">
                   {job.signatureUrl ? (
                     <img src={job.signatureUrl} alt="Client Signature" className="max-h-[80px] object-contain mix-blend-multiply" />
                   ) : (

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { Suspense, useCallback, useEffect, useState } from "react";
 import { Loader2 } from "lucide-react";
 import { fetchSession, type DriverProfile } from "./api/auth";
 import { LoginScreen } from "./screens/LoginScreen";
@@ -7,50 +7,132 @@ import { ResetPasswordScreen } from "./screens/ResetPasswordScreen";
 import { JobListScreen } from "./screens/JobListScreen";
 import { JobWorkflowScreen } from "./screens/JobWorkflowScreen";
 import { ScenarioFormScreen } from "./screens/ScenarioFormScreen";
-import { AdminApp } from "./screens/admin/AdminApp";
+import { AccountSettingsScreen } from "./screens/AccountSettingsScreen";
+import { StorageHomeScreen } from "./screens/StorageHomeScreen";
+import { StorageCompletionScreen, type StorageSummary } from "./screens/StorageCompletionScreen";
+import { logout } from "./api/auth";
+import { setUnauthorizedHandler } from "./lib/http";
+import { startOutboxSync } from "./lib/outbox";
+import { AppLayout, type TabId } from "./app/AppLayout";
+import { DevicePreview } from "./app/DevicePreview";
+import { ConfirmDialog } from "./ui";
+import { useToast } from "./components/ui/Toast";
+
+/**
+ * The admin dashboard is loaded on demand.
+ *
+ * It used to be a static import, which meant Leaflet, Recharts, Luxon and all 14
+ * dashboard pages were in the same chunk as the driver app: 1,150kB of JavaScript
+ * parsed on a driver's phone to render a list of jobs, and precached by the service
+ * worker on top of that. Splitting it here takes the driver bundle to ~235kB. The
+ * dashboard itself is unaffected -- it loads its own chunk once, on a desktop
+ * connection.
+ */
+const AdminApp = React.lazy(() => import("./screens/admin/AdminApp").then(m => ({ default: m.AdminApp })));
+
+/** DEV-only design-system gallery, reachable at `/?ui=gallery`. The ternary is
+ *  statically resolved at build time (import.meta.env.DEV === false), so the dynamic
+ *  import — and the whole src/ui/__gallery__ chunk — is dropped from production. */
+const UiGallery: React.LazyExoticComponent<React.ComponentType> | (() => null) = import.meta.env.DEV
+  ? React.lazy(() => import("./ui/__gallery__/Gallery"))
+  : () => null;
 
 type View =
   | { name: "checking" }
   | { name: "reset-password"; token: string }
   | { name: "login" }
   | { name: "forgot-password" }
+  // ---- tab destinations (chrome: sidebar on desktop, bottom nav on mobile) ----
   | { name: "jobs"; driver: DriverProfile }
+  | { name: "storage-home"; driver: DriverProfile }
+  | { name: "settings"; driver: DriverProfile }
+  // ---- drill-in flows (own the whole screen, no tab chrome) -------------------
   | { name: "job"; driver: DriverProfile; jobId: string }
-  // Check In/Check Out -- standalone storage-job forms, not attached to any job (see
-  // ScenarioFormScreen's jobId doc comment). Reachable directly from the jobs list.
-  | { name: "storage"; driver: DriverProfile; scenario: "checkin" | "checkout" };
+  | { name: "storage-form"; driver: DriverProfile; scenario: "checkin" | "checkout" }
+  // The confirmation screen after a storage form is recorded. Only ever reached
+  // from a real submission -- `summary` carries what was actually sent.
+  | { name: "storage-complete"; driver: DriverProfile; summary: StorageSummary };
 
-/** Only one real "deep link" this app needs to honour outside its own in-app
- * navigation: the password-reset email points at /reset-password?token=... A tiny
- * pathname check up front is simpler and lighter than pulling in a router for a PWA
- * this size -- everything else is plain view-state, matching how little "routing"
- * the original chat-bot workflow ever needed either. */
+const TAB_FOR_VIEW: Record<string, TabId> = {
+  jobs: "jobs",
+  job: "jobs",
+  "storage-home": "storage",
+  "storage-form": "storage",
+  "storage-complete": "storage",
+  settings: "profile"
+};
+
+/** The only real deep link this app honours outside its own navigation: the
+ *  password-reset email points at /reset-password?token=... A pathname check is
+ *  lighter than a router for a PWA this size. */
 function resetTokenFromUrl(): string | null {
   if (window.location.pathname !== "/reset-password") return null;
   return new URLSearchParams(window.location.search).get("token");
 }
 
+function FullScreenSpinner({ label }: { label: string }) {
+  return (
+    <div
+      className="h-screen-safe flex flex-col items-center justify-center gap-3 bg-bg text-fg pt-safe pb-safe"
+      role="status"
+      aria-live="polite"
+    >
+      <Loader2 className="size-6 animate-spin text-fg-subtle" aria-hidden />
+      <span className="text-[14px] text-fg-muted">{label}</span>
+    </div>
+  );
+}
+
 export function App() {
   const [view, setView] = useState<View>({ name: "checking" });
+  /** Set when the driver was bounced out mid-session, so LoginScreen can explain why
+   *  rather than just appearing without warning. */
+  const [authNotice, setAuthNotice] = useState<string | null>(null);
+  const [confirmLogout, setConfirmLogout] = useState(false);
+  const toast = useToast();
 
-  // Admin is a whole separate app (its own login, its own session cookie) -- bail out
-  // before ever touching the driver session check below, same reasoning as
-  // /reset-password's early return.
+  // Admin is a separate app with its own login and session cookie, so it bails out
+  // before the driver session check ever runs.
   //
-  // This same server/bundle answers both chat.themanvan.co.uk (nginx -> this
-  // container's driver-app port) and dashboard.themanvan.co.uk (nginx -> this same
-  // container, repointed off the old TMV-Chat-bot dashboard). On the dashboard domain
-  // the admin app owns every path, not just /admin -- that domain's whole purpose is
-  // the dashboard now, so the bare root ("dashboard.themanvan.co.uk/" with no path)
-  // should land there too, not silently fall through to the driver login screen as if
-  // it were an unrecognised path. localhost keeps the path-gated check instead (dev
-  // convenience: lets a local server still switch between driver app and admin by
-  // path alone, matching how chat.themanvan.co.uk continues to work everywhere else).
+  // The same bundle answers both chat.themanvan.co.uk (driver app) and
+  // dashboard.themanvan.co.uk (the dashboard, repointed off the retired project). On
+  // the dashboard domain the admin app owns every path including the bare root --
+  // that domain's whole purpose is the dashboard. localhost keeps the path-gated check
+  // so a local server can still switch between the two by path alone.
   const path = window.location.pathname;
   const hostname = window.location.hostname;
   const isAdmin =
     hostname === "dashboard.themanvan.co.uk" ||
     (hostname === "localhost" && (path === "/admin" || path === "/admin/"));
+
+  const showGallery =
+    import.meta.env.DEV &&
+    new URLSearchParams(window.location.search).get("ui") === "gallery";
+
+  /** Called by lib/http whenever any authenticated request comes back 401. */
+  const handleUnauthorized = useCallback(() => {
+    setAuthNotice("Your session expired. Sign in again to carry on.");
+    setView({ name: "login" });
+  }, []);
+
+  const handleLogout = useCallback(async () => {
+    setConfirmLogout(false);
+    await logout();
+    toast.info("Signed out");
+    setView({ name: "login" });
+  }, [toast]);
+
+  useEffect(() => {
+    if (isAdmin) return;
+    setUnauthorizedHandler(handleUnauthorized);
+    return () => setUnauthorizedHandler(null);
+  }, [isAdmin, handleUnauthorized]);
+
+  // Retries anything sitting in the offline outbox, on startup and on reconnect.
+  useEffect(() => {
+    if (isAdmin) return;
+    return startOutboxSync();
+  }, [isAdmin]);
 
   useEffect(() => {
     if (isAdmin) return;
@@ -62,68 +144,179 @@ export function App() {
     fetchSession()
       .then(driver => setView(driver ? { name: "jobs", driver } : { name: "login" }))
       .catch(() => setView({ name: "login" }));
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAdmin]);
 
-  if (isAdmin) {
-    return <AdminApp />;
+  if (showGallery) {
+    return (
+      <Suspense fallback={null}>
+        <UiGallery />
+      </Suspense>
+    );
   }
 
-  if (view.name === "checking") {
-    // h-screen-safe (dvh, not vh) + safe-area padding: this shell is the one place
-    // every screen nests inside, so getting the keyboard/notch handling right here
-    // once is what makes every other screen correct for free.
+  if (isAdmin) {
+    // The admin dashboard is not part of the driver-app redesign yet and its screens
+    // still use literal light colours, so pin this subtree to the light token set
+    // regardless of the user's theme. `display: contents` keeps it out of layout.
     return (
-      <div className="h-screen-safe flex items-center justify-center bg-admin-bg text-admin-ink pt-safe pb-safe pl-safe pr-safe">
-        <Loader2 className="w-6 h-6 animate-spin text-admin-muted" />
+      <div data-theme="light" style={{ display: "contents" }}>
+        <Suspense fallback={<FullScreenSpinner label="Loading Operations…" />}>
+          <AdminApp />
+        </Suspense>
       </div>
     );
   }
 
-  if (view.name === "reset-password") {
-    return (
-      <ResetPasswordScreen
-        token={view.token}
-        onDone={driver => {
-          window.history.replaceState({}, "", "/");
-          setView({ name: "jobs", driver });
+  let screen: React.ReactNode;
+  switch (view.name) {
+    case "checking":
+      screen = <FullScreenSpinner label="Checking your session…" />;
+      break;
+
+    case "reset-password":
+      screen = (
+        <ResetPasswordScreen
+          token={view.token}
+          onDone={driver => {
+            window.history.replaceState({}, "", "/");
+            setView({ name: "jobs", driver });
+          }}
+        />
+      );
+      break;
+
+    case "forgot-password":
+      screen = <ForgotPasswordScreen onBack={() => setView({ name: "login" })} />;
+      break;
+
+    case "login":
+      screen = (
+        <LoginScreen
+          notice={authNotice}
+          onLoggedIn={driver => {
+            setAuthNotice(null);
+            setView({ name: "jobs", driver });
+          }}
+          onForgotPassword={() => setView({ name: "forgot-password" })}
+        />
+      );
+      break;
+
+    case "job":
+      screen = (
+        <JobWorkflowScreen jobId={view.jobId} onBack={() => setView({ name: "jobs", driver: view.driver })} />
+      );
+      break;
+
+    case "settings":
+      screen = <AccountSettingsScreen driver={view.driver} onLogout={() => setConfirmLogout(true)} />;
+      break;
+
+    case "storage-home":
+      screen = (
+        <StorageHomeScreen
+          onOpenScenario={scenario => setView({ name: "storage-form", driver: view.driver, scenario })}
+        />
+      );
+      break;
+
+    case "storage-form":
+      screen = (
+        <ScenarioFormScreen
+          scenario={view.scenario}
+          onCancel={() => setView({ name: "storage-home", driver: view.driver })}
+          onDone={result =>
+            result?.summary
+              ? setView({ name: "storage-complete", driver: view.driver, summary: result.summary })
+              : setView({ name: "storage-home", driver: view.driver })
+          }
+        />
+      );
+      break;
+
+    case "storage-complete":
+      screen = (
+        <StorageCompletionScreen
+          summary={view.summary}
+          onHome={() => setView({ name: "jobs", driver: view.driver })}
+        />
+      );
+      break;
+
+    case "jobs":
+    default:
+      screen = (
+        <JobListScreen
+          driver={view.driver}
+          onOpenJob={jobId => setView({ name: "job", driver: view.driver, jobId })}
+          onOpenProfile={() => setView({ name: "settings", driver: view.driver })}
+        />
+      );
+      break;
+  }
+
+  // Auth screens carry their own full-viewport layout (a desktop split, a phone
+  // column) and aren't wrapped in the app chrome.
+  const isAuthView =
+    view.name === "checking" ||
+    view.name === "login" ||
+    view.name === "forgot-password" ||
+    view.name === "reset-password";
+
+  const isTabView =
+    view.name === "jobs" || view.name === "storage-home" || view.name === "settings";
+
+  let framed: React.ReactNode;
+  if (isAuthView) {
+    framed = screen;
+  } else if (isTabView && "driver" in view) {
+    // Jobs / Storage / Profile get the sidebar (desktop) + bottom nav (mobile).
+    // The keyed wrapper gives each tab a subtle entry transition; the sidebar and
+    // bottom nav sit outside it and stay put.
+    framed = (
+      <AppLayout
+        active={TAB_FOR_VIEW[view.name]}
+        onSelect={tab => {
+          const d = view.driver;
+          setView(
+            tab === "jobs"
+              ? { name: "jobs", driver: d }
+              : tab === "storage"
+                ? { name: "storage-home", driver: d }
+                : { name: "settings", driver: d }
+          );
         }}
-      />
+        driver={view.driver}
+        onLogout={() => setConfirmLogout(true)}
+      >
+        <div key={view.name} className="screen-enter h-full">
+          {screen}
+        </div>
+      </AppLayout>
     );
-  }
-
-  if (view.name === "forgot-password") {
-    return <ForgotPasswordScreen onBack={() => setView({ name: "login" })} />;
-  }
-
-  if (view.name === "login") {
-    return (
-      <LoginScreen
-        onLoggedIn={driver => setView({ name: "jobs", driver })}
-        onForgotPassword={() => setView({ name: "forgot-password" })}
-      />
-    );
-  }
-
-  if (view.name === "job") {
-    return <JobWorkflowScreen jobId={view.jobId} onBack={() => setView({ name: "jobs", driver: view.driver })} />;
-  }
-
-  if (view.name === "storage") {
-    return (
-      <ScenarioFormScreen
-        scenario={view.scenario}
-        onCancel={() => setView({ name: "jobs", driver: view.driver })}
-        onDone={() => setView({ name: "jobs", driver: view.driver })}
-      />
+  } else {
+    // Drill-in flow — owns the whole viewport, its own back navigation.
+    framed = (
+      <div key={view.name} className="screen-enter h-screen-safe">
+        {screen}
+      </div>
     );
   }
 
   return (
-    <JobListScreen
-      driver={view.driver}
-      onLoggedOut={() => setView({ name: "login" })}
-      onOpenJob={jobId => setView({ name: "job", driver: view.driver, jobId })}
-      onOpenStorageScenario={scenario => setView({ name: "storage", driver: view.driver, scenario })}
-    />
+    <DevicePreview>
+      {framed}
+      <ConfirmDialog
+        open={confirmLogout}
+        onClose={() => setConfirmLogout(false)}
+        onConfirm={() => void handleLogout()}
+        title="Sign out?"
+        body="You'll need your email and password to get back in. Anything saved on this phone but not yet sent stays queued and will send once you're back online."
+        confirmLabel="Sign out"
+        cancelLabel="Stay signed in"
+        tone="danger"
+      />
+    </DevicePreview>
   );
 }

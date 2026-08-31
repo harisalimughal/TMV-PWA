@@ -1,16 +1,17 @@
 import React, { useState, useMemo, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { fetchJobs } from "../api";
+import { fetchDrivers, fetchJobs, reassignJob } from "../api";
 import { NormalizedJob } from "../types";
 import { JobDetailDrawer } from "../components/JobDetailDrawer";
 import { JobStatusBadge, DelayBandBadge } from "../components/StatusBadge";
 import { DateRangePicker } from "../components/DateRangePicker";
 import { AddJobModal } from "../components/AddJobModal";
 import { formatLondonDateTime } from "../utils/date";
+import { downloadCsv, stampForFilename, toCsv } from "../utils/csv";
 import { resolveDriver, formatVanReg } from "../utils/drivers";
+import { Button } from "../../../../ui";
 import {
   Search,
-  Filter,
   Download,
   Plus,
   LayoutGrid,
@@ -26,7 +27,13 @@ import {
 } from "lucide-react";
 
 export function JobsPage() {
-  const [viewMode, setViewMode] = useState<"table" | "cards">("table");
+  // The table is 12 columns wide. On a phone it was previously the default and lived
+  // behind a horizontal scrollbar, which is close to unusable -- so below the md
+  // breakpoint the card view is the default instead.
+  const [viewMode, setViewMode] = useState<"table" | "cards">(() =>
+    typeof window !== "undefined" && window.matchMedia("(max-width: 767px)").matches ? "cards" : "table"
+  );
+  const [reassignOpen, setReassignOpen] = useState(false);
   const [drawerJob, setDrawerJob] = useState<NormalizedJob | null>(null);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   
@@ -39,6 +46,10 @@ export function JobsPage() {
   
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
+  // How many rows to pull from the server for the chosen date range. Search, status
+  // filtering and sorting all run client-side over this set, so the server has to
+  // hand back the whole range rather than one page of it -- see the query below.
+  const FETCH_LIMIT = 500;
   
   // Sorting
   const [sortConfig, setSortConfig] = useState<{ key: string, direction: "asc" | "desc" } | null>({ key: "Timing", direction: "desc" });
@@ -46,10 +57,30 @@ export function JobsPage() {
   // Selection
   const [selectedRows, setSelectedRows] = useState<Set<string>>(new Set());
 
+  /**
+   * Pagination was broken in three compounding ways before this:
+   *
+   *  - `page` wasn't in the query key, so React Query served the cached first page
+   *    forever and changing page never refetched;
+   *  - the server's 25-row response was then sliced *again* client-side, so page 2 was
+   *    always empty;
+   *  - `totalPages` was computed from the current page's length rather than the
+   *    server's `pagination.total`, which was fetched and discarded.
+   *
+   * The net effect was a Jobs Archive that could only ever show the first 25 jobs.
+   *
+   * Because search, status filtering and sorting are all client-side, mixing in server
+   * pagination would also mean "search" only ever searched the visible page. So there
+   * is now exactly one pagination strategy: fetch the whole date range once, then
+   * filter, sort and paginate it here. `hasMore` tells the user when the range is
+   * larger than we fetched, instead of silently truncating.
+   */
   const { data, isLoading, refetch, isFetching } = useQuery({
-    queryKey: ["jobs", from, to],
-    queryFn: () => fetchJobs({ page, limit: pageSize, from, to })
+    queryKey: ["jobs", from, to, FETCH_LIMIT],
+    queryFn: () => fetchJobs({ page: 1, limit: FETCH_LIMIT, from, to })
   });
+
+  const truncated = Boolean(data?.pagination?.hasMore);
 
   // Debounce search
   useEffect(() => {
@@ -116,9 +147,16 @@ export function JobsPage() {
     return filtered;
   }, [data?.items, debouncedSearch, statusFilter, sortConfig]);
 
-  // Pagination slice
-  const paginatedData = processedData.slice((page - 1) * pageSize, page * pageSize);
-  const totalPages = Math.ceil(processedData.length / pageSize);
+  // Pagination slice -- over the fully filtered set, so page 2 now contains page 2.
+  const totalPages = Math.max(1, Math.ceil(processedData.length / pageSize));
+  const safePage = Math.min(page, totalPages);
+  const paginatedData = processedData.slice((safePage - 1) * pageSize, safePage * pageSize);
+
+  // Filtering can shrink the result set beneath the current page; snap back rather
+  // than stranding the user on an empty page with no way to tell why.
+  useEffect(() => {
+    if (page > totalPages) setPage(totalPages);
+  }, [page, totalPages]);
 
   const handleSort = (key: string) => {
     setSortConfig(current => {
@@ -130,6 +168,25 @@ export function JobsPage() {
   };
 
   const toPounds = (cents: number | undefined) => (cents || 0) / 100;
+
+  /** Columns shared by both export buttons, so the two files always match. */
+  const exportColumns = [
+    { header: "Job ID", value: (j: NormalizedJob) => j.jobId },
+    { header: "Booked start", value: (j: NormalizedJob) => formatLondonDateTime(j.bookedStart) },
+    { header: "Driver", value: (j: NormalizedJob) => resolveDriver(j.driverName, j.driverInitials).name },
+    { header: "Customer", value: (j: NormalizedJob) => j.customerName },
+    { header: "Pickup", value: (j: NormalizedJob) => j.pickup },
+    { header: "Drop-off", value: (j: NormalizedJob) => j.dropoff },
+    { header: "Status", value: (j: NormalizedJob) => j.status },
+    { header: "Delay (min)", value: (j: NormalizedJob) => j.delayMinutes ?? "" },
+    { header: "Payment method", value: (j: NormalizedJob) => j.paymentMethod },
+    { header: "Total (GBP)", value: (j: NormalizedJob) => toPounds(j.totalCharges).toFixed(2) }
+  ];
+
+  function exportRows(rows: NormalizedJob[], suffix: string) {
+    if (rows.length === 0) return;
+    downloadCsv(`tmv-jobs-${suffix}-${stampForFilename()}.csv`, toCsv(rows, exportColumns));
+  }
 
   const toggleAll = () => {
     if (selectedRows.size === paginatedData.length) {
@@ -165,11 +222,23 @@ export function JobsPage() {
             </span>
             <div className="h-4 w-px bg-white/20 shrink-0" />
             <div className="flex items-center gap-2 shrink-0">
-              <button className="shrink-0 whitespace-nowrap px-2.5 sm:px-3 py-1.5 rounded-full text-[12px] font-semibold hover:bg-white/10 transition flex items-center gap-1.5">
+              <button
+                onClick={() => setReassignOpen(true)}
+                className="shrink-0 whitespace-nowrap px-2.5 sm:px-3 py-1.5 rounded-full text-[12px] font-semibold hover:bg-white/10 transition flex items-center gap-1.5"
+              >
                 <UserPlus className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Bulk Reassign</span>
               </button>
-              <button className="shrink-0 whitespace-nowrap px-2.5 sm:px-3 py-1.5 rounded-full text-[12px] font-semibold hover:bg-white/10 transition flex items-center gap-1.5">
+              <button
+                onClick={() => exportRows(processedData.filter(j => selectedRows.has(j.jobId)), "selection")}
+                className="shrink-0 whitespace-nowrap px-2.5 sm:px-3 py-1.5 rounded-full text-[12px] font-semibold hover:bg-white/10 transition flex items-center gap-1.5"
+              >
                 <Download className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Export Selection</span>
+              </button>
+              <button
+                onClick={() => setSelectedRows(new Set())}
+                className="shrink-0 px-2.5 py-1.5 rounded-full text-[12px] font-semibold hover:bg-white/10 transition"
+              >
+                Clear
               </button>
             </div>
           </div>
@@ -178,28 +247,25 @@ export function JobsPage() {
 
       {/* HEADER SECTION */}
       <div className="flex items-center justify-between px-2">
-        <h2 className="text-[18px] font-bold text-admin-ink">Jobs Archive</h2>
-        <button 
-          onClick={() => setIsAddModalOpen(true)}
-          className="flex items-center gap-2 px-5 py-2.5 bg-admin-brand text-white rounded-full font-semibold shadow-sm hover:bg-admin-brand-dark transition"
-        >
-          <Plus className="w-4 h-4" /> Add Job
-        </button>
+        <h2 className="text-title text-fg">Jobs Archive</h2>
+        <Button onClick={() => setIsAddModalOpen(true)} iconLeft={<Plus />}>
+          Add job
+        </Button>
       </div>
 
       {/* CONSOLIDATED TOOLBAR CARD */}
-      <div className="p-2 bg-white rounded-[16px] shadow-sm border border-transparent flex flex-wrap items-center gap-3">
+      <div className="p-2 bg-white rounded-module shadow-sm border border-transparent flex flex-wrap items-center gap-3">
 
-        <div className="flex items-center p-1 bg-admin-surface rounded-xl border border-admin-line/50 shrink-0">
+        <div className="flex items-center p-1 bg-admin-surface rounded-card border border-admin-line/50 shrink-0">
           <button
             onClick={() => setViewMode("table")}
-            className={`p-1.5 rounded-[8px] transition ${viewMode === 'table' ? 'bg-white shadow-sm text-admin-ink' : 'text-admin-muted hover:text-admin-ink'}`}
+            className={`p-1.5 rounded-control transition ${viewMode === 'table' ? 'bg-white shadow-sm text-admin-ink' : 'text-admin-muted hover:text-admin-ink'}`}
           >
             <List className="w-4 h-4" />
           </button>
           <button
             onClick={() => setViewMode("cards")}
-            className={`p-1.5 rounded-[8px] transition ${viewMode === 'cards' ? 'bg-white shadow-sm text-admin-ink' : 'text-admin-muted hover:text-admin-ink'}`}
+            className={`p-1.5 rounded-control transition ${viewMode === 'cards' ? 'bg-white shadow-sm text-admin-ink' : 'text-admin-muted hover:text-admin-ink'}`}
           >
             <LayoutGrid className="w-4 h-4" />
           </button>
@@ -212,44 +278,43 @@ export function JobsPage() {
             placeholder="Search ID, customer, route..."
             value={searchQuery}
             onChange={e => setSearchQuery(e.target.value)}
-            className="w-full pl-9 pr-4 h-10 rounded-xl bg-admin-surface border border-admin-line/50 text-[13px] text-admin-ink focus:border-admin-brand focus:ring-1 focus:ring-admin-brand outline-none transition"
+            className="w-full pl-9 pr-4 h-10 rounded-card bg-admin-surface border border-admin-line/50 text-[13px] text-admin-ink focus:border-admin-brand focus:ring-1 focus:ring-admin-brand outline-none transition"
           />
         </div>
 
-        <div className="flex items-center bg-admin-surface p-1 rounded-xl border border-admin-line/50 shrink-0">
+        <div className="flex items-center bg-admin-surface p-1 rounded-card border border-admin-line/50 shrink-0">
           {["All", "In Progress", "Delivered"].map(status => (
             <button
               key={status}
               onClick={() => { setStatusFilter(status); setPage(1); }}
-              className={`shrink-0 whitespace-nowrap px-3 py-1.5 rounded-[8px] text-[13px] font-medium transition ${statusFilter === status ? 'bg-white text-admin-ink shadow-sm' : 'text-admin-muted hover:text-admin-ink'}`}
+              className={`shrink-0 whitespace-nowrap px-3 py-1.5 rounded-control text-[13px] font-medium transition ${statusFilter === status ? 'bg-white text-admin-ink shadow-sm' : 'text-admin-muted hover:text-admin-ink'}`}
             >
               {status}
             </button>
           ))}
         </div>
 
-        <button className="shrink-0 whitespace-nowrap flex items-center gap-2 h-10 px-4 bg-admin-surface hover:bg-admin-line/30 rounded-xl border border-admin-line/50 text-[13px] font-semibold text-admin-ink transition relative">
-          <Filter className="w-4 h-4 text-admin-muted" /> Filters
-        </button>
-
         <div className="hidden sm:block w-px h-6 bg-admin-line mx-1 shrink-0" />
 
         <DateRangePicker from={from} to={to} onChange={(f, t) => { setFrom(f); setTo(t); setPage(1); }} />
 
-        <span className="shrink-0 text-[13px] font-medium text-admin-muted px-2 whitespace-nowrap sm:min-w-[120px] sm:text-right">
+        <span className="shrink-0 text-label font-medium text-fg-muted px-2 whitespace-nowrap sm:min-w-[120px] sm:text-right">
           {isLoading || isFetching ? "Updating..." : `${processedData.length} moves`}
         </span>
 
         <button
           onClick={() => refetch()}
-          className="shrink-0 w-10 h-10 rounded-xl flex items-center justify-center bg-admin-surface border border-admin-line/50 hover:bg-admin-line/40 text-admin-muted hover:text-admin-ink transition"
+          className="shrink-0 w-10 h-10 rounded-card flex items-center justify-center bg-admin-surface border border-admin-line/50 hover:bg-admin-line/40 text-admin-muted hover:text-admin-ink transition"
           title="Refresh Data"
         >
           <RefreshCw className={`w-4 h-4 ${isFetching ? 'animate-spin' : ''}`} />
         </button>
         <button
-          className="shrink-0 w-10 h-10 rounded-xl flex items-center justify-center bg-admin-surface border border-admin-line/50 hover:bg-admin-line/40 text-admin-muted hover:text-admin-ink transition"
-          title="Export CSV"
+          onClick={() => exportRows(processedData, "filtered")}
+          disabled={processedData.length === 0}
+          className="shrink-0 w-10 h-10 rounded-card flex items-center justify-center bg-admin-surface border border-admin-line/50 hover:bg-admin-line/40 text-admin-muted hover:text-admin-ink transition disabled:opacity-40"
+          title={`Export ${processedData.length} rows as CSV`}
+          aria-label="Export filtered jobs as CSV"
         >
           <Download className="w-4 h-4" />
         </button>
@@ -257,7 +322,7 @@ export function JobsPage() {
 
       {/* TABLE CARD */}
       {viewMode === "table" && (
-        <div className="bg-white rounded-[24px] shadow-sm overflow-hidden border border-admin-line">
+        <div className="bg-white rounded-module shadow-sm overflow-hidden border border-admin-line">
           <div className="overflow-x-auto relative min-h-[400px]">
             <table className="w-full text-left text-[14px] border-collapse relative">
               <thead className="bg-white sticky top-0 z-10 shadow-[0_1px_0_rgba(0,0,0,0.05)]">
@@ -270,34 +335,34 @@ export function JobsPage() {
                       className="rounded text-admin-brand cursor-pointer" 
                     />
                   </th>
-                  <th className="py-4 px-2 w-10 text-center font-mono text-[12px] font-semibold text-admin-muted uppercase tracking-[0.03em]">#</th>
-                  <th className="py-4 px-4 font-semibold text-[12px] font-semibold text-admin-muted uppercase tracking-[0.03em] uppercase tracking-[0.03em]">
+                  <th className="py-4 px-2 w-10 text-center font-mono text-eyebrow text-fg-subtle tracking-[0.03em]">#</th>
+                  <th className="py-4 px-4 font-semibold text-eyebrow text-fg-subtle tracking-[0.03em] uppercase tracking-[0.03em]">
                     Job ID & Driver
                   </th>
                   <th 
-                    className="py-4 px-4 font-semibold text-[12px] font-semibold text-admin-muted uppercase tracking-[0.03em] uppercase tracking-[0.03em] group cursor-pointer hover:text-admin-ink transition select-none"
+                    className="py-4 px-4 font-semibold text-eyebrow text-fg-subtle tracking-[0.03em] uppercase tracking-[0.03em] group cursor-pointer hover:text-admin-ink transition select-none"
                     onClick={() => handleSort("Timing")}
                   >
                     Timing <SortIcon column="Timing" />
                   </th>
-                  <th className="py-4 px-4 font-semibold text-[12px] font-semibold text-admin-muted uppercase tracking-[0.03em] uppercase tracking-[0.03em]">Customer</th>
-                  <th className="py-4 px-4 font-semibold text-[12px] font-semibold text-admin-muted uppercase tracking-[0.03em] uppercase tracking-[0.03em]">Pickup</th>
-                  <th className="py-4 px-4 font-semibold text-[12px] font-semibold text-admin-muted uppercase tracking-[0.03em] uppercase tracking-[0.03em]">Dropoff</th>
+                  <th className="py-4 px-4 font-semibold text-eyebrow text-fg-subtle tracking-[0.03em] uppercase tracking-[0.03em]">Customer</th>
+                  <th className="py-4 px-4 font-semibold text-eyebrow text-fg-subtle tracking-[0.03em] uppercase tracking-[0.03em]">Pickup</th>
+                  <th className="py-4 px-4 font-semibold text-eyebrow text-fg-subtle tracking-[0.03em] uppercase tracking-[0.03em]">Dropoff</th>
                   <th 
-                    className="py-4 px-4 font-semibold text-[12px] font-semibold text-admin-muted uppercase tracking-[0.03em] uppercase tracking-[0.03em] group cursor-pointer hover:text-admin-ink transition select-none"
+                    className="py-4 px-4 font-semibold text-eyebrow text-fg-subtle tracking-[0.03em] uppercase tracking-[0.03em] group cursor-pointer hover:text-admin-ink transition select-none"
                     onClick={() => handleSort("Status")}
                   >
                     Status <SortIcon column="Status" />
                   </th>
                   <th 
-                    className="py-4 px-4 font-semibold text-[12px] font-semibold text-admin-muted uppercase tracking-[0.03em] uppercase tracking-[0.03em] group cursor-pointer hover:text-admin-ink transition select-none"
+                    className="py-4 px-4 font-semibold text-eyebrow text-fg-subtle tracking-[0.03em] uppercase tracking-[0.03em] group cursor-pointer hover:text-admin-ink transition select-none"
                     onClick={() => handleSort("Punctuality")}
                   >
                     Punctuality <SortIcon column="Punctuality" />
                   </th>
-                  <th className="py-4 px-4 font-semibold text-[12px] font-semibold text-admin-muted uppercase tracking-[0.03em] uppercase tracking-[0.03em] text-center">Photos</th>
+                  <th className="py-4 px-4 font-semibold text-eyebrow text-fg-subtle tracking-[0.03em] uppercase tracking-[0.03em] text-center">Photos</th>
                   <th 
-                    className="py-4 px-6 font-semibold text-[12px] font-semibold text-admin-muted uppercase tracking-[0.03em] uppercase tracking-[0.03em] text-right group cursor-pointer hover:text-admin-ink transition select-none"
+                    className="py-4 px-6 font-semibold text-eyebrow text-fg-subtle tracking-[0.03em] uppercase tracking-[0.03em] text-right group cursor-pointer hover:text-admin-ink transition select-none"
                     onClick={() => handleSort("Total")}
                   >
                     Total <SortIcon column="Total" />
@@ -322,11 +387,11 @@ export function JobsPage() {
                       <div className="w-12 h-12 bg-admin-surface text-admin-muted rounded-full flex items-center justify-center mx-auto mb-3">
                         <Search className="w-5 h-5" />
                       </div>
-                      <h3 className="text-[15px] font-bold text-admin-ink mb-1">No jobs match your filters</h3>
+                      <h3 className="text-card text-fg mb-1">No jobs match your filters</h3>
                       <p className="text-[13px] text-admin-muted mb-4">Try adjusting your search or clearing filters.</p>
                       <button 
                         onClick={() => { setSearchQuery(""); setStatusFilter("All"); setFrom(undefined); setTo(undefined); }}
-                        className="px-4 py-2 bg-admin-surface hover:bg-admin-line text-admin-ink text-[13px] font-semibold rounded-xl transition"
+                        className="px-4 py-2 bg-admin-surface hover:bg-admin-line text-admin-ink text-[13px] font-semibold rounded-card transition"
                       >
                         Clear all filters
                       </button>
@@ -334,7 +399,7 @@ export function JobsPage() {
                   </tr>
                 ) : (
                   paginatedData.map((job: NormalizedJob, index: number) => {
-                    const rowNumber = (page - 1) * pageSize + index + 1;
+                    const rowNumber = (safePage - 1) * pageSize + index + 1;
                     const formattedTime = formatLondonDateTime(job.bookedStart);
                     const totalPounds = toPounds(job.totalCharges);
                     const isCancelled = job.status === "CANCELLED";
@@ -380,7 +445,7 @@ export function JobsPage() {
                                  <span className="truncate">{resolvedDriver.name}</span>
                                  {resolvedDriver.needsReassignment && (
                                    <div 
-                                     className="flex items-center gap-1.5 text-[11px] tracking-[0.02em] font-semibold text-amber-700 bg-amber-100 px-2.5 py-1 rounded-[6px] shrink-0 hover:bg-amber-200 transition"
+                                     className="flex items-center gap-1.5 text-[11px] tracking-[0.02em] font-semibold text-amber-700 bg-amber-100 px-2.5 py-1 rounded-control shrink-0 hover:bg-amber-200 transition"
                                      onClick={(e) => { e.stopPropagation(); /* Mock Inline Assign */ }}
                                    >
                                      <AlertTriangle className="w-3 h-3" /> Reassign
@@ -422,7 +487,7 @@ export function JobsPage() {
                         <td className="px-4 text-center">
                           <div className="flex items-center justify-center">
                             {photoCount > 0 ? (
-                              <div className="flex items-center gap-1 px-2 py-0.5 bg-admin-surface border border-admin-line text-admin-ink rounded-lg text-[11px] font-bold">
+                              <div className="flex items-center gap-1 px-2 py-0.5 bg-admin-surface border border-admin-line text-admin-ink rounded-card text-[11px] font-bold">
                                 <Camera className="w-3 h-3 text-admin-brand" /> {photoCount}
                               </div>
                             ) : (
@@ -458,7 +523,7 @@ export function JobsPage() {
                  <select 
                    value={pageSize}
                    onChange={e => { setPageSize(Number(e.target.value)); setPage(1); }}
-                   className="h-8 px-2 rounded-lg border border-admin-line bg-admin-surface outline-none focus:border-admin-brand"
+                   className="h-8 px-2 rounded-card border border-admin-line bg-admin-surface outline-none focus:border-admin-brand"
                  >
                    <option value={25}>25</option>
                    <option value={50}>50</option>
@@ -468,21 +533,21 @@ export function JobsPage() {
                </div>
                
                <div className="flex items-center gap-4">
-                 <span className="text-[13px] font-medium text-admin-muted">
-                   Page {page} of {totalPages || 1}
+                 <span className="text-label font-medium text-fg-muted">
+                   Page {safePage} of {totalPages}
                  </span>
                  <div className="flex items-center gap-1">
                    <button 
-                     disabled={page === 1}
+                     disabled={safePage <= 1}
                      onClick={() => setPage(p => Math.max(1, p - 1))}
-                     className="p-1.5 rounded-lg border border-admin-line bg-white text-admin-ink hover:bg-admin-surface disabled:opacity-50 transition"
+                     className="p-1.5 rounded-card border border-admin-line bg-white text-admin-ink hover:bg-admin-surface disabled:opacity-50 transition"
                    >
                      <ChevronLeft className="w-4 h-4" />
                    </button>
                    <button 
-                     disabled={page >= totalPages}
+                     disabled={safePage >= totalPages}
                      onClick={() => setPage(p => Math.min(totalPages, p + 1))}
-                     className="p-1.5 rounded-lg border border-admin-line bg-white text-admin-ink hover:bg-admin-surface disabled:opacity-50 transition"
+                     className="p-1.5 rounded-card border border-admin-line bg-white text-admin-ink hover:bg-admin-surface disabled:opacity-50 transition"
                    >
                      <ChevronRight className="w-4 h-4" />
                    </button>
@@ -494,9 +559,17 @@ export function JobsPage() {
       )}
 
       {viewMode === "cards" && (
-        <div className="text-center text-admin-muted p-12 bg-white rounded-[24px] shadow-sm">
-          Cards view selected. Switch to table for detailed layout.
-        </div>
+        <JobCardList
+          jobs={paginatedData}
+          isLoading={isLoading}
+          selected={selectedRows}
+          onToggle={toggleRow}
+          onOpen={setDrawerJob}
+          toPounds={toPounds}
+          page={safePage}
+          totalPages={totalPages}
+          onPageChange={setPage}
+        />
       )}
 
       {drawerJob && (
@@ -509,6 +582,256 @@ export function JobsPage() {
       )}
 
       <AddJobModal isOpen={isAddModalOpen} onClose={() => setIsAddModalOpen(false)} />
+
+      {reassignOpen && (
+        <BulkReassignModal
+          jobIds={Array.from(selectedRows)}
+          onClose={() => setReassignOpen(false)}
+          onDone={() => {
+            setReassignOpen(false);
+            setSelectedRows(new Set());
+            void refetch();
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ card view --- */
+
+interface JobCardListProps {
+  jobs: NormalizedJob[];
+  isLoading: boolean;
+  selected: Set<string>;
+  onToggle: (id: string) => void;
+  onOpen: (job: NormalizedJob) => void;
+  toPounds: (pence: number | undefined) => number;
+  page: number;
+  totalPages: number;
+  onPageChange: (page: number) => void;
+}
+
+/**
+ * The card view used to be a placeholder that said "Switch to table for detailed
+ * layout" -- which, on a phone, meant the only option was a 12-column table behind a
+ * horizontal scrollbar. This is the real thing, and it's the default below md.
+ */
+function JobCardList({
+  jobs,
+  isLoading,
+  selected,
+  onToggle,
+  onOpen,
+  toPounds,
+  page,
+  totalPages,
+  onPageChange
+}: JobCardListProps) {
+  if (isLoading) {
+    return (
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+        {Array.from({ length: 6 }).map((_, i) => (
+          <div key={i} className="h-[150px] rounded-module bg-white border border-admin-line skeleton" />
+        ))}
+      </div>
+    );
+  }
+
+  if (jobs.length === 0) {
+    return (
+      <div className="text-center p-12 bg-white rounded-module border border-admin-line">
+        <h3 className="text-card text-fg mb-1">No jobs match your filters</h3>
+        <p className="text-[13px] text-admin-muted">Try adjusting your search or clearing the date range.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+        {jobs.map(job => {
+          const driver = resolveDriver(job.driverName, job.driverInitials);
+          const total = toPounds(job.totalCharges);
+          const isSelected = selected.has(job.jobId);
+          return (
+            <article
+              key={job.jobId}
+              className={`rounded-module bg-white border p-4 transition ${
+                isSelected ? "border-admin-brand ring-2 ring-admin-brand/20" : "border-admin-line"
+              }`}
+            >
+              <div className="flex items-start gap-3">
+                <input
+                  type="checkbox"
+                  checked={isSelected}
+                  onChange={() => onToggle(job.jobId)}
+                  className="mt-1 w-4 h-4 rounded accent-admin-brand cursor-pointer shrink-0"
+                  aria-label={`Select job ${job.jobId}`}
+                />
+                <button onClick={() => onOpen(job)} className="flex-1 min-w-0 text-left">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="font-semibold text-admin-brand text-[14px]">{job.jobId}</span>
+                    <JobStatusBadge status={job.status} />
+                  </div>
+                  <p className="text-card text-fg mt-1.5 truncate">
+                    {job.customerName || "Not recorded"}
+                  </p>
+                  <p className="text-[13px] text-admin-muted mt-1 leading-snug">
+                    {job.pickup || "—"} <span className="text-admin-line-strong">→</span> {job.dropoff || "—"}
+                  </p>
+                  <div className="flex items-center justify-between gap-3 mt-3 pt-3 border-t border-admin-line">
+                    <span className="flex items-center gap-2 min-w-0">
+                      <span
+                        className={`w-6 h-6 rounded-full flex items-center justify-center font-bold text-[10px] shrink-0 ${driver.color}`}
+                      >
+                        {driver.code}
+                      </span>
+                      <span className="text-[13px] text-admin-muted truncate">
+                        {formatLondonDateTime(job.bookedStart) || "Not scheduled"}
+                      </span>
+                    </span>
+                    <span className="font-mono text-[14px] font-bold tabular-nums shrink-0">
+                      {total === 0 ? "—" : `£${total.toLocaleString("en-GB", { minimumFractionDigits: 2 })}`}
+                    </span>
+                  </div>
+                </button>
+              </div>
+            </article>
+          );
+        })}
+      </div>
+
+      {totalPages > 1 && (
+        <div className="flex items-center justify-center gap-3">
+          <button
+            disabled={page <= 1}
+            onClick={() => onPageChange(page - 1)}
+            className="w-11 h-11 rounded-card border border-admin-line bg-white disabled:opacity-40 flex items-center justify-center"
+            aria-label="Previous page"
+          >
+            <ChevronLeft className="w-4 h-4" />
+          </button>
+          <span className="text-label font-medium text-fg-muted tabular-nums">
+            Page {page} of {totalPages}
+          </span>
+          <button
+            disabled={page >= totalPages}
+            onClick={() => onPageChange(page + 1)}
+            className="w-11 h-11 rounded-card border border-admin-line bg-white disabled:opacity-40 flex items-center justify-center"
+            aria-label="Next page"
+          >
+            <ChevronRight className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------- bulk reassign ---- */
+
+/**
+ * Reassigns every selected job to one driver. The endpoint already existed
+ * (api.ts's reassignJob, used by the single-job drawer) -- the toolbar button simply
+ * had no handler wired to it.
+ */
+function BulkReassignModal({
+  jobIds,
+  onClose,
+  onDone
+}: {
+  jobIds: string[];
+  onClose: () => void;
+  onDone: () => void;
+}) {
+  const { data } = useQuery({ queryKey: ["drivers_summary"], queryFn: () => fetchDrivers() });
+  const [initials, setInitials] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [done, setDone] = useState(0);
+
+  const drivers = (data?.drivers || []).filter(d => d.initials && d.initials !== "UN" && d.active);
+
+  async function handleConfirm() {
+    if (!initials || busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      // Sequential rather than Promise.all: the progress counter stays truthful, and a
+      // partial failure leaves a clear record of how far it got.
+      for (const jobId of jobIds) {
+        await reassignJob(jobId, initials);
+        setDone(n => n + 1);
+      }
+      onDone();
+    } catch (err: any) {
+      setError(err?.message || "Couldn't reassign every job. Some may have been changed.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-admin-ink/40 backdrop-blur-sm p-4">
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="bulk-reassign-title"
+        className="bg-white rounded-module shadow-2xl w-full max-w-[440px] p-6 animate-in zoom-in-95"
+      >
+        <h2 id="bulk-reassign-title" className="text-title text-fg">
+          Reassign {jobIds.length} job{jobIds.length === 1 ? "" : "s"}
+        </h2>
+        <p className="text-[13px] text-admin-muted mt-1">
+          Every selected job moves to this driver. The drivers involved are not notified automatically.
+        </p>
+
+        <label className="block mt-5">
+          <span className="text-label font-semibold text-fg">Assign to</span>
+          <select
+            value={initials}
+            onChange={e => setInitials(e.target.value)}
+            disabled={busy}
+            className="mt-1.5 w-full h-11 px-3 rounded-card border border-admin-line bg-admin-surface outline-none focus:border-admin-brand"
+          >
+            <option value="">Choose a driver…</option>
+            {drivers.map(driver => (
+              <option key={driver.initials} value={driver.initials}>
+                {driver.fullName || driver.initials} ({driver.initials})
+              </option>
+            ))}
+          </select>
+        </label>
+
+        {busy && (
+          <p className="text-[13px] text-admin-muted mt-3" role="status">
+            Reassigning… {done} of {jobIds.length}
+          </p>
+        )}
+        {error && (
+          <p className="text-[13px] text-admin-status-red mt-3" role="alert">
+            {error}
+          </p>
+        )}
+
+        <div className="flex gap-3 mt-6">
+          <button
+            onClick={onClose}
+            disabled={busy}
+            className="flex-1 h-11 rounded-card bg-admin-surface text-card text-fg disabled:opacity-50"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleConfirm}
+            disabled={!initials || busy}
+            className="flex-1 h-11 rounded-card bg-admin-brand text-white text-[14px] font-semibold disabled:opacity-50"
+          >
+            {busy ? "Reassigning…" : "Reassign"}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

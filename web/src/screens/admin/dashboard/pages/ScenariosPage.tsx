@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { FolderActionDropdown } from "../components/FolderActionDropdown";
 import { SubmissionDetailDrawer } from "../components/SubmissionDetailDrawer";
+import { Button } from "../../../../ui";
 import { PaperDossierReport } from "../components/PaperDossierReport";
 import { NormalizedJob } from "../types";
 import { fetchScenarios } from "../api";
@@ -115,35 +116,51 @@ export function ScenariosPage({ kind }: Props) {
     <div className="space-y-6 max-w-[1440px] mx-auto">
       {/* PAGE HEADER */}
       <div className="flex flex-wrap items-center justify-between gap-y-2 gap-x-3 px-2">
-        <h1 className="text-[20px] font-bold text-admin-ink truncate">{config.title}</h1>
+        <h1 className="text-title text-fg truncate">{config.title}</h1>
         <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
           {kind === "liability" && (
             <>
-              <button onClick={() => setIsConfigOpen(true)} className="shrink-0 whitespace-nowrap h-10 px-2.5 sm:px-4 rounded-[12px] border border-admin-line bg-white hover:bg-admin-surface text-admin-ink text-[13px] font-medium shadow-sm transition flex items-center gap-2">
-                <Settings2 className="w-4 h-4 text-admin-brand" /> <span className="hidden sm:inline">Manage Categories</span>
-              </button>
-              <button onClick={() => setIsMobileOpen(true)} className="shrink-0 whitespace-nowrap h-10 px-2.5 sm:px-4 rounded-[12px] bg-[#2563EB] hover:bg-blue-700 text-white text-[13px] font-medium shadow-sm transition flex items-center gap-2">
-                <Smartphone className="w-4 h-4" /> <span className="hidden sm:inline">Preview Mobile Form</span>
-              </button>
+              <Button
+                variant="secondary"
+                onClick={() => setIsConfigOpen(true)}
+                iconLeft={<Settings2 />}
+                aria-label="Manage categories"
+                className="shrink-0"
+              >
+                <span className="hidden sm:inline">Manage categories</span>
+              </Button>
+              <Button
+                onClick={() => setIsMobileOpen(true)}
+                iconLeft={<Smartphone />}
+                aria-label="Preview mobile form"
+                className="shrink-0"
+              >
+                <span className="hidden sm:inline">Preview mobile form</span>
+              </Button>
               <div className="hidden sm:block w-[1px] h-6 bg-admin-line mx-1" />
             </>
           )}
-          <button
-            onClick={() => { window.location.href = `/api/admin/scenarios/${kind}/export.csv`; }}
-            className="shrink-0 whitespace-nowrap h-10 px-2.5 sm:px-4 rounded-[12px] border border-admin-line bg-white hover:bg-admin-surface text-admin-ink text-[13px] font-medium shadow-sm transition flex items-center gap-2"
+          <Button
+            variant="secondary"
+            onClick={() => {
+              window.location.href = `/api/admin/scenarios/${kind}/export.csv`;
+            }}
+            iconLeft={<Download />}
+            aria-label="Export CSV"
+            className="shrink-0"
           >
-            <Download className="w-4 h-4" /> <span className="hidden sm:inline">Export CSV</span>
-          </button>
+            <span className="hidden sm:inline">Export CSV</span>
+          </Button>
         </div>
       </div>
 
       {/* TOOLBAR */}
-      <div className="p-2 bg-white rounded-[16px] shadow-sm border border-admin-line flex flex-wrap items-center gap-4">
+      <div className="p-2 bg-white rounded-module shadow-sm border border-admin-line flex flex-wrap items-center gap-4">
         {/* View Toggle */}
-        <div className="flex items-center gap-1 bg-admin-surface p-1 rounded-xl">
+        <div className="flex items-center gap-1 bg-admin-surface p-1 rounded-card">
           <button
             onClick={() => setViewMode("table")}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-[8px] text-[13px] font-medium transition ${
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-control text-[13px] font-medium transition ${
               viewMode === "table" ? "bg-white text-admin-ink shadow-sm" : "text-admin-muted hover:text-admin-ink"
             }`}
           >
@@ -151,7 +168,7 @@ export function ScenariosPage({ kind }: Props) {
           </button>
           <button
             onClick={() => setViewMode("cards")}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-[8px] text-[13px] font-medium transition ${
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-control text-[13px] font-medium transition ${
               viewMode === "cards" ? "bg-white text-admin-ink shadow-sm" : "text-admin-muted hover:text-admin-ink"
             }`}
           >
@@ -175,13 +192,30 @@ export function ScenariosPage({ kind }: Props) {
 
         <div className="w-[1px] h-6 bg-admin-line mx-2" />
 
-        {/* Date Ranges */}
-        <div className="flex items-center gap-1 bg-admin-surface p-1 rounded-xl">
-          {["All Time", "Today", "7 Days", "30 Days"].map((l) => (
-            <button key={l} className="px-3 py-1.5 rounded-[8px] text-[12px] font-medium text-admin-muted hover:text-admin-ink hover:bg-white/50 transition">
-              {l}
-            </button>
-          ))}
+        {/* Date Ranges. These four chips previously had no handler at all -- they
+            highlighted on hover and did nothing. They now drive the same from/to the
+            DateRangePicker beside them uses, and show which one is active. */}
+        <div className="flex items-center gap-1 bg-admin-surface p-1 rounded-card">
+          {RANGE_PRESETS.map(preset => {
+            const range = preset.range();
+            const isActive = from === range.from && to === range.to;
+            return (
+              <button
+                key={preset.label}
+                onClick={() => {
+                  setFrom(range.from);
+                  setTo(range.to);
+                  setPage(1);
+                }}
+                aria-pressed={isActive}
+                className={`px-3 py-1.5 rounded-control text-[12px] font-medium transition ${
+                  isActive ? "bg-white text-admin-ink shadow-sm" : "text-admin-muted hover:text-admin-ink hover:bg-white/50"
+                }`}
+              >
+                {preset.label}
+              </button>
+            );
+          })}
         </div>
         <DateRangePicker from={from} to={to} onChange={(f, t) => { setFrom(f); setTo(t); setPage(1); }} />
 
@@ -201,32 +235,32 @@ export function ScenariosPage({ kind }: Props) {
       </div>
 
       {isLoading && (
-        <div className="h-64 bg-white rounded-[24px] border border-admin-line animate-pulse flex items-center justify-center">
+        <div className="h-64 bg-white rounded-module border border-admin-line animate-pulse flex items-center justify-center">
           <span className="text-admin-muted font-medium">Loading {config.title.toLowerCase()} records...</span>
         </div>
       )}
 
       {isError && (
-        <div className="p-8 text-center text-admin-status-red bg-admin-status-red-bg rounded-[24px] border border-admin-status-red/20 shadow-sm">
+        <div className="p-8 text-center text-admin-status-red bg-admin-status-red-bg rounded-module border border-admin-status-red/20 shadow-sm">
           Failed to load {config.title.toLowerCase()} records.
         </div>
       )}
 
       {/* TABLE VIEW */}
       {!isLoading && !isError && viewMode === "table" && (
-        <div className="bg-white rounded-[20px] shadow-[0_4px_20px_rgb(0,0,0,0.03)] border border-admin-line flex flex-col overflow-hidden">
+        <div className="bg-white rounded-module shadow-[0_4px_20px_rgb(0,0,0,0.03)] border border-admin-line flex flex-col overflow-hidden">
           <div className="overflow-x-auto custom-scrollbar">
             <table className="w-full text-left text-[14px] border-collapse whitespace-nowrap">
               <thead>
                 <tr className="border-b border-admin-line bg-white">
-                  <th className="py-5 px-4 font-semibold text-[12px] font-semibold text-admin-muted uppercase tracking-[0.03em] pl-6">Timestamp</th>
-                  <th className="py-5 px-4 font-semibold text-[12px] font-semibold text-admin-muted uppercase tracking-[0.03em]">Job ID</th>
-                  <th className="py-5 px-4 font-semibold text-[12px] font-semibold text-admin-muted uppercase tracking-[0.03em]">Driver</th>
-                  <th className="py-5 px-4 font-semibold text-[12px] font-semibold text-admin-muted uppercase tracking-[0.03em]" title={config.refLabel}>{config.refLabel}</th>
-                  <th className="py-5 px-4 font-semibold text-[12px] font-semibold text-admin-muted uppercase tracking-[0.03em]">Client Name</th>
-                  <th className="py-5 px-4 font-semibold text-[12px] font-semibold text-admin-muted uppercase tracking-[0.03em]">Pictures</th>
-                  <th className="py-5 px-4 font-semibold text-[12px] font-semibold text-admin-muted uppercase tracking-[0.03em]">Sign here.</th>
-                  <th className="py-5 px-4 font-semibold text-[12px] font-semibold text-admin-muted uppercase tracking-[0.03em] text-center">Docs</th>
+                  <th className="py-5 px-4 font-semibold text-eyebrow text-fg-subtle tracking-[0.03em] pl-6">Timestamp</th>
+                  <th className="py-5 px-4 font-semibold text-eyebrow text-fg-subtle tracking-[0.03em]">Job ID</th>
+                  <th className="py-5 px-4 font-semibold text-eyebrow text-fg-subtle tracking-[0.03em]">Driver</th>
+                  <th className="py-5 px-4 font-semibold text-eyebrow text-fg-subtle tracking-[0.03em]" title={config.refLabel}>{config.refLabel}</th>
+                  <th className="py-5 px-4 font-semibold text-eyebrow text-fg-subtle tracking-[0.03em]">Client Name</th>
+                  <th className="py-5 px-4 font-semibold text-eyebrow text-fg-subtle tracking-[0.03em]">Pictures</th>
+                  <th className="py-5 px-4 font-semibold text-eyebrow text-fg-subtle tracking-[0.03em]">Sign here.</th>
+                  <th className="py-5 px-4 font-semibold text-eyebrow text-fg-subtle tracking-[0.03em] text-center">Docs</th>
                   <th className="py-5 px-4 w-10"></th>
                 </tr>
               </thead>
@@ -299,12 +333,12 @@ export function ScenariosPage({ kind }: Props) {
                               {kind === "liability" ? (
                                 <div className="flex flex-wrap items-center gap-1.5 max-w-[280px]">
                                   {refText.split(",").map((s) => s.trim()).filter(Boolean).slice(0, 3).map((cat, i) => (
-                                    <span key={i} className="px-2 py-1 rounded-md bg-admin-surface border border-admin-line text-admin-ink text-[11px] font-medium whitespace-nowrap truncate max-w-[120px]" title={cat}>
+                                    <span key={i} className="px-2 py-1 rounded-control bg-admin-surface border border-admin-line text-admin-ink text-[11px] font-medium whitespace-nowrap truncate max-w-[120px]" title={cat}>
                                       {cat}
                                     </span>
                                   ))}
                                   {refText.split(",").filter(Boolean).length > 3 && (
-                                    <span className="px-2 py-1 rounded-md bg-white border border-admin-line text-admin-muted text-[11px] font-medium whitespace-nowrap shadow-sm cursor-help" title={refText}>
+                                    <span className="px-2 py-1 rounded-control bg-white border border-admin-line text-admin-muted text-[11px] font-medium whitespace-nowrap shadow-sm cursor-help" title={refText}>
                                       +{refText.split(",").filter(Boolean).length - 3} more
                                     </span>
                                   )}
@@ -315,7 +349,7 @@ export function ScenariosPage({ kind }: Props) {
                                     {refText}
                                   </span>
                                   {isTestRef && (
-                                    <span className="px-1.5 py-0.5 rounded-[4px] bg-admin-surface border border-admin-line text-admin-muted text-[10px] font-semibold uppercase tracking-wider" title="Test Record">
+                                    <span className="px-1.5 py-0.5 rounded-control bg-admin-surface border border-admin-line text-admin-muted text-[10px] font-semibold uppercase tracking-wider" title="Test Record">
                                       Unverified / Test Data
                                     </span>
                                   )}
@@ -334,12 +368,12 @@ export function ScenariosPage({ kind }: Props) {
                             {photos.length > 0 ? (
                               <div className="flex items-center">
                                 {photos.slice(0, 3).map((p: any, i: number) => (
-                                  <div key={i} className={`w-8 h-8 rounded-[8px] overflow-hidden border border-admin-line bg-admin-surface ${i > 0 ? "-ml-3 shadow-sm" : ""}`}>
+                                  <div key={i} className={`w-8 h-8 rounded-control overflow-hidden border border-admin-line bg-admin-surface ${i > 0 ? "-ml-3 shadow-sm" : ""}`}>
                                     <img src={p.thumbUrl || p.fileUrl || p.driveUrl} alt="Evidence" className="w-full h-full object-cover" />
                                   </div>
                                 ))}
                                 {photos.length > 3 && (
-                                  <div className="w-8 h-8 rounded-[8px] border border-admin-line bg-white flex items-center justify-center text-[11px] font-medium text-admin-muted -ml-3 z-10 shadow-sm">
+                                  <div className="w-8 h-8 rounded-control border border-admin-line bg-white flex items-center justify-center text-[11px] font-medium text-admin-muted -ml-3 z-10 shadow-sm">
                                     +{photos.length - 3}
                                   </div>
                                 )}
@@ -355,10 +389,10 @@ export function ScenariosPage({ kind }: Props) {
                             <img
                               src={sigUrl}
                               alt="Signature"
-                              className="w-14 h-7 object-contain mx-4 border border-admin-line bg-white rounded-[4px] p-0.5 shadow-sm"
+                              className="w-14 h-7 object-contain mx-4 border border-admin-line bg-white rounded-control p-0.5 shadow-sm"
                             />
                           ) : (
-                            <div className="w-14 h-7 rounded-[4px] border border-dashed border-admin-line-strong mx-4 opacity-50" />
+                            <div className="w-14 h-7 rounded-control border border-dashed border-admin-line-strong mx-4 opacity-50" />
                           )}
                         </td>
 
@@ -403,15 +437,15 @@ export function ScenariosPage({ kind }: Props) {
                 <button 
                   disabled={page === 1} 
                   onClick={() => setPage(p => p - 1)} 
-                  className="px-3 py-1.5 rounded-[8px] border border-admin-line bg-white text-[13px] font-medium text-admin-ink hover:bg-admin-surface disabled:opacity-50 disabled:cursor-not-allowed transition"
+                  className="px-3 py-1.5 rounded-control border border-admin-line bg-white text-[13px] font-medium text-admin-ink hover:bg-admin-surface disabled:opacity-50 disabled:cursor-not-allowed transition"
                 >
                   Prev
                 </button>
-                <div className="text-[13px] font-medium text-admin-muted mx-2">{page} / {data.pagination.totalPages || 1}</div>
+                <div className="text-label font-medium text-fg-muted mx-2">{page} / {data.pagination.totalPages || 1}</div>
                 <button 
                   disabled={page >= (data.pagination.totalPages || 1)} 
                   onClick={() => setPage(p => p + 1)} 
-                  className="px-3 py-1.5 rounded-[8px] border border-admin-line bg-white text-[13px] font-medium text-admin-ink hover:bg-admin-surface disabled:opacity-50 disabled:cursor-not-allowed transition"
+                  className="px-3 py-1.5 rounded-control border border-admin-line bg-white text-[13px] font-medium text-admin-ink hover:bg-admin-surface disabled:opacity-50 disabled:cursor-not-allowed transition"
                 >
                   Next
                 </button>
@@ -423,7 +457,7 @@ export function ScenariosPage({ kind }: Props) {
 
       {!isLoading && !isError && viewMode === "cards" && (
          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-           <div className="bg-white p-6 rounded-[20px] shadow-sm border border-admin-line">
+           <div className="bg-white p-6 rounded-module shadow-sm border border-admin-line">
              <p className="text-admin-muted text-[13px]">Card view available on mobile devices.</p>
            </div>
          </div>
@@ -448,4 +482,19 @@ export function ScenariosPage({ kind }: Props) {
       )}
     </div>
   );
+}
+
+/** Relative date presets for the Scenarios toolbar chips. Days are resolved in
+ *  Europe/London so a late-evening click doesn't roll the range into tomorrow. */
+const RANGE_PRESETS: Array<{ label: string; range: () => { from?: string; to?: string } }> = [
+  { label: "All Time", range: () => ({ from: undefined, to: undefined }) },
+  { label: "Today", range: () => ({ from: londonDay(0), to: londonDay(0) }) },
+  { label: "7 Days", range: () => ({ from: londonDay(-6), to: londonDay(0) }) },
+  { label: "30 Days", range: () => ({ from: londonDay(-29), to: londonDay(0) }) }
+];
+
+function londonDay(offset: number): string {
+  const date = new Date();
+  date.setDate(date.getDate() + offset);
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/London" }).format(date);
 }

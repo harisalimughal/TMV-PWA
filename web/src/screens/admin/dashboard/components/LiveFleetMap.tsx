@@ -1,3 +1,7 @@
+/* Leaflet's stylesheet is imported here rather than in the app-wide index.css so it
+   ships inside the lazily loaded admin chunk. It was previously global, meaning 45kB
+   of map CSS was downloaded by every driver for a map only this page renders. */
+import "leaflet/dist/leaflet.css";
 import React, { useState, useEffect, useRef, useMemo } from "react";
 import L from "leaflet";
 import { useQuery } from "@tanstack/react-query";
@@ -377,7 +381,7 @@ export function LiveFleetMap({ jobs, onSelectJob }: Props) {
             <div className="absolute inset-0 z-[300] flex items-center justify-center bg-white/80 backdrop-blur-xs">
               <div className="text-center px-6">
                 <WifiOff className="w-8 h-8 text-admin-muted mx-auto mb-2 opacity-50" />
-                <p className="text-[13px] font-semibold text-admin-ink">No vehicle positions available</p>
+                <p className="text-label font-semibold text-fg">No vehicle positions available</p>
                 <p className="text-[11px] text-admin-muted mt-1">Waiting for GPSLive telemetry...</p>
               </div>
             </div>

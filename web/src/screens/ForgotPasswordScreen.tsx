@@ -1,6 +1,8 @@
 import React, { useState } from "react";
-import { ArrowLeft, Loader2, Mail } from "lucide-react";
-import { forgotPassword } from "../api/auth";
+import { ArrowLeft, Mail } from "lucide-react";
+import { forgotPassword, type ApiError } from "../api/auth";
+import { Alert, Button, Field, Input } from "../ui";
+import { AuthBrand, AuthHeading, AuthLayout } from "./auth/AuthKit";
 
 interface ForgotPasswordScreenProps {
   onBack: () => void;
@@ -24,77 +26,66 @@ export function ForgotPasswordScreen({ onBack }: ForgotPasswordScreenProps) {
     try {
       await forgotPassword(email.trim());
       setSent(true);
-    } catch (err: any) {
-      setError(err?.message || "Couldn't send the reset link. Try again.");
+    } catch (err) {
+      setError((err as ApiError)?.message || "Couldn't send the reset link. Try again.");
     } finally {
       setSubmitting(false);
     }
   }
 
   return (
-    <div className="h-screen-safe flex flex-col bg-admin-bg text-admin-ink pt-safe pb-safe pl-safe pr-safe">
-      <div className="px-4 pt-4">
-        <button onClick={onBack} className="flex items-center gap-1.5 text-sm text-admin-muted hover:text-admin-ink py-2">
-          <ArrowLeft className="w-4 h-4" />
-          Back to sign in
-        </button>
-      </div>
+    <AuthLayout>
+      <button
+        type="button"
+        onClick={onBack}
+        className="-ml-2 mb-4 inline-flex items-center gap-1.5 rounded-control px-2 py-2 text-label font-medium text-fg-muted hover:bg-surface-sunken hover:text-fg"
+      >
+        <ArrowLeft className="size-[18px]" />
+        Sign in
+      </button>
 
-      <div className="flex-1 flex flex-col justify-center px-6">
-        <div className="w-full max-w-sm mx-auto">
-          <div className="flex flex-col items-center gap-3 mb-8">
-            <div className="w-20 h-20 rounded-2xl bg-white border border-admin-line p-2 shadow-elevated flex items-center justify-center">
-              <img src="/tmv-logo.png" alt="The Man Van" className="w-full h-full object-contain" />
-            </div>
-            <h1 className="text-xl font-bold">Reset your password</h1>
-            <p className="text-sm text-admin-muted text-center">
-              Enter your email and we'll send you a link to set a new password.
-            </p>
-          </div>
+      <AuthBrand />
+      <AuthHeading
+        title="Reset your password"
+        hint="Enter your email and we'll send a link to set a new one."
+      />
 
-          {sent ? (
-            <div className="text-sm text-admin-status-green bg-admin-status-green-bg border border-admin-status-green/20 rounded-lg px-4 py-3 text-center">
-              If that email has a driver account, we've sent a password reset link. Check your inbox.
-            </div>
-          ) : (
-            <form onSubmit={handleSubmit} className="flex flex-col gap-4" noValidate>
-              <label className="flex flex-col gap-1.5">
-                <span className="text-xs font-medium text-admin-ink-2 pl-1">Email</span>
-                <div className="relative">
-                  <Mail className="w-4 h-4 text-admin-muted absolute left-3.5 top-1/2 -translate-y-1/2" />
-                  <input
-                    type="email"
-                    inputMode="email"
-                    autoComplete="username"
-                    autoCapitalize="none"
-                    autoCorrect="off"
-                    value={email}
-                    onChange={e => setEmail(e.target.value)}
-                    disabled={submitting}
-                    placeholder="you@themanvan.co.uk"
-                    className="w-full rounded-xl bg-white border border-admin-line pl-10 pr-4 py-3 text-sm placeholder:text-admin-muted/60 focus:outline-none focus:border-brand disabled:opacity-50"
-                  />
-                </div>
-              </label>
-
-              {error && (
-                <div className="text-sm text-admin-status-red bg-admin-status-red-bg border border-admin-status-red/20 rounded-lg px-3 py-2">
-                  {error}
-                </div>
-              )}
-
-              <button
-                type="submit"
-                disabled={submitting}
-                className="mt-2 flex items-center justify-center gap-2 rounded-xl bg-brand hover:bg-brand-dark active:bg-brand-dark transition-colors py-3.5 text-sm font-semibold text-white disabled:opacity-60"
-              >
-                {submitting && <Loader2 className="w-4 h-4 animate-spin" />}
-                {submitting ? "Sending…" : "Send reset link"}
-              </button>
-            </form>
-          )}
+      {sent ? (
+        <div className="flex flex-col gap-4">
+          <Alert tone="success" title="Check your inbox">
+            If that email has a driver account, a reset link is on its way.
+          </Alert>
+          <Button variant="secondary" size="lg" fullWidth onClick={onBack}>
+            Back to sign in
+          </Button>
         </div>
-      </div>
-    </div>
+      ) : (
+        <form onSubmit={handleSubmit} className="flex flex-col gap-4" noValidate>
+          <Field label="Email">
+            {p => (
+              <Input
+                {...p}
+                type="email"
+                inputMode="email"
+                autoComplete="username"
+                autoCapitalize="none"
+                autoCorrect="off"
+                prefix={<Mail />}
+                value={email}
+                onChange={e => setEmail(e.target.value)}
+                disabled={submitting}
+                placeholder="you@themanvan.co.uk"
+              />
+            )}
+          </Field>
+
+          {error && <Alert tone="danger">{error}</Alert>}
+
+          <Button type="submit" size="lg" fullWidth loading={submitting} className="mt-1">
+            {submitting ? "Sending…" : "Send reset link"}
+          </Button>
+        </form>
+      )}
+    </AuthLayout>
   );
 }
