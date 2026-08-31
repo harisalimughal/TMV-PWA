@@ -7,26 +7,27 @@ interface Props {
 }
 
 export function PaperScenarioReport({ item, kind }: Props) {
+  // The API route (backend/src/admin/dashboard/scenarios.routes.ts) is this project's
+  // own MongoDB-backed shape -- clean top-level fields plus a `photos`/`signature`
+  // pair. `rawRecord` (== the submission's raw form fields, snake_case) is kept only
+  // as a last-resort fallback; the old capitalized "Client Name"/"Photo"-style keys
+  // below are dead weight ported from TMV-Chat-bot's Sheets-backed dashboard and never
+  // match anything here, but are harmless no-ops if a field is ever genuinely absent.
   const raw = item.rawRecord || item;
-  
-  const clientName = item.clientName || raw["Client Name"] || raw["Client Full Name"] || raw["Full client name as on the booking ?"] || "Not recorded";
+
+  const clientName = item.clientName || raw["Client Name"] || raw["Client Full Name"] || "Not recorded";
   const driverInitials = item.driver || raw["Driver"] || "UN";
-  const driverName = raw["Driver Name"] || `${driverInitials} Driver`; 
+  const driverName = raw["Driver Name"] || `${driverInitials} Driver`;
   const timestampStr = item.timestamp || raw["Timestamp"] || raw["Date"] || "";
   const formattedTime = formatLondonDateTime(timestampStr);
   const containerNum = item.containerNumber || raw["Container Number"] || "—";
-  const clientPhone = raw["Client Phone"] || "—";
-  const clientEmail = raw["Client Email"] || "—";
-  const clientPresent = raw["Client Present"] || "—";
-  const address = raw["Address"] || raw["Address as show on the booking ?"] || "Not recorded";
-  const signature = raw["Signature"] || raw["Parking - Liability - Signature:"];
-  
-  // Use public/drive url
-  let photoUrl = item.photoUrl || raw["Photo"] || raw["Evidence that the items have been loaded."] || raw["Parking restrictions photos"];
-  if (photoUrl && photoUrl.includes('drive.google.com') && !photoUrl.includes('export=view')) {
-     // rudimentary fix if raw drive url is passed
-     photoUrl = photoUrl;
-  }
+  const clientPhone = item.clientPhone || raw["Client Phone"] || "—";
+  const clientEmail = item.clientEmail || raw["Client Email"] || "—";
+  const clientPresent = item.clientPresent || raw["Client Present"] || "—";
+  const address = item.address || raw["Address"] || "Not recorded";
+  const signatureUrl: string | undefined = item.signature?.thumbUrl || raw["Signature"];
+
+  const photos: Array<{ fileId: string; thumbUrl: string }> = item.photos || [];
 
   const titleMap: Record<string, string> = {
     checkin: "Storage Check-in",
@@ -114,19 +115,32 @@ export function PaperScenarioReport({ item, kind }: Props) {
           </div>
         )}
 
-        {/* PHOTO (Dominant, up to 50vh) */}
-        {photoUrl && (
+        {/* PHOTOS -- one dominant when there's just one, a grid otherwise */}
+        {photos.length > 0 && (
           <div className="flex flex-col mb-6">
             <div className="text-[13px] font-semibold text-[#8A8A8A] mb-3">
-              Submitted Image / Evidence
+              Submitted Image{photos.length > 1 ? "s" : ""} / Evidence
             </div>
-            <div className="flex items-center justify-center border border-admin-line rounded-card p-2 shadow-sm bg-[#FAFAFA] h-[45vh]">
-              <img 
-                src={photoUrl.startsWith('http') ? photoUrl : '/placeholder.png'} 
-                alt="Evidence" 
-                className="max-w-[90%] max-h-full object-contain rounded-card"
-              />
-            </div>
+            {photos.length === 1 ? (
+              <div className="flex items-center justify-center border border-admin-line rounded-card p-2 shadow-sm bg-[#FAFAFA] h-[45vh]">
+                <img
+                  src={photos[0].thumbUrl}
+                  alt="Evidence"
+                  className="max-w-[90%] max-h-full object-contain rounded-card"
+                />
+              </div>
+            ) : (
+              <div className="grid grid-cols-3 gap-3">
+                {photos.map((p, i) => (
+                  <div
+                    key={p.fileId || i}
+                    className="aspect-square flex items-center justify-center border border-admin-line rounded-card p-1 shadow-sm bg-[#FAFAFA]"
+                  >
+                    <img src={p.thumbUrl} alt={`Evidence ${i + 1}`} className="max-w-full max-h-full object-contain rounded-card" />
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
 
@@ -177,8 +191,8 @@ export function PaperScenarioReport({ item, kind }: Props) {
             </p>
             <div className="text-[12px] font-semibold text-[#8A8A8A] mb-2">Client Signature:</div>
             <div className="w-full h-[120px] border border-admin-line rounded-card bg-white p-4 shadow-sm flex items-center justify-center">
-              {signature ? (
-                <img src={signature} alt="Signature" className="max-w-full max-h-full object-contain mix-blend-multiply" />
+              {signatureUrl ? (
+                <img src={signatureUrl} alt="Signature" className="max-w-full max-h-full object-contain mix-blend-multiply" />
               ) : (
                 <span className="text-[#8A8A8A] text-[12px]">No signature provided</span>
               )}

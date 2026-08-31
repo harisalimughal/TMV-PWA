@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { Camera, ImagePlus, Loader2, X } from "lucide-react";
+import { Camera, Loader2, X } from "lucide-react";
 import { compressAll, formatBytes } from "../lib/image";
 import { haptics } from "../lib/haptics";
 import { cx } from "../ui";
@@ -30,7 +30,6 @@ interface Preview {
  */
 export function PhotoPicker({ label, min = 0, max, onChange, hint }: PhotoPickerProps) {
   const cameraRef = useRef<HTMLInputElement>(null);
-  const libraryRef = useRef<HTMLInputElement>(null);
   const [previews, setPreviews] = useState<Preview[]>([]);
   const [processing, setProcessing] = useState(false);
 
@@ -116,13 +115,13 @@ export function PhotoPicker({ label, min = 0, max, onChange, hint }: PhotoPicker
       )}
 
       {!full && (
-        <div className="flex gap-2.5">
+        <div className="flex justify-center gap-2.5">
           <button
             type="button"
             onClick={() => cameraRef.current?.click()}
             disabled={processing}
             className={cx(
-              "flex min-h-control-lg flex-1 items-center justify-center gap-2 rounded-card text-button",
+              "flex min-h-control-lg w-full items-center justify-center gap-2 rounded-card text-button",
               "bg-brand text-brand-fg shadow-xs transition duration-fast",
               "hover:bg-brand-hover active:scale-[0.985] disabled:opacity-60"
             )}
@@ -133,20 +132,6 @@ export function PhotoPicker({ label, min = 0, max, onChange, hint }: PhotoPicker
               <Camera className="size-[18px]" aria-hidden />
             )}
             {processing ? "Preparing…" : previews.length === 0 ? "Take photo" : "Take another"}
-          </button>
-          {/* Secondary route: a shot already taken, or re-documenting from earlier. */}
-          <button
-            type="button"
-            onClick={() => libraryRef.current?.click()}
-            disabled={processing}
-            aria-label="Choose from photo library"
-            className={cx(
-              "flex min-h-control-lg w-[52px] shrink-0 items-center justify-center rounded-card",
-              "border border-line bg-surface text-fg-subtle shadow-xs transition duration-fast",
-              "hover:bg-surface-sunken active:scale-[0.985] disabled:opacity-60"
-            )}
-          >
-            <ImagePlus className="size-[18px]" aria-hidden />
           </button>
         </div>
       )}
@@ -167,17 +152,6 @@ export function PhotoPicker({ label, min = 0, max, onChange, hint }: PhotoPicker
         onChange={e => {
           void handleFiles(e.target.files);
           e.target.value = ""; // lets the same file be picked twice in a row
-        }}
-      />
-      <input
-        ref={libraryRef}
-        type="file"
-        accept="image/*"
-        multiple={max > 1}
-        className="hidden"
-        onChange={e => {
-          void handleFiles(e.target.files);
-          e.target.value = "";
         }}
       />
     </section>

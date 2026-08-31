@@ -23,9 +23,9 @@ export interface PhotoUploaderProps {
 
 /**
  * The photo-capture step, presented consistently everywhere it appears (arrival,
- * van loaded, empty van). Section label + live count from <PhotoPicker>, a big
- * primary "Take photo" action with a smaller library picker beside it, previews
- * with remove controls, plus an upload progress bar and an inline error slot. The
+ * van loaded, empty van). Section label + live count from <PhotoPicker>, a single
+ * full-width "Take photo" action (camera only, no gallery picker), previews with
+ * remove controls, plus an upload progress bar and an inline error slot. The
  * submit button is NOT here — it's docked at the bottom of the screen.
  */
 export function PhotoUploader({
