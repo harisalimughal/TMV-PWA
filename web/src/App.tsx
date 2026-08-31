@@ -74,6 +74,26 @@ function resetTokenFromUrl(): string | null {
 }
 
 /**
+ * /admin only means anything on the dashboard domain (see isAdmin in App() below) or
+ * on localhost for local dev -- see the comment there. Anywhere else, chiefly
+ * chat.themanvan.co.uk, it used to silently fall through to the ordinary driver app
+ * rendered under a misleading /admin URL, with no admin functionality behind it at
+ * all. Redirected to "/" before React ever mounts, so nothing renders under that path.
+ */
+(() => {
+  try {
+    if (typeof window === "undefined") return;
+    const { hostname, pathname } = window.location;
+    const onAdminPath = pathname === "/admin" || pathname === "/admin/";
+    if (onAdminPath && hostname !== "dashboard.themanvan.co.uk" && hostname !== "localhost") {
+      window.location.replace("/");
+    }
+  } catch {
+    /* no-op */
+  }
+})();
+
+/**
  * Manifest app-shortcut landing (?tab=jobs|storage|profile). Captured once at module
  * load — before React mounts — and the param is stripped immediately, so a
  * StrictMode double-mount can't lose it mid-session-check.
