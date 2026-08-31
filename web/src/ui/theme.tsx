@@ -8,8 +8,9 @@ import React, { createContext, useCallback, useContext, useEffect, useMemo, useS
  * `color-scheme` onto <html> and keeps <meta name="theme-color"> in sync; an inline
  * script in index.html does the same before first paint so there is no flash.
  *
- * First visit defaults to "system" — the OS preference is honoured. The choice is
- * persisted and synced across tabs via the `storage` event.
+ * First visit defaults to LIGHT — the app is a light-theme product; dark is opt-in.
+ * "system" is still a choice the user can make, but it is never the default. The
+ * choice is persisted and synced across tabs via the `storage` event.
  */
 
 export type ThemePreference = "light" | "dark" | "system";
@@ -35,7 +36,8 @@ function readStoredPreference(): ThemePreference {
   } catch {
     // localStorage can throw in private modes — fall through to the default.
   }
-  return "system";
+  // Default is light. A user who wants OS-following must pick "system" explicitly.
+  return "light";
 }
 
 function systemPrefersDark(): boolean {

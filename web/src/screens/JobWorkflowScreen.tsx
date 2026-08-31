@@ -101,7 +101,7 @@ export function JobWorkflowScreen({ jobId, onBack }: JobWorkflowScreenProps) {
   // screen -- and with it BOTH the StepBody (the inputs) and the StepDock (the submit
   // button, which reads `formState` to decide whether it's still blocked). Without
   // this the docked button stayed frozen at whatever it was on first render: take the
-  // arrival photo and "Upload photo" never woke up.
+  // arrival photo and "Send photo" never woke up.
   const [, setFormVersion] = useState(0);
   const bumpForm = useCallback(() => setFormVersion(v => v + 1), []);
 
@@ -811,11 +811,11 @@ function StepDock({
           >
             {busy
               ? uploadProgress !== null
-                ? `Uploading ${Math.round(uploadProgress * 100)}%`
-                : "Uploading…"
+                ? `Sending ${Math.round(uploadProgress * 100)}%`
+                : "Sending…"
               : formState.photos.length > 1
-                ? `Upload ${formState.photos.length} photos`
-                : "Upload photo"}
+                ? `Send ${formState.photos.length} photos`
+                : "Send photo"}
           </Button>
         </BottomActionBar>
       );

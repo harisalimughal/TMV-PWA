@@ -1,8 +1,9 @@
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Camera, Loader2, X } from "lucide-react";
 import { compressAll, formatBytes } from "../lib/image";
 import { haptics } from "../lib/haptics";
 import { cx } from "../ui";
+import { CameraCaptureModal } from "./camera";
 
 export interface PhotoPickerProps {
   label: string;
@@ -20,18 +21,19 @@ interface Preview {
 }
 
 /**
- * Collects photos and reports the current list up. Used by both the job-workflow
+ * Collects photo evidence and reports the current list up. Used by the job-workflow
  * steps (via PhotoUploader) and the scenario forms.
  *
- * Two behaviours that matter more than they look, unchanged from before:
+ * Every photo is CAPTURED with the device camera — there is no file/library picker.
+ * Two behaviours that matter more than they look, unchanged:
  *
  *  - Files are downscaled before they ever reach the caller (see lib/image.ts).
  *  - Object URLs are revoked on unmount, not just on replace/remove.
  */
 export function PhotoPicker({ label, min = 0, max, onChange, hint }: PhotoPickerProps) {
-  const cameraRef = useRef<HTMLInputElement>(null);
   const [previews, setPreviews] = useState<Preview[]>([]);
   const [processing, setProcessing] = useState(false);
+  const [cameraOpen, setCameraOpen] = useState(false);
 
   // Revoke every URL this component ever created, on unmount.
   const urlsRef = useRef<string[]>([]);
@@ -40,24 +42,20 @@ export function PhotoPicker({ label, min = 0, max, onChange, hint }: PhotoPicker
   }, [previews]);
   useEffect(() => () => urlsRef.current.forEach(URL.revokeObjectURL), []);
 
-  const handleFiles = useCallback(
-    async (fileList: FileList | null) => {
-      if (!fileList?.length) return;
-      setProcessing(true);
-      try {
-        const incoming = Array.from(fileList).slice(0, Math.max(0, max - previews.length));
-        const compressed = await compressAll(incoming);
-        const added = compressed.map(file => ({ file, url: URL.createObjectURL(file) }));
-        const next = [...previews, ...added];
-        setPreviews(next);
-        onChange(next.map(p => p.file));
-        haptics.tap();
-      } finally {
-        setProcessing(false);
-      }
-    },
-    [max, onChange, previews]
-  );
+  async function handleCapture(file: File) {
+    setProcessing(true);
+    try {
+      const [compressed] = await compressAll([file]);
+      const added: Preview = { file: compressed, url: URL.createObjectURL(compressed) };
+      const next = [...previews, added].slice(0, max);
+      setPreviews(next);
+      onChange(next.map(p => p.file));
+      if (next.length >= max) setCameraOpen(false);
+      haptics.tap();
+    } finally {
+      setProcessing(false);
+    }
+  }
 
   function removeAt(index: number) {
     const target = previews[index];
@@ -70,6 +68,7 @@ export function PhotoPicker({ label, min = 0, max, onChange, hint }: PhotoPicker
   const full = previews.length >= max;
   const totalBytes = previews.reduce((sum, p) => sum + p.file.size, 0);
   const met = previews.length >= min;
+  const captureLabel = previews.length === 0 ? "Take photo" : "Take another";
 
   return (
     <section className="flex flex-col gap-3">
@@ -81,7 +80,7 @@ export function PhotoPicker({ label, min = 0, max, onChange, hint }: PhotoPicker
         <span
           className={cx(
             "shrink-0 text-label font-semibold tabular-nums",
-            met ? "text-success" : "text-fg-subtle"
+            met ? "text-success" : "text-fg-subtle",
           )}
         >
           {previews.length}
@@ -115,44 +114,38 @@ export function PhotoPicker({ label, min = 0, max, onChange, hint }: PhotoPicker
       )}
 
       {!full && (
-        <div className="flex justify-center gap-2.5">
-          <button
-            type="button"
-            onClick={() => cameraRef.current?.click()}
-            disabled={processing}
-            className={cx(
-              "flex min-h-control-lg w-full items-center justify-center gap-2 rounded-card text-button",
-              "bg-brand text-brand-fg shadow-xs transition duration-fast",
-              "hover:bg-brand-hover active:scale-[0.985] disabled:opacity-60"
-            )}
-          >
-            {processing ? (
-              <Loader2 className="size-[18px] animate-spin" aria-hidden />
-            ) : (
-              <Camera className="size-[18px]" aria-hidden />
-            )}
-            {processing ? "Preparing…" : previews.length === 0 ? "Take photo" : "Take another"}
-          </button>
-        </div>
+        <button
+          type="button"
+          onClick={() => setCameraOpen(true)}
+          disabled={processing}
+          className={cx(
+            "flex min-h-control-lg w-full items-center justify-center gap-2 rounded-card text-button",
+            "bg-brand text-brand-fg shadow-xs transition duration-fast",
+            "hover:bg-brand-hover active:scale-[0.985] disabled:opacity-60",
+            "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand",
+          )}
+        >
+          {processing ? (
+            <Loader2 className="size-[18px] animate-spin" aria-hidden />
+          ) : (
+            <Camera className="size-[18px]" aria-hidden />
+          )}
+          {processing ? "Preparing…" : captureLabel}
+        </button>
       )}
 
       {totalBytes > 0 && (
         <p className="text-meta text-fg-subtle">
-          {formatBytes(totalBytes)} to upload — photos are shrunk on this phone before sending.
+          {formatBytes(totalBytes)} to send — photos are shrunk on this phone first.
         </p>
       )}
 
-      <input
-        ref={cameraRef}
-        type="file"
-        accept="image/*"
-        capture="environment"
-        multiple={max > 1}
-        className="hidden"
-        onChange={e => {
-          void handleFiles(e.target.files);
-          e.target.value = ""; // lets the same file be picked twice in a row
-        }}
+      <CameraCaptureModal
+        open={cameraOpen}
+        onClose={() => setCameraOpen(false)}
+        onCapture={file => void handleCapture(file)}
+        allowMultiple={max > 1}
+        title={`Take ${label.toLowerCase()}`}
       />
     </section>
   );

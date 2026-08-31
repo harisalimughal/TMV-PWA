@@ -15,8 +15,8 @@ import { useSyncExternalStore } from "react";
 
 const KEY = "tmv-driver-avatar";
 const MAX_DIMENSION = 320;
-export const MAX_AVATAR_BYTES = 5 * 1024 * 1024;
-export const ACCEPTED_AVATAR_TYPES = ["image/jpeg", "image/png", "image/webp"];
+/** Sanity cap on a camera frame before it's downscaled to a data URL. */
+export const MAX_AVATAR_BYTES = 15 * 1024 * 1024;
 
 const listeners = new Set<() => void>();
 

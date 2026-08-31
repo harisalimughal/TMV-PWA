@@ -1,56 +1,49 @@
-import React, { useRef, useState } from "react";
+import React, { useState } from "react";
 import { AlertTriangle, Camera, Loader2, Trash2 } from "lucide-react";
 import { Avatar } from "../ui";
-import {
-  ACCEPTED_AVATAR_TYPES,
-  MAX_AVATAR_BYTES,
-  fileToAvatarDataUrl
-} from "../lib/profile";
+import { MAX_AVATAR_BYTES, fileToAvatarDataUrl } from "../lib/profile";
+import { CameraCaptureModal } from "./camera";
 
 export interface ProfilePhotoUploaderProps {
   name: string;
-  /** The effective photo to show — a pending pick, or the saved one, or null. */
+  /** The effective photo to show — a pending capture, or the saved one, or null. */
   value: string | null;
   /** True once `value` differs from what is saved (drives the Remove affordance). */
   dirty: boolean;
-  /** Fires with a downscaled data URL on pick, or null on remove. */
+  /** Fires with a downscaled data URL on capture, or null on remove. */
   onChange: (next: string | null) => void;
   disabled?: boolean;
 }
 
 /**
- * Choose / preview / remove the driver's profile photo. The chosen file is validated
- * for type and size, downscaled on-device, and handed up as a data URL — it never
- * leaves this device (see lib/profile.ts). Selection is instantly previewed; the
- * parent's Save commits it.
+ * Take / preview / remove the driver's profile photo.
+ *
+ * The photo is CAPTURED with the device camera — there is no file/library picker.
+ * The captured frame is downscaled on-device and handed up as a data URL; it never
+ * leaves this device (see lib/profile.ts). The parent's Save commits it.
  */
 export function ProfilePhotoUploader({
   name,
   value,
   dirty,
   onChange,
-  disabled = false
+  disabled = false,
 }: ProfilePhotoUploaderProps) {
-  const inputRef = useRef<HTMLInputElement>(null);
   const [processing, setProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [cameraOpen, setCameraOpen] = useState(false);
 
-  async function handleFile(file: File | undefined) {
-    if (!file) return;
+  async function handleCapture(file: File) {
     setError(null);
-    if (!ACCEPTED_AVATAR_TYPES.includes(file.type)) {
-      setError("Choose a JPEG, PNG or WebP image.");
-      return;
-    }
     if (file.size > MAX_AVATAR_BYTES) {
-      setError("That image is over 5 MB. Choose a smaller one.");
+      setError("That photo is too large. Try again.");
       return;
     }
     setProcessing(true);
     try {
       onChange(await fileToAvatarDataUrl(file));
     } catch {
-      setError("Couldn't read that image. Try another.");
+      setError("Couldn't process that photo. Try again.");
     } finally {
       setProcessing(false);
     }
@@ -74,11 +67,11 @@ export function ProfilePhotoUploader({
           <button
             type="button"
             disabled={disabled || processing}
-            onClick={() => inputRef.current?.click()}
-            className="inline-flex min-h-[40px] items-center gap-2 rounded-control border border-line bg-surface px-3.5 text-button text-fg transition-colors hover:bg-surface-sunken disabled:opacity-50"
+            onClick={() => setCameraOpen(true)}
+            className="inline-flex min-h-[40px] items-center gap-2 rounded-control border border-line bg-surface px-3.5 text-button text-fg transition-colors hover:bg-surface-sunken disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
           >
             <Camera className="size-4" aria-hidden />
-            {value ? "Change photo" : "Add photo"}
+            {value ? "Retake profile photo" : "Take profile photo"}
           </button>
           {canRemove && (
             <button
@@ -96,7 +89,7 @@ export function ProfilePhotoUploader({
           )}
         </div>
         <p className="text-helper text-fg-subtle">
-          JPEG, PNG or WebP, up to 5&nbsp;MB. Saved on this device.
+          Taken with your camera. Saved on this device.
         </p>
         {error && (
           <p className="flex items-center gap-1.5 text-helper text-danger" role="alert">
@@ -106,15 +99,11 @@ export function ProfilePhotoUploader({
         )}
       </div>
 
-      <input
-        ref={inputRef}
-        type="file"
-        accept={ACCEPTED_AVATAR_TYPES.join(",")}
-        className="hidden"
-        onChange={e => {
-          void handleFile(e.target.files?.[0]);
-          e.target.value = "";
-        }}
+      <CameraCaptureModal
+        open={cameraOpen}
+        onClose={() => setCameraOpen(false)}
+        onCapture={file => void handleCapture(file)}
+        title="Take profile photo"
       />
     </div>
   );

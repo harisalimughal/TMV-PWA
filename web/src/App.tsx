@@ -8,6 +8,7 @@ import { JobListScreen } from "./screens/JobListScreen";
 import { JobWorkflowScreen } from "./screens/JobWorkflowScreen";
 import { ScenarioFormScreen } from "./screens/ScenarioFormScreen";
 import { AccountSettingsScreen } from "./screens/AccountSettingsScreen";
+import { PwaSettingsScreen } from "./screens/pwa-settings/PwaSettingsScreen";
 import { StorageHomeScreen } from "./screens/StorageHomeScreen";
 import { StorageCompletionScreen, type StorageSummary } from "./screens/StorageCompletionScreen";
 import { logout } from "./api/auth";
@@ -15,6 +16,7 @@ import { setUnauthorizedHandler } from "./lib/http";
 import { startOutboxSync } from "./lib/outbox";
 import { AppLayout, type TabId } from "./app/AppLayout";
 import { DevicePreview } from "./app/DevicePreview";
+import { UpdateBanner } from "./app/UpdateBanner";
 import { ConfirmDialog } from "./ui";
 import { useToast } from "./components/ui/Toast";
 
@@ -47,6 +49,7 @@ type View =
   | { name: "storage-home"; driver: DriverProfile }
   | { name: "settings"; driver: DriverProfile }
   // ---- drill-in flows (own the whole screen, no tab chrome) -------------------
+  | { name: "pwa-settings"; driver: DriverProfile }
   | { name: "job"; driver: DriverProfile; jobId: string }
   | { name: "storage-form"; driver: DriverProfile; scenario: "checkin" | "checkout" }
   // The confirmation screen after a storage form is recorded. Only ever reached
@@ -69,6 +72,24 @@ function resetTokenFromUrl(): string | null {
   if (window.location.pathname !== "/reset-password") return null;
   return new URLSearchParams(window.location.search).get("token");
 }
+
+/**
+ * Manifest app-shortcut landing (?tab=jobs|storage|profile). Captured once at module
+ * load — before React mounts — and the param is stripped immediately, so a
+ * StrictMode double-mount can't lose it mid-session-check.
+ */
+const SHORTCUT_TAB: string | null = (() => {
+  try {
+    if (typeof window === "undefined") return null;
+    const tab = new URLSearchParams(window.location.search).get("tab");
+    if (tab && window.location.pathname === "/") {
+      window.history.replaceState({}, "", "/");
+    }
+    return tab;
+  } catch {
+    return null;
+  }
+})();
 
 function FullScreenSpinner({ label }: { label: string }) {
   return (
@@ -142,7 +163,19 @@ export function App() {
       return;
     }
     fetchSession()
-      .then(driver => setView(driver ? { name: "jobs", driver } : { name: "login" }))
+      .then(driver => {
+        if (!driver) {
+          setView({ name: "login" });
+          return;
+        }
+        setView(
+          SHORTCUT_TAB === "storage"
+            ? { name: "storage-home", driver }
+            : SHORTCUT_TAB === "profile"
+              ? { name: "settings", driver }
+              : { name: "jobs", driver }
+        );
+      })
       .catch(() => setView({ name: "login" }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAdmin]);
@@ -210,7 +243,19 @@ export function App() {
       break;
 
     case "settings":
-      screen = <AccountSettingsScreen driver={view.driver} onLogout={() => setConfirmLogout(true)} />;
+      screen = (
+        <AccountSettingsScreen
+          driver={view.driver}
+          onLogout={() => setConfirmLogout(true)}
+          onOpenPwaSettings={() => setView({ name: "pwa-settings", driver: view.driver })}
+        />
+      );
+      break;
+
+    case "pwa-settings":
+      screen = (
+        <PwaSettingsScreen onBack={() => setView({ name: "settings", driver: view.driver })} />
+      );
       break;
 
     case "storage-home":
@@ -307,6 +352,7 @@ export function App() {
   return (
     <DevicePreview>
       {framed}
+      <UpdateBanner />
       <ConfirmDialog
         open={confirmLogout}
         onClose={() => setConfirmLogout(false)}

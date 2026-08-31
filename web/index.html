@@ -13,17 +13,19 @@
     <meta name="theme-color" content="#FFFFFF" />
     <meta name="color-scheme" content="light dark" />
     <meta name="description" content="The Man Van driver app - jobs, evidence photos and customer sign-off." />
+    <link rel="icon" href="/tmv-logo.png" />
 
-    <!-- Apply the theme before first paint so there is no flash. "dark" / "light"
-         are explicit; anything else (unset, "system") follows the OS. The React
-         ThemeProvider (src/ui/theme.tsx) takes over and keeps this in sync. -->
+    <!-- Apply the theme before first paint so there is no flash. The app defaults to
+         LIGHT: only an explicit "dark" choice, or "system" while the OS is dark,
+         resolves to dark. The React ThemeProvider (src/ui/theme.tsx) takes over and
+         keeps this in sync. -->
     <script>
       (function () {
         try {
           var pref = localStorage.getItem("tmv-theme");
           var dark =
             pref === "dark" ||
-            ((!pref || pref === "system") &&
+            (pref === "system" &&
               window.matchMedia &&
               window.matchMedia("(prefers-color-scheme: dark)").matches);
           var theme = dark ? "dark" : "light";
@@ -34,6 +36,26 @@
         } catch (e) {
           /* no-op: falls back to the :root (light) tokens */
         }
+      })();
+    </script>
+
+    <!-- Capture `beforeinstallprompt` before the app bundle executes: Chromium can
+         fire it during initial load, earlier than React mounts. The event is stashed
+         so usePwaInstall() can offer a working Install button; `appinstalled` clears
+         it. iOS/desktop Safari never fire this and fall back to guidance. -->
+    <script>
+      (function () {
+        window.__tmvInstallPrompt = window.__tmvInstallPrompt || null;
+        window.addEventListener("beforeinstallprompt", function (e) {
+          e.preventDefault();
+          window.__tmvInstallPrompt = e;
+          window.dispatchEvent(new Event("tmv:installprompt"));
+        });
+        window.addEventListener("appinstalled", function () {
+          window.__tmvInstallPrompt = null;
+          window.__tmvInstalled = true;
+          window.dispatchEvent(new Event("tmv:appinstalled"));
+        });
       })();
     </script>
 

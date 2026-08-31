@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { App } from "./App";
 import { ThemeProvider } from "./ui/theme";
 import { ToastProvider } from "./components/ui/Toast";
+import { initServiceWorker } from "./lib/pwa/registration";
 import "./index.css";
 
 const queryClient = new QueryClient({
@@ -29,6 +30,10 @@ async function bootstrap() {
     const { installMockApi } = await import("./mocks/install");
     installMockApi();
   }
+
+  // Register the service worker early (production only — there is no dev SW). The
+  // call is idempotent; the PWA Settings hooks also ensure it.
+  if (import.meta.env.PROD) initServiceWorker();
 
   ReactDOM.createRoot(document.getElementById("root")!).render(
     <React.StrictMode>

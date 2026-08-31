@@ -129,6 +129,32 @@ export function seedStore(): MockStore {
       bookedFinish: iso(2, 11, 0),
       status: "READY",
       currentState: "READY"
+    }),
+    makeJob({
+      jobId: "10238",
+      customerName: "Aisha Khan",
+      customerPhone: "+44 7700 900205",
+      pickup: "14 Canal Street, Manchester M1 3HE",
+      dropoff: "9 Vernon Road, Leeds LS6 1AA",
+      crewSize: 2,
+      basePrice: 310,
+      bookedStart: iso(1, 9, 0),
+      bookedFinish: iso(1, 12, 30),
+      status: "READY",
+      currentState: "READY"
+    }),
+    makeJob({
+      jobId: "10245",
+      customerName: "Marco Rossi",
+      customerPhone: "+44 7700 900206",
+      pickup: "2 Harbour View, Brighton BN1 1AA",
+      dropoff: "31 Millers Way, Oxford OX1 2AB",
+      crewSize: 3,
+      basePrice: 480,
+      bookedStart: iso(3, 14, 0),
+      bookedFinish: iso(3, 18, 0),
+      status: "READY",
+      currentState: "READY"
     })
   ];
 
@@ -142,7 +168,7 @@ export function seedStore(): MockStore {
       new URLSearchParams(window.location.search).get("mock") === "loggedout",
     driver: mockDriver,
     jobs: byId,
-    buckets: { today: ["10231", "10232"], past: ["10228"], next: ["10240"] },
+    buckets: { today: ["10231", "10232"], past: ["10228"], next: ["10238", "10240", "10245"] },
     activity: {}
   };
 }

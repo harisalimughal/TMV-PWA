@@ -23,10 +23,10 @@ export interface PhotoUploaderProps {
 
 /**
  * The photo-capture step, presented consistently everywhere it appears (arrival,
- * van loaded, empty van). Section label + live count from <PhotoPicker>, a single
- * full-width "Take photo" action (camera only, no gallery picker), previews with
- * remove controls, plus an upload progress bar and an inline error slot. The
- * submit button is NOT here — it's docked at the bottom of the screen.
+ * van loaded, empty van). Section label + live count from <PhotoPicker>, a big
+ * primary "Take photo" action that opens the in-app camera (no file/library
+ * picker), previews with remove controls, plus a send progress bar and an inline
+ * error slot. The submit button is NOT here — it's docked at the bottom of the screen.
  */
 export function PhotoUploader({
   label,
@@ -54,7 +54,7 @@ export function PhotoUploader({
       {submitting && progress !== null && (
         <div className="flex flex-col gap-1.5" role="status" aria-live="polite">
           <div className="flex items-center justify-between text-helper font-medium text-fg-muted">
-            <span>Uploading…</span>
+            <span>Sending…</span>
             <span className="tabular-nums">{Math.round(progress * 100)}%</span>
           </div>
           <div className="h-2 overflow-hidden rounded-pill bg-line">

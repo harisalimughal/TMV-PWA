@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { ArrowLeft, ChevronRight } from "lucide-react";
+import { ArrowLeft, ChevronRight, Smartphone } from "lucide-react";
 import type { DriverProfile } from "../api/auth";
 import { AppShell } from "../app/AppShell";
 import { Button, IconButton } from "../ui";
@@ -11,6 +11,8 @@ import { clearLocalAvatar, setLocalAvatar, useLocalAvatar } from "../lib/profile
 interface AccountSettingsScreenProps {
   driver: DriverProfile;
   onLogout: () => void;
+  /** Opens the PWA Settings drill-in (install, updates, offline, notifications). */
+  onOpenPwaSettings: () => void;
   /** Present only when reached as a drill-in; the Profile tab omits it. */
   onBack?: () => void;
 }
@@ -20,7 +22,12 @@ interface AccountSettingsScreenProps {
  * lib/profile.ts); name and email are read-only because the production API
  * exposes neither an avatar field nor a profile-update endpoint.
  */
-export function AccountSettingsScreen({ driver, onLogout, onBack }: AccountSettingsScreenProps) {
+export function AccountSettingsScreen({
+  driver,
+  onLogout,
+  onOpenPwaSettings,
+  onBack
+}: AccountSettingsScreenProps) {
   const committed = useLocalAvatar();
   const toast = useToast();
 
@@ -88,6 +95,22 @@ export function AccountSettingsScreen({ driver, onLogout, onBack }: AccountSetti
         <ThemeToggle />
         <p className="pt-2.5 text-helper text-fg-subtle">
           System follows your device setting.
+        </p>
+
+        <h2 className="pb-2 pt-7 text-card text-fg">App</h2>
+        <button
+          type="button"
+          onClick={onOpenPwaSettings}
+          className="flex w-full items-center justify-between gap-3 border-y border-line py-3.5 text-left transition-colors hover:bg-surface-sunken"
+        >
+          <span className="flex items-center gap-3">
+            <Smartphone className="size-[18px] shrink-0 text-fg-subtle" aria-hidden />
+            <span className="text-body font-medium text-fg">PWA Settings</span>
+          </span>
+          <ChevronRight className="size-4 shrink-0 text-fg-subtle" aria-hidden />
+        </button>
+        <p className="pt-2.5 text-helper text-fg-subtle">
+          Install the app, check for updates, and manage offline, notifications and storage.
         </p>
 
         <h2 className="pb-2 pt-7 text-card text-fg">Personal details</h2>

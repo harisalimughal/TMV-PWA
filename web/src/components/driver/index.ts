@@ -24,6 +24,12 @@ export type { ProfileMenuProps } from "./ProfileMenu";
 export { FeaturedJobCard } from "./FeaturedJobCard";
 export type { FeaturedJobCardProps } from "./FeaturedJobCard";
 
+export { JobFilterBar } from "./JobFilterBar";
+export type { JobFilterBarProps } from "./JobFilterBar";
+
+export { DatePickerSheet } from "./DatePickerSheet";
+export type { DatePickerSheetProps } from "./DatePickerSheet";
+
 export { JobRoute } from "./JobRoute";
 export type { JobRouteProps } from "./JobRoute";
 
@@ -51,8 +57,11 @@ export type { WarningNoticeProps } from "./WarningNotice";
 export { RouteCard } from "./RouteCard";
 export type { RouteCardProps } from "./RouteCard";
 
-export { StorageActions } from "./StorageActions";
-export type { StorageActionsProps } from "./StorageActions";
+export { StorageActionCard } from "./StorageActionCard";
+export type { StorageActionCardProps } from "./StorageActionCard";
+
+export { StorageActivity } from "./StorageActivity";
+export type { StorageActivityProps } from "./StorageActivity";
 
 export { IssueDecision } from "./IssueDecision";
 export type { IssueDecisionProps } from "./IssueDecision";
