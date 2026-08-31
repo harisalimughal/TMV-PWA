@@ -468,6 +468,7 @@ export function ScenariosPage({ kind }: Props) {
       {previewJob && (
         <SubmissionDetailDrawer
           job={previewJob}
+          kind={kind}
           isOpen={!!previewJob}
           onClose={() => setPreviewJob(null)}
           onNavigate={(dir) => {

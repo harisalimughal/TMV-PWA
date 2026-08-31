@@ -212,7 +212,7 @@ export function ParkingLiabilityPage() {
           isOpen={!!selectedSubmission}
           onClose={() => setSelectedSubmission(null)}
           job={selectedSubmission as any}
-          
+          kind="parking"
         />
       )}
     </>

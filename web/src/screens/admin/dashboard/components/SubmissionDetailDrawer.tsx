@@ -2,19 +2,32 @@ import React, { useState } from "react";
 import { X, Download, Eye, Maximize2, ZoomIn, ZoomOut, Check, ChevronLeft, ChevronRight, RefreshCw } from "lucide-react";
 import { IconButton } from "../../../../ui";
 import { PaperDossierReport } from "./PaperDossierReport";
-import { NormalizedJob } from "../types";
+import { PaperScenarioReport } from "./PaperScenarioReport";
+import { NormalizedJob, ScenarioItem } from "../types";
 import { formatLondonDateTime } from "../utils/date";
 
+type ScenarioKind = "checkin" | "checkout" | "parking" | "liability";
+
+const SCENARIO_TITLES: Record<ScenarioKind, string> = {
+  checkin: "Storage Check-in",
+  checkout: "Storage Check-out",
+  parking: "Parking Liability Notice",
+  liability: "Liability Report"
+};
+
 interface Props {
-  job: NormalizedJob;
+  job: NormalizedJob | ScenarioItem;
   isOpen: boolean;
   onClose: () => void;
   onNavigate?: (dir: 'next' | 'prev') => void;
   hasNext?: boolean;
   hasPrev?: boolean;
+  /** Set only for a scenario submission (check-in/out, parking, liability) --
+   *  a NormalizedJob (finished job) has no kind and uses PaperDossierReport instead. */
+  kind?: ScenarioKind;
 }
 
-export function SubmissionDetailDrawer({ job, isOpen, onClose, onNavigate, hasNext, hasPrev }: Props) {
+export function SubmissionDetailDrawer({ job, isOpen, onClose, onNavigate, hasNext, hasPrev, kind }: Props) {
   const [isPreviewing, setIsPreviewing] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [zoom, setZoom] = useState(100);
@@ -23,6 +36,46 @@ export function SubmissionDetailDrawer({ job, isOpen, onClose, onNavigate, hasNe
   const [toast, setToast] = useState<string | null>(null);
 
   if (!isOpen || !job) return null;
+
+  // A scenario submission (check-in/out, parking, liability) has a completely
+  // different shape from a finished job's NormalizedJob -- flat/capitalized raw
+  // fields and a `photos`/`signature` pair instead of `evidenceItems`/`signatureUrl`.
+  // Reading job.* directly (as this component originally did, job-only) left every
+  // field undefined for a scenario item: blank customer details, "No photos
+  // captured" even when photos exist, and a blank PaperDossierReport on Preview/
+  // Download since that report also expects NormalizedJob fields.
+  const isScenario = !!kind;
+  const scenarioItem = job as ScenarioItem & Record<string, any>;
+  const rawRecord: Record<string, any> = isScenario ? (scenarioItem.rawRecord || scenarioItem) : {};
+
+  const displayId = isScenario ? (scenarioItem.id || "—") : (job as NormalizedJob).jobId;
+  const driverInitials = isScenario
+    ? (scenarioItem.driver || rawRecord["Driver"] || "UN")
+    : ((job as NormalizedJob).driverInitials || "UN");
+  const driverName = isScenario
+    ? (rawRecord["Driver Name"] || `${driverInitials} Driver`)
+    : ((job as NormalizedJob).driverName || "Unknown");
+  const customerName = isScenario
+    ? (scenarioItem.clientName || rawRecord["Client Name"] || rawRecord["Client Full Name"] || "Not recorded")
+    : (job as NormalizedJob).customerName;
+
+  const scenarioPhotos = isScenario ? (scenarioItem.photos || []).map((p, i) => ({
+    key: p.fileId || String(i),
+    href: p.thumbUrl,
+    thumbSrc: p.thumbUrl,
+    category: SCENARIO_TITLES[kind!]
+  })) : [];
+  const jobPhotos = !isScenario ? ((job as NormalizedJob).evidenceItems?.filter(e => !!e.fileId) || []).map(p => ({
+    key: p.id,
+    href: p.driveUrl || p.thumbProxyUrl || `/admin/api/jobs/${(job as NormalizedJob).jobId}/photos/${p.fileId}`,
+    thumbSrc: p.thumbProxyUrl || `/admin/api/jobs/${(job as NormalizedJob).jobId}/photos/${p.fileId}`,
+    category: p.category
+  })) : [];
+  const photos = isScenario ? scenarioPhotos : jobPhotos;
+
+  const signatureUrl = isScenario
+    ? (scenarioItem.signature?.thumbUrl || rawRecord["Signature"])
+    : (job as NormalizedJob).signatureUrl;
 
   const showToast = (msg: string) => {
     setToast(msg);
@@ -36,17 +89,22 @@ export function SubmissionDetailDrawer({ job, isOpen, onClose, onNavigate, hasNe
       // Temporarily set document title for nice PDF filename
       const originalTitle = document.title;
       const dateStr = new Date().toISOString().slice(0, 10);
-      document.title = `Job_Completed_${job.jobId}_${job.driverName?.replace(/\\s+/g, '')}_${dateStr}`;
-      
+      const label = isScenario ? SCENARIO_TITLES[kind!].replace(/\s+/g, '') : 'Job_Completed';
+      document.title = `${label}_${displayId}_${(driverName || '').replace(/\s+/g, '')}_${dateStr}`;
+
       window.print();
-      
+
       document.title = originalTitle;
       setIsGeneratingPdf(false);
       showToast("PDF Downloaded");
     }, 800);
   };
 
-  const formattedTime = job.actualFinish ? formatLondonDateTime(job.actualFinish) : (job.bookedStart ? formatLondonDateTime(job.bookedStart) : 'Unknown Time');
+  const formattedTime = isScenario
+    ? formatLondonDateTime(scenarioItem.timestamp || rawRecord["Timestamp"] || rawRecord["Date"])
+    : ((job as NormalizedJob).actualFinish
+        ? formatLondonDateTime((job as NormalizedJob).actualFinish)
+        : ((job as NormalizedJob).bookedStart ? formatLondonDateTime((job as NormalizedJob).bookedStart) : 'Unknown Time'));
 
   const SidebarLeft = () => (
     <div className="w-full lg:w-[300px] lg:flex-shrink-0 border-b lg:border-b-0 lg:border-r border-admin-line bg-white flex flex-col p-6 overflow-y-auto custom-scrollbar relative z-10">
@@ -85,9 +143,9 @@ export function SubmissionDetailDrawer({ job, isOpen, onClose, onNavigate, hasNe
                <div className="absolute -left-[21px] top-1.5 w-2.5 h-2.5 rounded-full bg-admin-brand ring-4 ring-white" />
                <div className="flex items-center gap-2 mb-1">
                  <div className="w-6 h-6 rounded-full bg-admin-brand-soft text-admin-brand font-bold text-[9px] flex items-center justify-center">
-                    {job.driverInitials || 'UN'}
+                    {driverInitials}
                  </div>
-                 <span className="text-[13px] font-bold text-admin-ink">{job.driverName || 'Unknown Driver'}</span>
+                 <span className="text-[13px] font-bold text-admin-ink">{driverName || 'Unknown Driver'}</span>
                </div>
                <span className="text-[13px] text-admin-muted mb-1">submitted the form</span>
                <span className="text-[11px] font-medium text-admin-muted/60">{formattedTime}</span>
@@ -98,44 +156,69 @@ export function SubmissionDetailDrawer({ job, isOpen, onClose, onNavigate, hasNe
     </div>
   );
 
-  const photos = job.evidenceItems?.filter(e => !!e.fileId) || [];
-
   const FormAnswersView = () => (
     <div className="max-w-2xl mx-auto space-y-6 w-full py-6 sm:py-8 px-4 sm:px-6">
       <div className="bg-white rounded-module p-4 sm:p-6 shadow-sm border border-admin-line">
          <label className="text-[13px] font-semibold text-admin-muted block mb-2">Customer & Details</label>
-         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-           <div>
-             <span className="text-[11px] uppercase text-admin-muted font-semibold tracking-wider">Customer Name</span>
-             <div className="text-[14px] font-medium text-admin-ink mt-1">{job.customerName || "N/A"}</div>
+         {isScenario ? (
+           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+             <div>
+               <span className="text-[11px] uppercase text-admin-muted font-semibold tracking-wider">Client Name</span>
+               <div className="text-[14px] font-medium text-admin-ink mt-1">{customerName}</div>
+             </div>
+             {(kind === "checkin" || kind === "checkout") && (
+               <div>
+                 <span className="text-[11px] uppercase text-admin-muted font-semibold tracking-wider">Container Number</span>
+                 <div className="text-[14px] font-medium text-admin-ink mt-1">{scenarioItem.containerNumber || rawRecord["Container Number"] || "—"}</div>
+               </div>
+             )}
+             {kind === "parking" && (
+               <div className="sm:col-span-2">
+                 <span className="text-[11px] uppercase text-admin-muted font-semibold tracking-wider">Address</span>
+                 <div className="text-[14px] font-medium text-admin-ink mt-1">{scenarioItem.address || rawRecord["Address"] || "N/A"}</div>
+               </div>
+             )}
+             {kind === "liability" && (
+               <div className="sm:col-span-2">
+                 <span className="text-[11px] uppercase text-admin-muted font-semibold tracking-wider">Damage Categories</span>
+                 <div className="text-[14px] font-medium text-admin-ink mt-1">{scenarioItem.damageCategories || rawRecord["Damage Categories"] || "—"}</div>
+               </div>
+             )}
            </div>
-           <div>
-             <span className="text-[11px] uppercase text-admin-muted font-semibold tracking-wider">Confirmed By</span>
-             <div className="text-[14px] font-medium text-admin-ink mt-1">{job.clientConfirmedName || "N/A"}</div>
+         ) : (
+           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+             <div>
+               <span className="text-[11px] uppercase text-admin-muted font-semibold tracking-wider">Customer Name</span>
+               <div className="text-[14px] font-medium text-admin-ink mt-1">{(job as NormalizedJob).customerName || "N/A"}</div>
+             </div>
+             <div>
+               <span className="text-[11px] uppercase text-admin-muted font-semibold tracking-wider">Confirmed By</span>
+               <div className="text-[14px] font-medium text-admin-ink mt-1">{(job as NormalizedJob).clientConfirmedName || "N/A"}</div>
+             </div>
+             <div className="sm:col-span-2">
+               <span className="text-[11px] uppercase text-admin-muted font-semibold tracking-wider">Pickup</span>
+               <div className="text-[14px] font-medium text-admin-ink mt-1">{(job as NormalizedJob).pickup || "N/A"}</div>
+             </div>
+             <div className="sm:col-span-2">
+               <span className="text-[11px] uppercase text-admin-muted font-semibold tracking-wider">Dropoff</span>
+               <div className="text-[14px] font-medium text-admin-ink mt-1">{(job as NormalizedJob).dropoff || "N/A"}</div>
+             </div>
            </div>
-           <div className="sm:col-span-2">
-             <span className="text-[11px] uppercase text-admin-muted font-semibold tracking-wider">Pickup</span>
-             <div className="text-[14px] font-medium text-admin-ink mt-1">{job.pickup || "N/A"}</div>
-           </div>
-           <div className="sm:col-span-2">
-             <span className="text-[11px] uppercase text-admin-muted font-semibold tracking-wider">Dropoff</span>
-             <div className="text-[14px] font-medium text-admin-ink mt-1">{job.dropoff || "N/A"}</div>
-           </div>
-         </div>
+         )}
       </div>
 
       <div className="bg-white rounded-module p-4 sm:p-6 shadow-sm border border-admin-line">
          <label className="text-[13px] font-semibold text-admin-muted block mb-4">Evidence that the items have been loaded.</label>
          {photos.length > 0 ? (
            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
-             {photos.map((p, i) => (
-               <a 
-                 key={i} 
-                 href={p.driveUrl || p.thumbProxyUrl || `/admin/api/jobs/${job.jobId}/photos/${p.fileId}`}
+             {photos.map((p) => (
+               <a
+                 key={p.key}
+                 href={p.href}
                  target="_blank" rel="noreferrer"
                  className="aspect-square rounded-card bg-admin-surface overflow-hidden border border-admin-line shadow-sm hover:ring-2 hover:ring-admin-brand/50 transition cursor-pointer block relative group"
                >
-                 <img src={p.thumbProxyUrl || `/admin/api/jobs/${job.jobId}/photos/${p.fileId}`} className="w-full h-full object-cover" alt={p.category} />
+                 <img src={p.thumbSrc} className="w-full h-full object-cover" alt={p.category} />
                  <div className="absolute inset-0 bg-admin-ink/50 opacity-0 group-hover:opacity-100 transition flex items-center justify-center">
                     <Maximize2 className="w-5 h-5 text-white" />
                  </div>
@@ -154,9 +237,9 @@ export function SubmissionDetailDrawer({ job, isOpen, onClose, onNavigate, hasNe
 
       <div className="bg-white rounded-module p-4 sm:p-6 shadow-sm border border-admin-line">
          <label className="text-[13px] font-semibold text-admin-muted block mb-4">Client Signature</label>
-         {job.signatureUrl ? (
+         {signatureUrl ? (
             <div className="border border-admin-line rounded-card p-4 bg-admin-surface max-w-sm flex justify-center">
-              <img src={job.signatureUrl} alt="Signature" className="max-h-24 mix-blend-multiply" />
+              <img src={signatureUrl} alt="Signature" className="max-h-24 mix-blend-multiply" />
             </div>
          ) : (
             <div className="p-8 text-center bg-admin-surface border border-dashed border-admin-line rounded-card max-w-sm">
@@ -191,11 +274,11 @@ export function SubmissionDetailDrawer({ job, isOpen, onClose, onNavigate, hasNe
         <div className="min-h-[72px] bg-white border-b border-admin-line shadow-sm px-3 sm:px-6 py-2 flex flex-wrap items-center justify-between gap-2 shrink-0 relative z-20">
           <div className="flex items-center gap-3 sm:gap-4 min-w-0">
              <div className="w-10 h-10 shrink-0 rounded-full bg-admin-brand-soft text-admin-brand border border-admin-brand/20 flex items-center justify-center font-bold text-[14px]">
-               {job.driverInitials || "UN"}
+               {driverInitials}
              </div>
              <div className="min-w-0">
-               <h2 className="text-card text-fg leading-tight truncate">{job.driverName || "Unknown"}</h2>
-               <div className="text-[12px] text-admin-muted mt-0.5 truncate">{formattedTime}, Job ID: {job.jobId}</div>
+               <h2 className="text-card text-fg leading-tight truncate">{driverName || "Unknown"}</h2>
+               <div className="text-[12px] text-admin-muted mt-0.5 truncate">{formattedTime}, {isScenario ? "Ref" : "Job ID"}: {displayId}</div>
              </div>
           </div>
           <div className="flex items-center gap-2 sm:gap-3">
@@ -240,7 +323,11 @@ export function SubmissionDetailDrawer({ job, isOpen, onClose, onNavigate, hasNe
                     className="w-full max-w-[210mm] relative transition-transform duration-150"
                     style={{ transform: `scale(${zoom / 100})`, transformOrigin: "top center" }}
                   >
-                     <PaperDossierReport job={job} isPreview={true} />
+                     {isScenario ? (
+                       <PaperScenarioReport item={job} kind={kind!} />
+                     ) : (
+                       <PaperDossierReport job={job as NormalizedJob} isPreview={true} />
+                     )}
                   </div>
                   
                   {/* Floating Toolbar */}
@@ -287,7 +374,11 @@ export function SubmissionDetailDrawer({ job, isOpen, onClose, onNavigate, hasNe
           since browsers repeat fixed-position elements identically on every printed
           page instead of letting their content paginate. */}
       <div className="hidden print:block print-content">
-         <PaperDossierReport job={job} isPreview={false} />
+         {isScenario ? (
+           <PaperScenarioReport item={job} kind={kind!} />
+         ) : (
+           <PaperDossierReport job={job as NormalizedJob} isPreview={false} />
+         )}
       </div>
     </div>
   );
