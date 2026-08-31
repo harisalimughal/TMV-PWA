@@ -12,6 +12,7 @@ import { env } from "../../config/env";
 import { EvidenceStatus, EvidenceType } from "../../jobs/job.types";
 import { fromPounds, Pence, pence } from "../../utils/money";
 import { MongoDataset } from "./read";
+import { toThumbnailUrl } from "../../storage/cloudinary";
 import { reconcileFinancials } from "./finance";
 import { calculateDelayMinutes, calculateMinutes, getDelayBand, isTimingTrustworthy, toUtcIso } from "./timezone";
 import { ActivityEntry, EvidenceCategory, EvidenceState, JobException, NormalizedEvidenceItem, NormalizedJob } from "./types";
@@ -187,7 +188,7 @@ function classifyEvidence(
         category, state: "COMPLETED",
         fileId: latest.cloudinaryPublicId,
         driveUrl: latest.cloudinaryUrl,
-        thumbProxyUrl: latest.cloudinaryUrl,
+        thumbProxyUrl: toThumbnailUrl(latest.cloudinaryUrl),
         fileName: latest.fileName,
         contentType: latest.contentType,
         receivedAt: toUtcIso(latest.receivedAt),
@@ -229,7 +230,7 @@ function classifyEvidence(
       id: `sig-${jobId}`,
       category: "Signature", state: "COMPLETED",
       driveUrl: signatureUrl,
-      thumbProxyUrl: signatureUrl,
+      thumbProxyUrl: toThumbnailUrl(signatureUrl),
       provenance: "recorded"
     });
   }
@@ -240,7 +241,7 @@ function classifyEvidence(
       items.push({
         id: `${submission.scenario}-photo-${index}-${jobId}`,
         category: "Documents", state: "COMPLETED",
-        driveUrl: url, thumbProxyUrl: url,
+        driveUrl: url, thumbProxyUrl: toThumbnailUrl(url),
         fileName: `${label} photo ${index + 1}`,
         receivedAt: toUtcIso(submission.submittedAt),
         completedAt: toUtcIso(submission.submittedAt),
@@ -251,7 +252,7 @@ function classifyEvidence(
       items.push({
         id: `${submission.scenario}-signature-${jobId}`,
         category: "Documents", state: "COMPLETED",
-        driveUrl: submission.signatureUrl, thumbProxyUrl: submission.signatureUrl,
+        driveUrl: submission.signatureUrl, thumbProxyUrl: toThumbnailUrl(submission.signatureUrl),
         fileName: `${label} signature`,
         receivedAt: toUtcIso(submission.submittedAt),
         completedAt: toUtcIso(submission.submittedAt),

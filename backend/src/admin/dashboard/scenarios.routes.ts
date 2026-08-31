@@ -1,6 +1,7 @@
 /** Ported from TMV-Chat-bot's dashboard/server/routes/scenarios.route.ts. */
 import { Router } from "express";
 import { listAllScenarioSubmissions, listScenarioSubmissionsByKind, ScenarioSubmissionDoc } from "../../db/scenario.repo";
+import { toThumbnailUrl } from "../../storage/cloudinary";
 
 const VALID_KINDS = new Set(["checkin", "checkout", "parking", "liability"]);
 
@@ -81,8 +82,8 @@ export function dashboardScenariosRoutes(): Router {
           clientEmail: r.fields.client_email || "", containerNumber: r.fields.container_number || "—",
           address: r.fields.address || "", damageCategories: r.fields.damage_categories || "",
           clientPresent: r.fields.client_present || "—", rawRecord: r.fields,
-          photos: r.photoUrls.map(url => ({ fileId: url, thumbUrl: url })),
-          signature: r.signatureUrl ? { fileId: r.signatureUrl, thumbUrl: r.signatureUrl } : null
+          photos: r.photoUrls.map(url => ({ fileId: url, thumbUrl: toThumbnailUrl(url) })),
+          signature: r.signatureUrl ? { fileId: r.signatureUrl, thumbUrl: toThumbnailUrl(r.signatureUrl) } : null
         };
       }).reverse(); // latest events first
 

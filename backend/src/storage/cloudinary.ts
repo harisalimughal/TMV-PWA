@@ -69,6 +69,28 @@ export async function uploadEvidenceImage(
   });
 }
 
+/**
+ * Cloudinary delivery URLs support transformations via a segment inserted right after
+ * `/upload/` -- no extra API call or storage; the CDN transforms and caches the result
+ * on first request. `thumbProxyUrl` (db/mongo.ts normalization, admin/dashboard/
+ * normalize.ts and scenarios.routes.ts) used to just be the same URL as `driveUrl`,
+ * the full-resolution original -- meaning every evidence grid, list thumbnail, and
+ * the admin print/PDF flow all downloaded the same multi-hundred-KB photo regardless
+ * of the tiny size most of them actually render at. That made the print flow
+ * (SubmissionDetailDrawer's waitForPrintImages, web/src/screens/admin/dashboard/
+ * utils/printReady.ts) slow enough on a real connection to occasionally outrun its
+ * own wait timeout and print a still-loading photo as blank.
+ *
+ * w_900 keeps enough resolution to still be legible printed at up to A4 width (the
+ * dossier report shows one photo per page); q_auto/f_auto let Cloudinary pick the
+ * smallest quality/format (WebP/AVIF where the requesting browser supports it) that
+ * still looks right, instead of always shipping the original JPEG at full quality.
+ * A no-op on any URL that isn't a Cloudinary /upload/ delivery URL.
+ */
+export function toThumbnailUrl(url: string): string {
+  return url.replace("/upload/", "/upload/w_900,q_auto,f_auto/");
+}
+
 function errorMessage(error: unknown): string | undefined {
   if (!error) return undefined;
   if (error instanceof Error) return error.message;
