@@ -28,6 +28,7 @@ export function FinishedJobsPage() {
   const [to, setTo] = useState<string | undefined>();
   const [expandedJobId, setExpandedJobId] = useState<string | null>(null);
   const [previewJob, setPreviewJob] = useState<NormalizedJob | null>(null);
+  const [downloadingJobId, setDownloadingJobId] = useState<string | null>(null);
 
   const { data, isLoading, error } = useQuery({
     queryKey: ["jobs", "COMPLETED", page, pageSize, from, to],
@@ -263,12 +264,14 @@ export function FinishedJobsPage() {
                         </td>
                         
                         <td className="px-4 text-center">
-      <FolderActionDropdown 
+      <FolderActionDropdown
         hasFolderUrl={!!job.driveFolderUrl}
+        downloading={downloadingJobId === job.jobId}
         onOpenFolder={() => window.open(job.driveFolderUrl, "_blank")}
         onPreview={() => setPreviewJob(job)}
         onDownload={() => {
           setPreviewJob(job);
+          setDownloadingJobId(job.jobId);
           setTimeout(async () => {
             await waitForPrintImages();
             const originalTitle = document.title;
@@ -276,6 +279,7 @@ export function FinishedJobsPage() {
             document.title = `Job_Completed_${job.jobId}_${job.driverName?.replace(/\s+/g, '')}_${dateStr}`;
             window.print();
             document.title = originalTitle;
+            setDownloadingJobId(null);
           }, 500);
         }}
       />

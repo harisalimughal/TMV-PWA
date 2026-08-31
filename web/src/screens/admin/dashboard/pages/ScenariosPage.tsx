@@ -81,6 +81,7 @@ export function ScenariosPage({ kind }: Props) {
   const [viewMode, setViewMode] = useState<"table" | "cards">("table");
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [previewJob, setPreviewJob] = useState<any | null>(null);
+  const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const [isConfigOpen, setIsConfigOpen] = useState(false);
   const [isMobileOpen, setIsMobileOpen] = useState(false);
 
@@ -398,15 +399,18 @@ export function ScenariosPage({ kind }: Props) {
                         </td>
 
                         <td className="px-4 pr-6 text-center">
-    <FolderActionDropdown 
+    <FolderActionDropdown
       hasFolderUrl={!!(item.folderUrl || item.driveFolderUrl)}
+      downloading={downloadingId === item.id}
       onOpenFolder={() => window.open((item.folderUrl || item.driveFolderUrl), "_blank")}
       onPreview={() => setPreviewJob(item)}
       onDownload={() => {
         setPreviewJob(item);
+        setDownloadingId(item.id);
         setTimeout(async () => {
           await waitForPrintImages();
           window.print();
+          setDownloadingId(null);
         }, 500);
       }}
     />
