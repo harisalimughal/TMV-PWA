@@ -228,63 +228,63 @@ export function NotificationsPage() {
 
         <DateRangePicker from={from} to={to} onChange={(f, t) => { setFrom(f); setTo(t); setPage(1); }} />
 
-        <div className="w-[1px] h-6 bg-admin-line mx-2" />
-
-        <div className="relative flex-1 min-w-[200px]">
-          <Search className="w-4 h-4 text-admin-muted absolute left-3 top-2.5" />
+        <div className="flex-1 min-w-[200px] relative">
+          <Search className="w-4 h-4 text-admin-muted absolute left-3 top-1/2 -translate-y-1/2" />
           <input
             type="text"
-            placeholder="Search Job ID or Customer..."
+            placeholder="Search by customer name or job ID..."
             value={searchQuery}
-            onChange={e => { setSearchQuery(e.target.value); setPage(1); }}
-            className="w-full h-9 pl-9 pr-3 rounded-control border border-admin-line bg-white text-[13px] outline-none focus:border-admin-brand focus:ring-1 focus:ring-admin-brand transition"
+            onChange={(e) => { setSearchQuery(e.target.value); setPage(1); }}
+            className="w-full h-9 pl-9 pr-3 rounded-card bg-admin-surface border border-admin-line text-[13px] text-admin-ink placeholder:text-admin-muted outline-none focus:border-admin-brand transition"
           />
         </div>
-
-        <span className="text-[13px] text-admin-muted font-medium pr-2">
-          {isLoading ? "..." : `${filtered.length} records`}
-        </span>
       </div>
 
+      {/* TABLE CONTENT */}
       {isLoading && (
-        <div className="h-64 bg-white rounded-module border border-admin-line animate-pulse flex items-center justify-center">
+        <div className="p-12 text-center bg-white rounded-module border border-admin-line">
           <span className="text-admin-muted font-medium">Loading notifications...</span>
         </div>
       )}
 
       {error && (
-        <div className="p-8 text-center text-admin-status-red bg-admin-status-red-bg rounded-module border border-admin-status-red/20 shadow-sm">
+        <div className="p-12 text-center bg-white rounded-module border border-admin-status-red/20 text-admin-status-red">
           Failed to load notification logs.
         </div>
       )}
 
-      {!isLoading && !error && (
-        <div className="bg-white rounded-module shadow-[0_4px_20px_rgb(0,0,0,0.03)] border border-admin-line overflow-hidden">
-          <div className="overflow-x-auto custom-scrollbar">
-            <table className="w-full text-left text-[14px] border-collapse whitespace-nowrap">
+      {!isLoading && !error && filtered.length === 0 && (
+        <div className="p-12 text-center bg-white rounded-module border border-admin-line text-admin-muted">
+          No notifications match the selected filters.
+        </div>
+      )}
+
+      {!isLoading && !error && filtered.length > 0 && (
+        <div className="bg-white rounded-module shadow-sm border border-admin-line overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse">
               <thead>
-                <tr className="border-b border-admin-line bg-[#F7F7F7]/50">
-                  <th className="py-4 px-4 font-semibold text-[12px] text-admin-muted uppercase tracking-wider pl-6">Job ID</th>
-                  <th className="py-4 px-4 font-semibold text-[12px] text-admin-muted uppercase tracking-wider">Customer</th>
-                  <th className="py-4 px-4 font-semibold text-[12px] text-admin-muted uppercase tracking-wider">Driver</th>
-                  <th className="py-4 px-4 font-semibold text-[12px] text-admin-muted uppercase tracking-wider">Started</th>
-                  <th className="py-4 px-4 font-semibold text-[12px] text-admin-muted uppercase tracking-wider">Email Address</th>
-                  <th className="py-4 px-4 font-semibold text-[12px] text-admin-muted uppercase tracking-wider">Email</th>
-                  <th className="py-4 px-4 font-semibold text-[12px] text-admin-muted uppercase tracking-wider">Phone Number</th>
-                  <th className="py-4 px-4 font-semibold text-[12px] text-admin-muted uppercase tracking-wider">SMS</th>
+                <tr className="border-b border-admin-line bg-admin-surface/60 text-eyebrow text-fg-subtle">
+                  <th className="py-3 px-4 font-bold">Job ID</th>
+                  <th className="py-3 px-4 font-bold">Customer</th>
+                  <th className="py-3 px-4 font-bold">Driver</th>
+                  <th className="py-3 px-4 font-bold">Started (UK)</th>
+                  <th className="py-3 px-4 font-bold">Email Target</th>
+                  <th className="py-3 px-4 font-bold">Email Status</th>
+                  <th className="py-3 px-4 font-bold">SMS Target</th>
+                  <th className="py-3 px-4 font-bold">SMS Status</th>
                 </tr>
               </thead>
-
               <tbody className="divide-y divide-admin-line">
                 {pageRows.map((row) => {
-                  const startedTime = row.actualStart ? formatLondonDateTime(row.actualStart) : "—";
                   const driverInit = row.driverInitials || "UN";
                   const phoneInfo = normalizePhone(row.customerPhone);
+                  const startedTime = formatLondonDateTime(row.actualStart);
 
                   return (
-                    <tr key={row.jobId} className="h-[60px] group transition select-none hover:bg-[#F9FAFB]">
-                      <td className="px-6">
-                        <span className="font-medium text-admin-ink text-[14px]">{row.jobId}</span>
+                    <tr key={row.jobId} className="hover:bg-admin-surface/40 transition">
+                      <td className="px-4 py-3 text-[13px] font-mono font-medium text-admin-ink">
+                        {row.jobId}
                       </td>
 
                       <td className="px-4 text-[14px] text-admin-ink font-medium">
