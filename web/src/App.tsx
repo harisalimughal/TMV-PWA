@@ -1,4 +1,4 @@
-import React, { Suspense, useCallback, useEffect, useState } from "react";
+import React, { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { Loader2 } from "lucide-react";
 import { fetchSession, type DriverProfile } from "./api/auth";
 import { LoginScreen } from "./screens/LoginScreen";
@@ -21,6 +21,7 @@ import { ConfirmDialog } from "./ui";
 import { useToast } from "./components/ui/Toast";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { InAppNotificationListener } from "./components/InAppNotificationListener";
+import { usePushNotifications } from "./lib/pwa/usePushNotifications";
 
 /**
  * The admin dashboard is loaded on demand.
@@ -200,6 +201,28 @@ export function App() {
     if (isAdmin) return;
     return startOutboxSync();
   }, [isAdmin]);
+
+  // Prompts for push notifications automatically on login, instead of requiring the
+  // driver to find Settings > PWA Settings > Enable Push themselves. The browser's own
+  // "Allow notifications?" dialog can never be shown without a real one, so this can't
+  // silently subscribe anyone -- what it removes is the multi-tap hunt through
+  // settings before that dialog even appears; it's now one tap on login, on every
+  // device. Fires at most once per app load, and only while permission is still
+  // "default" (never decided) -- a driver who dismissed/denied it is never re-prompted
+  // by this (the browser itself won't let JS re-trigger that dialog after a denial;
+  // re-enabling then requires the driver's own browser/OS settings).
+  const { permission: pushPermission, isSupported: pushSupported, subscribe: subscribeToPush } =
+    usePushNotifications();
+  const autoPushPromptedRef = useRef(false);
+  useEffect(() => {
+    if (isAdmin) return;
+    if (!("driver" in view)) return; // only once genuinely logged in, on a real driver screen
+    if (autoPushPromptedRef.current) return;
+    if (!pushSupported || pushPermission !== "default") return;
+    autoPushPromptedRef.current = true;
+    const timer = setTimeout(() => void subscribeToPush(), 1200);
+    return () => clearTimeout(timer);
+  }, [isAdmin, view, pushSupported, pushPermission, subscribeToPush]);
 
   useEffect(() => {
     if (isAdmin) return;

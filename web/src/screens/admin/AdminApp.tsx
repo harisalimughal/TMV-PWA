@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Loader2 } from "lucide-react";
 import { adminLogout, fetchAdminSession } from "../../api/admin";
 import { AdminLoginScreen } from "./AdminLoginScreen";
@@ -16,6 +16,7 @@ import { ActivityPage } from "./dashboard/pages/ActivityPage";
 import { ReportsPage } from "./dashboard/pages/ReportsPage";
 import { MessagingPage } from "./dashboard/pages/MessagingPage";
 import { PricingSettingsPage } from "./dashboard/pages/PricingSettingsPage";
+import { usePushNotifications } from "../../lib/pwa/usePushNotifications";
 
 /**
  * Entry point for the /admin path on dashboard.themanvan.co.uk (see App.tsx's
@@ -40,6 +41,25 @@ export function AdminApp() {
       .then(setLoggedIn)
       .finally(() => setChecking(false));
   }, []);
+
+  // Same auto-prompt as the driver app's App.tsx: fires the browser's own "Allow
+  // notifications?" dialog right on login instead of leaving it for the admin to find
+  // in Pricing Settings themselves. It can only ever prompt, not silently subscribe --
+  // that's a hard browser rule, not something either app can work around -- but this
+  // removes the settings-hunt before that prompt appears. Fires at most once per app
+  // load, only while permission is still "default" (never decided); a denied prompt is
+  // never retried here (the browser blocks JS from re-showing it after a denial).
+  const { permission: pushPermission, isSupported: pushSupported, subscribe: subscribeToPush } =
+    usePushNotifications();
+  const autoPushPromptedRef = useRef(false);
+  useEffect(() => {
+    if (!loggedIn) return;
+    if (autoPushPromptedRef.current) return;
+    if (!pushSupported || pushPermission !== "default") return;
+    autoPushPromptedRef.current = true;
+    const timer = setTimeout(() => void subscribeToPush(), 1200);
+    return () => clearTimeout(timer);
+  }, [loggedIn, pushSupported, pushPermission, subscribeToPush]);
 
   /**
    * Section state lives in ?section=. pushState was already being called on every
