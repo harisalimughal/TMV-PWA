@@ -53,8 +53,12 @@ export function PaperScenarioReport({ item, kind, isPreview = false }: Props) {
   return (
     <div className={`paper-document bg-white font-sans text-[#1A1A1A] ${isPreview ? "w-full shadow-lg border border-admin-line rounded-control p-8 mb-8" : ""}`}>
       <style>{`
+        @page {
+          size: 210mm 297mm;
+          size: A4 portrait;
+          margin: 0;
+        }
         @media print {
-          @page { size: A4 portrait; margin: 0; }
           .scenario-print-page {
             width: 210mm !important;
             height: 297mm !important;

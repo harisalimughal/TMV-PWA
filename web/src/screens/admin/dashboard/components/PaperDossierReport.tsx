@@ -110,8 +110,12 @@ export function PaperDossierReport({ job, isPreview = false }: Props) {
   return (
     <div className={`font-sans ${isPreview ? 'w-full' : 'block'}`}>
       <style>{`
+        @page {
+          size: 210mm 297mm;
+          size: A4 portrait;
+          margin: 0;
+        }
         @media print {
-          @page { size: A4 portrait; margin: 0; }
           .print-page {
             width: 210mm !important;
             height: 297mm !important;
