@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Bell, BellOff } from "lucide-react";
 import { EmptyState } from "../../ui";
 import { useNotificationLog } from "../../lib/pwa/useNotificationLog";
@@ -28,6 +28,8 @@ export function NotificationBell() {
   const { items, unreadCount, loading, markRead, markAllRead } = useNotificationLog();
   const [isOpen, setIsOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
+  const [panelShiftX, setPanelShiftX] = useState(0);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -46,6 +48,31 @@ export function NotificationBell() {
       document.removeEventListener("keydown", onEscape);
     };
   }, [isOpen]);
+
+  // The panel defaults to right-aligned under the trigger (className below), which is
+  // correct wherever the bell sits near the right edge of its container -- the mobile
+  // header, the admin header. It's wrong for the desktop sidebar, whose trigger sits
+  // near the LEFT edge of the whole viewport (the sidebar itself is only ~260px wide):
+  // right-aligning there tries to open the panel mostly to the left of the trigger,
+  // off the edge of the screen entirely. Rather than hardcode a different alignment
+  // per surface (fragile the next time the bell moves somewhere new), this measures
+  // where the panel actually landed after render and nudges it back on-screen with a
+  // transform if either edge overflows -- correct in any container, automatically.
+  useLayoutEffect(() => {
+    if (!isOpen || !panelRef.current) {
+      setPanelShiftX(0);
+      return;
+    }
+    const rect = panelRef.current.getBoundingClientRect();
+    const margin = 12;
+    if (rect.left < margin) {
+      setPanelShiftX(margin - rect.left);
+    } else if (rect.right > window.innerWidth - margin) {
+      setPanelShiftX(window.innerWidth - margin - rect.right);
+    } else {
+      setPanelShiftX(0);
+    }
+  }, [isOpen, items.length]);
 
   function handleSelect(item: LoggedNotification) {
     void markRead(item.id);
@@ -76,8 +103,10 @@ export function NotificationBell() {
 
       {isOpen && (
         <div
+          ref={panelRef}
           role="menu"
-          className="absolute right-0 top-full z-50 mt-2 w-[min(360px,90vw)] overflow-hidden rounded-card border border-line bg-surface shadow-md animate-in fade-in zoom-in-95"
+          style={{ transform: panelShiftX ? `translateX(${panelShiftX}px)` : undefined }}
+          className="absolute right-0 top-full z-50 mt-2 w-[min(360px,calc(100vw-24px))] overflow-hidden rounded-card border border-line bg-surface shadow-md animate-in fade-in zoom-in-95"
         >
           <div className="flex items-center justify-between border-b border-line px-4 py-3">
             <span className="text-label font-semibold text-fg">Notifications</span>
