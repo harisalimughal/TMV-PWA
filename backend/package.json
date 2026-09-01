@@ -25,7 +25,8 @@
     "googleapis": "^144.0.0",
     "luxon": "^3.5.0",
     "mongodb": "^7.6.0",
-    "multer": "^2.3.0"
+    "multer": "^2.3.0",
+    "web-push": "^3.6.7"
   },
   "devDependencies": {
     "@types/bcryptjs": "^2.4.6",
@@ -34,6 +35,7 @@
     "@types/luxon": "^3.4.2",
     "@types/multer": "^2.2.0",
     "@types/node": "^22.10.2",
+    "@types/web-push": "^3.6.4",
     "tsx": "^4.19.2",
     "typescript": "^5.7.2",
     "vitest": "^2.1.9"

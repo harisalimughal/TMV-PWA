@@ -20,6 +20,7 @@ import { UpdateBanner } from "./app/UpdateBanner";
 import { ConfirmDialog } from "./ui";
 import { useToast } from "./components/ui/Toast";
 import { ErrorBoundary } from "./components/ErrorBoundary";
+import { InAppNotificationListener } from "./components/InAppNotificationListener";
 
 /**
  * The admin dashboard is loaded on demand.
@@ -398,6 +399,7 @@ export function App() {
 
   return (
     <DevicePreview>
+      <InAppNotificationListener />
       {framed}
       <UpdateBanner />
       <ConfirmDialog

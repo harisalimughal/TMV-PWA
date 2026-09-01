@@ -1,22 +1,11 @@
 import React, { useState } from "react";
-import { Bell, BellOff, BellRing } from "lucide-react";
+import { Bell, BellOff, BellRing, Send, CheckCircle2 } from "lucide-react";
 import { Alert, Button } from "../../../ui";
 import { useToast } from "../../../components/ui/Toast";
-import { getPlatform } from "../../../lib/pwa/platform";
-import { useNotificationPermission } from "../hooks/useNotificationPermission";
-import type { NotificationPermissionState } from "../../../lib/pwa/types";
+import { getPlatform, isStandalone } from "../../../lib/pwa/platform";
+import { usePushNotifications } from "../../../lib/pwa/usePushNotifications";
 import { SettingCard } from "./SettingCard";
 import { StatusRow } from "./StatusRow";
-
-const PRESENTATION: Record<
-  NotificationPermissionState,
-  { label: string; tone: "success" | "danger" | "neutral" }
-> = {
-  granted: { label: "Allowed", tone: "success" },
-  denied: { label: "Blocked", tone: "danger" },
-  default: { label: "Not enabled", tone: "neutral" },
-  unsupported: { label: "Not supported", tone: "neutral" },
-};
 
 function blockedGuidance(): string {
   switch (getPlatform()) {
@@ -29,90 +18,137 @@ function blockedGuidance(): string {
   }
 }
 
-/**
- * Section 7: notification permission state + a gesture-driven request.
- *
- * Permission only — there is no push backend in this project, so this never calls
- * `PushManager.subscribe()`. `pushCapable` makes the distinction visible and the
- * code is structured so a subscription step can be added later.
- */
 export function NotificationsCard() {
-  const { permission, supported, pushCapable, request } = useNotificationPermission();
-  const toast = useToast();
-  const [busy, setBusy] = useState(false);
+  const {
+    permission,
+    isSupported,
+    isSubscribed,
+    isLoading,
+    subscribe,
+    unsubscribe,
+    sendTestNotification
+  } = usePushNotifications();
 
-  const presentation = PRESENTATION[permission];
+  const toast = useToast();
+  const [testing, setTesting] = useState(false);
+  const platform = getPlatform();
+  const standalone = isStandalone();
 
   async function handleEnable() {
-    setBusy(true);
-    try {
-      const next = await request();
-      if (next === "granted") toast.success("Notifications enabled");
-      else if (next === "denied") toast.info("Notifications not enabled");
-    } finally {
-      setBusy(false);
+    const success = await subscribe();
+    if (success) {
+      toast.success("Push notifications enabled!");
+    } else {
+      if (Notification.permission === "denied") {
+        toast.info("Notifications were blocked in settings.");
+      } else {
+        toast.error("Failed to enable push notifications.");
+      }
     }
   }
+
+  async function handleTest() {
+    setTesting(true);
+    try {
+      const ok = await sendTestNotification();
+      if (ok) {
+        toast.success("Test notification sent! Check your device.");
+      } else {
+        toast.error("Failed to send test notification.");
+      }
+    } finally {
+      setTesting(false);
+    }
+  }
+
+  const isGranted = permission === "granted";
 
   return (
     <SettingCard
       icon={<Bell />}
-      title="Notifications"
-      description="Allow TMV BOT to send important job and app notifications."
+      title="Push Notifications"
+      description="Receive instant alerts for new jobs, schedule updates, and customer changes on your phone."
     >
       <div className="flex flex-col gap-3" aria-live="polite">
         <StatusRow
-          label="Permission"
-          value={presentation.label}
-          tone={presentation.tone}
+          label="Push Status"
+          value={
+            isSubscribed
+              ? "Active & Subscribed"
+              : isGranted
+              ? "Permission Allowed"
+              : permission === "denied"
+              ? "Blocked"
+              : permission === "unsupported"
+              ? "Not supported"
+              : "Not enabled"
+          }
+          tone={isSubscribed || isGranted ? "success" : permission === "denied" ? "danger" : "neutral"}
           icon={
-            permission === "granted" ? (
-              <BellRing aria-hidden />
+            isSubscribed ? (
+              <BellRing className="text-success" aria-hidden />
+            ) : isGranted ? (
+              <CheckCircle2 className="text-success" aria-hidden />
             ) : permission === "denied" ? (
-              <BellOff aria-hidden />
+              <BellOff className="text-danger" aria-hidden />
             ) : (
               <Bell aria-hidden />
             )
           }
         />
 
-        {permission === "default" && (
+        {/* iOS Web Push Requirement: Must be added to Home Screen on iOS */}
+        {platform === "ios" && !standalone && (
+          <Alert tone="info" title="iPhone / iPad Notification Tip">
+            On iOS (16.4+), push notifications require adding this app to your Home Screen. Tap the Safari Share button (box with up arrow) and select <strong>&quot;Add to Home Screen&quot;</strong>.
+          </Alert>
+        )}
+
+        {/* Action Button: Enable */}
+        {(!isGranted || !isSubscribed) && permission !== "denied" && permission !== "unsupported" && (
           <Button
             variant="primary"
             size="md"
             fullWidth
-            loading={busy}
+            loading={isLoading}
             iconLeft={<Bell />}
             onClick={() => void handleEnable()}
           >
-            Enable Notifications
+            Enable Push Notifications
           </Button>
         )}
 
+        {/* Action Button: Send Test */}
+        {isSubscribed && (
+          <div className="flex gap-2">
+            <Button
+              variant="secondary"
+              size="md"
+              fullWidth
+              loading={testing}
+              iconLeft={<Send />}
+              onClick={() => void handleTest()}
+            >
+              Send Test Notification
+            </Button>
+          </div>
+        )}
+
         {permission === "denied" && (
-          <Alert tone="warning" title="Notifications are blocked in your browser settings.">
+          <Alert tone="warning" title="Notifications are blocked in your device settings.">
             {blockedGuidance()}
           </Alert>
         )}
 
         {permission === "unsupported" && (
-          <Alert tone="info" title="Not available here">
-            This browser doesn't support notifications. Try Chrome or Edge on desktop,
-            or install the app on Android.
+          <Alert tone="info" title="Not available in this browser">
+            This browser doesn&apos;t support Web Push notifications. Try Chrome or Edge on desktop/Android, or Safari on iOS 16.4+.
           </Alert>
         )}
 
-        {permission === "granted" && (
+        {isSubscribed && (
           <p className="text-helper text-fg-subtle">
-            {pushCapable
-              ? "Notifications are allowed. Push delivery for job alerts will activate once it's switched on for your account."
-              : "Notifications are allowed for this browser session. Background push delivery isn't available on this device."}
-          </p>
-        )}
-
-        {!supported && permission !== "unsupported" && (
-          <p className="text-helper text-fg-subtle">
-            Notification support is limited in this browser.
+            Your phone is registered to receive background notifications even when the app is closed.
           </p>
         )}
       </div>

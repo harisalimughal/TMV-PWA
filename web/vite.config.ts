@@ -97,6 +97,8 @@ export default defineConfig({
         ]
       },
       workbox: {
+        // Import our background Web Push & notification click handler
+        importScripts: ["/push-worker.js"],
         // The app shell is an SPA: unknown navigations fall back to the built
         // index.html so a deep link / refresh works offline...
         navigateFallback: "index.html",

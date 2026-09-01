@@ -19,6 +19,7 @@ import { adminRoutes } from "./auth/admin.routes";
 import { requireAdminAuth } from "./auth/require-admin-auth";
 import { jobsRoutes } from "./jobs/jobs.routes";
 import { storageRoutes } from "./jobs/storage.routes";
+import { pushRoutes } from "./push/push.routes";
 import { syncTodayBookings } from "./jobs/booking.service";
 import { dashboardActivityRoutes } from "./admin/dashboard/activity.routes";
 import { dashboardDriversSummaryRoutes } from "./admin/dashboard/drivers-summary.routes";
@@ -40,6 +41,7 @@ app.use("/api/auth", authRoutes());
 app.use("/api/admin", adminRoutes());
 app.use("/api/jobs", jobsRoutes());
 app.use("/api/storage", storageRoutes());
+app.use("/api/push", pushRoutes());
 
 // The ported admin dashboard (Overview/Jobs/Live Fleet/Exceptions/Reports/Activity/
 // Messaging/Scenarios/Finance/driver performance stats) -- same requireAdminAuth

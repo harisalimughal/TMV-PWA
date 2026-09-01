@@ -260,12 +260,6 @@ body {
   z-index: -9999;
 }
 
-@page {
-  size: 210mm 297mm;
-  size: A4 portrait;
-  margin: 0;
-}
-
 @media print {
   html,
   body {
@@ -305,8 +299,6 @@ body {
     padding: 0 !important;
     opacity: 1 !important;
     pointer-events: auto !important;
-    overflow: visible !important;
-    background: #ffffff !important;
   }
 
   body.printing-report #tmv-print-portal *,

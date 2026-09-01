@@ -23,6 +23,7 @@ import { formatLondonDate } from "./timezone";
 import { NormalizedJob } from "./types";
 import { generateJobPdf } from "./pdf-generator";
 import { readMongoDataset } from "./read";
+import { sendPushToDriver } from "../../push/push.service";
 
 function escapeCsvField(val: unknown): string {
   if (val === null || val === undefined) return "";
@@ -197,6 +198,12 @@ export function dashboardJobsRoutes(): Router {
         jobId, driver: "admin dashboard", action: "REASSIGNED",
         detail: `${fromInitials} -> ${driverInitials}`
       });
+
+      sendPushToDriver(driverInitials, {
+        title: "New Job Assigned",
+        body: `Job #${jobId} has been assigned to you.`,
+        url: `/?tab=jobs`
+      }).catch(err => log.warn("failed to send job assignment push", { error: String(err) }));
 
       return res.status(200).json({ ok: true, driverInitials, driverName: driver.fullName });
     } catch (error) {

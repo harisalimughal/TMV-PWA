@@ -62,6 +62,20 @@ export interface SettingDoc {
   updatedAt: Date;
 }
 
+export interface PushSubscriptionDoc {
+  endpoint: string;
+  driverInitials?: string;
+  driverEmail?: string;
+  keys: {
+    p256dh: string;
+    auth: string;
+  };
+  userAgent?: string;
+  platform?: "ios" | "android" | "desktop" | "unknown";
+  createdAt: Date;
+  updatedAt: Date;
+}
+
 let clientPromise: Promise<MongoClient> | null = null;
 
 async function getClient(): Promise<MongoClient> {
@@ -105,11 +119,16 @@ export async function settingsCollection(): Promise<Collection<SettingDoc>> {
   return db.collection<SettingDoc>("settings");
 }
 
+export async function pushSubscriptionsCollection(): Promise<Collection<PushSubscriptionDoc>> {
+  const db = await getDb();
+  return db.collection<PushSubscriptionDoc>("push_subscriptions");
+}
+
 /** Creates indexes if they don't exist yet. Safe to call every startup -- createIndex
  * is a no-op when the index already matches. */
 export async function ensureIndexes(): Promise<void> {
-  const [accounts, jobs, evidence, activity, settings] = await Promise.all([
-    driverAccounts(), jobsCollection(), evidenceCollection(), activityCollection(), settingsCollection()
+  const [accounts, jobs, evidence, activity, settings, pushSubs] = await Promise.all([
+    driverAccounts(), jobsCollection(), evidenceCollection(), activityCollection(), settingsCollection(), pushSubscriptionsCollection()
   ]);
   await Promise.all([
     accounts.createIndex({ email: 1 }, { unique: true }),
@@ -121,7 +140,9 @@ export async function ensureIndexes(): Promise<void> {
     jobs.createIndex({ bookedStart: 1 }),
     evidence.createIndex({ jobId: 1 }),
     activity.createIndex({ jobId: 1, timestamp: 1 }),
-    settings.createIndex({ key: 1 }, { unique: true })
+    settings.createIndex({ key: 1 }, { unique: true }),
+    pushSubs.createIndex({ endpoint: 1 }, { unique: true }),
+    pushSubs.createIndex({ driverInitials: 1 })
   ]);
   log.info("mongo indexes verified");
 }

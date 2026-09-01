@@ -50,6 +50,9 @@ export const env = {
   tunnelCharge: numberEnv("TMV_TUNNEL_CHARGE", 13),
   maxImageBytes: numberEnv("TMV_MAX_IMAGE_BYTES", 10 * 1024 * 1024),
   notificationFromName: process.env.TMV_NOTIFICATION_FROM_NAME?.trim() || "The Man Van",
+  vapidPublicKey: process.env.VAPID_PUBLIC_KEY?.trim() || "",
+  vapidPrivateKey: process.env.VAPID_PRIVATE_KEY?.trim() || "",
+  vapidSubject: process.env.VAPID_SUBJECT?.trim() || "mailto:operations@themanvan.co.uk",
   bootstrapOnStart: boolEnv("BOOTSTRAP_ON_START", true),
   syncSecret: process.env.SYNC_SECRET?.trim() || "",
 
