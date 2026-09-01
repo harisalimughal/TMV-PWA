@@ -1,7 +1,10 @@
 import React, { useEffect, useState } from "react";
-import { AlertTriangle, Box, Clock, Loader2, Save, Users } from "lucide-react";
+import { AlertTriangle, Box, Clock, Loader2, Save, Users, Smartphone, Bell, BellRing, Send } from "lucide-react";
 import { fetchSettings, saveSetting, type EditableSetting } from "../api";
 import { Button } from "../../../../ui";
+import { usePushNotifications } from "../../../../lib/pwa/usePushNotifications";
+import { SendBroadcastPushModal } from "../components/SendBroadcastPushModal";
+import { useToast } from "../../../../components/ui/Toast";
 
 /**
  * Rebuilt, not ported: the source's PricingSettingsPage.tsx and SettingsPage.tsx were
@@ -21,6 +24,34 @@ export function PricingSettingsPage() {
   const [values, setValues] = useState<Record<string, string>>({});
   const [dirty, setDirty] = useState<Set<string>>(new Set());
   const [saving, setSaving] = useState(false);
+  const [broadcastModalOpen, setBroadcastModalOpen] = useState(false);
+  const [testing, setTesting] = useState(false);
+
+  const toast = useToast();
+  const {
+    permission,
+    isSubscribed,
+    isLoading: pushLoading,
+    subscribe,
+    sendTestNotification
+  } = usePushNotifications();
+
+  const handleEnable = async () => {
+    const ok = await subscribe();
+    if (ok) toast.success("Push notifications enabled on this device!");
+    else toast.info("Push notification permission not granted.");
+  };
+
+  const handleTest = async () => {
+    setTesting(true);
+    try {
+      const ok = await sendTestNotification();
+      if (ok) toast.success("Test push notification sent! Check your device/screen.");
+      else toast.error("Could not deliver test notification.");
+    } finally {
+      setTesting(false);
+    }
+  };
 
   async function load() {
     setLoading(true);
@@ -83,10 +114,9 @@ export function PricingSettingsPage() {
     <div className="space-y-6 max-w-[1440px] mx-auto pb-24">
       <div className="bg-white p-6 rounded-module border border-admin-line shadow-sm flex items-start justify-between">
         <div>
-          <h2 className="text-title text-fg mb-1">Pricing Settings</h2>
+          <h2 className="text-title text-fg mb-1">System & Pricing Settings</h2>
           <p className="text-[14px] text-admin-muted max-w-3xl">
-            Configure crew rates, packing service pricing, and overtime rules. Changes apply to all new jobs
-            immediately — no developer or redeployment required.
+            Configure PWA push notifications, device alerts, crew rates, packing services, and overtime rules. Changes apply immediately across all apps.
           </p>
         </div>
         {dirty.size > 0 && (
@@ -102,6 +132,63 @@ export function PricingSettingsPage() {
           {error}
         </div>
       )}
+
+      {/* PWA PUSH NOTIFICATIONS CARD */}
+      <div className="bg-white p-6 rounded-module border border-admin-line shadow-sm space-y-4">
+        <div className="flex items-start justify-between border-b border-admin-line pb-4">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-admin-brand-soft text-admin-brand flex items-center justify-center border border-admin-brand/20">
+              {isSubscribed ? <BellRing className="w-5 h-5 text-admin-brand" /> : <Smartphone className="w-5 h-5 text-admin-brand" />}
+            </div>
+            <div>
+              <h3 className="text-[16px] font-bold text-admin-ink">PWA Push Notifications (Android & iOS)</h3>
+              <p className="text-[13px] text-admin-muted">
+                Receive instant job and operational alerts on your mobile phone or desktop even when the app is closed.
+              </p>
+            </div>
+          </div>
+
+          <span className={`px-3 py-1 rounded-full text-[12px] font-bold ${
+            isSubscribed
+              ? "bg-admin-status-green-bg text-admin-status-green border border-admin-status-green/30"
+              : permission === "denied"
+              ? "bg-admin-status-red-bg text-admin-status-red border border-admin-status-red/30"
+              : "bg-admin-surface text-admin-muted border border-admin-line"
+          }`}>
+            {isSubscribed ? "This Device: Subscribed" : permission === "denied" ? "Blocked in Browser" : "Not Enabled"}
+          </span>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-3 pt-1">
+          {!isSubscribed ? (
+            <button
+              onClick={handleEnable}
+              disabled={pushLoading}
+              className="h-10 px-4 rounded-control bg-admin-brand hover:bg-admin-brand-hover text-white text-button shadow-sm transition flex items-center gap-2"
+            >
+              {pushLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Bell className="w-4 h-4" />}
+              Enable Push Notifications on This Device
+            </button>
+          ) : (
+            <button
+              onClick={handleTest}
+              disabled={testing}
+              className="h-10 px-4 rounded-control border border-admin-line bg-admin-surface hover:bg-white text-admin-ink text-button transition flex items-center gap-2 shadow-sm"
+            >
+              {testing ? <Loader2 className="w-4 h-4 animate-spin text-admin-brand" /> : <Send className="w-4 h-4 text-admin-brand" />}
+              Send Test Notification to This Device
+            </button>
+          )}
+
+          <button
+            onClick={() => setBroadcastModalOpen(true)}
+            className="h-10 px-4 rounded-control bg-admin-surface hover:bg-white text-admin-ink border border-admin-line text-button transition flex items-center gap-2 shadow-sm"
+          >
+            <Send className="w-4 h-4 text-admin-ink-2" />
+            Send Notice to Driver(s)
+          </button>
+        </div>
+      </div>
 
       <div className="space-y-6">
         <SettingsCard icon={<Users className="w-4 h-4 text-admin-brand" />} title="Base Crew Rates">
@@ -198,6 +285,12 @@ export function PricingSettingsPage() {
           </div>
         </div>
       )}
+
+      {/* Broadcast Modal */}
+      <SendBroadcastPushModal
+        isOpen={broadcastModalOpen}
+        onClose={() => setBroadcastModalOpen(false)}
+      />
     </div>
   );
 }

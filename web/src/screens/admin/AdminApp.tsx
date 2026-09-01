@@ -16,6 +16,7 @@ import { ActivityPage } from "./dashboard/pages/ActivityPage";
 import { ReportsPage } from "./dashboard/pages/ReportsPage";
 import { MessagingPage } from "./dashboard/pages/MessagingPage";
 import { PricingSettingsPage } from "./dashboard/pages/PricingSettingsPage";
+import { AdminPwaSettingsPage } from "./dashboard/pages/AdminPwaSettingsPage";
 
 /**
  * Entry point for the /admin path on dashboard.themanvan.co.uk (see App.tsx's
@@ -99,6 +100,7 @@ export function AdminApp() {
       {activeSection === "drivers" && <DriversPage />}
       {activeSection === "exceptions" && <ExceptionsPage onOpenJob={() => handleSelectSection("jobs")} />}
       {activeSection === "pricing" && <PricingSettingsPage />}
+      {activeSection === "pwasettings" && <AdminPwaSettingsPage />}
       {activeSection === "activity" && <ActivityPage />}
       {activeSection === "reports" && <ReportsPage />}
       {activeSection === "messaging" && <MessagingPage />}

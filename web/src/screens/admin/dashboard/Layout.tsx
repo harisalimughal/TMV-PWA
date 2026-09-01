@@ -11,7 +11,7 @@ import React, { useState, useEffect } from "react";
 import {
   LayoutDashboard, Navigation, Truck, CheckSquare, LogIn, LogOut, AlertCircle, ShieldAlert,
   Users, Banknote, AlertTriangle, History, FileSpreadsheet, Settings, RefreshCw,
-  ChevronLeft, ChevronRight, Search, Command, MessageSquare, Bell, Menu, X
+  ChevronLeft, ChevronRight, Search, Command, MessageSquare, Bell, Menu, X, Smartphone
 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { fetchExceptions, triggerDatasetRefresh } from "./api";
@@ -51,6 +51,7 @@ const NAV_CONFIG: NavSectionItem[] = [
   { type: "header", label: "Management" },
   { id: "drivers", label: "Drivers", icon: Users, desc: "Driver scorecards, revenue handled and punctuality metrics" },
   { id: "pricing", label: "Pricing Settings", icon: Banknote, desc: "Configure crew rates, packing service pricing, and overtime rules" },
+  { id: "pwasettings", label: "PWA & Push Settings", icon: Smartphone, desc: "Device push notifications, PWA installation and background sync" },
   { id: "exceptions", label: "Exceptions", icon: AlertTriangle, hasBadge: true, desc: "Operational exceptions and quality control alerts" },
   { id: "activity", label: "Activity Log", icon: History, desc: "Chronological audit records directly from the activity log" },
   { id: "reports", label: "Reports", icon: FileSpreadsheet, desc: "Downloadable operational datasets and certified export files" },
