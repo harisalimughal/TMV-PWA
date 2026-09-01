@@ -73,12 +73,30 @@ const distCandidates = [
 const finalDistPath = distCandidates.find(candidate => fs.existsSync(candidate)) ?? distCandidates[0];
 
 if (fs.existsSync(finalDistPath)) {
-  app.use(express.static(finalDistPath));
+  // Static assets with smart caching:
+  // - Hashed assets (/assets/*): 1 year immutable
+  // - HTML shell & Service Worker (index.html, sw.js, manifest): no-cache so updates apply immediately
+  app.use(express.static(finalDistPath, {
+    setHeaders: (res, filePath) => {
+      if (filePath.endsWith("index.html") || filePath.endsWith("sw.js") || filePath.endsWith("manifest.webmanifest")) {
+        res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+      } else if (filePath.includes(`${path.sep}assets${path.sep}`) || filePath.includes("/assets/")) {
+        res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+      }
+    }
+  }));
+
+  // Missing static assets should NEVER fall back to index.html (which causes MIME type errors when importing JS chunks)
+  app.get(/^\/assets\/.*/, (_req, res) => {
+    res.status(404).type("text/plain").send("Asset not found");
+  });
+
   // A RegExp, not the string "*" -- Express 4.21+ bundles a path-to-regexp version that
   // deprecated the bare "*" wildcard (it silently fails to match anything, including
   // "/", rather than erroring at registration time). /.*/ isn't affected by that syntax
   // change either way.
   app.get(/.*/, (_req, res) => {
+    res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
     res.sendFile(path.join(finalDistPath, "index.html"));
   });
 } else {

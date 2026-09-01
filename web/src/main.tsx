@@ -4,8 +4,22 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { App } from "./App";
 import { ThemeProvider } from "./ui/theme";
 import { ToastProvider } from "./components/ui/Toast";
+import { ErrorBoundary } from "./components/ErrorBoundary";
 import { initServiceWorker } from "./lib/pwa/registration";
 import "./index.css";
+
+// Auto-reload when dynamic chunk import fails due to new deployment
+if (typeof window !== "undefined") {
+  window.addEventListener("vite:preloadError", (event) => {
+    console.warn("Vite preload error detected. Reloading for latest assets...", event);
+    const reloadKey = "tmv:preload_reload_count";
+    const count = parseInt(sessionStorage.getItem(reloadKey) || "0", 10);
+    if (count < 2) {
+      sessionStorage.setItem(reloadKey, String(count + 1));
+      window.location.reload();
+    }
+  });
+}
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -37,13 +51,15 @@ async function bootstrap() {
 
   ReactDOM.createRoot(document.getElementById("root")!).render(
     <React.StrictMode>
-      <ThemeProvider>
-        <QueryClientProvider client={queryClient}>
-          <ToastProvider>
-            <App />
-          </ToastProvider>
-        </QueryClientProvider>
-      </ThemeProvider>
+      <ErrorBoundary>
+        <ThemeProvider>
+          <QueryClientProvider client={queryClient}>
+            <ToastProvider>
+              <App />
+            </ToastProvider>
+          </QueryClientProvider>
+        </ThemeProvider>
+      </ErrorBoundary>
     </React.StrictMode>
   );
 }

@@ -19,6 +19,7 @@ import { DevicePreview } from "./app/DevicePreview";
 import { UpdateBanner } from "./app/UpdateBanner";
 import { ConfirmDialog } from "./ui";
 import { useToast } from "./components/ui/Toast";
+import { ErrorBoundary } from "./components/ErrorBoundary";
 
 /**
  * The admin dashboard is loaded on demand.
@@ -30,7 +31,31 @@ import { useToast } from "./components/ui/Toast";
  * dashboard itself is unaffected -- it loads its own chunk once, on a desktop
  * connection.
  */
-const AdminApp = React.lazy(() => import("./screens/admin/AdminApp").then(m => ({ default: m.AdminApp })));
+const AdminApp = React.lazy(() =>
+  import("./screens/admin/AdminApp")
+    .then(m => ({ default: m.AdminApp }))
+    .catch((error: any) => {
+      const isChunkError =
+        error?.message?.includes("Failed to fetch dynamically imported module") ||
+        error?.message?.includes("Importing a module script failed") ||
+        error?.message?.includes("Expected a JavaScript-or-Wasm module script") ||
+        error?.name === "ChunkLoadError";
+
+      if (isChunkError && !sessionStorage.getItem("tmv:admin_chunk_reloaded")) {
+        sessionStorage.setItem("tmv:admin_chunk_reloaded", "1");
+        if (typeof caches !== "undefined") {
+          caches.keys().then(keys => Promise.all(keys.map(k => caches.delete(k)))).finally(() => {
+            window.location.reload();
+          });
+        } else {
+          window.location.reload();
+        }
+        return new Promise<{ default: () => React.JSX.Element }>(() => {});
+      }
+      sessionStorage.removeItem("tmv:admin_chunk_reloaded");
+      throw error;
+    })
+);
 
 /** DEV-only design-system gallery, reachable at `/?ui=gallery`. The ternary is
  *  statically resolved at build time (import.meta.env.DEV === false), so the dynamic
@@ -214,9 +239,11 @@ export function App() {
     // regardless of the user's theme. `display: contents` keeps it out of layout.
     return (
       <div data-theme="light" style={{ display: "contents" }}>
-        <Suspense fallback={<FullScreenSpinner label="Loading Operations…" />}>
-          <AdminApp />
-        </Suspense>
+        <ErrorBoundary>
+          <Suspense fallback={<FullScreenSpinner label="Loading Operations…" />}>
+            <AdminApp />
+          </Suspense>
+        </ErrorBoundary>
       </div>
     );
   }
