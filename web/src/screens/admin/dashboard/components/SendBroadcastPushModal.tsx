@@ -151,3 +151,4 @@ export function SendBroadcastPushModal({ isOpen, onClose }: Props) {
     </div>
   );
 }
+
