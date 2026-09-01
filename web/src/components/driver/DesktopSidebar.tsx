@@ -5,6 +5,7 @@ import { useLocalAvatar } from "../../lib/profile";
 import type { DriverProfile } from "../../api/auth";
 import type { TabId } from "./BottomNav";
 import { ThemeToggleButton } from "./ThemeToggle";
+import { NotificationBell } from "./NotificationBell";
 
 const NAV: Array<{ id: TabId; label: string; icon: React.ComponentType<{ className?: string }> }> = [
   { id: "jobs", label: "Jobs", icon: ClipboardList },
@@ -28,9 +29,12 @@ export function DesktopSidebar({ active, onSelect, driver, onLogout }: DesktopSi
   const localAvatar = useLocalAvatar();
   return (
     <aside className="fixed inset-y-0 left-0 z-30 hidden w-[var(--sidebar-width)] flex-col border-r border-line bg-surface lg:flex">
-      <div className="px-5 pb-4 pt-5">
-        <span className="block text-heading text-fg">The Man Van</span>
-        <span className="mt-0.5 block text-meta text-fg-subtle">Driver Operations</span>
+      <div className="flex items-start justify-between gap-2 px-5 pb-4 pt-5">
+        <div>
+          <span className="block text-heading text-fg">The Man Van</span>
+          <span className="mt-0.5 block text-meta text-fg-subtle">Driver Operations</span>
+        </div>
+        <NotificationBell />
       </div>
 
       <nav aria-label="Main" className="flex-1 px-2.5 py-2">

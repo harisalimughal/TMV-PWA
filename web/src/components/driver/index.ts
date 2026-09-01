@@ -18,6 +18,8 @@ export type { DesktopSidebarProps } from "./DesktopSidebar";
 
 export { ThemeToggle, ThemeToggleButton } from "./ThemeToggle";
 
+export { NotificationBell } from "./NotificationBell";
+
 export { ProfileMenu } from "./ProfileMenu";
 export type { ProfileMenuProps } from "./ProfileMenu";
 

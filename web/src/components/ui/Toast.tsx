@@ -7,12 +7,20 @@ interface ToastItem {
   id: number;
   tone: ToastTone;
   message: string;
+  onClick?: () => void;
+}
+
+interface ToastOptions {
+  /** Makes the whole toast clickable (e.g. open whatever a push notification was
+   *  about) without disturbing its own Dismiss button, which stays independently
+   *  clickable via stopPropagation. */
+  onClick?: () => void;
 }
 
 interface ToastApi {
-  success: (message: string) => void;
-  error: (message: string) => void;
-  info: (message: string) => void;
+  success: (message: string, opts?: ToastOptions) => void;
+  error: (message: string, opts?: ToastOptions) => void;
+  info: (message: string, opts?: ToastOptions) => void;
 }
 
 const ToastContext = createContext<ToastApi | null>(null);
@@ -51,17 +59,17 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
   const [toasts, setToasts] = useState<ToastItem[]>([]);
   const nextId = useRef(1);
 
-  const push = useCallback((tone: ToastTone, message: string) => {
+  const push = useCallback((tone: ToastTone, message: string, opts?: ToastOptions) => {
     const id = nextId.current++;
-    setToasts(prev => [...prev.filter(t => t.message !== message), { id, tone, message }]);
+    setToasts(prev => [...prev.filter(t => t.message !== message), { id, tone, message, onClick: opts?.onClick }]);
     setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), tone === "error" ? 6000 : 3500);
   }, []);
 
   const api = useMemo<ToastApi>(
     () => ({
-      success: message => push("success", message),
-      error: message => push("error", message),
-      info: message => push("info", message)
+      success: (message, opts) => push("success", message, opts),
+      error: (message, opts) => push("error", message, opts),
+      info: (message, opts) => push("info", message, opts)
     }),
     [push]
   );
@@ -78,14 +86,27 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
         {toasts.map(toast => (
           <div
             key={toast.id}
+            role={toast.onClick ? "button" : undefined}
+            tabIndex={toast.onClick ? 0 : undefined}
+            onClick={toast.onClick}
+            onKeyDown={
+              toast.onClick
+                ? event => {
+                    if (event.key === "Enter" || event.key === " ") toast.onClick!();
+                  }
+                : undefined
+            }
             className={`pointer-events-auto flex w-full max-w-sm items-center gap-3 rounded-card px-3.5 py-2.5 shadow-md animate-in slide-in-from-top-4 ${
-              TONE_STYLES[toast.tone].wrap
-            }`}
+              toast.onClick ? "cursor-pointer" : ""
+            } ${TONE_STYLES[toast.tone].wrap}`}
           >
             {TONE_STYLES[toast.tone].icon}
             <span className="flex-1 text-[13px] font-medium leading-snug">{toast.message}</span>
             <button
-              onClick={() => setToasts(prev => prev.filter(t => t.id !== toast.id))}
+              onClick={event => {
+                event.stopPropagation();
+                setToasts(prev => prev.filter(t => t.id !== toast.id));
+              }}
               className="-mr-1 shrink-0 p-1 opacity-70 hover:opacity-100"
               aria-label="Dismiss"
             >

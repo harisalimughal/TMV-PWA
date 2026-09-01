@@ -4,6 +4,7 @@ import { Avatar, cx } from "../../ui";
 import { useLocalAvatar } from "../../lib/profile";
 import type { DriverProfile } from "../../api/auth";
 import { ThemeToggleButton } from "./ThemeToggle";
+import { NotificationBell } from "./NotificationBell";
 
 const LONDON = "Europe/London";
 
@@ -58,6 +59,7 @@ export function MobileHeader({
         <span className="text-label font-semibold text-fg">The Man Van</span>
         <div className="flex items-center gap-1">
           <ThemeToggleButton />
+          <NotificationBell />
           <button
             type="button"
             aria-label="Refresh jobs"

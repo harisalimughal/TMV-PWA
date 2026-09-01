@@ -18,6 +18,7 @@ import { fetchExceptions, triggerDatasetRefresh } from "./api";
 import { CommandPalette } from "./components/CommandPalette";
 import { ShortcutsModal } from "./components/ShortcutsModal";
 import { formatLondonTimeOnly } from "./utils/date";
+import { NotificationBell } from "../../../components/driver/NotificationBell";
 
 interface Props {
   activeSection: string;
@@ -360,6 +361,11 @@ export function Layout({ activeSection, onSelectSection, onLogout, children }: P
                 <Bell className="w-4 h-4" aria-hidden />
                 {rawBadgeCount > 0 && <span className="absolute top-1.5 right-1.5 w-2.5 h-2.5 bg-admin-status-red rounded-full ring-2 ring-white" />}
               </button>
+
+              {/* Push notification history (job completed, exceptions raised) --
+                  distinct from the Exceptions-page shortcut above, which only ever
+                  counts open exceptions specifically. */}
+              <NotificationBell />
 
               <img src="/tmv-logo.png" alt="" className="w-9 h-9 ml-2 rounded-full object-cover border-2 border-white shadow-primary" />
             </div>
