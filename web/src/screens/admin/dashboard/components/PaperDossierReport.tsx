@@ -86,22 +86,19 @@ export function PaperDossierReport({ job, isPreview = false }: Props) {
   // boundary.
   const Page = ({ page, totalPages, children }: { page: number, totalPages: number, children: React.ReactNode }) => (
     <div
-      className={`bg-white text-admin-ink mx-auto ${isPreview ? 'w-full shadow-lg border border-admin-line mb-8 overflow-hidden rounded-control' : 'print-page'}`}
+      className={`bg-white text-admin-ink mx-auto ${isPreview ? 'w-full shadow-lg border border-admin-line mb-8 overflow-hidden rounded-control p-8 min-h-[297mm]' : 'print-page'}`}
       style={{
-        width: isPreview ? '100%' : '210mm',
-        height: isPreview ? 'auto' : '297mm',
-        minHeight: isPreview ? '297mm' : 'auto',
-        padding: '20mm',
-        pageBreakAfter: 'always',
-        boxSizing: 'border-box'
+        boxSizing: 'border-box',
+        pageBreakAfter: page < totalPages ? 'always' : 'auto',
+        breakAfter: page < totalPages ? 'page' : 'auto'
       }}
     >
-      <div className="flex h-full flex-col">
+      <div className="flex h-full flex-col min-h-[260mm]">
         <Header />
         {page === 1 && <SubmitterCard />}
         {children}
-        <div className="pt-4 mt-auto border-t border-[#E5E7EB] flex justify-end shrink-0">
-          <span className="text-[12px] font-semibold text-admin-muted">{page}/{totalPages}</span>
+        <div className="pt-3 mt-auto border-t border-[#E5E7EB] flex justify-end shrink-0">
+          <span className="text-[11px] font-semibold text-admin-muted">{page}/{totalPages}</span>
         </div>
       </div>
     </div>
@@ -111,22 +108,26 @@ export function PaperDossierReport({ job, isPreview = false }: Props) {
   const totalPages = Math.max(photos.length, 1);
 
   return (
-    <div className={`font-sans ${isPreview ? 'w-full' : 'hidden print:block'}`}>
-      <style>{!isPreview ? `
+    <div className={`font-sans ${isPreview ? 'w-full' : 'block'}`}>
+      <style>{`
         @media print {
           @page { size: A4 portrait; margin: 0; }
-          body { -webkit-print-color-adjust: exact; print-color-adjust: exact; background: white; }
           .print-page {
             width: 210mm !important;
             height: 297mm !important;
-            padding: 20mm !important;
+            max-height: 297mm !important;
+            padding: 16mm 20mm !important;
             margin: 0 !important;
-            page-break-after: always;
-            box-sizing: border-box;
-            background-color: white;
+            box-sizing: border-box !important;
+            background-color: white !important;
+            overflow: hidden !important;
+          }
+          .print-page:not(:last-child) {
+            page-break-after: always !important;
+            break-after: page !important;
           }
         }
-      ` : ''}</style>
+      `}</style>
 
       {photoPages.map((p, index) => {
         const pageNum = index + 1;
@@ -140,29 +141,29 @@ export function PaperDossierReport({ job, isPreview = false }: Props) {
             
             {/* Inject data blocks on specific pages if possible, or at the end */}
             {pageNum === 1 && (
-              <div className="mb-4 border border-[#E5E7EB] rounded-card overflow-hidden shrink-0">
-                <div className="flex items-center justify-between p-4 border-b border-[#E5E7EB] bg-white">
+              <div className="mb-3 border border-[#E5E7EB] rounded-card overflow-hidden shrink-0">
+                <div className="flex items-center justify-between p-3 border-b border-[#E5E7EB] bg-white">
                   <span className="text-label font-medium text-fg-muted">Customer Name</span>
                   <span className="text-[13px] font-bold text-admin-ink">{job.customerName || "N/A"}</span>
                 </div>
-                <div className="flex items-center justify-between p-4 border-b border-[#E5E7EB] bg-white">
+                <div className="flex items-center justify-between p-3 border-b border-[#E5E7EB] bg-white">
                   <span className="text-label font-medium text-fg-muted">Pickup</span>
-                  <span className="text-[13px] font-bold text-admin-ink truncate max-w-[200px]">{job.pickup || "N/A"}</span>
+                  <span className="text-[13px] font-bold text-admin-ink truncate max-w-[240px]">{job.pickup || "N/A"}</span>
                 </div>
-                <div className="flex items-center justify-between p-4 bg-white">
+                <div className="flex items-center justify-between p-3 bg-white">
                   <span className="text-label font-medium text-fg-muted">Dropoff</span>
-                  <span className="text-[13px] font-bold text-admin-ink truncate max-w-[200px]">{job.dropoff || "N/A"}</span>
+                  <span className="text-[13px] font-bold text-admin-ink truncate max-w-[240px]">{job.dropoff || "N/A"}</span>
                 </div>
               </div>
             )}
 
             {pageNum === 2 && (
-              <div className="mb-4 border border-[#E5E7EB] rounded-card overflow-hidden shrink-0">
-                <div className="flex items-center justify-between p-4 border-b border-[#E5E7EB] bg-white">
+              <div className="mb-3 border border-[#E5E7EB] rounded-card overflow-hidden shrink-0">
+                <div className="flex items-center justify-between p-3 border-b border-[#E5E7EB] bg-white">
                   <span className="text-label font-medium text-fg-muted">Total Charges</span>
                   <span className="text-[13px] font-bold text-admin-ink">{formatPounds(job.totalCharges)}</span>
                 </div>
-                <div className="flex items-center justify-between p-4 border-b border-[#E5E7EB] bg-white">
+                <div className="flex items-center justify-between p-3 bg-white">
                   <span className="text-label font-medium text-fg-muted">Payment Method</span>
                   <span className="text-[13px] font-bold text-admin-ink">{job.paymentMethod || "Not recorded"}</span>
                 </div>
@@ -170,16 +171,16 @@ export function PaperDossierReport({ job, isPreview = false }: Props) {
             )}
 
             {(pageNum === totalPages || (pageNum === 3 && totalPages >= 3)) && index === photoPages.length - 1 && (
-              <div className="mb-4 shrink-0">
-                <h2 className="text-label font-medium text-fg-muted mb-2">Client Signature:</h2>
-                <div className="border border-[#E5E7EB] rounded-card p-6 bg-[#F8F9FA] flex flex-col items-center justify-center min-h-[120px]">
+              <div className="mb-3 shrink-0">
+                <h2 className="text-label font-medium text-fg-muted mb-1.5">Client Signature:</h2>
+                <div className="border border-[#E5E7EB] rounded-card p-4 bg-[#F8F9FA] flex flex-col items-center justify-center min-h-[100px]">
                   {job.signatureUrl ? (
-                    <img src={job.signatureUrl} alt="Client Signature" className="max-h-[80px] object-contain mix-blend-multiply" />
+                    <img src={job.signatureUrl} alt="Client Signature" className="max-h-[70px] object-contain mix-blend-multiply" />
                   ) : (
-                    <span className="text-[14px] font-semibold text-admin-muted italic">Not captured</span>
+                    <span className="text-[13px] font-semibold text-admin-muted italic">Not captured</span>
                   )}
-                  <span className="text-[11px] font-medium text-admin-muted mt-4">Confirmed By: {job.clientConfirmedName || "N/A"}</span>
-                  <span className="text-[11px] font-medium text-admin-muted mt-1">Signed: {formattedTime}</span>
+                  <span className="text-[11px] font-medium text-admin-muted mt-2">Confirmed By: {job.clientConfirmedName || "N/A"}</span>
+                  <span className="text-[10px] font-medium text-admin-muted mt-0.5">Signed: {formattedTime}</span>
                 </div>
               </div>
             )}

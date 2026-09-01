@@ -3,6 +3,7 @@ import { X, Download, Eye, Maximize2, ZoomIn, ZoomOut, Check, ChevronLeft, Chevr
 import { IconButton } from "../../../../ui";
 import { PaperDossierReport } from "./PaperDossierReport";
 import { PaperScenarioReport } from "./PaperScenarioReport";
+import { PrintPortal } from "./PrintPortal";
 import { NormalizedJob, ScenarioItem } from "../types";
 import { formatLondonDateTime } from "../utils/date";
 import { waitForPrintImages } from "../utils/printReady";
@@ -107,20 +108,10 @@ export function SubmissionDetailDrawer({ job, isOpen, onClose, onNavigate, hasNe
   };
 
   const handleDownload = () => {
-    // Jobs' own download flow (JobDetailDrawer -> PdfPreviewModal) always renders a
-    // genuinely visible on-screen copy of the report before the user can download --
-    // this drawer's own Download PDF button used to skip straight from the default
-    // Form Answers view to a print-only hidden copy, no visible render in between.
-    // Switching into the Preview PDF pane here makes every download flow through
-    // this drawer go through the same visible-render step Jobs already relies on.
-    setIsPreviewing(true);
     setIsGeneratingPdf(true);
-    // Give the preview + hidden print DOM a tick to mount, then wait for their actual
-    // photos to finish loading -- a fixed setTimeout before print() left real
-    // evidence photos blank on the printed/downloaded page whenever they hadn't
-    // loaded in time.
+    document.body.classList.add("printing-report");
     setTimeout(async () => {
-      await waitForPrintImages();
+      await waitForPrintImages("#tmv-print-portal, .print-content");
 
       // Temporarily set document title for nice PDF filename
       const originalTitle = document.title;
@@ -131,9 +122,14 @@ export function SubmissionDetailDrawer({ job, isOpen, onClose, onNavigate, hasNe
       window.print();
 
       document.title = originalTitle;
+      document.body.classList.remove("printing-report");
       setIsGeneratingPdf(false);
       showToast("PDF Downloaded");
-    }, 800);
+
+      if (autoDownload) {
+        onClose();
+      }
+    }, 400);
   };
   handleDownloadRef.current = handleDownload;
 
@@ -361,7 +357,7 @@ export function SubmissionDetailDrawer({ job, isOpen, onClose, onNavigate, hasNe
                     style={{ transform: `scale(${zoom / 100})`, transformOrigin: "top center" }}
                   >
                      {isScenario ? (
-                       <PaperScenarioReport item={job} kind={kind!} />
+                       <PaperScenarioReport item={job} kind={kind!} isPreview={true} />
                      ) : (
                        <PaperDossierReport job={job as NormalizedJob} isPreview={true} />
                      )}
@@ -405,22 +401,14 @@ export function SubmissionDetailDrawer({ job, isOpen, onClose, onNavigate, hasNe
       </div>
       
          </div>
-      {/* PDF renderer, kept off-screen (not display:none) for printing -- see
-          index.css's .print-content rule for why: a photo inside a permanently
-          display:none element never gets laid out or painted, and printed blank
-          even once fully downloaded. Positioning (fixed off-screen normally,
-          absolute at print time) is owned entirely by that CSS class: a fixed
-          position at print time previously caused only page 1 of a multi-page
-          report to print, since browsers repeat fixed-position elements
-          identically on every printed page instead of letting their content
-          paginate. */}
-      <div className="print-content">
-         {isScenario ? (
-           <PaperScenarioReport item={job} kind={kind!} />
-         ) : (
-           <PaperDossierReport job={job as NormalizedJob} isPreview={false} />
-         )}
-      </div>
+      {/* PDF renderer mounted via PrintPortal directly into document.body for clean print isolation */}
+      <PrintPortal>
+        {isScenario ? (
+          <PaperScenarioReport item={job} kind={kind!} isPreview={false} />
+        ) : (
+          <PaperDossierReport job={job as NormalizedJob} isPreview={false} />
+        )}
+      </PrintPortal>
     </div>
   );
 }

@@ -22,7 +22,7 @@
  * the bug this function exists to prevent. 25s is a real ceiling only a stuck/dead
  * request should ever reach, not typical load time.
  */
-export function waitForPrintImages(selector = ".print-content", timeoutMs = 25000): Promise<void> {
+export function waitForPrintImages(selector = "#tmv-print-portal, .print-content", timeoutMs = 25000): Promise<void> {
   const container = document.querySelector(selector);
   if (!container) return Promise.resolve();
 

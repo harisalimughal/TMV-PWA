@@ -5,9 +5,10 @@ import { resolveDriver } from "../utils/drivers";
 interface Props {
   item: any;
   kind: string;
+  isPreview?: boolean;
 }
 
-export function PaperScenarioReport({ item, kind }: Props) {
+export function PaperScenarioReport({ item, kind, isPreview = false }: Props) {
   // The API route (backend/src/admin/dashboard/scenarios.routes.ts) is this project's
   // own MongoDB-backed shape -- clean top-level fields plus a `photos`/`signature`
   // pair. `rawRecord` (== the submission's raw form fields, snake_case) is kept only
@@ -30,7 +31,6 @@ export function PaperScenarioReport({ item, kind }: Props) {
   const containerNum = item.containerNumber || raw["Container Number"] || "—";
   const clientPhone = item.clientPhone || raw["Client Phone"] || "—";
   const clientEmail = item.clientEmail || raw["Client Email"] || "—";
-  const clientPresent = item.clientPresent || raw["Client Present"] || "—";
   const address = item.address || raw["Address"] || "Not recorded";
   const signatureUrl: string | undefined = item.signature?.thumbUrl || raw["Signature"];
 
@@ -51,101 +51,92 @@ export function PaperScenarioReport({ item, kind }: Props) {
   const driverColor = driverInitials === "UN" ? "bg-amber-500" : "bg-[#F59E0B]"; 
 
   return (
-    <div className="paper-document bg-white font-sans text-[#1A1A1A]">
-      
-      {/* NO-PRINT CONTROLS */}
-      <div className="no-print flex items-center justify-between p-4 mb-4 bg-admin-surface rounded-card border border-admin-line">
-        <div className="text-card text-fg">Preview Large-Format Report</div>
-        <button onClick={() => window.print()} className="flex items-center gap-1.5 px-3 py-1.5 rounded-control border border-line-strong bg-surface hover:bg-surface-sunken text-button text-fg transition shadow-sm">
-          Print / Save PDF
-        </button>
-      </div>
-
+    <div className={`paper-document bg-white font-sans text-[#1A1A1A] ${isPreview ? "w-full shadow-lg border border-admin-line rounded-control p-8 mb-8" : ""}`}>
       <style>{`
         @media print {
-          /* Was height: 100vh here -- unlike a physical mm/in unit, vh resolves against
-             the print engine's own notion of "viewport", which is unreliable across
-             browsers and print-to-PDF paths. When the resolved height came out shorter
-             than the actual content (any real submission with photos), the overflow
-             got pushed onto a second page that was then almost entirely blank -- the
-             report itself never overflowed logical content, just the box that was
-             supposed to contain it on one page. min-height (below) already sizes this
-             correctly for one physical A4 page; print only needs the @page rule and
-             color-adjust so backgrounds/shadows aren't stripped for ink-saving. */
           @page { size: A4 portrait; margin: 0; }
-          body { background: white; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-          .print-page-container { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+          .scenario-print-page {
+            width: 210mm !important;
+            height: 297mm !important;
+            max-height: 297mm !important;
+            padding: 16mm 20mm !important;
+            margin: 0 !important;
+            border: none !important;
+            border-radius: 0 !important;
+            box-shadow: none !important;
+            box-sizing: border-box !important;
+            background-color: white !important;
+            overflow: hidden !important;
+          }
         }
-        .print-page-container {
+        .scenario-print-page {
           min-height: 297mm;
           display: flex;
           flex-direction: column;
-          padding: 40px;
-          margin-bottom: 24px;
+          padding: 32px;
           background: white;
           border: 1px solid var(--line);
           border-radius: 8px;
-          box-shadow: var(--shadow-sm);
+          box-sizing: border-box;
         }
       `}</style>
 
-      <div className="print-page-container">
-        
+      <div className={isPreview ? "flex flex-col min-h-[260mm]" : "scenario-print-page"}>
         {/* HEADER */}
-        <div className="flex items-center justify-between pb-4 border-b border-admin-line mb-6">
+        <div className="flex items-center justify-between pb-3 border-b border-admin-line mb-3 shrink-0">
           <h1 className="text-[20px] font-bold text-[#1A1A1A]">{title}</h1>
           <div className="flex flex-col items-end">
-            <img src={`/tmv-logo.png`} alt="The Man Van" className="w-24 object-contain" />
+            <img src="/tmv-logo.png" alt="The Man Van" className="w-24 object-contain" />
             <span className="text-[10px] font-bold text-[#1A1A1A] tracking-wider mt-1">020 3773 9113</span>
           </div>
         </div>
 
         {/* META ROW */}
-        <div className="flex items-start justify-between gap-3 p-4 border border-admin-line rounded-card mb-6 bg-white shadow-sm">
+        <div className="flex items-start justify-between gap-3 p-3 border border-admin-line rounded-card mb-3 bg-white shadow-sm shrink-0">
           <div className="flex min-w-0 items-center gap-3">
             <div className={`w-9 h-9 shrink-0 overflow-hidden rounded-full ${driverColor} text-white flex items-center justify-center text-[13px] font-bold`}>
               {driverInitials}
             </div>
             <div className="min-w-0">
-              <div className="truncate text-[14px] font-bold text-[#1A1A1A]">{driverName}</div>
-              <div className="text-[12px] text-[#8A8A8A] mt-0.5">{formattedTime} | Europe/London</div>
+              <div className="truncate text-[13px] font-bold text-[#1A1A1A]">{driverName}</div>
+              <div className="text-[11px] text-[#8A8A8A] mt-0.5">{formattedTime} | Europe/London</div>
             </div>
           </div>
-          <div className="shrink-0 px-3 py-1 bg-admin-surface text-[#1A1A1A] text-[13px] font-semibold rounded-card border border-admin-line">
+          <div className="shrink-0 px-3 py-1 bg-admin-surface text-[#1A1A1A] text-[12px] font-semibold rounded-card border border-admin-line">
             {refId ? `#${refId}` : "Reference pending"}
           </div>
         </div>
 
         {/* PARKING LIABILITY TEXT */}
         {kind === "parking" && (
-          <div className="bg-[#FFFBEB] border border-[#FDE68A] p-4 rounded-card mb-6 shadow-sm">
-            <h3 className="text-[13px] font-bold text-amber-600 mb-2">Penalty Charge Liability Notice</h3>
-            <p className="text-[12px] text-amber-900">
+          <div className="bg-[#FFFBEB] border border-[#FDE68A] p-3 rounded-card mb-3 shadow-sm shrink-0">
+            <h3 className="text-[12px] font-bold text-amber-600 mb-1">Penalty Charge Liability Notice</h3>
+            <p className="text-[11px] text-amber-900 leading-relaxed">
               In the event a fine is received, You will cover the cost directly, ensuring the company and drivers are not held liable. (Penalty Charge Notice) fines typically start at £60 and can go up to £180, depending on the severity of the offence. If paid within 14 days, most fines are reduced by 50%, making the lowest payable amount £45 and the highest £90.
             </p>
           </div>
         )}
 
-        {/* PHOTOS -- one dominant when there's just one, a grid otherwise */}
+        {/* PHOTOS */}
         {photos.length > 0 && (
-          <div className="flex flex-col mb-6">
-            <div className="text-[13px] font-semibold text-[#8A8A8A] mb-3">
+          <div className="flex-1 flex flex-col mb-3 min-h-0">
+            <div className="text-[12px] font-semibold text-[#8A8A8A] mb-1.5 shrink-0">
               Submitted Image{photos.length > 1 ? "s" : ""} / Evidence
             </div>
             {photos.length === 1 ? (
-              <div className="flex items-center justify-center border border-admin-line rounded-card p-2 shadow-sm bg-[#FAFAFA] h-[45vh]">
+              <div className="flex-1 min-h-[160px] max-h-[300px] flex items-center justify-center border border-admin-line rounded-card p-2 shadow-sm bg-[#FAFAFA]">
                 <img
                   src={photos[0].thumbUrl}
                   alt="Evidence"
-                  className="max-w-[90%] max-h-full object-contain rounded-card"
+                  className="max-w-full max-h-full object-contain rounded-card"
                 />
               </div>
             ) : (
-              <div className="grid grid-cols-3 gap-3">
+              <div className="grid grid-cols-3 gap-2">
                 {photos.map((p, i) => (
                   <div
                     key={p.fileId || i}
-                    className="aspect-square flex items-center justify-center border border-admin-line rounded-card p-1 shadow-sm bg-[#FAFAFA]"
+                    className="aspect-square max-h-[160px] flex items-center justify-center border border-admin-line rounded-card p-1 shadow-sm bg-[#FAFAFA]"
                   >
                     <img src={p.thumbUrl} alt={`Evidence ${i + 1}`} className="max-w-full max-h-full object-contain rounded-card" />
                   </div>
@@ -156,66 +147,68 @@ export function PaperScenarioReport({ item, kind }: Props) {
         )}
 
         {/* DATA & SIGNATURE */}
-        <div className="flex gap-6">
-          <div className="flex-1 bg-[#F7F7F7] rounded-card border border-admin-line p-6 shadow-sm">
-            <h3 className="text-[13px] font-semibold text-[#2563EB] mb-4">CLIENT DETAILS</h3>
-            <div className="flex flex-col gap-3">
-              <div className="flex justify-between py-1 border-b border-admin-line/50">
-                <span className="text-[12px] text-[#8A8A8A]">Client Name</span>
-                <span className="text-[12px] font-medium text-[#1A1A1A]">{clientName}</span>
+        <div className="flex gap-4 shrink-0 mb-3">
+          <div className="flex-1 bg-[#F7F7F7] rounded-card border border-admin-line p-3.5 shadow-sm">
+            <h3 className="text-[12px] font-semibold text-[#2563EB] mb-2">CLIENT DETAILS</h3>
+            <div className="flex flex-col gap-1.5">
+              <div className="flex justify-between py-0.5 border-b border-admin-line/50">
+                <span className="text-[11px] text-[#8A8A8A]">Client Name</span>
+                <span className="text-[11px] font-medium text-[#1A1A1A]">{clientName}</span>
               </div>
               
               {kind !== "parking" && (
                 <>
-                  <div className="flex justify-between py-1 border-b border-admin-line/50">
-                    <span className="text-[12px] text-[#8A8A8A]">Phone</span>
-                    <span className="text-[12px] font-medium text-[#1A1A1A]">{clientPhone}</span>
+                  <div className="flex justify-between py-0.5 border-b border-admin-line/50">
+                    <span className="text-[11px] text-[#8A8A8A]">Phone</span>
+                    <span className="text-[11px] font-medium text-[#1A1A1A]">{clientPhone}</span>
                   </div>
-                  <div className="flex justify-between py-1 border-b border-admin-line/50">
-                    <span className="text-[12px] text-[#8A8A8A]">Email</span>
-                    <span className="text-[12px] font-medium text-[#1A1A1A]">{clientEmail}</span>
+                  <div className="flex justify-between py-0.5 border-b border-admin-line/50">
+                    <span className="text-[11px] text-[#8A8A8A]">Email</span>
+                    <span className="text-[11px] font-medium text-[#1A1A1A]">{clientEmail}</span>
                   </div>
                 </>
               )}
 
               {kind === "checkin" && (
-                <div className="flex justify-between py-1 border-b border-[#1A1A1A]/20">
-                  <span className="text-[12px] font-bold text-[#1A1A1A]">Container Number</span>
-                  <span className="text-[14px] font-bold text-[#2563EB]">{containerNum}</span>
+                <div className="flex justify-between py-0.5 border-b border-[#1A1A1A]/20">
+                  <span className="text-[11px] font-bold text-[#1A1A1A]">Container Number</span>
+                  <span className="text-[12px] font-bold text-[#2563EB]">{containerNum}</span>
                 </div>
               )}
 
               {kind === "parking" && (
-                <div className="flex justify-between py-1 border-b border-admin-line/50">
-                  <span className="text-[12px] text-[#8A8A8A]">Address on Booking</span>
-                  <span className="text-[12px] font-medium text-[#1A1A1A] truncate max-w-[200px]" title={address}>{address}</span>
+                <div className="flex justify-between py-0.5 border-b border-admin-line/50">
+                  <span className="text-[11px] text-[#8A8A8A]">Address on Booking</span>
+                  <span className="text-[11px] font-medium text-[#1A1A1A] truncate max-w-[180px]" title={address}>{address}</span>
                 </div>
               )}
             </div>
           </div>
 
-          <div className="flex-1">
-            <p className="text-[11px] text-[#8A8A8A] italic mb-2">
-              {kind === "parking" 
-                ? "By signing this document, you confirm acceptance of the parking liability terms above." 
-                : "By signing this document, you confirm that all items listed have been checked in and stored."}
-            </p>
-            <div className="text-[12px] font-semibold text-[#8A8A8A] mb-2">Client Signature:</div>
-            <div className="w-full h-[120px] border border-admin-line rounded-card bg-white p-4 shadow-sm flex items-center justify-center">
-              {signatureUrl ? (
-                <img src={signatureUrl} alt="Signature" className="max-w-full max-h-full object-contain mix-blend-multiply" />
-              ) : (
-                <span className="text-[#8A8A8A] text-[12px]">No signature provided</span>
-              )}
+          <div className="flex-1 flex flex-col justify-between">
+            <div>
+              <p className="text-[10px] text-[#8A8A8A] italic mb-1">
+                {kind === "parking" 
+                  ? "By signing this document, you confirm acceptance of the parking liability terms above." 
+                  : "By signing this document, you confirm that all items listed have been checked in and stored."}
+              </p>
+              <div className="text-[11px] font-semibold text-[#8A8A8A] mb-1">Client Signature:</div>
+              <div className="w-full h-[90px] border border-admin-line rounded-card bg-white p-2 shadow-sm flex items-center justify-center">
+                {signatureUrl ? (
+                  <img src={signatureUrl} alt="Signature" className="max-w-full max-h-full object-contain mix-blend-multiply" />
+                ) : (
+                  <span className="text-[#8A8A8A] text-[11px]">No signature provided</span>
+                )}
+              </div>
             </div>
-            <div className="text-[12px] text-[#8A8A8A] mt-2 text-right">
+            <div className="text-[11px] text-[#8A8A8A] text-right mt-1">
               Signed: {formattedTime}
             </div>
           </div>
         </div>
 
         {/* FOOTER */}
-        <div className="mt-auto pt-4 border-t border-admin-line flex justify-end">
+        <div className="mt-auto pt-2 border-t border-admin-line flex justify-end shrink-0">
           <span className="text-[11px] text-[#8A8A8A]">1/1</span>
         </div>
       </div>
