@@ -4,15 +4,23 @@ import {
   Download,
   Search,
   Bell,
+  BellRing,
   AlertTriangle,
   Mail,
-  Smartphone
+  Smartphone,
+  Send,
+  Radio,
+  CheckCircle2,
+  Loader2
 } from "lucide-react";
 import { fetchNotifications, NotificationRow } from "../api";
 import { DateRangePicker } from "../components/DateRangePicker";
 import { formatLondonDateTime } from "../utils/date";
 import { getAvatarColor } from "../utils/drivers";
 import { downloadCsv, toCsv } from "../utils/csv";
+import { usePushNotifications } from "../../../../lib/pwa/usePushNotifications";
+import { SendBroadcastPushModal } from "../components/SendBroadcastPushModal";
+import { useToast } from "../../../../components/ui/Toast";
 
 const STATUS_PILL: Record<NotificationRow["email"]["state"], string> = {
   sent: "bg-admin-status-green-bg text-admin-status-green",
@@ -66,6 +74,33 @@ export function NotificationsPage() {
   const [to, setTo] = useState<string | undefined>();
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("All");
+  const [broadcastModalOpen, setBroadcastModalOpen] = useState(false);
+  const [testingMyDevice, setTestingMyDevice] = useState(false);
+
+  const toast = useToast();
+  const {
+    isSubscribed,
+    isLoading: pushLoading,
+    subscribe: subscribePush,
+    sendTestNotification
+  } = usePushNotifications();
+
+  const handleTestMyDevice = async () => {
+    setTestingMyDevice(true);
+    try {
+      const ok = await sendTestNotification();
+      if (ok) toast.success("Test push notification sent to your device!");
+      else toast.error("Could not deliver test push.");
+    } finally {
+      setTestingMyDevice(false);
+    }
+  };
+
+  const handleEnablePush = async () => {
+    const ok = await subscribePush();
+    if (ok) toast.success("This device is now subscribed to push notifications!");
+    else toast.info("Push notification permission not granted.");
+  };
 
   const { data, isLoading, error } = useQuery({
     queryKey: ["notifications"],
@@ -99,10 +134,16 @@ export function NotificationsPage() {
       <div className="flex flex-wrap items-center justify-between gap-3 px-2">
         <div className="flex items-center gap-3">
           <Bell className="w-6 h-6 text-admin-brand" />
-          <h1 className="text-title text-fg">Notifications</h1>
+          <h1 className="text-title text-fg">Notifications & Web Push</h1>
         </div>
 
         <div className="flex items-center gap-3">
+          <button
+            onClick={() => setBroadcastModalOpen(true)}
+            className="h-10 px-4 rounded-control bg-admin-brand hover:bg-admin-brand-hover text-white text-button shadow-sm transition flex items-center gap-2"
+          >
+            <Send className="w-4 h-4" /> Send Push Notice
+          </button>
           <button
             onClick={() =>
               downloadCsv(
@@ -114,6 +155,55 @@ export function NotificationsPage() {
             className="h-10 px-4 rounded-control border border-line-strong bg-surface hover:bg-surface-sunken text-fg text-button shadow-sm transition flex items-center gap-2 disabled:opacity-50"
           >
             <Download className="w-4 h-4" /> Export CSV
+          </button>
+        </div>
+      </div>
+
+      {/* PWA & PUSH NOTIFICATION DASHBOARD CARD */}
+      <div className="p-5 bg-white rounded-module border border-admin-line shadow-sm flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+        <div className="flex items-start gap-4">
+          <div className="w-12 h-12 rounded-xl bg-admin-brand-soft text-admin-brand flex items-center justify-center border border-admin-brand/20 shrink-0">
+            {isSubscribed ? <BellRing className="w-6 h-6 text-admin-brand" /> : <Radio className="w-6 h-6 text-admin-brand" />}
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <h3 className="text-[15px] font-bold text-admin-ink">PWA Push Notification System</h3>
+              <span className={`px-2 py-0.5 rounded-full text-[11px] font-bold ${
+                isSubscribed ? "bg-admin-status-green-bg text-admin-status-green border border-admin-status-green/30" : "bg-admin-surface text-admin-muted border border-admin-line"
+              }`}>
+                {isSubscribed ? "This Device: Subscribed" : "This Device: Not Subscribed"}
+              </span>
+            </div>
+            <p className="text-[13px] text-admin-ink-2 mt-0.5 max-w-2xl">
+              Web Push allows dispatching real-time notifications to driver phones and admin screens even when the app is closed. Compatible with Android and iOS 16.4+.
+            </p>
+          </div>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2 self-stretch md:self-auto shrink-0">
+          {!isSubscribed ? (
+            <button
+              onClick={handleEnablePush}
+              disabled={pushLoading}
+              className="h-9 px-3 rounded-control bg-admin-brand-soft hover:bg-admin-brand-soft/80 text-admin-brand text-[13px] font-bold transition flex items-center gap-1.5 border border-admin-brand/20"
+            >
+              <Bell className="w-4 h-4" /> Enable Device Alerts
+            </button>
+          ) : (
+            <button
+              onClick={handleTestMyDevice}
+              disabled={testingMyDevice}
+              className="h-9 px-3 rounded-control border border-admin-line bg-admin-surface hover:bg-white text-admin-ink text-[13px] font-medium transition flex items-center gap-1.5 shadow-sm"
+            >
+              {testingMyDevice ? <Loader2 className="w-4 h-4 animate-spin text-admin-brand" /> : <Send className="w-4 h-4 text-admin-brand" />}
+              Test My Device
+            </button>
+          )}
+          <button
+            onClick={() => setBroadcastModalOpen(true)}
+            className="h-9 px-3 rounded-control bg-admin-surface hover:bg-white text-admin-ink border border-admin-line text-[13px] font-medium transition flex items-center gap-1.5 shadow-sm"
+          >
+            <Send className="w-4 h-4 text-admin-ink-2" /> Broadcast Notice
           </button>
         </div>
       </div>
@@ -271,6 +361,12 @@ export function NotificationsPage() {
           </div>
         </div>
       )}
+
+      {/* Broadcast Push Modal */}
+      <SendBroadcastPushModal
+        isOpen={broadcastModalOpen}
+        onClose={() => setBroadcastModalOpen(false)}
+      />
     </div>
   );
 }
