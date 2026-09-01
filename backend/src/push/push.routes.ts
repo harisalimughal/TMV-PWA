@@ -10,6 +10,7 @@ import {
 import { readSessionCookie, verifySessionToken } from "../auth/session";
 import { getDriverAccount } from "../auth/driver-account.service";
 import { requireAdminAuth } from "../auth/require-admin-auth";
+import { readAdminSessionCookie, verifyAdminSessionToken } from "../auth/admin-session";
 import { log } from "../utils/logger";
 
 export function pushRoutes(): Router {
@@ -35,18 +36,29 @@ export function pushRoutes(): Router {
         return res.status(400).json({ error: "Invalid push subscription object" });
       }
 
-      // Check if driver is authenticated
+      // Admin dashboard and driver app share this one endpoint (same backend, two
+      // origins) -- whichever session cookie is actually present on the request
+      // settles which this device is. Checked in this order deliberately: an admin
+      // browsing while also somehow holding a stale driver cookie should still count
+      // as admin, since that's the app they're subscribing from.
+      let role: "admin" | "driver" = "driver";
       let driverInitials: string | undefined = req.body.driverInitials;
       let driverEmail: string | undefined;
 
-      const token = readSessionCookie(req);
-      if (token) {
-        const payload = verifySessionToken(token);
-        if (payload?.email) {
-          driverEmail = payload.email;
-          const account = await getDriverAccount(payload.email);
-          if (account?.initials) {
-            driverInitials = account.initials;
+      const adminToken = readAdminSessionCookie(req);
+      if (adminToken && verifyAdminSessionToken(adminToken)) {
+        role = "admin";
+        driverInitials = undefined;
+      } else {
+        const token = readSessionCookie(req);
+        if (token) {
+          const payload = verifySessionToken(token);
+          if (payload?.email) {
+            driverEmail = payload.email;
+            const account = await getDriverAccount(payload.email);
+            if (account?.initials) {
+              driverInitials = account.initials;
+            }
           }
         }
       }
@@ -56,6 +68,7 @@ export function pushRoutes(): Router {
       await upsertPushSubscription({
         endpoint: subscription.endpoint,
         keys: subscription.keys,
+        role,
         driverInitials: driverInitials ? driverInitials.trim().toUpperCase() : undefined,
         driverEmail,
         platform: platform || (userAgent.includes("iPhone") || userAgent.includes("iPad") ? "ios" : userAgent.includes("Android") ? "android" : "desktop"),

@@ -15,6 +15,7 @@ import { log, setContext } from "../utils/logger";
 import { equalPence, formatPounds, fromPounds } from "../utils/money";
 import { sendJobCompletionEmail, sendReviewRequestEmail } from "../google/gmail";
 import { JOB_COMPLETION_EMAIL_TEMPLATE, REVIEW_REQUEST_EMAIL_TEMPLATE } from "../notifications/message";
+import { sendPushToAdmins } from "../push/push.service";
 
 export const DEFAULT_CUSTOMER_CONFIRMATION_TEXT =
   "By signing below, you confirm that you have inspected the van, that it is empty, that all items have been delivered, and that no items have been left behind. You also confirm that the removal service has been completed to your satisfaction.";
@@ -117,6 +118,16 @@ function sendCompletionEmailIfAny(job: Job, jobId: string): void {
   getSetting("JOB_COMPLETION_EMAIL_TEXT", JOB_COMPLETION_EMAIL_TEMPLATE)
     .then(template => sendJobCompletionEmail(job, template))
     .catch(err => log.warn("job completion email failed (non-fatal)", { job_id: jobId, error: String(err) }));
+}
+
+/** Fire-and-forget, same shape as sendCompletionEmailIfAny -- an admin's phone being
+ *  unreachable must never hold up (or fail) the driver's completion action. */
+function notifyAdminsOfCompletion(job: Job, jobId: string): void {
+  sendPushToAdmins({
+    title: "Job Completed",
+    body: `${job.driverInitials || "A driver"} completed the job for ${job.customerName}.`,
+    url: "/?section=finished"
+  }).catch(err => log.warn("job completion admin push failed (non-fatal)", { job_id: jobId, error: String(err) }));
 }
 
 export async function handleAction(
@@ -340,6 +351,7 @@ export async function handleAction(
     case "COMPLETE_JOB": {
       await assertCompletionGate(jobId, job);
       sendCompletionEmailIfAny(job, jobId);
+      notifyAdminsOfCompletion(job, jobId);
       return completeJob(jobId, identifier);
     }
 

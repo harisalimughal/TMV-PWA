@@ -3,6 +3,7 @@ import { initVapid } from "./vapid";
 import {
   getSubscriptionsByDriver,
   getAllPushSubscriptions,
+  getAdminPushSubscriptions,
   removePushSubscriptionByEndpoint,
   upsertPushSubscription
 } from "../db/push.repo";
@@ -44,7 +45,16 @@ export async function sendNotificationToSubscription(
     title: payload.title || "The Man Van",
     body: payload.body || "",
     icon: payload.icon || "/icons/icon-192.png",
-    badge: payload.badge || "/icons/icon-192.png",
+    // badge (the small Android status-bar icon) deliberately has no default here.
+    // It's documented as monochrome-only -- the OS reads just the alpha channel to
+    // build the shape, then tints it itself -- but icon-192.png is the full-color
+    // marketing logo on an OPAQUE white canvas (see public/icons/README.md's own
+    // note that it's a stand-in, not a real app icon). Every pixel has alpha=255, so
+    // there's no shape to extract: it rendered as a solid white/tinted square.
+    // Passing no badge lets the OS fall back to its own sensible default instead of
+    // that broken square; only use this field once a real simplified, transparent
+    // silhouette mark exists.
+    badge: payload.badge,
     url: payload.url || "/",
     tag: payload.tag || `tmv-${Date.now()}`,
     data: {
@@ -130,6 +140,42 @@ export async function broadcastPushNotification(
   );
 
   log.info("broadcasted push notification", {
+    total: subscriptions.length,
+    sent,
+    failed
+  });
+
+  return { total: subscriptions.length, sent, failed, pruned: 0 };
+}
+
+/**
+ * Operational alerts for admin devices only (job completed, an exception needs a
+ * human decision) -- never reaches a driver's phone, even one whose subscription has
+ * no driverInitials recorded (unlike broadcastPushNotification, which is genuinely
+ * everyone). Silently a no-op with total:0 if no admin has ever enabled push -- these
+ * are all fire-and-forget best-effort calls from event handlers, not something a
+ * request should ever fail over.
+ */
+export async function sendPushToAdmins(
+  payload: PushNotificationPayload
+): Promise<SendPushResult> {
+  const subscriptions = await getAdminPushSubscriptions();
+  if (subscriptions.length === 0) {
+    return { total: 0, sent: 0, failed: 0, pruned: 0 };
+  }
+
+  let sent = 0;
+  let failed = 0;
+
+  await Promise.all(
+    subscriptions.map(async sub => {
+      const ok = await sendNotificationToSubscription(sub, payload);
+      if (ok) sent++;
+      else failed++;
+    })
+  );
+
+  log.info("sent push to admins", {
     total: subscriptions.length,
     sent,
     failed

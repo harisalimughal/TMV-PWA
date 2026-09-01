@@ -157,6 +157,18 @@ export function dashboardJobsRoutes(): Router {
         }).catch(err => log.warn("failed to mirror new job into Mongo (background sync will pick it up shortly)", { error: String(err) }));
       }
 
+      // Only the reassign endpoint below used to fire this -- a job that had a driver
+      // picked right at creation never got a push at all until the driver happened to
+      // open the app and see it in their list. Best-effort: never blocks the response,
+      // a driver's device being unreachable isn't a job-creation failure.
+      if (driverInitials) {
+        sendPushToDriver(driverInitials, {
+          title: "New Job Assigned",
+          body: `New job for ${customerName} — pickup at ${pickup}.`,
+          url: "/?tab=jobs"
+        }).catch(err => log.warn("failed to send new-job push", { error: String(err), driverInitials }));
+      }
+
       return res.status(200).json({ ok: true });
     } catch (error) {
       log.error("dashboard add job failed", error);

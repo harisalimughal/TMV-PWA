@@ -64,6 +64,14 @@ export interface SettingDoc {
 
 export interface PushSubscriptionDoc {
   endpoint: string;
+  /** Determined server-side from whichever session cookie was actually present on
+   *  the /subscribe request (push/push.routes.ts) -- never trust a client-supplied
+   *  role, or a driver's own device could mark itself "admin" and receive every
+   *  admin-only alert (job completed, exceptions raised). Defaults to "driver" for
+   *  a request with neither cookie (there's no legitimate way to subscribe from
+   *  either app while logged out, so this is a defensive fallback, not an expected
+   *  case). */
+  role?: "admin" | "driver";
   driverInitials?: string;
   driverEmail?: string;
   keys: {
@@ -142,7 +150,8 @@ export async function ensureIndexes(): Promise<void> {
     activity.createIndex({ jobId: 1, timestamp: 1 }),
     settings.createIndex({ key: 1 }, { unique: true }),
     pushSubs.createIndex({ endpoint: 1 }, { unique: true }),
-    pushSubs.createIndex({ driverInitials: 1 })
+    pushSubs.createIndex({ driverInitials: 1 }),
+    pushSubs.createIndex({ role: 1 })
   ]);
   log.info("mongo indexes verified");
 }

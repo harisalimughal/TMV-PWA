@@ -5,6 +5,7 @@ import { env } from "../config/env";
 import { listCalendarEvents } from "../google/calendar";
 import { listJobs, upsertJob } from "../db/jobs.repo";
 import { recordException } from "../db/exceptions.repo";
+import { sendPushToAdmins } from "../push/push.service";
 import { Job, JobStatus, ParsedCalendarBooking } from "./job.types";
 import { WorkflowState } from "../workflow/workflow.states";
 import { log } from "../utils/logger";
@@ -235,6 +236,11 @@ async function reconcileDisappeared(existing: Job, reason: string): Promise<Job 
       detail: `${reason}. The job is ${existing.status} and was not auto-cancelled. Needs a human decision.`,
       timestamp: new Date().toISOString()
     }).catch(err => log.warn("failed to record exception", { job_id: existing.jobId, error: String(err) }));
+    sendPushToAdmins({
+      title: "Exception: Job Needs Attention",
+      body: `Job ${existing.jobId} for ${existing.customerName || "a customer"} disappeared from Calendar mid-job and needs a human decision.`,
+      url: "/?section=exceptions"
+    }).catch(err => log.warn("failed to send exception push", { job_id: existing.jobId, error: String(err) }));
     return null;
   }
 
