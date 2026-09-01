@@ -198,3 +198,4 @@ export function PaperAnalyticsReport({ reportType, from, to, driver, summary, jo
     </div>
   );
 }
+

@@ -73,3 +73,4 @@ export async function countActiveSubscriptions(): Promise<{ total: number; drive
     drivers: driverInitialsList.filter(Boolean).length
   };
 }
+

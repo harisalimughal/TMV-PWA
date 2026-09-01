@@ -43,3 +43,4 @@ export function InAppNotificationListener(): React.ReactElement | null {
 
   return null;
 }
+

@@ -16,3 +16,4 @@ describe("Push Notification VAPID service", () => {
     expect(keys1.privateKey).toBe(keys2.privateKey);
   });
 });
+

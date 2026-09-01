@@ -6,3 +6,4 @@ export default defineConfig({
     exclude: ["node_modules", "dist", "src/**/*.spec.ts"]
   }
 });
+
