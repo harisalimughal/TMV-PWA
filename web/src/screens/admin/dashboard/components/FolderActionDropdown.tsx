@@ -1,19 +1,14 @@
 import React, { useState, useRef, useEffect } from "react";
-import { FolderOpen, FileText, Download, ChevronDown, ExternalLink, Loader2 } from "lucide-react";
+import { FolderOpen, FileText, Download, ChevronDown, ExternalLink } from "lucide-react";
 
 interface Props {
   onPreview: () => void;
   onDownload: () => void;
   onOpenFolder?: () => void;
   hasFolderUrl?: boolean;
-  /** True while a PDF triggered from this row is preparing (waiting on its evidence
-   *  photos to load before print) -- the wait can run several seconds on a slow
-   *  connection, and the dropdown closes on click, so without this the row goes
-   *  silent and looks like the download did nothing. */
-  downloading?: boolean;
 }
 
-export function FolderActionDropdown({ onPreview, onDownload, onOpenFolder, hasFolderUrl, downloading }: Props) {
+export function FolderActionDropdown({ onPreview, onDownload, onOpenFolder, hasFolderUrl }: Props) {
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
@@ -34,13 +29,9 @@ export function FolderActionDropdown({ onPreview, onDownload, onOpenFolder, hasF
       <button
         onClick={(e) => { e.stopPropagation(); setIsOpen(!isOpen); }}
         className={`flex items-center gap-1.5 p-1.5 px-2 rounded-card transition border border-transparent ${isOpen ? 'bg-admin-surface border-admin-line shadow-sm' : 'hover:bg-admin-surface hover:border-admin-line'}`}
-        title={downloading ? "Preparing PDF…" : "View job documents"}
+        title="View job documents"
       >
-        {downloading ? (
-          <Loader2 className="w-4 h-4 text-admin-brand animate-spin" />
-        ) : (
-          <FolderOpen className={`w-4 h-4 ${isOpen ? 'text-admin-brand fill-admin-brand/10' : 'text-admin-muted'}`} />
-        )}
+        <FolderOpen className={`w-4 h-4 ${isOpen ? 'text-admin-brand fill-admin-brand/10' : 'text-admin-muted'}`} />
         <ChevronDown className={`w-3 h-3 transition-transform ${isOpen ? 'rotate-180 text-admin-brand' : 'text-admin-muted/60'}`} />
       </button>
 

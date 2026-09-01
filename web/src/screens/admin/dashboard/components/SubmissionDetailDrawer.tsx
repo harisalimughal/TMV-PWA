@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { X, Download, Eye, Maximize2, ZoomIn, ZoomOut, Check, ChevronLeft, ChevronRight, RefreshCw } from "lucide-react";
 import { IconButton } from "../../../../ui";
 import { PaperDossierReport } from "./PaperDossierReport";
@@ -27,15 +27,30 @@ interface Props {
   /** Set only for a scenario submission (check-in/out, parking, liability) --
    *  a NormalizedJob (finished job) has no kind and uses PaperDossierReport instead. */
   kind?: ScenarioKind;
+  /** Triggers the download flow immediately on open -- for the row-level "Download"
+   *  quick action, which used to open this drawer and print in the same click with
+   *  no visible preview step. See the comment on handleDownload for why that mattered. */
+  autoDownload?: boolean;
 }
 
-export function SubmissionDetailDrawer({ job, isOpen, onClose, onNavigate, hasNext, hasPrev, kind }: Props) {
+export function SubmissionDetailDrawer({ job, isOpen, onClose, onNavigate, hasNext, hasPrev, kind, autoDownload }: Props) {
   const [isPreviewing, setIsPreviewing] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [zoom, setZoom] = useState(100);
   const [activeTab, setActiveTab] = useState<"Activity" | "Comments">("Activity");
   const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+
+  // handleDownload is defined further down (it needs job-derived values that only
+  // make sense once job is known non-null), but the autoDownload effect has to sit
+  // up here with the other hooks, before the early return below -- Rules of Hooks.
+  // The ref always holds the latest handleDownload closure; the effect just calls it
+  // once when the drawer opens with autoDownload set.
+  const handleDownloadRef = useRef<() => void>();
+  useEffect(() => {
+    if (isOpen && autoDownload && job) handleDownloadRef.current?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, autoDownload]);
 
   if (!isOpen || !job) return null;
 
@@ -92,10 +107,18 @@ export function SubmissionDetailDrawer({ job, isOpen, onClose, onNavigate, hasNe
   };
 
   const handleDownload = () => {
+    // Jobs' own download flow (JobDetailDrawer -> PdfPreviewModal) always renders a
+    // genuinely visible on-screen copy of the report before the user can download --
+    // this drawer's own Download PDF button used to skip straight from the default
+    // Form Answers view to a print-only hidden copy, no visible render in between.
+    // Switching into the Preview PDF pane here makes every download flow through
+    // this drawer go through the same visible-render step Jobs already relies on.
+    setIsPreviewing(true);
     setIsGeneratingPdf(true);
-    // Give the hidden print DOM a tick to mount, then wait for its actual photos to
-    // finish loading -- a fixed setTimeout before print() left real evidence photos
-    // blank on the printed/downloaded page whenever they hadn't loaded in time.
+    // Give the preview + hidden print DOM a tick to mount, then wait for their actual
+    // photos to finish loading -- a fixed setTimeout before print() left real
+    // evidence photos blank on the printed/downloaded page whenever they hadn't
+    // loaded in time.
     setTimeout(async () => {
       await waitForPrintImages();
 
@@ -112,6 +135,7 @@ export function SubmissionDetailDrawer({ job, isOpen, onClose, onNavigate, hasNe
       showToast("PDF Downloaded");
     }, 800);
   };
+  handleDownloadRef.current = handleDownload;
 
   const formattedTime = isScenario
     ? formatLondonDateTime(scenarioItem.timestamp || rawRecord["Timestamp"] || rawRecord["Date"])
@@ -381,12 +405,16 @@ export function SubmissionDetailDrawer({ job, isOpen, onClose, onNavigate, hasNe
       </div>
       
          </div>
-      {/* Hidden PDF renderer just for printing. Positioning (absolute, not fixed -- see
-          index.css's .print-content rule) is owned entirely by that CSS class: a fixed
-          position here previously caused only page 1 of a multi-page report to print,
-          since browsers repeat fixed-position elements identically on every printed
-          page instead of letting their content paginate. */}
-      <div className="hidden print:block print-content">
+      {/* PDF renderer, kept off-screen (not display:none) for printing -- see
+          index.css's .print-content rule for why: a photo inside a permanently
+          display:none element never gets laid out or painted, and printed blank
+          even once fully downloaded. Positioning (fixed off-screen normally,
+          absolute at print time) is owned entirely by that CSS class: a fixed
+          position at print time previously caused only page 1 of a multi-page
+          report to print, since browsers repeat fixed-position elements
+          identically on every printed page instead of letting their content
+          paginate. */}
+      <div className="print-content">
          {isScenario ? (
            <PaperScenarioReport item={job} kind={kind!} />
          ) : (

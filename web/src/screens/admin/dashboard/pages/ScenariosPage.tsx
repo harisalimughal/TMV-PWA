@@ -18,7 +18,6 @@ import { PaperDossierReport } from "../components/PaperDossierReport";
 import { NormalizedJob } from "../types";
 import { fetchScenarios } from "../api";
 import { PaperScenarioReport } from "../components/PaperScenarioReport";
-import { waitForPrintImages } from "../utils/printReady";
 import { formatLondonDateTime } from "../utils/date";
 import { DateRangePicker } from "../components/DateRangePicker";
 import { LiabilityConfigModal } from "../components/LiabilityConfigModal";
@@ -81,7 +80,10 @@ export function ScenariosPage({ kind }: Props) {
   const [viewMode, setViewMode] = useState<"table" | "cards">("table");
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [previewJob, setPreviewJob] = useState<any | null>(null);
-  const [downloadingId, setDownloadingId] = useState<string | null>(null);
+  /** Set right before opening the drawer from the row-level "Download" action -- see
+   *  the matching state in FinishedJobsPage.tsx and SubmissionDetailDrawer's
+   *  autoDownload prop. */
+  const [autoDownloadId, setAutoDownloadId] = useState<string | null>(null);
   const [isConfigOpen, setIsConfigOpen] = useState(false);
   const [isMobileOpen, setIsMobileOpen] = useState(false);
 
@@ -401,17 +403,14 @@ export function ScenariosPage({ kind }: Props) {
                         <td className="px-4 pr-6 text-center">
     <FolderActionDropdown
       hasFolderUrl={!!(item.folderUrl || item.driveFolderUrl)}
-      downloading={downloadingId === item.id}
       onOpenFolder={() => window.open((item.folderUrl || item.driveFolderUrl), "_blank")}
-      onPreview={() => setPreviewJob(item)}
+      onPreview={() => { setAutoDownloadId(null); setPreviewJob(item); }}
       onDownload={() => {
+        // Same reasoning as FinishedJobsPage: hand off to the drawer's own download
+        // flow (autoDownload) instead of printing straight from a permanently hidden
+        // copy with no visible render step, which Jobs' working flow never does.
+        setAutoDownloadId(item.id);
         setPreviewJob(item);
-        setDownloadingId(item.id);
-        setTimeout(async () => {
-          await waitForPrintImages();
-          window.print();
-          setDownloadingId(null);
-        }, 500);
       }}
     />
   </td>
@@ -476,7 +475,8 @@ export function ScenariosPage({ kind }: Props) {
           job={previewJob}
           kind={kind}
           isOpen={!!previewJob}
-          onClose={() => setPreviewJob(null)}
+          autoDownload={autoDownloadId === previewJob.id}
+          onClose={() => { setPreviewJob(null); setAutoDownloadId(null); }}
           onNavigate={(dir) => {
             if (!data?.items) return;
             const idx = data.items.findIndex((j: any) => (j.id || j.jobId) === (previewJob.id || previewJob.jobId));

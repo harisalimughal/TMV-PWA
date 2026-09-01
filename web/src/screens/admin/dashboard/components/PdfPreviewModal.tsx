@@ -60,18 +60,20 @@ export function PdfPreviewModal({ job, isOpen, onClose, onDownload }: Props) {
          </div>
       </div>
 
-      {/* Hidden print-only renderer: window.print() while this modal is open would
-          otherwise capture the modal's own fixed/scrollable chrome, which browsers
-          can't paginate across multiple print pages -- only whatever fits the current
-          viewport gets printed, silently truncating everything else. This mirrors
-          SubmissionDetailDrawer.tsx's working pattern: index.css's @media print rule
-          hides body * by default and only re-shows .print-content, so this is the only
-          thing that ends up on the printed/saved-as-PDF page, laid out via
-          PaperDossierReport's own isPreview=false print-page/@page CSS.
-          Positioning (absolute, not fixed -- see index.css's .print-content rule) is
-          owned entirely by that CSS class; don't add position utilities here, a fixed
-          position here previously caused only page 1 of a multi-page report to print. */}
-      <div className="hidden print:block print-content">
+      {/* Print-only renderer, kept off-screen rather than display:none -- see
+          index.css's .print-content rule. window.print() while this modal is open
+          would otherwise capture the modal's own fixed/scrollable chrome, which
+          browsers can't paginate across multiple print pages -- only whatever fits
+          the current viewport gets printed, silently truncating everything else.
+          index.css's @media print rule hides body * by default and only re-shows
+          .print-content, so this is the only thing that ends up on the
+          printed/saved-as-PDF page, laid out via PaperDossierReport's own
+          isPreview=false print-page/@page CSS.
+          Positioning (fixed off-screen normally, absolute at print time) is owned
+          entirely by that CSS class; don't add position utilities here, a fixed
+          position at print time previously caused only page 1 of a multi-page
+          report to print. */}
+      <div className="print-content">
         <PaperDossierReport job={job} isPreview={false} />
       </div>
     </div>

@@ -12,7 +12,6 @@ import {
 import { SubmissionDetailDrawer } from "../components/SubmissionDetailDrawer";
 import { FolderActionDropdown } from "../components/FolderActionDropdown";
 import { PaperDossierReport } from "../components/PaperDossierReport";
-import { waitForPrintImages } from "../utils/printReady";
 import { FileText } from "lucide-react";
 import { fetchJobs } from "../api";
 import { NormalizedJob, toPounds } from "../types";
@@ -28,7 +27,10 @@ export function FinishedJobsPage() {
   const [to, setTo] = useState<string | undefined>();
   const [expandedJobId, setExpandedJobId] = useState<string | null>(null);
   const [previewJob, setPreviewJob] = useState<NormalizedJob | null>(null);
-  const [downloadingJobId, setDownloadingJobId] = useState<string | null>(null);
+  /** Set right before opening the drawer from the row-level "Download" action, so the
+   *  drawer knows to run its own download flow immediately on open (see
+   *  SubmissionDetailDrawer's autoDownload prop) instead of just sitting on Preview. */
+  const [autoDownloadJobId, setAutoDownloadJobId] = useState<string | null>(null);
 
   const { data, isLoading, error } = useQuery({
     queryKey: ["jobs", "COMPLETED", page, pageSize, from, to],
@@ -266,21 +268,17 @@ export function FinishedJobsPage() {
                         <td className="px-4 text-center">
       <FolderActionDropdown
         hasFolderUrl={!!job.driveFolderUrl}
-        downloading={downloadingJobId === job.jobId}
         onOpenFolder={() => window.open(job.driveFolderUrl, "_blank")}
-        onPreview={() => setPreviewJob(job)}
+        onPreview={() => { setAutoDownloadJobId(null); setPreviewJob(job); }}
         onDownload={() => {
+          // Opens the same drawer as Preview, then has it run its own download flow
+          // (SubmissionDetailDrawer's handleDownload/autoDownload) -- the drawer's own
+          // Preview PDF pane and Download PDF button are what give this the same
+          // genuinely-visible-render-before-print structure Jobs' PdfPreviewModal has.
+          // This used to print straight from a permanently hidden copy with no visible
+          // render step at all, one of the differences from Jobs' working flow.
+          setAutoDownloadJobId(job.jobId);
           setPreviewJob(job);
-          setDownloadingJobId(job.jobId);
-          setTimeout(async () => {
-            await waitForPrintImages();
-            const originalTitle = document.title;
-            const dateStr = new Date().toISOString().slice(0, 10);
-            document.title = `Job_Completed_${job.jobId}_${job.driverName?.replace(/\s+/g, '')}_${dateStr}`;
-            window.print();
-            document.title = originalTitle;
-            setDownloadingJobId(null);
-          }, 500);
         }}
       />
     </td>
@@ -316,7 +314,8 @@ export function FinishedJobsPage() {
         <SubmissionDetailDrawer
           job={previewJob}
           isOpen={!!previewJob}
-          onClose={() => setPreviewJob(null)}
+          autoDownload={autoDownloadJobId === previewJob.jobId}
+          onClose={() => { setPreviewJob(null); setAutoDownloadJobId(null); }}
           onNavigate={(dir) => {
             if (!data?.items) return;
             const idx = data.items.findIndex((j: any) => j.jobId === previewJob.jobId);

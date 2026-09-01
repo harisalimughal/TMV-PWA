@@ -231,11 +231,39 @@ body {
   border: 1px solid rgb(var(--line)) !important;
 }
 
-/* PDF/print export. position:fixed on ANY ancestor pins .print-content to a single
- * viewport-sized box during print, capping a multi-page report at page 1 -- and
- * visibility:hidden doesn't remove that containing block. So flatten every element to
- * static, then re-elevate only .print-content, which then has no positioned ancestor
- * left to be trapped inside. */
+/* PDF/print export. .print-content holds a hidden copy of the report used only to
+ * generate the print/PDF output (the on-screen preview, when there is one, is a
+ * separate visible copy). It used to be display:none (Tailwind's `hidden`) at all
+ * times outside of print. That hid it from the user correctly, but display:none
+ * elements are never laid out or painted -- the browser still fetches their <img>
+ * tags' bytes over the network (img.complete/the load event do fire, which is what
+ * printReady.ts's waitForPrintImages waits on), but a real evidence photo that has
+ * never actually been through a layout+paint pass reliably showed up blank in the
+ * printed/downloaded PDF regardless, on any report with more than one photo -- the
+ * download flow that opens a genuinely visible on-screen preview first (Jobs' own
+ * PdfPreviewModal) never had this problem, everything else that went straight from
+ * click to a display:none-only copy did. Fixed by keeping it positioned off-screen
+ * (not display:none) so it's continuously laid out and painted like ordinary content,
+ * just not visible or interactive -- print media then un-hides it in place, exactly
+ * as before.
+ *
+ * position:fixed on ANY ancestor pins .print-content to a single viewport-sized box
+ * during print, capping a multi-page report at page 1 -- and visibility:hidden
+ * doesn't remove that containing block. So flatten every element to static, then
+ * re-elevate only .print-content, which then has no positioned ancestor left to be
+ * trapped inside. */
+.print-content {
+  position: fixed;
+  /* Off the visible viewport in every browser's scroll-area accounting, not just
+     invisible -- opacity:0 alone doesn't guarantee a fixed, full-width element can
+     never introduce a stray scrollbar. */
+  top: -99999px;
+  left: -99999px;
+  width: 210mm;
+  opacity: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
 @media print {
   aside, header, .no-print, button {
     display: none !important;
@@ -255,6 +283,8 @@ body {
     z-index: 99999;
     background: white;
     overflow: visible;
+    opacity: 1 !important;
+    pointer-events: auto !important;
   }
   .print-content * {
     visibility: visible;
