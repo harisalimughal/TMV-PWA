@@ -1,7 +1,14 @@
 import React, { useState, useEffect } from "react";
-import { X, FileText, Download, AlertTriangle, FileDown } from "lucide-react";
+import { X, FileText, Download, AlertTriangle, FileDown, Loader2 } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
 import { DateRangePicker } from "./DateRangePicker";
 import { Button, IconButton } from "../../../../ui";
+import { fetchSummary, fetchJobs, fetchDrivers } from "../api";
+import { NormalizedJob, SummaryResponse } from "../types";
+import { PrintPortal } from "./PrintPortal";
+import { PaperAnalyticsReport } from "./PaperAnalyticsReport";
+import { waitForPrintImages } from "../utils/printReady";
+import { sounds } from "../utils/audio";
 
 interface Props {
   isOpen: boolean;
@@ -27,16 +34,23 @@ export function GenerateReportModal({ isOpen, onClose, initialFrom, initialTo }:
   const [from, setFrom] = useState(initialFrom);
   const [to, setTo] = useState(initialTo);
   const [driver, setDriver] = useState("all");
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [printableData, setPrintableData] = useState<{
+    summary: SummaryResponse | null;
+    jobs: NormalizedJob[];
+  } | null>(null);
 
-  // Report generation is not wired to a backend yet. Rather than fabricate a file, the
-  // action reports the feature as unavailable -- see handleGenerate. The picker UI is
-  // kept so the contract (report type / range / format) is visible for when it lands.
-  const [status, setStatus] = useState<"idle" | "unavailable">("idle");
+  const { data: driversData } = useQuery({
+    queryKey: ["report_modal_drivers"],
+    queryFn: () => fetchDrivers(),
+    enabled: isOpen
+  });
 
   // Reset state when opened
   useEffect(() => {
     if (isOpen) {
-      setStatus("idle");
+      setIsGenerating(false);
+      setPrintableData(null);
       setReportType("Analytics Overview");
       setFormat("PDF");
       setFrom(initialFrom);
@@ -50,15 +64,70 @@ export function GenerateReportModal({ isOpen, onClose, initialFrom, initialTo }:
   const requiresDateRange = ["Daily Operations", "Weekly Operations", "Monthly Operations"].includes(reportType);
   const noDatesSelected = requiresDateRange && (!from || !to);
   
-  const showDriverFilter = ["Driver Performance", "Revenue"].includes(reportType);
+  const showDriverFilter = ["Driver Performance", "Revenue", "Daily Operations", "Weekly Operations", "Monthly Operations"].includes(reportType);
 
-  const handleGenerate = () => {
-    // No backend endpoint for report generation exists yet. Previously this faked a
-    // delay, a random 5% failure, and downloaded a "Mock Report Content" text file --
-    // all of which looked to an operator like a real, if flaky, report. Until the
-    // real endpoint is built it reports honestly that the feature is unavailable.
-    setStatus("unavailable");
+  const handleGenerate = async () => {
+    if (format === "CSV") {
+      const params = new URLSearchParams();
+      if (from) params.set("from", from);
+      if (to) params.set("to", to);
+      if (driver && driver !== "all") params.set("driver", driver);
+      if (reportType === "Exceptions") {
+        params.set("evidence", "missing");
+      } else if (reportType === "Revenue" || reportType === "Payments") {
+        params.set("payStatus", "ALL");
+      }
+
+      sounds.playSuccess();
+      window.location.href = `/api/admin/jobs/export.csv?${params.toString()}`;
+      onClose();
+      return;
+    }
+
+    if (format === "PDF") {
+      try {
+        setIsGenerating(true);
+        const [sumRes, jobsRes] = await Promise.all([
+          fetchSummary(from, to).catch(() => null),
+          fetchJobs({
+            from,
+            to,
+            driver: driver !== "all" ? driver : undefined,
+            pageSize: 100
+          }).catch(() => ({ items: [] as NormalizedJob[] }))
+        ]);
+
+        setPrintableData({
+          summary: sumRes,
+          jobs: (jobsRes as any)?.items || []
+        });
+
+        document.body.classList.add("printing-report");
+
+        setTimeout(async () => {
+          await waitForPrintImages("#tmv-print-portal, .print-content");
+
+          const originalTitle = document.title;
+          const label = reportType.replace(/\s+/g, "_");
+          const dateStr = from ? `${from}_${to || from}` : new Date().toISOString().slice(0, 10);
+          document.title = `TMV_${label}_${dateStr}`;
+
+          window.print();
+
+          document.title = originalTitle;
+          document.body.classList.remove("printing-report");
+          setIsGenerating(false);
+          setPrintableData(null);
+          onClose();
+        }, 400);
+      } catch (err) {
+        console.error("PDF report generation failed", err);
+        setIsGenerating(false);
+      }
+    }
   };
+
+  const driversList = driversData?.drivers || [];
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
@@ -75,19 +144,6 @@ export function GenerateReportModal({ isOpen, onClose, initialFrom, initialTo }:
         {/* Body */}
         <div className="p-6 overflow-y-auto flex-1 min-h-0">
              <div className="space-y-6">
-
-                {status === "unavailable" && (
-                  <div className="p-4 bg-admin-status-amber-bg border border-admin-status-amber/30 rounded-card flex items-start gap-3">
-                    <AlertTriangle className="w-5 h-5 text-admin-status-amber shrink-0" />
-                    <div>
-                      <h4 className="text-[14px] font-bold text-admin-status-amber">Report generation isn&apos;t available yet</h4>
-                      <p className="text-[13px] text-admin-ink-2 mt-0.5">
-                        This build has no report backend wired up. Use the CSV exports on the Reports, Jobs and
-                        Completed Jobs pages in the meantime.
-                      </p>
-                    </div>
-                  </div>
-                )}
 
                 {/* Report Type */}
                 <div>
@@ -133,9 +189,11 @@ export function GenerateReportModal({ isOpen, onClose, initialFrom, initialTo }:
                        className="w-full h-10 px-3 rounded-card border border-admin-line bg-admin-surface text-[13px] text-admin-ink outline-none focus:border-admin-brand transition"
                      >
                        <option value="all">All Drivers</option>
-                       <option value="MK">Maico (MK)</option>
-                       <option value="KA">Caio (KA)</option>
-                       <option value="TI">Tiago (TI)</option>
+                       {driversList.map(d => (
+                         <option key={d.initials} value={d.initials}>
+                           {d.fullName || d.initials} ({d.initials})
+                         </option>
+                       ))}
                      </select>
                    </div>
                 )}
@@ -170,14 +228,28 @@ export function GenerateReportModal({ isOpen, onClose, initialFrom, initialTo }:
           </Button>
           <Button
             onClick={handleGenerate}
-            disabled={noDatesSelected || status === "unavailable"}
-            iconLeft={<Download />}
+            disabled={noDatesSelected || isGenerating}
+            iconLeft={isGenerating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download />}
           >
-            Generate {format}
+            {isGenerating ? "Preparing PDF…" : `Generate ${format}`}
           </Button>
         </div>
 
       </div>
+
+      {/* Hidden Print Portal for PDF generation */}
+      {printableData && (
+        <PrintPortal>
+          <PaperAnalyticsReport
+            reportType={reportType}
+            from={from}
+            to={to}
+            driver={driver}
+            summary={printableData.summary}
+            jobs={printableData.jobs}
+          />
+        </PrintPortal>
+      )}
     </div>
   );
 }
