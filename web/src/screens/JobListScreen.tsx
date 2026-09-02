@@ -7,7 +7,6 @@ import { AppShell } from "../app/AppShell";
 import { OfflineBanner } from "../app/OfflineBanner";
 import {
   DatePickerSheet,
-  FeaturedJobCard,
   JobFilterBar,
   MobileHeader,
   ScheduleRow,
@@ -68,11 +67,6 @@ function bucketForKey(key: string): JobBucket {
   if (key < t) return "past";
   if (key > t) return "next";
   return "today";
-}
-
-/** The job that matters right now within Today: in progress first, else the earliest. */
-function pickTodayFeatured(today: Job[]): Job | null {
-  return today.find(j => j.status === "IN_PROGRESS") ?? today[0] ?? null;
 }
 
 export function JobListScreen({ driver, onOpenJob, onOpenProfile }: JobListScreenProps) {
@@ -160,10 +154,6 @@ export function JobListScreen({ driver, onOpenJob, onOpenProfile }: JobListScree
     else if (filtered.counts.upcoming > 0) setFilter("upcoming");
   }, [loading, error, filter, filtered.counts]);
 
-  const featured = filter === "today" ? pickTodayFeatured(filtered.today) : null;
-  const featuredId = featured?.jobId;
-  const todayRest = filtered.today.filter(j => j.jobId !== featuredId);
-
   const hasAnyJobs = jobsList.today.length + jobsList.past.length + jobsList.next.length > 0;
 
   const showFilterBar = !loading && !error && hasAnyJobs;
@@ -243,8 +233,6 @@ export function JobListScreen({ driver, onOpenJob, onOpenProfile }: JobListScree
                 <FilterView
                   filter={filter}
                   filtered={filtered}
-                  featured={featured}
-                  todayRest={todayRest}
                   customDate={customDate}
                   onOpenJob={onOpenJob}
                   onOpenPicker={() => setPickerOpen(true)}
@@ -272,8 +260,6 @@ export function JobListScreen({ driver, onOpenJob, onOpenProfile }: JobListScree
 interface FilterViewProps {
   filter: JobFilter;
   filtered: ReturnType<typeof filterJobsByDate>;
-  featured: Job | null;
-  todayRest: Job[];
   customDate: string | null;
   onOpenJob: (jobId: string) => void;
   onOpenPicker: () => void;
@@ -283,8 +269,6 @@ interface FilterViewProps {
 function FilterView({
   filter,
   filtered,
-  featured,
-  todayRest,
   customDate,
   onOpenJob,
   onOpenPicker,
@@ -308,23 +292,16 @@ function FilterView({
       );
     }
     return (
-      <>
-        {featured && (
-          <FeaturedJobCard job={featured} onOpen={() => onOpenJob(featured.jobId)} />
-        )}
-        {todayRest.length > 0 && (
-          <ScheduleSection title="Today" meta={jobsLabel(todayRest.length)}>
-            {todayRest.map(job => (
-              <ScheduleRow
-                key={job.jobId}
-                job={job}
-                bucket="today"
-                onOpen={() => onOpenJob(job.jobId)}
-              />
-            ))}
-          </ScheduleSection>
-        )}
-      </>
+      <ScheduleSection title="Today" meta={jobsLabel(filtered.today.length)}>
+        {filtered.today.map(job => (
+          <ScheduleRow
+            key={job.jobId}
+            job={job}
+            bucket="today"
+            onOpen={() => onOpenJob(job.jobId)}
+          />
+        ))}
+      </ScheduleSection>
     );
   }
 

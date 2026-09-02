@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { Eye, EyeOff } from "lucide-react";
+import { BrandMark } from "../../ui";
 
 /**
  * The auth composition.
@@ -12,19 +13,34 @@ import { Eye, EyeOff } from "lucide-react";
 
 export function AuthLayout({ children }: { children: React.ReactNode }) {
   return (
-    <div className="min-h-[100dvh] bg-surface text-fg lg:grid lg:h-full lg:min-h-0 lg:grid-cols-[minmax(0,42%)_minmax(0,58%)] lg:overflow-hidden">
-      <aside className="flex flex-col justify-between border-b border-line bg-surface-sunken px-6 pb-8 pt-safe lg:h-full lg:border-b-0 lg:border-r lg:px-14 lg:py-16">
-        <div className="pt-[9vh] lg:pt-0">
+    <div className="min-h-[100dvh] bg-surface-sunken text-fg lg:grid lg:h-full lg:min-h-0 lg:grid-cols-[minmax(0,42%)_minmax(0,58%)] lg:overflow-hidden">
+      <aside
+        className="flex min-h-[34dvh] flex-col justify-between border-b border-line bg-surface-sunken pb-7 pt-[calc(2rem+env(safe-area-inset-top))] lg:h-full lg:border-b-0 lg:border-r lg:px-14 lg:py-16"
+        style={{
+          paddingLeft: "calc(1.25rem + env(safe-area-inset-left))",
+          paddingRight: "calc(1.25rem + env(safe-area-inset-right))",
+        }}
+      >
+        <div className="mx-auto w-full max-w-[420px] pt-2 lg:mx-0 lg:pt-0">
+          <BrandMark size="md" tone="brand" className="mb-8" />
           <span className="block text-title text-fg">The Man Van</span>
           <p className="mt-3 max-w-sm text-body text-fg-muted lg:mt-4">
-            Driver Operations — jobs, evidence, payments and customer sign-off, in one place.
+            Driver Operations: jobs, evidence, payments and customer sign-off, in one place.
           </p>
         </div>
-        <p className="mt-6 text-meta text-fg-subtle lg:mt-0">© The Man Van</p>
+        <p className="mx-auto mt-6 w-full max-w-[420px] text-meta text-fg-subtle lg:mx-0 lg:mt-0">
+          © The Man Van
+        </p>
       </aside>
 
-      <main className="flex justify-center px-6 pb-12 pt-8 pl-safe pr-safe pb-safe lg:h-full lg:items-center lg:overflow-y-auto lg:scroll-touch lg:px-16 lg:py-12">
-        <div className="w-full max-w-[380px]">{children}</div>
+      <main
+        className="flex justify-center bg-surface pb-[calc(3rem+env(safe-area-inset-bottom))] pt-8 lg:h-full lg:items-center lg:overflow-y-auto lg:scroll-touch lg:px-16 lg:py-12"
+        style={{
+          paddingLeft: "calc(1.25rem + env(safe-area-inset-left))",
+          paddingRight: "calc(1.25rem + env(safe-area-inset-right))",
+        }}
+      >
+        <div className="w-full max-w-[420px]">{children}</div>
       </main>
     </div>
   );
