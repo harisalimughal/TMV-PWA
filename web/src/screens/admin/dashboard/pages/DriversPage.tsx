@@ -126,16 +126,16 @@ export function DriversPage() {
             className="bg-white rounded-module shadow-[0_4px_20px_rgb(0,0,0,0.03)] border border-admin-line p-6 flex flex-col justify-between hover:-translate-y-0.5 hover:shadow-md transition-all cursor-pointer relative group"
           >
             {/* Header Row */}
-            <div className="flex items-start justify-between mb-4">
-              <div className="flex items-center gap-3">
-                <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-[14px] ${getAvatarColor(driver.initials)}`}>
+            <div className="flex items-start justify-between gap-3 mb-4">
+              <div className="flex min-w-0 items-center gap-3">
+                <div className={`w-10 h-10 shrink-0 rounded-full flex items-center justify-center font-bold text-[14px] ${getAvatarColor(driver.initials)}`}>
                   {driver.initials}
                 </div>
-                <div>
+                <div className="min-w-0">
                   <h3 className="font-bold text-admin-ink text-[16px] flex items-center gap-1.5 leading-tight">
-                    {driver.fullName}
+                    <span className="truncate">{driver.fullName}</span>
                     {driver.active && (
-                      <span title="Verified Active" className="cursor-help">
+                      <span title="Verified Active" className="cursor-help shrink-0">
                         <ShieldCheck className="w-4 h-4 text-[#10b981]" />
                       </span>
                     )}
@@ -143,15 +143,18 @@ export function DriversPage() {
                 </div>
               </div>
 
-              <div className="flex flex-col items-end gap-2">
+              <div className="flex shrink-0 flex-col items-end gap-2">
                 <span className={`px-2 py-0.5 rounded-control text-[11px] font-bold uppercase tracking-wider ${
                   driver.active ? "bg-admin-status-green-bg text-admin-status-green" : "bg-admin-surface text-admin-muted"
                 }`}>
                   {driver.active ? "Active" : "Inactive"}
                 </span>
 
-                {/* Overflow menu triggers */}
-                <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition">
+                {/* Overflow menu triggers. Hover-reveal only from md up -- below that
+                    (this card grid's single-column mobile layout) touch has no real
+                    hover, so a tap would just trigger the hover state instead of the
+                    button underneath it; always visible there instead. */}
+                <div className="flex items-center gap-1 opacity-100 transition md:opacity-0 md:group-hover:opacity-100">
                   <button
                     onClick={(e) => { e.stopPropagation(); setEditingDriver(driver); }}
                     title="Edit Driver"
@@ -179,9 +182,9 @@ export function DriversPage() {
 
             {/* Contact / Van Reg Line */}
             <div className="flex flex-col gap-2 mb-6 text-[13px] text-admin-muted">
-              <div className="flex items-center gap-4">
-                <span className="flex items-center gap-1.5"><Mail className="w-3.5 h-3.5" /> {driver.email || "—"}</span>
-                <span className="flex items-center gap-1.5"><Phone className="w-3.5 h-3.5" /> {driver.phone || "—"}</span>
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5">
+                <span className="flex min-w-0 items-center gap-1.5"><Mail className="w-3.5 h-3.5 shrink-0" /> <span className="truncate">{driver.email || "—"}</span></span>
+                <span className="flex min-w-0 items-center gap-1.5"><Phone className="w-3.5 h-3.5 shrink-0" /> <span className="truncate">{driver.phone || "—"}</span></span>
               </div>
               {driver.vanRegistration && (
                 <div className="flex items-center gap-1.5 mt-1">
