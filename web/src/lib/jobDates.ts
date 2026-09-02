@@ -94,6 +94,21 @@ export interface FilteredJobs {
   counts: { today: number; upcoming: number; previous: number };
 }
 
+export function groupJobsByDate(jobs: Job[]): DateGroup[] {
+  const groups: DateGroup[] = [];
+  for (const job of jobs) {
+    const k = londonDateKey(job.bookedStart);
+    if (!k) continue;
+    const last = groups[groups.length - 1];
+    if (last && last.key === k) {
+      last.jobs.push(job);
+    } else {
+      groups.push({ key: k, label: formatDateKeyShort(k), jobs: [job] });
+    }
+  }
+  return groups;
+}
+
 /**
  * Split a flat job list into the filter buckets. `customKey` is a "YYYY-MM-DD" key or
  * null. `now` is injectable for tests.
@@ -121,16 +136,7 @@ export function filterJobsByDate(
   upcoming.sort(byStartAsc);
   custom.sort(byStartAsc);
 
-  const upcomingGroups: DateGroup[] = [];
-  for (const job of upcoming) {
-    const k = londonDateKey(job.bookedStart);
-    const last = upcomingGroups[upcomingGroups.length - 1];
-    if (last && last.key === k) {
-      last.jobs.push(job);
-    } else {
-      upcomingGroups.push({ key: k, label: formatDateKeyShort(k), jobs: [job] });
-    }
-  }
+  const upcomingGroups = groupJobsByDate(upcoming);
 
   const previous = overdueJobs(jobs, now);
 

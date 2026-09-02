@@ -20,6 +20,7 @@ import {
   filterJobsByDate,
   formatDateKeyLong,
   formatDateKeyShort,
+  groupJobsByDate,
   todayKey,
   type JobFilter
 } from "../lib/jobDates";
@@ -35,6 +36,12 @@ interface JobListScreenProps {
  * convenience, not a durable preference. */
 const FILTER_KEY = "tmv-jobs:filter";
 const DATE_KEY = "tmv-jobs:custom-date";
+
+interface JobsListState {
+  today: Job[];
+  past: Job[];
+  next: Job[];
+}
 
 function readStored(): { filter: JobFilter; customDate: string | null; hadStored: boolean } {
   try {
@@ -71,7 +78,7 @@ function pickTodayFeatured(today: Job[]): Job | null {
 export function JobListScreen({ driver, onOpenJob, onOpenProfile }: JobListScreenProps) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [jobs, setJobs] = useState<Job[]>([]);
+  const [jobsList, setJobsList] = useState<JobsListState>({ today: [], past: [], next: [] });
   const [refreshing, setRefreshing] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -88,17 +95,13 @@ export function JobListScreen({ driver, onOpenJob, onOpenProfile }: JobListScree
     setError(null);
     try {
       const result = await fetchJobsList();
-      // The API pre-buckets by calendar day; flatten to one list and re-derive the
-      // date filters client-side so Previous / Upcoming / a custom date all work
-      // from the same data with no extra requests. De-dupe defensively.
-      const seen = new Set<string>();
-      const flat: Job[] = [];
-      for (const job of [...result.past, ...result.today, ...result.next]) {
-        if (seen.has(job.jobId)) continue;
-        seen.add(job.jobId);
-        flat.push(job);
-      }
-      setJobs(flat);
+      // Preserve the server's calendar-day buckets for the main filters. The custom
+      // date picker still derives its single-day view from these same jobs.
+      setJobsList({
+        today: result.today,
+        past: result.past,
+        next: result.next
+      });
     } catch (err) {
       setError((err as ApiError)?.message || "Couldn't load your jobs.");
     } finally {
@@ -111,7 +114,22 @@ export function JobListScreen({ driver, onOpenJob, onOpenProfile }: JobListScree
     void load("initial");
   }, [load]);
 
-  const filtered = useMemo(() => filterJobsByDate(jobs, customDate), [jobs, customDate]);
+  const filtered = useMemo(() => {
+    const flat = [...jobsList.past, ...jobsList.today, ...jobsList.next];
+    const custom = filterJobsByDate(flat, customDate).custom;
+    return {
+      today: jobsList.today,
+      upcoming: jobsList.next,
+      upcomingGroups: groupJobsByDate(jobsList.next),
+      previous: jobsList.past,
+      custom,
+      counts: {
+        today: jobsList.today.length,
+        upcoming: jobsList.next.length,
+        previous: jobsList.past.length
+      }
+    };
+  }, [jobsList, customDate]);
 
   // Persist the selection for this session.
   useEffect(() => {
@@ -146,7 +164,7 @@ export function JobListScreen({ driver, onOpenJob, onOpenProfile }: JobListScree
   const featuredId = featured?.jobId;
   const todayRest = filtered.today.filter(j => j.jobId !== featuredId);
 
-  const hasAnyJobs = jobs.length > 0;
+  const hasAnyJobs = jobsList.today.length + jobsList.past.length + jobsList.next.length > 0;
 
   const showFilterBar = !loading && !error && hasAnyJobs;
 

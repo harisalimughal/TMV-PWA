@@ -1,7 +1,6 @@
 import React from "react";
 import { Boxes, ClipboardList, LogOut, UserRound } from "lucide-react";
 import { cx } from "../../ui";
-import { useLocalAvatar } from "../../lib/profile";
 import type { DriverProfile } from "../../api/auth";
 import type { TabId } from "./BottomNav";
 import { ThemeToggleButton } from "./ThemeToggle";
@@ -26,7 +25,6 @@ export interface DesktopSidebarProps {
  * coloured.
  */
 export function DesktopSidebar({ active, onSelect, driver, onLogout }: DesktopSidebarProps) {
-  const localAvatar = useLocalAvatar();
   return (
     <aside className="fixed inset-y-0 left-0 z-30 hidden w-[var(--sidebar-width)] flex-col border-r border-line bg-surface lg:flex">
       <div className="flex items-start justify-between gap-2 px-5 pb-4 pt-5">
@@ -76,11 +74,7 @@ export function DesktopSidebar({ active, onSelect, driver, onLogout }: DesktopSi
       <div className="border-t border-line px-3 py-3">
         <div className="flex items-center gap-2.5 px-1">
           <span className="grid size-8 shrink-0 place-items-center overflow-hidden rounded-full border border-line bg-surface-sunken text-meta font-semibold text-fg-muted">
-            {localAvatar ? (
-              <img src={localAvatar} alt="" className="h-full w-full object-cover" />
-            ) : (
-              (driver.initials || "").slice(0, 2).toUpperCase()
-            )}
+            {(driver.initials || "").slice(0, 2).toUpperCase()}
           </span>
           <div className="min-w-0 flex-1">
             <p className="truncate text-label text-fg">{driver.fullName}</p>

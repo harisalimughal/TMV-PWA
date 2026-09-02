@@ -43,9 +43,14 @@ export function JobTime({ iso, variant = "column", className }: JobTimeProps) {
 
   if (variant === "display") {
     return (
-      <span className={cx("text-[32px] font-bold leading-none tracking-[-0.02em] text-fg", className)}>
-        {p?.time ?? "--:--"}
-      </span>
+      <div className={cx("leading-none", className)}>
+        <div className="text-[32px] font-bold leading-none tracking-[-0.02em] text-fg">
+          {p?.time ?? "--:--"}
+        </div>
+        <div className="mt-1.5 text-[11px] font-semibold uppercase tracking-[0.05em] text-fg-subtle">
+          {p?.day ?? ""}
+        </div>
+      </div>
     );
   }
 

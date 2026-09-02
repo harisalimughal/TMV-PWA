@@ -23,6 +23,7 @@ export interface FeaturedJobCardProps {
  */
 export function FeaturedJobCard({ job, onOpen }: FeaturedJobCardProps) {
   const inProgress = job.status === "IN_PROGRESS";
+  const label = inProgress ? "Current job" : "Today's job";
   return (
     <button
       type="button"
@@ -37,7 +38,7 @@ export function FeaturedJobCard({ job, onOpen }: FeaturedJobCardProps) {
       )}
     >
       <div className="flex items-center justify-between gap-3 border-b border-line bg-surface-sunken/60 px-4 py-2">
-        <span className="text-eyebrow uppercase text-fg-subtle">Next job</span>
+        <span className="text-eyebrow uppercase text-fg-subtle">{label}</span>
         {inProgress && <StatusIndicator job={job} />}
       </div>
 

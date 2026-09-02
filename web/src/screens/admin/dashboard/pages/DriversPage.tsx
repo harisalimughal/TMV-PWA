@@ -4,7 +4,6 @@ import { deleteDriver, fetchDrivers, saveDriver } from "../api";
 import {
   Plus,
   AlertTriangle,
-  Inbox,
   ShieldCheck,
   Mail,
   Phone,
@@ -36,9 +35,6 @@ export function DriversPage() {
   });
 
   const allDrivers = data?.drivers ?? [];
-  // The real /drivers/summary endpoint already buckets jobs with no driver assigned
-  // under a synthetic "UNASSIGNED" entry -- no need to recompute that client-side.
-  const unassigned = allDrivers.find(d => d.initials === "UNASSIGNED");
   // hasAccount is false for a code that only shows up because some job's
   // driverInitials matches it -- e.g. typed straight into a Calendar title -- with
   // nobody ever added via Add Driver. Those jobs stay assigned exactly as they are;
@@ -100,31 +96,6 @@ export function DriversPage() {
           {isLoading ? "..." : `${roster.filter(d => d.active).length} active drivers`}
         </span>
       </div>
-
-      {/* UNASSIGNED QUEUE (Isolated Top Tile) */}
-      {unassigned && unassigned.assigned > 0 && (
-        <div className="bg-[#FFFBEB] border border-amber-200 rounded-module p-5 flex items-center justify-between shadow-sm">
-          <div className="flex items-center gap-4">
-            <div className="w-12 h-12 rounded-full bg-amber-100 flex items-center justify-center text-amber-600 border border-amber-200 border-dashed">
-              <Inbox className="w-6 h-6" />
-            </div>
-            <div>
-              <h3 className="text-[16px] font-bold text-amber-900">Unassigned Jobs Queue</h3>
-              <p className="text-[13px] text-amber-700/80 mt-0.5">These jobs have no driver assigned yet.</p>
-            </div>
-          </div>
-          <div className="flex gap-8">
-            <div className="text-center">
-              <span className="block text-[24px] font-bold font-mono text-amber-600">{unassigned.assigned}</span>
-              <span className="block text-[11px] font-semibold uppercase text-amber-600/70 tracking-wider">Jobs Pending</span>
-            </div>
-            <div className="text-center">
-              <span className="block text-[24px] font-bold font-mono text-amber-600">£{(unassigned.revenuePounds || 0).toFixed(0)}</span>
-              <span className="block text-[11px] font-semibold uppercase text-amber-600/70 tracking-wider">Potential Rev</span>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* DRIVER CARDS GRID */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 items-stretch">

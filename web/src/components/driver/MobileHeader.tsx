@@ -1,7 +1,6 @@
 import React from "react";
 import { RefreshCw } from "lucide-react";
 import { Avatar, cx } from "../../ui";
-import { useLocalAvatar } from "../../lib/profile";
 import type { DriverProfile } from "../../api/auth";
 import { ThemeToggleButton } from "./ThemeToggle";
 import { NotificationBell } from "./NotificationBell";
@@ -51,8 +50,6 @@ export function MobileHeader({
   jobCount,
   className
 }: MobileHeaderProps) {
-  const localAvatar = useLocalAvatar();
-
   return (
     <div className={className}>
       <div className="flex items-center justify-between gap-3">
@@ -75,7 +72,7 @@ export function MobileHeader({
             aria-label="Profile"
             className="rounded-full transition-transform active:scale-95 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
           >
-            <Avatar name={driver.fullName || driver.initials} src={localAvatar} size="md" />
+            <Avatar name={driver.fullName || driver.initials} size="md" />
           </button>
         </div>
       </div>
