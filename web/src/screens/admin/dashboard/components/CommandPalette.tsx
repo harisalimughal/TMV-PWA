@@ -23,7 +23,6 @@ const PALETTE_ITEMS = [
   { id: "liability", label: "Liability Report", section: "liability", icon: ShieldAlert, category: "Scenarios" },
   { id: "drivers", label: "Drivers", section: "drivers", icon: Users, category: "Management" },
   { id: "finance", label: "Finance", section: "finance", icon: Banknote, category: "Management" },
-  { id: "exceptions", label: "Exceptions", section: "exceptions", icon: AlertTriangle, category: "Management" },
   { id: "activity", label: "Activity Log", section: "activity", icon: History, category: "Management" },
   { id: "reports", label: "Reports", section: "reports", icon: FileSpreadsheet, category: "Management" },
   { id: "settings", label: "Settings", section: "settings", icon: Settings, category: "Management" },

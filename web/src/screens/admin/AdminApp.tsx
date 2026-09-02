@@ -9,7 +9,6 @@ import { JobsPage } from "./dashboard/pages/JobsPage";
 import { FinishedJobsPage } from "./dashboard/pages/FinishedJobsPage";
 import { NotificationsPage } from "./dashboard/pages/NotificationsPage";
 import { DriversPage } from "./dashboard/pages/DriversPage";
-import { ExceptionsPage } from "./dashboard/pages/ExceptionsPage";
 import { ScenariosPage } from "./dashboard/pages/ScenariosPage";
 import { ParkingLiabilityPage } from "./dashboard/pages/ParkingLiabilityPage";
 import { ActivityPage } from "./dashboard/pages/ActivityPage";
@@ -117,7 +116,6 @@ export function AdminApp() {
       {activeSection === "parking" && <ParkingLiabilityPage />}
       {activeSection === "liability" && <ScenariosPage kind="liability" />}
       {activeSection === "drivers" && <DriversPage />}
-      {activeSection === "exceptions" && <ExceptionsPage onOpenJob={() => handleSelectSection("jobs")} />}
       {activeSection === "pricing" && <PricingSettingsPage />}
       {activeSection === "activity" && <ActivityPage />}
       {activeSection === "reports" && <ReportsPage />}
