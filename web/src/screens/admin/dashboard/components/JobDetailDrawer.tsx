@@ -43,6 +43,7 @@ interface Props {
 export function JobDetailDrawer({ job: initialJob, isOpen, onClose, onUpdated }: Props) {
   const [job, setJob] = useState<NormalizedJob>(initialJob);
   const [copiedId, setCopiedId] = useState(false);
+  const [showRawTitle, setShowRawTitle] = useState(false);
   const [activePhoto, setActivePhoto] = useState<{title: string, url: string, driveUrl?: string} | null>(null);
   const [toast, setToast] = useState<string | null>(null);
 
@@ -63,7 +64,7 @@ export function JobDetailDrawer({ job: initialJob, isOpen, onClose, onUpdated }:
 
   useEffect(() => {
     if (!isReassigning || roster.length) return;
-    fetchDrivers().then(({ drivers }) => setRoster(drivers.filter(d => d.active))).catch(() => {});
+    fetchDrivers().then(({ drivers }) => setRoster(drivers.filter(d => d.active && d.hasAccount))).catch(() => {});
   }, [isReassigning, roster.length]);
 
   // Timeline State
@@ -77,6 +78,7 @@ export function JobDetailDrawer({ job: initialJob, isOpen, onClose, onUpdated }:
     setJob(initialJob);
     setIsEditing(false);
     setIsReassigning(false);
+    setShowRawTitle(false);
   }, [initialJob]);
 
   // Sync to Edit Form
@@ -249,6 +251,26 @@ export function JobDetailDrawer({ job: initialJob, isOpen, onClose, onUpdated }:
               Operations Dossier &bull; <span className="font-medium text-admin-ink">{job.customerName || "Customer not recorded"}</span>
             </span>
           </div>
+
+          {/* Raw Calendar title -- click to reveal exactly what the booking's Calendar
+              event title says, verbatim. Useful for spotting a mistyped/unrecognised
+              driver-initials tag or other parsing surprises that the already-parsed
+              fields above hide. */}
+          <button
+            type="button"
+            onClick={() => setShowRawTitle(v => !v)}
+            className="flex items-center gap-1.5 self-start text-[11px] font-semibold text-admin-muted hover:text-admin-ink transition"
+          >
+            {showRawTitle ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+            Calendar title
+          </button>
+          {showRawTitle && (
+            <div className="rounded-card bg-admin-surface border border-admin-line px-3 py-2 -mt-2 animate-in fade-in slide-in-from-top-1">
+              <span className="block font-mono text-[12px] text-admin-ink break-words">
+                {job.rawTitle || "Not available -- this job was synced before this field existed."}
+              </span>
+            </div>
+          )}
         </div>
 
         {/* 2. Scrollable Body Content */}

@@ -751,7 +751,7 @@ function BulkReassignModal({
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState(0);
 
-  const drivers = (data?.drivers || []).filter(d => d.initials && d.initials !== "UN" && d.active);
+  const drivers = (data?.drivers || []).filter(d => d.initials && d.initials !== "UN" && d.active && d.hasAccount);
 
   async function handleConfirm() {
     if (!initials || busy) return;

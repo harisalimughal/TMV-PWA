@@ -153,7 +153,8 @@ export function dashboardJobsRoutes(): Router {
       if (event.id) {
         await mirrorNewJob(event.id, {
           driverInitials, customerName, customerEmail, customerPhone, pickup, dropoff,
-          crewSize, price, paidOnline, bookedStart: startDt.toISO()!, bookedFinish: finishDt.toISO()!
+          crewSize, price, paidOnline, bookedStart: startDt.toISO()!, bookedFinish: finishDt.toISO()!,
+          rawTitle: title, rawDescription: description
         }).catch(err => log.warn("failed to mirror new job into Mongo (background sync will pick it up shortly)", { error: String(err) }));
       }
 
@@ -355,7 +356,7 @@ export function dashboardJobsRoutes(): Router {
 interface NewJobFields {
   driverInitials: string; customerName: string; customerEmail: string; customerPhone: string;
   pickup: string; dropoff: string; crewSize: number; price: number; paidOnline: boolean;
-  bookedStart: string; bookedFinish: string;
+  bookedStart: string; bookedFinish: string; rawTitle: string; rawDescription: string;
 }
 
 async function mirrorNewJob(calendarEventId: string, fields: NewJobFields): Promise<void> {
@@ -383,6 +384,7 @@ async function mirrorNewJob(calendarEventId: string, fields: NewJobFields): Prom
     clientNamePostcode: "", clientConfirmedBy: "", signatureUrl: "",
     driveFolderId: "", driveFolderUrl: "",
     status: JobStatus.READY, currentState: WorkflowState.READY,
+    rawTitle: fields.rawTitle, rawDescription: fields.rawDescription,
     createdAt: now, updatedAt: now
   });
 }

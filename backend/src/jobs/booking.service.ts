@@ -139,6 +139,8 @@ function toJob(parsed: ParsedCalendarBooking, existing?: Job): Job {
     driveFolderUrl: "",
     status: existing?.status ?? JobStatus.READY,
     currentState: existing?.currentState ?? WorkflowState.READY,
+    rawTitle: parsed.rawTitle,
+    rawDescription: parsed.rawDescription,
     createdAt: existing?.createdAt || now,
     updatedAt: now
   };

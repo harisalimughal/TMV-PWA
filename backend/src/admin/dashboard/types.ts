@@ -101,6 +101,9 @@ export interface NormalizedJob {
 
   activity: ActivityEntry[];
   exceptions: JobException[];
+  /** Verbatim Calendar event title this job was synced from -- lets ops see exactly
+   *  what the booking's title says, not just the already-parsed fields. */
+  rawTitle: string;
   created: string;
   updated: string;
 }

@@ -68,6 +68,12 @@ export interface Job {
   driveFolderUrl: string;
   status: JobStatus;
   currentState: string;
+  /** Verbatim Calendar event title/description this job was last synced from -- lets
+   *  ops see exactly what a booking's title says (e.g. to spot a mistyped driver-
+   *  initials tag) instead of only the already-parsed fields. Empty on jobs synced
+   *  before this field existed, until their next resync. */
+  rawTitle: string;
+  rawDescription: string;
   createdAt: string;
   updatedAt: string;
 }

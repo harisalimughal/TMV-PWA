@@ -26,7 +26,10 @@ export function SendBroadcastPushModal({ isOpen, onClose }: Props) {
 
   if (!isOpen) return null;
 
-  const drivers = driversData?.drivers || [];
+  // Only real accounts can receive a push -- a synthetic entry (a job's
+  // driverInitials with nobody actually added via Add Driver) has no device
+  // subscription behind it, so it'd just silently reach nobody.
+  const drivers = (driversData?.drivers || []).filter(d => d.hasAccount);
 
   const handleSend = async () => {
     if (!title.trim() || !body.trim()) {

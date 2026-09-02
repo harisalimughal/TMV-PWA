@@ -47,7 +47,7 @@ export function AddJobModal({ isOpen, onClose }: Props) {
   // Real roster (initials/fullName/email/vanRegistration), not the old localStorage mock --
   // this modal's whole point is creating a job the real bot can assign to a real driver.
   const { data: driversData } = useQuery({ queryKey: ["drivers_summary"], queryFn: () => fetchDrivers() });
-  const roster = (driversData?.drivers ?? []).filter(d => d.active);
+  const roster = (driversData?.drivers ?? []).filter(d => d.active && d.hasAccount);
   const driverDropdownRef = useRef<HTMLDivElement>(null);
 
   // Close dropdown on outside click

@@ -79,6 +79,8 @@ export interface NormalizedJob {
     signature: EvidenceState;
   };
   evidenceItems: NormalizedEvidenceItem[];
+  /** Verbatim Calendar event title this job was synced from. */
+  rawTitle: string;
   clientConfirmedName?: string;
   signatureUrl?: string;
   driveFolderId?: string;
@@ -132,6 +134,11 @@ export interface DriverSummaryItem {
   phone?: string;
   vanRegistration?: string;
   active: boolean;
+  /** False when this entry only exists because a job's driverInitials matches this
+   *  code -- nobody has actually added this driver via Add Driver. No account backs
+   *  it, so it can't be edited/deactivated/deleted and shouldn't be offered as a
+   *  reassignment target. */
+  hasAccount: boolean;
   assigned: number;
   completed: number;
   cancelled: number;

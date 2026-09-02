@@ -148,6 +148,7 @@ export async function normalizeMongoDataset(dataset: MongoDataset): Promise<Norm
       driveFolderUrl: undefined,
       activity: activity.sort((a, b) => a.timestamp.localeCompare(b.timestamp)),
       exceptions,
+      rawTitle: job.rawTitle || "",
       created: toUtcIso(job.createdAt),
       updated: toUtcIso(job.updatedAt)
     });
