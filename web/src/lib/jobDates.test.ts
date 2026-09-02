@@ -58,16 +58,17 @@ describe("filterJobsByDate", () => {
   it("buckets by London calendar day", () => {
     const r = filterJobsByDate(jobs, null, NOW);
     expect(r.today.map(j => j.jobId)).toEqual(["today-a", "today-b"]);
-    expect(r.tomorrow.map(j => j.jobId)).toEqual(["tomorrow"]);
-    expect(r.upcoming.map(j => j.jobId)).toEqual(["up-1", "up-2", "up-3"]);
-    expect(r.counts).toEqual({ today: 2, tomorrow: 1, upcoming: 3 });
+    expect(r.upcoming.map(j => j.jobId)).toEqual(["tomorrow", "up-1", "up-2", "up-3"]);
+    expect(r.previous.map(j => j.jobId)).toEqual(["past"]);
+    expect(r.counts).toEqual({ today: 2, upcoming: 4, previous: 1 });
   });
 
   it("sorts upcoming nearest-first and groups by date", () => {
     const r = filterJobsByDate(jobs, null, NOW);
-    expect(r.upcomingGroups.map(g => g.key)).toEqual(["2026-09-06", "2026-09-09"]);
-    expect(r.upcomingGroups[0].jobs.map(j => j.jobId)).toEqual(["up-1", "up-2"]);
-    expect(r.upcomingGroups[1].jobs).toHaveLength(1);
+    expect(r.upcomingGroups.map(g => g.key)).toEqual(["2026-09-05", "2026-09-06", "2026-09-09"]);
+    expect(r.upcomingGroups[0].jobs.map(j => j.jobId)).toEqual(["tomorrow"]);
+    expect(r.upcomingGroups[1].jobs.map(j => j.jobId)).toEqual(["up-1", "up-2"]);
+    expect(r.upcomingGroups[2].jobs).toHaveLength(1);
   });
 
   it("custom bucket matches an exact day and includes past days", () => {

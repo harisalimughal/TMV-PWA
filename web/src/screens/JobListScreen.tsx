@@ -20,7 +20,6 @@ import {
   filterJobsByDate,
   formatDateKeyLong,
   formatDateKeyShort,
-  overdueJobs,
   todayKey,
   type JobFilter
 } from "../lib/jobDates";
@@ -41,7 +40,7 @@ function readStored(): { filter: JobFilter; customDate: string | null; hadStored
   try {
     const f = sessionStorage.getItem(FILTER_KEY);
     const d = sessionStorage.getItem(DATE_KEY);
-    const valid = f === "today" || f === "tomorrow" || f === "upcoming" || f === "custom";
+    const valid = f === "today" || f === "previous" || f === "upcoming" || f === "custom";
     return {
       filter: valid ? (f as JobFilter) : "today",
       customDate: d && /^\d{4}-\d{2}-\d{2}$/.test(d) ? d : null,
@@ -90,7 +89,7 @@ export function JobListScreen({ driver, onOpenJob, onOpenProfile }: JobListScree
     try {
       const result = await fetchJobsList();
       // The API pre-buckets by calendar day; flatten to one list and re-derive the
-      // date filters client-side so Tomorrow / Upcoming / a custom date all work
+      // date filters client-side so Previous / Upcoming / a custom date all work
       // from the same data with no extra requests. De-dupe defensively.
       const seen = new Set<string>();
       const flat: Job[] = [];
@@ -113,7 +112,6 @@ export function JobListScreen({ driver, onOpenJob, onOpenProfile }: JobListScree
   }, [load]);
 
   const filtered = useMemo(() => filterJobsByDate(jobs, customDate), [jobs, customDate]);
-  const overdue = useMemo(() => overdueJobs(jobs), [jobs]);
 
   // Persist the selection for this session.
   useEffect(() => {
@@ -133,12 +131,14 @@ export function JobListScreen({ driver, onOpenJob, onOpenProfile }: JobListScree
   }, [customDate]);
 
   // First successful load with no stored choice: if Today is empty but there's work
-  // later, land on the nearest non-empty filter instead of an empty screen.
+  // elsewhere, land on the nearest non-empty filter instead of an empty screen.
+  // Previous (still-open jobs from earlier days) takes priority over Upcoming -- that
+  // work is overdue, so it's more urgent than something booked for later.
   useEffect(() => {
     if (loading || error || !autoSelectPending.current) return;
     autoSelectPending.current = false;
     if (filter !== "today" || filtered.counts.today > 0) return;
-    if (filtered.counts.tomorrow > 0) setFilter("tomorrow");
+    if (filtered.counts.previous > 0) setFilter("previous");
     else if (filtered.counts.upcoming > 0) setFilter("upcoming");
   }, [loading, error, filter, filtered.counts]);
 
@@ -218,41 +218,21 @@ export function JobListScreen({ driver, onOpenJob, onOpenProfile }: JobListScree
                 </Button>
               </div>
             ) : (
-              <>
-                {overdue.length > 0 && (
-                  <ScheduleSection
-                    title="Needs finishing"
-                    tone="attention"
-                    meta={`${overdue.length}`}
-                    className="mb-6"
-                  >
-                    {overdue.map(job => (
-                      <ScheduleRow
-                        key={job.jobId}
-                        job={job}
-                        bucket="past"
-                        onOpen={() => onOpenJob(job.jobId)}
-                      />
-                    ))}
-                  </ScheduleSection>
-                )}
-
-                <div
-                  key={`${filter}:${customDate ?? ""}`}
-                  className="flex animate-in flex-col gap-6 fade-in"
-                >
-                  <FilterView
-                    filter={filter}
-                    filtered={filtered}
-                    featured={featured}
-                    todayRest={todayRest}
-                    customDate={customDate}
-                    onOpenJob={onOpenJob}
-                    onOpenPicker={() => setPickerOpen(true)}
-                    onRefresh={() => load("refresh")}
-                  />
-                </div>
-              </>
+              <div
+                key={`${filter}:${customDate ?? ""}`}
+                className="flex animate-in flex-col gap-6 fade-in"
+              >
+                <FilterView
+                  filter={filter}
+                  filtered={filtered}
+                  featured={featured}
+                  todayRest={todayRest}
+                  customDate={customDate}
+                  onOpenJob={onOpenJob}
+                  onOpenPicker={() => setPickerOpen(true)}
+                  onRefresh={() => load("refresh")}
+                />
+              </div>
             )}
           </div>
         </PullToRefresh>
@@ -330,24 +310,24 @@ function FilterView({
     );
   }
 
-  if (filter === "tomorrow") {
-    if (filtered.tomorrow.length === 0) {
+  if (filter === "previous") {
+    if (filtered.previous.length === 0) {
       return (
         <EmptyState
           icon={<CalendarClock />}
-          title="No jobs scheduled for tomorrow"
-          description="Nothing on the board for tomorrow yet."
+          title="Nothing needs finishing"
+          description="Jobs from earlier days that are still open will show up here."
           action={refreshAction}
         />
       );
     }
     return (
-      <ScheduleSection title="Tomorrow" meta={jobsLabel(filtered.tomorrow.length)}>
-        {filtered.tomorrow.map(job => (
+      <ScheduleSection title="Needs finishing" tone="attention" meta={jobsLabel(filtered.previous.length)}>
+        {filtered.previous.map(job => (
           <ScheduleRow
             key={job.jobId}
             job={job}
-            bucket="next"
+            bucket="past"
             onOpen={() => onOpenJob(job.jobId)}
           />
         ))}
@@ -361,7 +341,7 @@ function FilterView({
         <EmptyState
           icon={<CalendarClock />}
           title="No upcoming jobs"
-          description="Jobs further out than tomorrow will show up here."
+          description="Jobs booked for tomorrow onward will show up here."
           action={refreshAction}
         />
       );

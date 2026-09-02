@@ -20,9 +20,9 @@ const KEY_FMT = new Intl.DateTimeFormat("en-CA", {
   day: "2-digit",
 });
 
-export type JobFilter = "today" | "tomorrow" | "upcoming" | "custom";
+export type JobFilter = "today" | "upcoming" | "previous" | "custom";
 
-export const JOB_FILTERS: JobFilter[] = ["today", "tomorrow", "upcoming", "custom"];
+export const JOB_FILTERS: JobFilter[] = ["today", "previous", "upcoming", "custom"];
 
 /** Europe/London calendar date of an ISO timestamp as "YYYY-MM-DD"; "" if invalid. */
 export function londonDateKey(iso: string | Date): string {
@@ -81,19 +81,22 @@ export interface DateGroup {
 
 export interface FilteredJobs {
   today: Job[];
-  tomorrow: Job[];
-  /** Everything after tomorrow, nearest first. */
+  /** Tomorrow onward, nearest first. */
   upcoming: Job[];
   /** `upcoming`, split into consecutive same-day groups. */
   upcomingGroups: DateGroup[];
+  /** Past-day jobs still needing action (not completed/cancelled) — the Previous
+   *  filter's contents. Same jobs `overdueJobs` returns; kept as its own function too
+   *  since it's a natural standalone check ("is there anything overdue at all"). */
+  previous: Job[];
   /** Jobs on `customKey` (any status), or [] when no custom date is set. */
   custom: Job[];
-  counts: { today: number; tomorrow: number; upcoming: number };
+  counts: { today: number; upcoming: number; previous: number };
 }
 
 /**
- * Split a flat job list into the four filter buckets. `customKey` is a "YYYY-MM-DD"
- * key or null. `now` is injectable for tests.
+ * Split a flat job list into the filter buckets. `customKey` is a "YYYY-MM-DD" key or
+ * null. `now` is injectable for tests.
  */
 export function filterJobsByDate(
   jobs: Job[],
@@ -101,10 +104,8 @@ export function filterJobsByDate(
   now: Date = new Date(),
 ): FilteredJobs {
   const tKey = todayKey(now);
-  const tomKey = addDaysToKey(tKey, 1);
 
   const today: Job[] = [];
-  const tomorrow: Job[] = [];
   const upcoming: Job[] = [];
   const custom: Job[] = [];
 
@@ -112,13 +113,11 @@ export function filterJobsByDate(
     const k = londonDateKey(job.bookedStart);
     if (!k) continue;
     if (k === tKey) today.push(job);
-    else if (k === tomKey) tomorrow.push(job);
-    else if (k > tomKey) upcoming.push(job);
+    else if (k > tKey) upcoming.push(job);
     if (customKey && k === customKey) custom.push(job);
   }
 
   today.sort(byStartAsc);
-  tomorrow.sort(byStartAsc);
   upcoming.sort(byStartAsc);
   custom.sort(byStartAsc);
 
@@ -133,17 +132,19 @@ export function filterJobsByDate(
     }
   }
 
+  const previous = overdueJobs(jobs, now);
+
   return {
     today,
-    tomorrow,
     upcoming,
     upcomingGroups,
+    previous,
     custom,
-    counts: { today: today.length, tomorrow: tomorrow.length, upcoming: upcoming.length },
+    counts: { today: today.length, upcoming: upcoming.length, previous: previous.length },
   };
 }
 
-/** Past-day jobs that still need action — pinned above the filters. */
+/** Past-day jobs that still need action — the Previous filter's contents. */
 export function overdueJobs(jobs: Job[], now: Date = new Date()): Job[] {
   const tKey = todayKey(now);
   return jobs

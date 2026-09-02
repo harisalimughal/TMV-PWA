@@ -7,7 +7,7 @@ import { formatDateKeyShort, type JobFilter } from "../../lib/jobDates";
 export interface JobFilterBarProps {
   value: JobFilter;
   onChange: (filter: JobFilter) => void;
-  counts: { today: number; tomorrow: number; upcoming: number };
+  counts: { today: number; upcoming: number; previous: number };
   /** Selected custom date "YYYY-MM-DD", or null. */
   customDate: string | null;
   onOpenDatePicker: () => void;
@@ -83,12 +83,12 @@ export function JobFilterBar({
       <button
         type="button"
         role="tab"
-        aria-selected={value === "tomorrow"}
-        onClick={() => select("tomorrow")}
-        className={cx(PILL_BASE, value === "tomorrow" ? PILL_ACTIVE : PILL_IDLE)}
+        aria-selected={value === "previous"}
+        onClick={() => select("previous")}
+        className={cx(PILL_BASE, value === "previous" ? PILL_ACTIVE : PILL_IDLE)}
       >
-        Tomorrow
-        <Count n={counts.tomorrow} active={value === "tomorrow"} />
+        Previous
+        <Count n={counts.previous} active={value === "previous"} />
       </button>
 
       <button
