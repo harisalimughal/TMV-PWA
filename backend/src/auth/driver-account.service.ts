@@ -131,6 +131,20 @@ export async function deactivateDriverAccount(email: string): Promise<void> {
   );
 }
 
+/**
+ * Hard-deletes a driver's account -- unlike deactivateDriverAccount, this removes the
+ * roster entry entirely (used to permanently remove a driver who's left, rather than
+ * just blocking their login). Jobs keep the driver's initials as plain text (see
+ * job.types.ts's Job.driverInitials) rather than a reference to this document, so past
+ * jobs are unaffected -- they'll just resolve to "no name on file" for those initials
+ * going forward. Returns whether an account was actually removed.
+ */
+export async function deleteDriverAccount(email: string): Promise<boolean> {
+  const col = await driverAccounts();
+  const result = await col.deleteOne({ email: normalizeEmail(email) });
+  return result.deletedCount > 0;
+}
+
 export interface VerifyResult {
   ok: boolean;
   account?: DriverAccountDoc;

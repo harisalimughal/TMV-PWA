@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { fetchDrivers, saveDriver } from "../api";
+import { deleteDriver, fetchDrivers, saveDriver } from "../api";
 import {
   Plus,
   AlertTriangle,
@@ -9,7 +9,8 @@ import {
   Mail,
   Phone,
   Truck,
-  Edit3
+  Edit3,
+  Trash2
 } from "lucide-react";
 import { DateRangePicker } from "../components/DateRangePicker";
 import { getAvatarColor, formatVanReg } from "../utils/drivers";
@@ -51,6 +52,23 @@ export function DriversPage() {
       active: false
     });
     queryClient.invalidateQueries({ queryKey: ["drivers_summary"] });
+  };
+
+  const handleDelete = async (driver: DriverSummaryItem) => {
+    if (!driver.email) return;
+    if (
+      !window.confirm(
+        `Permanently delete ${driver.fullName}? This cannot be undone -- unlike Deactivate, there is no way to restore this driver afterwards. Their past jobs keep the "${driver.initials}" initials but will no longer show a name, email or phone.`
+      )
+    ) {
+      return;
+    }
+    try {
+      await deleteDriver(driver.email);
+      queryClient.invalidateQueries({ queryKey: ["drivers_summary"] });
+    } catch (err: any) {
+      window.alert(err?.message || "Failed to delete driver.");
+    }
   };
 
   return (
@@ -147,6 +165,13 @@ export function DriversPage() {
                     className="p-1 rounded-full text-admin-muted hover:bg-admin-status-red hover:text-white transition"
                   >
                     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/></svg>
+                  </button>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); handleDelete(driver); }}
+                    title="Delete Driver Permanently"
+                    className="p-1 rounded-full text-admin-muted hover:bg-admin-status-red hover:text-white transition"
+                  >
+                    <Trash2 className="w-4 h-4" />
                   </button>
                 </div>
               </div>

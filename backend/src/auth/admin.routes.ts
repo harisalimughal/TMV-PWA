@@ -4,7 +4,7 @@ import { env } from "../config/env";
 import { log } from "../utils/logger";
 import { SETTINGS_SPEC } from "../admin/settings-spec";
 import { listSettings, setSetting } from "../db/settings.repo";
-import { listDriverProfiles, setDriverPassword, upsertDriverProfile } from "./driver-account.service";
+import { deleteDriverAccount, listDriverProfiles, setDriverPassword, upsertDriverProfile } from "./driver-account.service";
 import { clearAdminSessionCookie, setAdminSessionCookie } from "./admin-session";
 import { requireAdminAuth } from "./require-admin-auth";
 
@@ -129,6 +129,29 @@ export function adminRoutes(): Router {
     }
 
     res.status(200).json({ ok: true });
+  });
+
+  // Permanently removes a driver from the roster (as opposed to POST /drivers with
+  // active:false, which only blocks their login). Past jobs keep the driver's
+  // initials as plain text, so this can't orphan or corrupt job history.
+  router.delete("/drivers/:email", requireAdminAuth, async (req: Request, res: Response) => {
+    const email = String(req.params.email ?? "").trim().toLowerCase();
+    if (!email) {
+      res.status(400).json({ error: { code: "VALIDATION_FAILED", message: "Email is required." } });
+      return;
+    }
+
+    try {
+      const deleted = await deleteDriverAccount(email);
+      if (!deleted) {
+        res.status(404).json({ error: { code: "DRIVER_NOT_FOUND", message: "No driver with that email." } });
+        return;
+      }
+      res.status(200).json({ ok: true });
+    } catch (error) {
+      log.error("admin driver delete failed", error);
+      res.status(500).json({ error: { code: "DRIVER_DELETE_FAILED", message: "Failed to delete driver." } });
+    }
   });
 
   // ---------------------------------------------------------------------------

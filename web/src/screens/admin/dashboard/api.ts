@@ -181,6 +181,17 @@ export async function saveDriver(payload: SaveDriverPayload): Promise<{ warning?
   return { warning: data?.warning };
 }
 
+/** Permanently removes a driver from the roster. Unlike saveDriver with active:false
+ * (which only blocks their login), this deletes the driver_accounts doc outright. */
+export async function deleteDriver(email: string): Promise<{ ok: true }> {
+  const res = await fetch(`/api/admin/drivers/${encodeURIComponent(email)}`, {
+    method: "DELETE", credentials: "same-origin"
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data?.error?.message || "Failed to delete driver");
+  return data;
+}
+
 export interface EditableSetting {
   key: string;
   label: string;
