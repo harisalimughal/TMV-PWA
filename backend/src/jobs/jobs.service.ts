@@ -106,7 +106,11 @@ export async function getNextJobForDriver(
     jobs
       .filter(j => isDueByToday(j.bookedStart))
       .filter(j => j.status !== JobStatus.COMPLETED && j.status !== JobStatus.CANCELLED)
-      .filter(j => !j.driverInitials || j.driverInitials === driver.initials)
+      // Assigned-only: a driver only ever sees their own jobs, never every unassigned
+      // booking in the calendar (the "open pool, first to start it claims it" design
+      // this used to have -- see startJob's still-present claim logic below, now only
+      // reachable for a job assigned some other way than showing up in this list).
+      .filter(j => j.driverInitials === driver.initials)
       // Oldest first: an overdue job from three days ago surfaces before today's.
       .sort((a, b) => a.bookedStart.localeCompare(b.bookedStart))[0] ?? null;
 
@@ -130,9 +134,9 @@ function isDueTomorrow(iso: string): boolean {
 
 /**
  * The driver's own jobs booked for tomorrow, oldest first -- lets a driver plan ahead
- * once today's work is done. Deliberately assigned-only (unlike getNextJobForDriver's
- * "unassigned is up for grabs" rule for today) -- a booking nobody has claimed yet
- * isn't "the driver's job" a day out.
+ * once today's work is done. Assigned-only, same as every other driver-facing job
+ * list now (see getJobsGroupedForDriver/getNextJobForDriver) -- unassignedCount below
+ * is a bare number for context, not a way to see those jobs' details.
  */
 export async function getTomorrowJobsForDriver(identifier: string): Promise<{
   jobs: Job[];
@@ -165,10 +169,9 @@ function londonDayKey(iso: string): string | null {
 /**
  * The driver's full job list, bucketed by calendar day relative to today (Europe/
  * London) instead of the single-"next job" model getNextJobForDriver uses for the
- * active-job workflow screen. Today and Past both include unassigned bookings (still
- * up for grabs, same rule as getNextJobForDriver) since a job overdue from an earlier
- * day is just as claimable as one due today; Next stays assigned-only, mirroring the
- * old tomorrow-only rule now extended to every future day, not just tomorrow.
+ * active-job workflow screen. Assigned-only across all three buckets: a driver only
+ * ever sees jobs with their own initials on them, never another unassigned booking
+ * from the shared calendar just because nobody's claimed it yet.
  */
 export async function getJobsGroupedForDriver(identifier: string): Promise<{
   driver: DriverProfile;
@@ -181,7 +184,7 @@ export async function getJobsGroupedForDriver(identifier: string): Promise<{
 
   const relevant = jobs
     .filter(j => j.status !== JobStatus.COMPLETED && j.status !== JobStatus.CANCELLED)
-    .filter(j => !j.driverInitials || j.driverInitials === driver.initials);
+    .filter(j => j.driverInitials === driver.initials);
 
   const today: Job[] = [];
   const past: Job[] = [];
@@ -192,7 +195,7 @@ export async function getJobsGroupedForDriver(identifier: string): Promise<{
     if (!dayKey || !todayKey) continue;
     if (dayKey === todayKey) today.push(job);
     else if (dayKey < todayKey) past.push(job);
-    else if (job.driverInitials === driver.initials) next.push(job);
+    else next.push(job);
   }
 
   const byBookedStart = (a: Job, b: Job) => a.bookedStart.localeCompare(b.bookedStart);
@@ -216,8 +219,22 @@ export async function getJobForDriver(
 ): Promise<{ job: Job; driver: DriverProfile }> {
   const [job, driver] = await Promise.all([getJob(jobId), resolveDriver(identifier)]);
   if (!job) throw new Error(`Job ${jobId} was not found.`);
-  if (job.driverInitials && job.driverInitials !== driver.initials && driver.role.toLowerCase() !== "manager") {
-    throw new Error("This job is assigned to another driver.");
+  if (driver.role.toLowerCase() !== "manager") {
+    // Assigned-only, matching every driver-facing job list (see
+    // getJobsGroupedForDriver/getNextJobForDriver) -- a non-manager driver is blocked
+    // here too, not just left out of the list, so a job they were never assigned
+    // stays genuinely unreachable rather than merely unlisted (e.g. from a stale
+    // link, or an id guessed from another job's). An unassigned job used to be
+    // reachable this way on purpose -- "first driver to open and start it claims
+    // it" -- see the still-present claim logic in startJob below, now effectively
+    // manager-only since a regular driver can no longer get past this check to
+    // reach it.
+    if (!job.driverInitials) {
+      throw new Error("This job hasn't been assigned to a driver yet.");
+    }
+    if (job.driverInitials !== driver.initials) {
+      throw new Error("This job is assigned to another driver.");
+    }
   }
   return { job, driver };
 }
@@ -262,8 +279,12 @@ export async function startJob(jobId: string, identifier: string): Promise<Job> 
       throw new ValidationError(`This job is booked for ${bookedDay}. You can't start it until then.`);
     }
 
-    // An unassigned booking must not be a free-for-all. First claim wins, and it
-    // happens inside the lock so two drivers cannot both claim it.
+    // Unassigned jobs are no longer reachable by a regular driver at all -- see
+    // getJobForDriver's permission check above, which now blocks one before
+    // execution ever gets here. This still runs for a manager identity starting an
+    // unassigned job directly (managers are exempt from that check), assigning it
+    // to them at that point; still inside the lock, so two concurrent starts can't
+    // both claim it.
     if (!job.driverInitials) {
       if (!driver.initials) {
         throw new ValidationError("Your driver record has no initials, so this job cannot be assigned to you.");
