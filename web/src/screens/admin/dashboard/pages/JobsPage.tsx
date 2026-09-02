@@ -77,7 +77,7 @@ export function JobsPage() {
    */
   const { data, isLoading, refetch, isFetching } = useQuery({
     queryKey: ["jobs", from, to, FETCH_LIMIT],
-    queryFn: () => fetchJobs({ page: 1, limit: FETCH_LIMIT, from, to })
+    queryFn: () => fetchJobs({ page: 1, pageSize: FETCH_LIMIT, from, to })
   });
 
   const truncated = Boolean(data?.pagination?.hasMore);

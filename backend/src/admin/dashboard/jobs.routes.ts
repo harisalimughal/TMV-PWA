@@ -329,7 +329,11 @@ export function dashboardJobsRoutes(): Router {
       });
 
       const page = Math.max(1, Number(req.query.page) || 1);
-      const pageSize = Math.min(100, Math.max(1, Number(req.query.pageSize) || 25));
+      // The dashboard's Jobs Archive fetches up to 500 rows in one page (see JobsPage's
+      // FETCH_LIMIT) and does its own search/filter/sort/pagination client-side over
+      // that set -- so the cap here has to cover that, not just the 25/50/100 the
+      // table's own page-size selector offers.
+      const pageSize = Math.min(500, Math.max(1, Number(req.query.pageSize) || 25));
       const total = jobs.length;
       const totalPages = Math.ceil(total / pageSize);
       const startIndex = (page - 1) * pageSize;

@@ -6,24 +6,35 @@ interface PullToRefreshProps {
   onRefresh: () => Promise<void> | void;
   children: React.ReactNode;
   className?: string;
+  /** Ref to the actual scrolling ancestor (AppShell's contentRef). Pull gesture reads
+   *  its scrollTop instead of this component owning a scroll container of its own --
+   *  see below for why. */
+  scrollRef: React.RefObject<HTMLDivElement>;
 }
 
 const PULL_THRESHOLD = 72;
 
 /**
  * Touch-driven pull-to-refresh. Only engages when the list is already scrolled to the
- * very top, and never fights the browser's own scrolling. Wraps the scroll region, so
- * place it as the AppShell content.
+ * very top, and never fights the browser's own scrolling.
+ *
+ * Does NOT create its own scroll container -- it used to (`overflow-y-auto` on its own
+ * wrapper), but that nested inside AppShell's already-scrolling content div, giving two
+ * ancestors both marked `overscroll-behavior: contain`. The inner one never actually
+ * had anything to scroll (its height just matched its content), so touch scroll hit-
+ * tested to it and `contain` then refused to chain the gesture up to the real
+ * scrollable ancestor -- the whole list would sit frozen under a finger. Reading
+ * scrollTop off AppShell's own content ref instead, and rendering as a plain
+ * (non-scrolling) wrapper here, leaves exactly one scroll container in the tree.
  */
-export function PullToRefresh({ onRefresh, children, className = "" }: PullToRefreshProps) {
-  const containerRef = useRef<HTMLDivElement>(null);
+export function PullToRefresh({ onRefresh, children, className = "", scrollRef }: PullToRefreshProps) {
   const startY = useRef<number | null>(null);
   const [pull, setPull] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
 
   function handleTouchStart(e: React.TouchEvent) {
     if (refreshing) return;
-    const el = containerRef.current;
+    const el = scrollRef.current;
     if (!el || el.scrollTop > 0) return;
     startY.current = e.touches[0].clientY;
   }
@@ -58,8 +69,7 @@ export function PullToRefresh({ onRefresh, children, className = "" }: PullToRef
 
   return (
     <div
-      ref={containerRef}
-      className={`relative h-full overflow-y-auto scroll-touch ${className}`}
+      className={`relative ${className}`}
       onTouchStart={handleTouchStart}
       onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}

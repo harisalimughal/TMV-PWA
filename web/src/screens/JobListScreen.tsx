@@ -74,6 +74,7 @@ export function JobListScreen({ driver, onOpenJob, onOpenProfile }: JobListScree
   const [error, setError] = useState<string | null>(null);
   const [jobs, setJobs] = useState<Job[]>([]);
   const [refreshing, setRefreshing] = useState(false);
+  const scrollRef = useRef<HTMLDivElement>(null);
 
   const stored = useRef(readStored());
   const [filter, setFilter] = useState<JobFilter>(stored.current.filter);
@@ -151,7 +152,7 @@ export function JobListScreen({ driver, onOpenJob, onOpenProfile }: JobListScree
 
   return (
     <>
-      <AppShell banner={<OfflineBanner />} contentWidth="content">
+      <AppShell banner={<OfflineBanner />} contentWidth="content" contentRef={scrollRef}>
         {/* Greeting — scrolls away with the page. */}
         <div className="px-4 pt-4">
           <MobileHeader
@@ -186,7 +187,7 @@ export function JobListScreen({ driver, onOpenJob, onOpenProfile }: JobListScree
           </div>
         )}
 
-        <PullToRefresh onRefresh={() => load("refresh")}>
+        <PullToRefresh onRefresh={() => load("refresh")} scrollRef={scrollRef}>
           <div className="px-4 pb-4 pt-5 scroll-pb-nav">
             {loading ? (
               <div>
