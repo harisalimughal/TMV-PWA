@@ -62,6 +62,20 @@ export async function reassignJob(jobId: string, driverInitials: string): Promis
   return body;
 }
 
+export async function saveJobReview(
+  jobId: string,
+  payload: { status: "Pending" | "Approved" | "Flagged"; note: string }
+): Promise<{ job?: NormalizedJob; review: { status: "Pending" | "Approved" | "Flagged"; note: string; reviewedAt: string } }> {
+  const res = await fetch(`/api/admin/jobs/${encodeURIComponent(jobId)}/review`, {
+    method: "POST", credentials: "same-origin",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload)
+  });
+  const body = await res.json();
+  if (!res.ok) throw new Error(body?.error?.message || "Failed to save manager review");
+  return body;
+}
+
 export async function fetchDrivers(from?: string, to?: string): Promise<{ drivers: DriverSummaryItem[] }> {
   const params = new URLSearchParams();
   if (from) params.set("from", from);

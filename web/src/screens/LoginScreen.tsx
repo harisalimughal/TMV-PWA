@@ -47,7 +47,7 @@ export function LoginScreen({ onLoggedIn, onForgotPassword, notice }: LoginScree
 
   return (
     <AuthLayout>
-      <AuthHeading title="Sign in" hint="Use your The Man Van account to access your jobs." />
+      <AuthHeading title="Sign in" />
 
       {notice && (
         <Alert tone="warning" className="mb-4">

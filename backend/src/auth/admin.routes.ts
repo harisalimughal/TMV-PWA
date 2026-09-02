@@ -2,7 +2,7 @@ import { timingSafeEqual } from "node:crypto";
 import { Request, Response, Router } from "express";
 import { env } from "../config/env";
 import { log } from "../utils/logger";
-import { SETTINGS_SPEC } from "../admin/settings-spec";
+import { customSettingSpec, isCustomSettingKey, SETTINGS_SPEC } from "../admin/settings-spec";
 import { listSettings, setSetting } from "../db/settings.repo";
 import { deleteDriverAccount, listDriverProfiles, setDriverPassword, upsertDriverProfile } from "./driver-account.service";
 import { clearAdminSessionCookie, setAdminSessionCookie } from "./admin-session";
@@ -160,14 +160,20 @@ export function adminRoutes(): Router {
 
   router.get("/settings", requireAdminAuth, async (_req: Request, res: Response) => {
     const stored = await listSettings();
-    const items = SETTINGS_SPEC.map(spec => ({ ...spec, value: stored[spec.key] ?? "" }));
+    const fixedKeys = new Set(SETTINGS_SPEC.map(spec => spec.key));
+    const customItems = Object.keys(stored)
+      .filter(key => !fixedKeys.has(key))
+      .map(key => customSettingSpec(key))
+      .filter((spec): spec is NonNullable<typeof spec> => !!spec)
+      .sort((a, b) => a.key.localeCompare(b.key, undefined, { numeric: true }));
+    const items = [...SETTINGS_SPEC, ...customItems].map(spec => ({ ...spec, value: stored[spec.key] ?? "" }));
     res.status(200).json({ settings: items });
   });
 
   router.post("/settings", requireAdminAuth, async (req: Request, res: Response) => {
     const key = String(req.body?.key ?? "");
     const value = String(req.body?.value ?? "");
-    if (!SETTINGS_SPEC.some(spec => spec.key === key)) {
+    if (!SETTINGS_SPEC.some(spec => spec.key === key) && !isCustomSettingKey(key)) {
       res.status(400).json({ error: { code: "VALIDATION_FAILED", message: "Unknown setting key." } });
       return;
     }

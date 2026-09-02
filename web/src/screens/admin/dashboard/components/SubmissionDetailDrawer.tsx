@@ -1,13 +1,14 @@
 import React, { useEffect, useRef, useState } from "react";
-import { X, Download, Eye, Maximize2, ZoomIn, ZoomOut, Check, ChevronLeft, ChevronRight, RefreshCw } from "lucide-react";
+import { X, Download, Eye, Maximize2, ZoomIn, ZoomOut, Check, ChevronLeft, ChevronRight, RefreshCw, Save } from "lucide-react";
 import { IconButton } from "../../../../ui";
 import { PaperDossierReport } from "./PaperDossierReport";
 import { PaperScenarioReport } from "./PaperScenarioReport";
 import { PrintPortal } from "./PrintPortal";
-import { NormalizedJob, ScenarioItem } from "../types";
+import { NormalizedJob, ScenarioItem, formatGBP } from "../types";
 import { formatLondonDateTime } from "../utils/date";
 import { waitForPrintImages } from "../utils/printReady";
 import { resolveDriver } from "../utils/drivers";
+import { saveJobReview } from "../api";
 
 type ScenarioKind = "checkin" | "checkout" | "parking" | "liability";
 
@@ -32,15 +33,52 @@ interface Props {
    *  quick action, which used to open this drawer and print in the same click with
    *  no visible preview step. See the comment on handleDownload for why that mattered. */
   autoDownload?: boolean;
+  onUpdated?: () => void;
 }
 
-export function SubmissionDetailDrawer({ job, isOpen, onClose, onNavigate, hasNext, hasPrev, kind, autoDownload }: Props) {
+function ChargeRow({
+  label,
+  value,
+  strong = false,
+  brand = false
+}: {
+  label: string;
+  value: number;
+  strong?: boolean;
+  brand?: boolean;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-4 bg-white px-3 py-2.5">
+      <span className={`text-[12px] ${strong ? "font-bold text-admin-ink" : "font-medium text-admin-muted"}`}>
+        {label}
+      </span>
+      <span className={`font-mono text-[13px] tabular-nums ${strong ? "font-bold" : "font-semibold"} ${brand ? "text-admin-brand" : "text-admin-ink"}`}>
+        {formatGBP(value)}
+      </span>
+    </div>
+  );
+}
+
+function DetailRow({ label, value }: { label: string; value: React.ReactNode }) {
+  return (
+    <div>
+      <span className="text-[11px] uppercase text-admin-muted font-semibold tracking-wider">{label}</span>
+      <div className="text-[14px] font-medium text-admin-ink mt-1">{value}</div>
+    </div>
+  );
+}
+
+export function SubmissionDetailDrawer({ job: initialJob, isOpen, onClose, onNavigate, hasNext, hasPrev, kind, autoDownload, onUpdated }: Props) {
+  const [job, setJob] = useState<NormalizedJob | ScenarioItem>(initialJob);
   const [isPreviewing, setIsPreviewing] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [zoom, setZoom] = useState(100);
   const [activeTab, setActiveTab] = useState<"Activity" | "Comments">("Activity");
   const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+  const [managerStatus, setManagerStatus] = useState<"Pending" | "Approved" | "Flagged">("Pending");
+  const [managerNote, setManagerNote] = useState("");
+  const [savingReview, setSavingReview] = useState(false);
 
   // handleDownload is defined further down (it needs job-derived values that only
   // make sense once job is known non-null), but the autoDownload effect has to sit
@@ -49,9 +87,20 @@ export function SubmissionDetailDrawer({ job, isOpen, onClose, onNavigate, hasNe
   // once when the drawer opens with autoDownload set.
   const handleDownloadRef = useRef<() => void>();
   useEffect(() => {
+    setJob(initialJob);
+  }, [initialJob]);
+
+  useEffect(() => {
     if (isOpen && autoDownload && job) handleDownloadRef.current?.();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, autoDownload]);
+
+  useEffect(() => {
+    if (kind) return;
+    const normalized = job as NormalizedJob;
+    setManagerStatus(normalized.managerReviewStatus || "Pending");
+    setManagerNote(normalized.managerReviewNote || "");
+  }, [job, kind]);
 
   if (!isOpen || !job) return null;
 
@@ -138,27 +187,77 @@ export function SubmissionDetailDrawer({ job, isOpen, onClose, onNavigate, hasNe
     : ((job as NormalizedJob).actualFinish
         ? formatLondonDateTime((job as NormalizedJob).actualFinish)
         : ((job as NormalizedJob).bookedStart ? formatLondonDateTime((job as NormalizedJob).bookedStart) : 'Unknown Time'));
+  const normalizedJob = !isScenario ? (job as NormalizedJob) : null;
+  const calculatedTotal = normalizedJob
+    ? normalizedJob.basePrice + normalizedJob.extraCharges + normalizedJob.overtimeCharge
+    : 0;
+
+  const handleSaveReview = async () => {
+    if (!normalizedJob || savingReview) return;
+    setSavingReview(true);
+    try {
+      const result = await saveJobReview(normalizedJob.jobId, { status: managerStatus, note: managerNote });
+      setJob(result.job ?? {
+        ...normalizedJob,
+        managerReviewStatus: result.review.status,
+        managerReviewNote: result.review.note,
+        managerReviewedAt: result.review.reviewedAt
+      });
+      onUpdated?.();
+      showToast("Manager review saved");
+    } catch (error: any) {
+      showToast(error?.message || "Couldn't save manager review");
+    } finally {
+      setSavingReview(false);
+    }
+  };
 
   const SidebarLeft = () => (
     <div className="w-full lg:w-[300px] lg:flex-shrink-0 border-b lg:border-b-0 lg:border-r border-admin-line bg-white flex flex-col p-6 overflow-y-auto custom-scrollbar relative z-10">
       <h3 className="text-[14px] font-bold text-admin-ink mb-6">Manager fields</h3>
-      <div className="space-y-6">
-        <div className="bg-[#F8F9FA] border border-admin-line rounded-module p-4 relative shadow-sm">
-          <label className="flex items-center gap-2 text-label font-semibold text-fg mb-3">Note <Eye className="w-4 h-4 text-admin-muted" /></label>
-          <textarea className="w-full bg-white border border-admin-line rounded-card p-3 text-[13px] text-admin-ink placeholder-admin-muted focus:outline-none focus:ring-2 focus:ring-admin-brand/20 min-h-[100px] resize-none" placeholder="Type here..." />
-          {/* The Save button here had no handler, so a note typed into this box was
-              silently discarded on close -- worse than offering no note field. Left as
-              a scratch pad until there's an endpoint to persist it to. */}
-        </div>
+      {normalizedJob ? (
+      <div className="space-y-4">
         <div className="bg-[#F8F9FA] border border-admin-line rounded-module p-4 flex items-center justify-between shadow-sm">
-          <label className="flex items-center gap-2 text-label font-semibold text-fg">Status <Eye className="w-4 h-4 text-admin-muted" /></label>
-          <select className="bg-white border border-admin-line rounded-card px-3 py-1.5 text-[13px] font-medium text-admin-ink focus:outline-none focus:ring-2 focus:ring-admin-brand/20 outline-none">
-            <option>Select</option>
+          <label className="flex items-center gap-2 text-label font-semibold text-fg">Status</label>
+          <select
+            value={managerStatus}
+            onChange={e => setManagerStatus(e.target.value as "Pending" | "Approved" | "Flagged")}
+            className="bg-white border border-admin-line rounded-card px-3 py-1.5 text-[13px] font-medium text-admin-ink focus:outline-none focus:ring-2 focus:ring-admin-brand/20 outline-none"
+          >
+            <option>Pending</option>
             <option>Approved</option>
             <option>Flagged</option>
           </select>
         </div>
+        <div className="bg-[#F8F9FA] border border-admin-line rounded-module p-4 relative shadow-sm">
+          <label className="flex items-center gap-2 text-label font-semibold text-fg mb-3">Note</label>
+          <textarea
+            value={managerNote}
+            onChange={e => setManagerNote(e.target.value)}
+            maxLength={2000}
+            className="w-full bg-white border border-admin-line rounded-card p-3 text-[13px] text-admin-ink placeholder-admin-muted focus:outline-none focus:ring-2 focus:ring-admin-brand/20 min-h-[120px] resize-none"
+            placeholder="Add manager review note"
+          />
+          <div className="mt-3 flex items-center justify-between gap-3">
+            <span className="text-[11px] text-admin-muted">
+              {normalizedJob.managerReviewedAt ? `Last saved ${formatLondonDateTime(normalizedJob.managerReviewedAt)}` : "Not reviewed yet"}
+            </span>
+            <button
+              onClick={handleSaveReview}
+              disabled={savingReview}
+              className="h-9 px-3 rounded-card bg-admin-brand text-white text-[12px] font-bold transition hover:bg-admin-brand-dark disabled:opacity-60 flex items-center gap-2"
+            >
+              {savingReview ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+              Save
+            </button>
+          </div>
+        </div>
       </div>
+      ) : (
+        <div className="rounded-card border border-admin-line bg-admin-surface p-4 text-[13px] text-admin-muted">
+          Manager review is only available for completed job records.
+        </div>
+      )}
     </div>
   );
 
@@ -172,17 +271,46 @@ export function SubmissionDetailDrawer({ job, isOpen, onClose, onNavigate, hasNe
       <div className="flex-1">
         {activeTab === "Activity" && (
           <div className="relative pl-4 space-y-6 before:absolute before:left-0 before:top-2 before:bottom-0 before:w-px before:bg-admin-line">
-            <div className="relative flex flex-col">
-               <div className="absolute -left-[21px] top-1.5 w-2.5 h-2.5 rounded-full bg-admin-brand ring-4 ring-white" />
-               <div className="flex items-center gap-2 mb-1 min-w-0">
-                 <div className="w-6 h-6 shrink-0 rounded-full bg-admin-brand-soft text-admin-brand font-bold text-[9px] flex items-center justify-center overflow-hidden">
-                    {driverInitials}
-                 </div>
-                 <span className="min-w-0 truncate text-[13px] font-bold text-admin-ink">{driverName || 'Unknown Driver'}</span>
-               </div>
-               <span className="text-[13px] text-admin-muted mb-1">submitted the form</span>
-               <span className="text-[11px] font-medium text-admin-muted/60">{formattedTime}</span>
-            </div>
+            {normalizedJob?.activity?.length ? (
+              normalizedJob.activity.map((entry, index) => (
+                <div key={`${entry.timestamp}-${entry.action}-${index}`} className="relative flex flex-col">
+                  <div className="absolute -left-[21px] top-1.5 w-2.5 h-2.5 rounded-full bg-admin-brand ring-4 ring-white" />
+                  <div className="flex items-center gap-2 mb-1 min-w-0">
+                    <div className="w-6 h-6 shrink-0 rounded-full bg-admin-brand-soft text-admin-brand font-bold text-[9px] flex items-center justify-center overflow-hidden">
+                      {(entry.driver || driverInitials || "UN").slice(0, 2).toUpperCase()}
+                    </div>
+                    <span className="min-w-0 truncate text-[13px] font-bold text-admin-ink">{entry.action.replace(/_/g, " ")}</span>
+                  </div>
+                  {entry.detail && <span className="text-[12px] text-admin-muted mb-1 leading-snug">{entry.detail}</span>}
+                  <span className="text-[11px] font-medium text-admin-muted/60">
+                    {entry.driver || "System"} - {formatLondonDateTime(entry.timestamp)}
+                  </span>
+                </div>
+              ))
+            ) : (
+              <div className="rounded-card border border-admin-line bg-admin-surface p-4 text-[13px] text-admin-muted">
+                No activity log entries recorded.
+              </div>
+            )}
+          </div>
+        )}
+        {activeTab === "Comments" && (
+          <div className="space-y-4">
+            {normalizedJob?.managerReviewNote ? (
+              <div className="rounded-module border border-admin-line bg-[#F8F9FA] p-4">
+                <div className="flex items-center justify-between gap-3 mb-2">
+                  <span className="text-[12px] font-bold text-admin-ink">Manager note</span>
+                  <span className="text-[11px] font-semibold text-admin-muted">
+                    {normalizedJob.managerReviewedAt ? formatLondonDateTime(normalizedJob.managerReviewedAt) : ""}
+                  </span>
+                </div>
+                <p className="text-[13px] leading-relaxed text-admin-ink whitespace-pre-wrap">{normalizedJob.managerReviewNote}</p>
+              </div>
+            ) : (
+              <div className="rounded-card border border-admin-line bg-admin-surface p-4 text-[13px] text-admin-muted">
+                No saved manager comments yet.
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -239,6 +367,55 @@ export function SubmissionDetailDrawer({ job, isOpen, onClose, onNavigate, hasNe
            </div>
          )}
       </div>
+
+      {!isScenario && normalizedJob && (
+        <div className="bg-white rounded-module p-4 sm:p-6 shadow-sm border border-admin-line">
+          <label className="text-[13px] font-semibold text-admin-muted block mb-4">Driver submitted details</label>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <DetailRow label="Booked crew" value={`${normalizedJob.crewSize} crew`} />
+            <DetailRow label="Paid online" value={normalizedJob.paidOnline ? "Yes" : "No"} />
+            <DetailRow
+              label="Extra charges selected"
+              value={
+                normalizedJob.extraChargeSelections?.length
+                  ? normalizedJob.extraChargeSelections.join(", ")
+                  : "None recorded"
+              }
+            />
+            <DetailRow label="Overtime minutes" value={`${normalizedJob.overtimeMinutes || 0} min`} />
+            <DetailRow label="Overtime charge" value={formatGBP(normalizedJob.overtimeCharge)} />
+            <DetailRow label="Payment method" value={normalizedJob.paymentMethod || "Not recorded"} />
+            <DetailRow label="Payment status" value={normalizedJob.paymentStatus || "Not recorded"} />
+            <DetailRow label="Customer confirmed by" value={normalizedJob.clientConfirmedName || "Not recorded"} />
+            <DetailRow
+              label="Started"
+              value={normalizedJob.actualStart ? formatLondonDateTime(normalizedJob.actualStart) : "Not recorded"}
+            />
+            <DetailRow
+              label="Finished"
+              value={normalizedJob.actualFinish ? formatLondonDateTime(normalizedJob.actualFinish) : "Not recorded"}
+            />
+          </div>
+        </div>
+      )}
+
+      {!isScenario && normalizedJob && (
+        <div className="bg-white rounded-module p-4 sm:p-6 shadow-sm border border-admin-line">
+          <div className="flex items-start justify-between gap-3 mb-4">
+            <label className="text-[13px] font-semibold text-admin-muted block">Charges</label>
+            <span className={normalizedJob.reconciled ? "rounded-control bg-admin-status-green-bg px-2.5 py-1 text-[11px] font-bold uppercase tracking-[0.03em] text-admin-status-green" : "rounded-control bg-admin-status-red-bg px-2.5 py-1 text-[11px] font-bold uppercase tracking-[0.03em] text-admin-status-red"}>
+              {normalizedJob.reconciled ? "Reconciled" : "Mismatch"}
+            </span>
+          </div>
+          <div className="divide-y divide-admin-line rounded-card border border-admin-line overflow-hidden">
+            <ChargeRow label="Base price" value={normalizedJob.basePrice} />
+            <ChargeRow label="Extra charges" value={normalizedJob.extraCharges} />
+            <ChargeRow label="Overtime" value={normalizedJob.overtimeCharge} />
+            <ChargeRow label="Calculated total" value={calculatedTotal} strong />
+            <ChargeRow label="Final charged total" value={normalizedJob.totalCharges} strong brand />
+          </div>
+        </div>
+      )}
 
       <div className="bg-white rounded-module p-4 sm:p-6 shadow-sm border border-admin-line">
          <label className="text-[13px] font-semibold text-admin-muted block mb-4">Evidence that the items have been loaded.</label>

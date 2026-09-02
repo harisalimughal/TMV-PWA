@@ -133,7 +133,8 @@ self.addEventListener("push", function (event) {
 
 self.addEventListener("notificationclick", function (event) {
   event.notification.close();
-  var targetUrl = (event.notification.data && event.notification.data.url) ? event.notification.data.url : "/";
+  var data = event.notification.data || {};
+  var targetUrl = data.url || "/";
 
   event.waitUntil(
     Promise.all([

@@ -13,9 +13,9 @@ import { BrandMark } from "../../ui";
 
 export function AuthLayout({ children }: { children: React.ReactNode }) {
   return (
-    <div className="min-h-[100dvh] bg-surface-sunken text-fg lg:grid lg:h-full lg:min-h-0 lg:grid-cols-[minmax(0,42%)_minmax(0,58%)] lg:overflow-hidden">
+    <div className="min-h-[100dvh] bg-surface text-fg lg:grid lg:h-full lg:min-h-0 lg:grid-cols-[minmax(0,42%)_minmax(0,58%)] lg:overflow-hidden">
       <aside
-        className="flex min-h-[34dvh] flex-col justify-between border-b border-line bg-surface-sunken pb-7 pt-[calc(2rem+env(safe-area-inset-top))] lg:h-full lg:border-b-0 lg:border-r lg:px-14 lg:py-16"
+        className="hidden flex-col justify-between border-r border-line bg-surface-sunken lg:flex lg:h-full lg:px-14 lg:py-16"
         style={{
           paddingLeft: "calc(1.25rem + env(safe-area-inset-left))",
           paddingRight: "calc(1.25rem + env(safe-area-inset-right))",
@@ -24,9 +24,6 @@ export function AuthLayout({ children }: { children: React.ReactNode }) {
         <div className="mx-auto w-full max-w-[420px] pt-2 lg:mx-0 lg:pt-0">
           <BrandMark size="md" tone="brand" className="mb-8" />
           <span className="block text-title text-fg">The Man Van</span>
-          <p className="mt-3 max-w-sm text-body text-fg-muted lg:mt-4">
-            Driver Operations: jobs, evidence, payments and customer sign-off, in one place.
-          </p>
         </div>
         <p className="mx-auto mt-6 w-full max-w-[420px] text-meta text-fg-subtle lg:mx-0 lg:mt-0">
           © The Man Van
@@ -34,13 +31,16 @@ export function AuthLayout({ children }: { children: React.ReactNode }) {
       </aside>
 
       <main
-        className="flex justify-center bg-surface pb-[calc(3rem+env(safe-area-inset-bottom))] pt-8 lg:h-full lg:items-center lg:overflow-y-auto lg:scroll-touch lg:px-16 lg:py-12"
+        className="flex min-h-[100dvh] justify-center bg-surface pb-[calc(3rem+env(safe-area-inset-bottom))] pt-[calc(2.5rem+env(safe-area-inset-top))] lg:h-full lg:min-h-0 lg:items-center lg:overflow-y-auto lg:scroll-touch lg:px-16 lg:py-12"
         style={{
           paddingLeft: "calc(1.25rem + env(safe-area-inset-left))",
           paddingRight: "calc(1.25rem + env(safe-area-inset-right))",
         }}
       >
-        <div className="w-full max-w-[420px]">{children}</div>
+        <div className="w-full max-w-[420px]">
+          <BrandMark size="lg" markOnly className="mb-8 flex justify-center lg:hidden" />
+          {children}
+        </div>
       </main>
     </div>
   );

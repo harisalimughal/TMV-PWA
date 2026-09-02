@@ -10,7 +10,7 @@
 import React, { useState, useEffect } from "react";
 import {
   LayoutDashboard, Navigation, Truck, CheckSquare, LogIn, LogOut, AlertCircle, ShieldAlert,
-  Users, Banknote, History, FileSpreadsheet, Settings, RefreshCw,
+  Users, Banknote, History, FileSpreadsheet, RefreshCw,
   ChevronLeft, ChevronRight, Search, Command, MessageSquare, Bell, Menu, X
 } from "lucide-react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
@@ -42,7 +42,6 @@ const NAV_CONFIG: NavSectionItem[] = [
   { id: "livefleet", label: "Live Fleet", icon: Navigation, isLive: true, desc: "Real-time GPS vehicle positions and driver telemetry" },
   { id: "jobs", label: "Jobs", icon: Truck, desc: "Operational moves joined across Jobs, Drivers, Workflow and Evidence" },
   { id: "finished", label: "Finished Jobs", icon: CheckSquare, desc: "Completed moves audit with verified evidence and sign-off records" },
-  { id: "notifications", label: "Notifications & Push", icon: Bell, desc: "Automated communication audit across Email, SMS and Web Push channels" },
   { type: "header", label: "Scenarios" },
   { id: "checkin", label: "Check In", icon: LogIn, desc: "Storage facility entry logs and client container check-ins" },
   { id: "checkout", label: "Check Out", icon: LogOut, desc: "Storage retrieval and client drop-off confirmation records" },
@@ -54,7 +53,7 @@ const NAV_CONFIG: NavSectionItem[] = [
   { id: "activity", label: "Activity Log", icon: History, desc: "Chronological audit records directly from the activity log" },
   { id: "reports", label: "Reports", icon: FileSpreadsheet, desc: "Downloadable operational datasets and certified export files" },
   { id: "messaging", label: "Messaging Content", icon: MessageSquare, desc: "Manage automated customer and driver communication templates" },
-  { id: "settings", label: "Settings", icon: Settings, desc: "Read-only system rules, rates, caching invariants and database mapping" }
+  { id: "notifications", label: "Notifications & Web Push", icon: Bell, desc: "Automated communication audit across Email, SMS and Web Push channels" }
 ];
 
 export function Layout({ activeSection, onSelectSection, onLogout, children }: Props) {

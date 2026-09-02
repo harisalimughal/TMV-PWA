@@ -1,7 +1,6 @@
 import React, { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
-  Download,
   Search,
   Bell,
   BellRing,
@@ -17,7 +16,6 @@ import { fetchNotifications, NotificationRow } from "../api";
 import { DateRangePicker } from "../components/DateRangePicker";
 import { formatLondonDateTime } from "../utils/date";
 import { getAvatarColor } from "../utils/drivers";
-import { downloadCsv, toCsv } from "../utils/csv";
 import { usePushNotifications } from "../../../../lib/pwa/usePushNotifications";
 import { SendBroadcastPushModal } from "../components/SendBroadcastPushModal";
 import { useToast } from "../../../../components/ui/Toast";
@@ -50,20 +48,6 @@ const normalizePhone = (phone?: string) => {
   }
   return { formatted: phone, isInvalid: false };
 };
-
-// Columns for the notifications export. Cell encoding (CSV quoting + spreadsheet
-// formula-injection guard) is handled centrally by toCsv/sanitizeCsvCell -- this file
-// no longer carries its own escaper.
-const NOTIFICATION_CSV_COLUMNS: Array<{ header: string; value: (r: NotificationRow) => unknown }> = [
-  { header: "Job ID", value: r => r.jobId },
-  { header: "Customer", value: r => r.customerName },
-  { header: "Driver", value: r => r.driverInitials },
-  { header: "Started", value: r => formatLondonDateTime(r.actualStart) },
-  { header: "Email address", value: r => r.customerEmail },
-  { header: "Email", value: r => STATUS_LABEL[r.email.state] },
-  { header: "Phone number", value: r => r.customerPhone },
-  { header: "SMS", value: r => STATUS_LABEL[r.sms.state] }
-];
 
 // Real email/SMS delivery status, from the classic bot's own ActivityLog rows (see
 // dashboard/server/routes/notifications.route.ts) -- not a fabricated per-job hash.
@@ -137,26 +121,7 @@ export function NotificationsPage() {
           <h1 className="text-title text-fg">Notifications & Web Push</h1>
         </div>
 
-        <div className="flex items-center gap-3">
-          <button
-            onClick={() => setBroadcastModalOpen(true)}
-            className="h-10 px-4 rounded-control bg-admin-brand hover:bg-admin-brand-hover text-white text-button shadow-sm transition flex items-center gap-2"
-          >
-            <Send className="w-4 h-4" /> Send Push Notice
-          </button>
-          <button
-            onClick={() =>
-              downloadCsv(
-                `notifications-${new Date().toISOString().slice(0, 10)}.csv`,
-                toCsv(filtered, NOTIFICATION_CSV_COLUMNS)
-              )
-            }
-            disabled={!filtered.length}
-            className="h-10 px-4 rounded-control border border-line-strong bg-surface hover:bg-surface-sunken text-fg text-button shadow-sm transition flex items-center gap-2 disabled:opacity-50"
-          >
-            <Download className="w-4 h-4" /> Export CSV
-          </button>
-        </div>
+        <div />
       </div>
 
       {/* PWA & PUSH NOTIFICATION DASHBOARD CARD */}

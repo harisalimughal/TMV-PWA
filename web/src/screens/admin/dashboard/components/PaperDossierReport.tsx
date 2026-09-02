@@ -12,6 +12,15 @@ export function PaperDossierReport({ job, isPreview = false }: Props) {
   
   // Helpers
   const formatPounds = (cents: number | undefined) => `£${((cents || 0) / 100).toFixed(2)}`;
+  const calculatedTotal = (job.basePrice || 0) + (job.extraCharges || 0) + (job.overtimeCharge || 0);
+  const MoneyRow = ({ label, value, strong = false }: { label: string; value: number; strong?: boolean }) => (
+    <div className="flex items-center justify-between p-3 border-b border-[#E5E7EB] bg-white last:border-b-0">
+      <span className="text-label font-medium text-fg-muted">{label}</span>
+      <span className={`text-[13px] ${strong ? "font-bold" : "font-semibold"} text-admin-ink`}>
+        {formatPounds(value)}
+      </span>
+    </div>
+  );
 
   // Get ALL image evidence items
   const photos = job.evidenceItems?.filter(e => !!e.fileId) || [];
@@ -145,18 +154,33 @@ export function PaperDossierReport({ job, isPreview = false }: Props) {
             
             {/* Inject data blocks on specific pages if possible, or at the end */}
             {pageNum === 1 && (
-              <div className="mb-3 border border-[#E5E7EB] rounded-card overflow-hidden shrink-0">
-                <div className="flex items-center justify-between p-3 border-b border-[#E5E7EB] bg-white">
-                  <span className="text-label font-medium text-fg-muted">Customer Name</span>
-                  <span className="text-[13px] font-bold text-admin-ink">{job.customerName || "N/A"}</span>
+              <div className="mb-3 grid grid-cols-1 gap-3 shrink-0">
+                <div className="border border-[#E5E7EB] rounded-card overflow-hidden">
+                  <div className="flex items-center justify-between p-3 border-b border-[#E5E7EB] bg-white">
+                    <span className="text-label font-medium text-fg-muted">Customer Name</span>
+                    <span className="text-[13px] font-bold text-admin-ink">{job.customerName || "N/A"}</span>
+                  </div>
+                  <div className="flex items-center justify-between p-3 border-b border-[#E5E7EB] bg-white">
+                    <span className="text-label font-medium text-fg-muted">Pickup</span>
+                    <span className="text-[13px] font-bold text-admin-ink truncate max-w-[240px]">{job.pickup || "N/A"}</span>
+                  </div>
+                  <div className="flex items-center justify-between p-3 bg-white">
+                    <span className="text-label font-medium text-fg-muted">Dropoff</span>
+                    <span className="text-[13px] font-bold text-admin-ink truncate max-w-[240px]">{job.dropoff || "N/A"}</span>
+                  </div>
                 </div>
-                <div className="flex items-center justify-between p-3 border-b border-[#E5E7EB] bg-white">
-                  <span className="text-label font-medium text-fg-muted">Pickup</span>
-                  <span className="text-[13px] font-bold text-admin-ink truncate max-w-[240px]">{job.pickup || "N/A"}</span>
-                </div>
-                <div className="flex items-center justify-between p-3 bg-white">
-                  <span className="text-label font-medium text-fg-muted">Dropoff</span>
-                  <span className="text-[13px] font-bold text-admin-ink truncate max-w-[240px]">{job.dropoff || "N/A"}</span>
+                <div className="border border-[#E5E7EB] rounded-card overflow-hidden">
+                  <MoneyRow label="Base Price" value={job.basePrice || 0} />
+                  <MoneyRow label="Extra Charges" value={job.extraCharges || 0} />
+                  <MoneyRow label="Overtime" value={job.overtimeCharge || 0} />
+                  <MoneyRow label="Calculated Total" value={calculatedTotal} strong />
+                  <MoneyRow label="Final Charged Total" value={job.totalCharges || 0} strong />
+                  <div className="flex items-center justify-between p-3 bg-white">
+                    <span className="text-label font-medium text-fg-muted">Reconciliation</span>
+                    <span className={`text-[11px] font-bold uppercase tracking-[0.03em] ${job.reconciled ? "text-admin-status-green" : "text-admin-status-red"}`}>
+                      {job.reconciled ? "Reconciled" : "Mismatch"}
+                    </span>
+                  </div>
                 </div>
               </div>
             )}

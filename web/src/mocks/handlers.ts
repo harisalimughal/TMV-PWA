@@ -60,7 +60,10 @@ function evidenceFor(job: Job): EvidenceSummary {
 
 function suggestedTotal(job: Job): number {
   if (job.totalCharges) return job.totalCharges;
-  return job.basePrice + (job.overtimeCharge ?? 0);
+  let extras = 0;
+  if (job.extraCharges?.includes("London Congestion charge")) extras += 18;
+  if (job.extraCharges?.includes("Tunnel Charges")) extras += 13;
+  return job.basePrice + extras + (job.overtimeCharge ?? 0);
 }
 
 function logActivity(job: Job, action: string, fromState: string): void {
@@ -86,7 +89,7 @@ function transition(jobId: string, trigger: WorkflowTrigger, input?: Record<stri
   const updated = applyTrigger(job, trigger, input ?? {});
   store.jobs[jobId] = updated;
   if (updated.currentState !== fromState) logActivity(updated, trigger, fromState);
-  return ok({ job: updated });
+  return ok({ job: updated, suggestedTotal: suggestedTotal(updated) });
 }
 
 function parse(bodyText?: string): any {

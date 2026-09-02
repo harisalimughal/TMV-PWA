@@ -225,6 +225,59 @@ export function dashboardJobsRoutes(): Router {
     }
   });
 
+  router.post("/:jobId/review", async (req, res) => {
+    const jobId = String(req.params.jobId || "").trim();
+    const status = String(req.body?.status ?? "Pending").trim();
+    const note = String(req.body?.note ?? "").trim();
+
+    if (!["Pending", "Approved", "Flagged"].includes(status)) {
+      return res.status(400).json({
+        error: { code: "VALIDATION_FAILED", message: "Review status must be Pending, Approved or Flagged." }
+      });
+    }
+    if (note.length > 2000) {
+      return res.status(400).json({
+        error: { code: "VALIDATION_FAILED", message: "Manager note must be 2000 characters or fewer." }
+      });
+    }
+
+    try {
+      const existing = await getJob(jobId);
+      if (!existing) {
+        return res.status(404).json({ error: { code: "JOB_NOT_FOUND", message: `Job ${jobId} not found.` } });
+      }
+
+      existing.managerReviewStatus = status as "Pending" | "Approved" | "Flagged";
+      existing.managerReviewNote = note;
+      existing.managerReviewedAt = new Date().toISOString();
+      existing.updatedAt = existing.managerReviewedAt;
+      await upsertJob(existing);
+
+      await appendActivity({
+        jobId,
+        driver: "admin dashboard",
+        action: "MANAGER_REVIEW_UPDATED",
+        detail: note ? `${status}: ${note}` : status
+      });
+
+      const dataset = await readMongoDataset();
+      const jobs = await normalizeMongoDataset(dataset);
+      const job = jobs.find(j => j.jobId.toUpperCase() === jobId.toUpperCase());
+
+      return res.status(200).json({
+        job,
+        review: {
+          status: existing.managerReviewStatus,
+          note: existing.managerReviewNote,
+          reviewedAt: existing.managerReviewedAt
+        }
+      });
+    } catch (error) {
+      log.error("dashboard manager review failed", error, { job_id: jobId });
+      return res.status(500).json({ error: { code: "REVIEW_SAVE_FAILED", message: "Failed to save manager review." } });
+    }
+  });
+
   router.get("/export.csv", async (req, res) => {
     try {
       const dataset = await readMongoDataset();

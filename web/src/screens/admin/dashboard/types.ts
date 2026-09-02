@@ -63,6 +63,7 @@ export interface NormalizedJob {
   currentState: string;
   workflowCompletionPct: number;
   basePrice: number;
+  extraChargeSelections: string[];
   extraCharges: number;
   overtimeMinutes: number;
   overtimeCharge: number;
@@ -70,6 +71,9 @@ export interface NormalizedJob {
   reconciled: boolean;
   paymentMethod: string;
   paymentStatus: string;
+  managerReviewStatus?: "Pending" | "Approved" | "Flagged";
+  managerReviewNote?: string;
+  managerReviewedAt?: string;
   paidOnline: boolean;
   evidenceCompleteness: {
     arrival: EvidenceState;

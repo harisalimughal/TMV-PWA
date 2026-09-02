@@ -10,6 +10,8 @@ export interface SettingFieldSpec {
   hint?: string;
 }
 
+const CREW_RATE_KEY_RE = /^CREW_RATE_([1-9]\d*)_MAN$/;
+
 /**
  * The exact set of keys workflow.engine.ts actually reads via getSetting() -- the
  * single source of truth for what the /admin Settings screen can edit. Adding a new
@@ -81,3 +83,30 @@ export const SETTINGS_SPEC: SettingFieldSpec[] = [
       "client-reminder job this configured, so changing it currently has no effect."
   }
 ];
+
+export function crewRateKey(crewSize: number): string {
+  return `CREW_RATE_${crewSize}_MAN`;
+}
+
+export function crewRateLabel(crewSize: number): string {
+  return `Crew Rate — ${crewSize} Man (£)`;
+}
+
+export function isCustomSettingKey(key: string): boolean {
+  const match = CREW_RATE_KEY_RE.exec(key);
+  if (!match) return false;
+  const crewSize = Number(match[1]);
+  return Number.isInteger(crewSize) && crewSize >= 4 && crewSize <= 12;
+}
+
+export function customSettingSpec(key: string): SettingFieldSpec | null {
+  if (!isCustomSettingKey(key)) return null;
+  const crewSize = Number(CREW_RATE_KEY_RE.exec(key)?.[1]);
+  return {
+    key,
+    label: crewRateLabel(crewSize),
+    type: "number",
+    fallback: String(env.crewRate3Man),
+    hint: "Custom crew-size rate. Used when the driver records this crew size during overtime."
+  };
+}

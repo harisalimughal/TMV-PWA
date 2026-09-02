@@ -14,7 +14,7 @@ import { FolderActionDropdown } from "../components/FolderActionDropdown";
 import { PaperDossierReport } from "../components/PaperDossierReport";
 import { FileText } from "lucide-react";
 import { fetchJobs } from "../api";
-import { NormalizedJob, toPounds } from "../types";
+import { NormalizedJob, formatGBP, toPounds } from "../types";
 import { DateRangePicker } from "../components/DateRangePicker";
 import { formatLondonDateTime } from "../utils/date";
 const isTestOrIncomplete = (job: any) => { return job.customerName === "hh" || String(job.pickup).includes("test") || String(job.dropoff).includes("test"); };
@@ -32,7 +32,7 @@ export function FinishedJobsPage() {
    *  SubmissionDetailDrawer's autoDownload prop) instead of just sitting on Preview. */
   const [autoDownloadJobId, setAutoDownloadJobId] = useState<string | null>(null);
 
-  const { data, isLoading, error } = useQuery({
+  const { data, isLoading, error, refetch } = useQuery({
     queryKey: ["jobs", "COMPLETED", page, pageSize, from, to],
     queryFn: () => fetchJobs({ status: "COMPLETED", page, pageSize, from, to })
   });
@@ -48,6 +48,8 @@ export function FinishedJobsPage() {
     
     return false;
   };
+
+  const calculatedTotal = (job: NormalizedJob) => job.basePrice + job.extraCharges + job.overtimeCharge;
 
   return (
     <div className="space-y-6 max-w-[1440px] mx-auto">
@@ -97,6 +99,7 @@ export function FinishedJobsPage() {
             {(data?.items || []).map((job: NormalizedJob) => {
               const driver = resolveDriver(job.driverName, job.driverInitials);
               const total = toPounds(job.totalCharges);
+              const calculated = calculatedTotal(job);
               const photoCount =
                 job.evidenceItems?.filter((e: any) => e.type === "IMAGE" && (e.thumbProxyUrl || e.driveUrl)).length || 0;
               return (
@@ -110,6 +113,17 @@ export function FinishedJobsPage() {
                       <span className="font-mono text-[14px] font-bold tabular-nums">
                         {total === 0 ? "—" : `£${total.toLocaleString("en-GB", { minimumFractionDigits: 2 })}`}
                       </span>
+                    </div>
+                    <div className="mt-2 flex items-center justify-between gap-3 rounded-card bg-admin-surface px-3 py-2 text-[12px]">
+                      <span className="text-admin-muted">
+                        Calc {formatGBP(calculated)}
+                      </span>
+                      <span className={job.reconciled ? "font-semibold text-admin-status-green" : "font-semibold text-admin-status-red"}>
+                        {job.reconciled ? "Reconciled" : "Check total"}
+                      </span>
+                    </div>
+                    <div className="mt-2 text-[12px] font-semibold text-admin-muted">
+                      Review: <span className="text-admin-ink">{job.managerReviewStatus || "Pending"}</span>
                     </div>
                     <p className="text-card text-fg mt-1.5 truncate">
                       {job.customerName || "Not recorded"}
@@ -163,6 +177,7 @@ export function FinishedJobsPage() {
                 {data?.items.map((job: NormalizedJob, index: number) => {
                   const isExpanded = expandedJobId === job.jobId;
                   const totalPounds = toPounds(job.totalCharges);
+                  const calculated = calculatedTotal(job);
                   const rowNumber = (page - 1) * pageSize + index + 1;
                   
                   const startedTime = job.actualStart ? formatLondonDateTime(job.actualStart) : "—";
@@ -213,6 +228,9 @@ export function FinishedJobsPage() {
                               </span>
                             )}
                           </div>
+                          <div className="mt-1 text-[11px] font-semibold text-admin-muted">
+                            Review: <span className="text-admin-ink">{job.managerReviewStatus || "Pending"}</span>
+                          </div>
                         </td>
 
                         <td className="px-4">
@@ -228,7 +246,13 @@ export function FinishedJobsPage() {
 
                         <td className="px-6 text-right">
                           <div className="font-mono text-[15px] font-bold tabular-nums text-admin-ink">
-                            {totalPounds.toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            £{totalPounds.toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </div>
+                          <div className="mt-0.5 text-[11px] text-admin-muted tabular-nums">
+                            Calc {formatGBP(calculated)}
+                          </div>
+                          <div className={job.reconciled ? "mt-0.5 text-[10px] font-bold uppercase tracking-[0.03em] text-admin-status-green" : "mt-0.5 text-[10px] font-bold uppercase tracking-[0.03em] text-admin-status-red"}>
+                            {job.reconciled ? "Reconciled" : "Mismatch"}
                           </div>
                         </td>
 
@@ -316,6 +340,7 @@ export function FinishedJobsPage() {
           isOpen={!!previewJob}
           autoDownload={autoDownloadJobId === previewJob.jobId}
           onClose={() => { setPreviewJob(null); setAutoDownloadJobId(null); }}
+          onUpdated={() => void refetch()}
           onNavigate={(dir) => {
             if (!data?.items) return;
             const idx = data.items.findIndex((j: any) => j.jobId === previewJob.jobId);

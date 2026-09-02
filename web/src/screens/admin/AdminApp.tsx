@@ -24,11 +24,7 @@ import { usePushNotifications } from "../../lib/pwa/usePushNotifications";
  *
  * The bulk of this -- Layout + all 14 pages -- is TMV-Chat-bot's dashboard/web ported
  * into tmv-pwa (see ./dashboard/*), so this domain can run entirely off tmv-pwa's own
- * Mongo backend instead of the retired Sheets/Drive-dependent project. "settings" and
- * "pricing" both route to the same real PricingSettingsPage -- the source's two
- * separate pages there were both non-functional UI mockups covering the same ground
- * (crew/packing/overtime rates); nothing was lost by consolidating them into the one
- * real version.
+ * Mongo backend instead of the retired Sheets/Drive-dependent project.
  */
 export function AdminApp() {
   const [checking, setChecking] = useState(true);
@@ -69,7 +65,7 @@ export function AdminApp() {
   useEffect(() => {
     const readSection = () => {
       const sec = new URLSearchParams(window.location.search).get("section");
-      setActiveSection(sec || "overview");
+      setActiveSection(sec === "settings" ? "pricing" : sec || "overview");
     };
     readSection();
     window.addEventListener("popstate", readSection);
@@ -120,7 +116,6 @@ export function AdminApp() {
       {activeSection === "activity" && <ActivityPage />}
       {activeSection === "reports" && <ReportsPage />}
       {activeSection === "messaging" && <MessagingPage />}
-      {activeSection === "settings" && <PricingSettingsPage />}
     </Layout>
   );
 }

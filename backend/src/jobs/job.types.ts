@@ -59,6 +59,9 @@ export interface Job {
   totalCharges: number;
   paymentMethod: string;
   paymentStatus: string;
+  managerReviewStatus?: "Pending" | "Approved" | "Flagged";
+  managerReviewNote?: string;
+  managerReviewedAt?: string;
   clientNamePostcode: string;
   clientConfirmedBy: string;
   /** Cloudinary URL of the customer's drawn signature, once captured -- replaces the

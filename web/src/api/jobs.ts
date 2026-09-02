@@ -55,6 +55,11 @@ export interface EvidenceSummary {
   hasSignature: boolean;
 }
 
+export interface JobUpdateResult {
+  job: Job;
+  suggestedTotal?: number;
+}
+
 /** The "Your jobs" listing -- every one of the driver's jobs, bucketed into
  *  Today / Past / Next by calendar day in Europe/London. */
 export function fetchJobsList(): Promise<{
@@ -76,7 +81,7 @@ export function fetchJobDetail(jobId: string): Promise<{
   return request(`/api/jobs/${encodeURIComponent(jobId)}`);
 }
 
-export function startJob(jobId: string): Promise<{ job: Job }> {
+export function startJob(jobId: string): Promise<JobUpdateResult> {
   return request(`/api/jobs/${encodeURIComponent(jobId)}/start`, { method: "POST" });
 }
 
@@ -84,7 +89,7 @@ export function uploadEvidencePhotos(
   jobId: string,
   files: File[],
   onProgress?: (fraction: number) => void
-): Promise<{ job: Job }> {
+): Promise<JobUpdateResult> {
   const form = new FormData();
   files.forEach(file => form.append("photos", file));
   return request(`/api/jobs/${encodeURIComponent(jobId)}/evidence`, {
@@ -99,7 +104,7 @@ export function uploadSignature(
   customerName: string,
   blob: Blob,
   onProgress?: (fraction: number) => void
-): Promise<{ job: Job }> {
+): Promise<JobUpdateResult> {
   const form = new FormData();
   form.append("customerName", customerName);
   form.append("signature", blob, "signature.png");
@@ -114,7 +119,7 @@ export function sendAction(
   jobId: string,
   action: string,
   input: Record<string, string[]> = {}
-): Promise<{ job: Job }> {
+): Promise<JobUpdateResult> {
   return postJson(`/api/jobs/${encodeURIComponent(jobId)}/actions`, { action, input });
 }
 

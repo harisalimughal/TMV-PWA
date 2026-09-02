@@ -26,6 +26,10 @@ export async function getConfirmationText(): Promise<string> {
   return getSetting("CUSTOMER_CONFIRMATION_TEXT", DEFAULT_CUSTOMER_CONFIRMATION_TEXT);
 }
 
+function crewRateKey(crewSize: number): string {
+  return `CREW_RATE_${crewSize}_MAN`;
+}
+
 function extraChargeAmount(job: Job): number {
   let total = 0;
   if (job.extraCharges.includes(ExtraChargeType.CONGESTION)) total += env.congestionCharge;
@@ -211,15 +215,12 @@ export async function handleAction(
       const otGraceStr = await getSetting("OVERTIME_GRACE_MINS", String(env.overtimeGraceMinutes));
       const otGrace = parseInt(otGraceStr, 10) || 0;
 
-      let rateKey = "CREW_RATE_2_MAN";
-      let rateFallback = env.crewRate2Man;
-      if (overtimeCrewSize === 1) {
-        rateKey = "CREW_RATE_1_MAN";
-        rateFallback = env.crewRate1Man;
-      } else if (overtimeCrewSize === 3) {
-        rateKey = "CREW_RATE_3_MAN";
-        rateFallback = env.crewRate3Man;
-      }
+      const rateKey = crewRateKey(overtimeCrewSize);
+      const rateFallback =
+        overtimeCrewSize === 1 ? env.crewRate1Man :
+        overtimeCrewSize === 2 ? env.crewRate2Man :
+        overtimeCrewSize === 3 ? env.crewRate3Man :
+        env.crewRate3Man;
 
       const isPackingService = job.extraCharges.includes(ExtraChargeType.PACKING);
       const defaultRateStr = isPackingService

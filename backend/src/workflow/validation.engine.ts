@@ -60,10 +60,10 @@ export function validateCurrency(raw: string): number {
  * left early), which is why the driver picks it explicitly rather than it being
  * silently inferred from the booking. Drives which CREW_RATE_*_MAN setting the
  * overtime charge is calculated from -- see workflow.engine.ts's SUBMIT_OVERTIME. */
-export function validateCrewSize(raw: string): 1 | 2 | 3 {
+export function validateCrewSize(raw: string): number {
   const value = Number(raw.trim());
-  if (value !== 1 && value !== 2 && value !== 3) {
-    throw new ValidationError("Select a crew size of 1, 2 or 3 men.");
+  if (!Number.isInteger(value) || value < 1 || value > 12) {
+    throw new ValidationError("Select a crew size between 1 and 12.");
   }
   return value;
 }

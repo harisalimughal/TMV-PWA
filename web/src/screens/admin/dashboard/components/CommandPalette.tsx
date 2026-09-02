@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from "react";
 import {
   Search, LayoutDashboard, Truck, CheckSquare, LogIn, LogOut, Users, Banknote,
-  AlertTriangle, FileSpreadsheet, Settings, RefreshCw, Download, History, ShieldAlert, ArrowRight
+  AlertTriangle, FileSpreadsheet, RefreshCw, Download, History, ShieldAlert, ArrowRight
 } from "lucide-react";
 
 interface Props {
@@ -25,7 +25,6 @@ const PALETTE_ITEMS = [
   { id: "finance", label: "Finance", section: "finance", icon: Banknote, category: "Management" },
   { id: "activity", label: "Activity Log", section: "activity", icon: History, category: "Management" },
   { id: "reports", label: "Reports", section: "reports", icon: FileSpreadsheet, category: "Management" },
-  { id: "settings", label: "Settings", section: "settings", icon: Settings, category: "Management" },
   { id: "act_refresh", label: "Sync Live Sheets Data", action: "refresh", icon: RefreshCw, category: "Actions" },
   { id: "act_export", label: "Export Jobs to CSV", action: "export", icon: Download, category: "Actions" }
 ];

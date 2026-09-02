@@ -73,6 +73,7 @@ let started = false;
 let swRegistration: ServiceWorkerRegistration | undefined;
 let updateSW: ((reload?: boolean) => Promise<void>) | undefined;
 let periodicTimer: ReturnType<typeof setInterval> | undefined;
+let updateNotificationShown = false;
 
 /** Idempotent. Safe to call from both `main.tsx` and the hook. */
 export function initServiceWorker(): void {
@@ -83,6 +84,7 @@ export function initServiceWorker(): void {
     immediate: true,
     onNeedRefresh() {
       patch({ needRefresh: true, registered: true });
+      void notifyUpdateAvailable();
     },
     onOfflineReady() {
       patch({ offlineReady: true, registered: true });
@@ -105,6 +107,29 @@ export function initServiceWorker(): void {
     navigator.serviceWorker.addEventListener("controllerchange", () => {
       patch({ controlled: !!navigator.serviceWorker.controller });
     });
+  }
+}
+
+async function notifyUpdateAvailable(): Promise<void> {
+  if (updateNotificationShown || !("Notification" in window)) return;
+  if (Notification.permission !== "granted") return;
+  updateNotificationShown = true;
+
+  try {
+    const registration =
+      swRegistration ?? (await navigator.serviceWorker.getRegistration());
+    await registration?.showNotification("TMV BOT update ready", {
+      body: "Tap to update the app now.",
+      icon: "/icons/icon-192.png",
+      tag: "tmv-app-update",
+      data: {
+        action: "TMV_APPLY_UPDATE",
+        url: "/?update=app"
+      }
+    });
+  } catch (err) {
+    updateNotificationShown = false;
+    report("Showing update notification failed", err);
   }
 }
 

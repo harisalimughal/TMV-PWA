@@ -75,6 +75,7 @@ export interface NormalizedJob {
   workflowCompletionPct: number;
 
   basePrice: Pence;
+  extraChargeSelections: string[];
   extraCharges: Pence;
   overtimeMinutes: number;
   overtimeCharge: Pence;
@@ -83,6 +84,9 @@ export interface NormalizedJob {
 
   paymentMethod: string;
   paymentStatus: string;
+  managerReviewStatus?: "Pending" | "Approved" | "Flagged";
+  managerReviewNote?: string;
+  managerReviewedAt?: string;
   paidOnline: boolean;
 
   evidenceCompleteness: {

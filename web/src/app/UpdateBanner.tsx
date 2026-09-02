@@ -15,6 +15,13 @@ const DISMISS_KEY = "tmv-pwa:update-banner-dismissed";
  */
 export function UpdateBanner() {
   const { needRefresh, updating, applyUpdate } = useServiceWorkerUpdate();
+  const [updateRequested, setUpdateRequested] = useState(() => {
+    try {
+      return new URLSearchParams(window.location.search).get("update") === "app";
+    } catch {
+      return false;
+    }
+  });
   const [dismissed, setDismissed] = useState(() => {
     try {
       return sessionStorage.getItem(DISMISS_KEY) === "1";
@@ -33,6 +40,17 @@ export function UpdateBanner() {
       }
     }
   }, [needRefresh]);
+
+  useEffect(() => {
+    if (!updateRequested || !needRefresh) return;
+    setUpdateRequested(false);
+    try {
+      window.history.replaceState({}, "", window.location.pathname || "/");
+    } catch {
+      /* ignore */
+    }
+    void applyUpdate();
+  }, [updateRequested, needRefresh, applyUpdate]);
 
   if (!needRefresh || dismissed) return null;
 

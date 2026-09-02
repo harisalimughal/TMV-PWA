@@ -175,7 +175,7 @@ export function jobsRoutes(): Router {
       const action = String(req.body?.action ?? "");
       const input = (req.body?.input ?? {}) as Record<string, string[]>;
       const job = await handleAction(action, String(req.params.jobId), req.driverEmail!, input);
-      res.status(200).json({ job });
+      res.status(200).json({ job, suggestedTotal: suggestedTotal(job) });
     } catch (error) {
       errorResponse(res, error);
     }

@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import { AlertTriangle, Car, CheckCircle2, ChevronLeft, FileWarning, PenLine } from "lucide-react";
 import {
   fetchJobDetail,
+  type JobUpdateResult,
   sendAction,
   startJob,
   uploadEvidencePhotos,
@@ -30,7 +31,6 @@ import { useOnline } from "../lib/net";
 import type { ScenarioKey } from "../scenarioSpec";
 import {
   BACK_ELIGIBLE,
-  CREW_SIZE_OPTIONS,
   EXTRA_CHARGE_OPTIONS,
   NO_EXTRAS,
   overtimeApplies,
@@ -75,10 +75,9 @@ function formatBookedDay(bookedStart: string): string {
 
 /** Pre-selects the job's booked crew size, but the driver can change it -- the crew
  *  actually working the overtime can differ from what was booked. */
-function defaultOvertimeCrewSize(job: Job): "1" | "2" | "3" {
-  if (job.crewSize === 1) return "1";
-  if (job.crewSize === 3) return "3";
-  return "2";
+function defaultOvertimeCrewSize(job: Job): string {
+  const crewSize = Number(job.crewSize);
+  return Number.isInteger(crewSize) && crewSize > 0 ? String(crewSize) : "2";
 }
 
 export function JobWorkflowScreen({ jobId, onBack }: JobWorkflowScreenProps) {
@@ -140,7 +139,7 @@ export function JobWorkflowScreen({ jobId, onBack }: JobWorkflowScreenProps) {
    * block with an honest message, and every form keeps its state so nothing is lost.
    */
   const run = useCallback(
-    async (action: () => Promise<{ job: Job }>, successMessage?: string): Promise<boolean> => {
+    async (action: () => Promise<JobUpdateResult>, successMessage?: string): Promise<boolean> => {
       if (!online) {
         toast.error("You're offline. Reconnect to continue this job — nothing you've entered is lost.");
         return false;
@@ -150,6 +149,7 @@ export function JobWorkflowScreen({ jobId, onBack }: JobWorkflowScreenProps) {
       try {
         const result = await action();
         setJob(result.job);
+        if (typeof result.suggestedTotal === "number") setSuggestedTotal(result.suggestedTotal);
         if (successMessage) toast.success(successMessage);
         // A new step means new content: put the driver at the top of it rather than
         // wherever the previous step happened to be scrolled to.
@@ -371,7 +371,7 @@ export function JobWorkflowScreen({ jobId, onBack }: JobWorkflowScreenProps) {
 const formState: {
   extraCharges: string[];
   overtimeMinutes: string;
-  overtimeCrew: "1" | "2" | "3";
+  overtimeCrew: string;
   total: string;
   payment: string;
   photos: File[];
@@ -391,6 +391,29 @@ function resetFormState() {
   formState.total = "";
   formState.payment = "";
   formState.photos = [];
+}
+
+function overtimeBlockedReason(offlineReason?: string): string | undefined {
+  if (offlineReason) return offlineReason;
+  if (formState.overtimeMinutes.trim() === "") {
+    return "Enter the overtime minutes — use 0 if there was none.";
+  }
+
+  const minutes = Number(formState.overtimeMinutes);
+  if (!Number.isFinite(minutes) || minutes < 0) {
+    return "Overtime must be a number of minutes.";
+  }
+
+  if (formState.overtimeCrew.trim() === "") {
+    return "Enter the crew size for the overtime.";
+  }
+
+  const crewSize = Number(formState.overtimeCrew);
+  if (!Number.isInteger(crewSize) || crewSize < 1 || crewSize > 12) {
+    return "Crew size must be between 1 and 12.";
+  }
+
+  return undefined;
 }
 
 function StepBody({
@@ -589,21 +612,26 @@ function StepBody({
             ))}
           </div>
 
-          <ChoiceGroup legend="Crew working the overtime">
-            {CREW_SIZE_OPTIONS.map(option => (
-              <Choice
-                key={option.value}
-                type="radio"
-                name="overtime_crew_size"
-                label={option.label}
-                selected={formState.overtimeCrew === option.value}
-                onToggle={() => {
-                  formState.overtimeCrew = option.value;
-                  tick();
-                }}
-              />
-            ))}
-          </ChoiceGroup>
+          <label className="flex flex-col gap-1.5">
+            <span className="pl-0.5 text-label text-fg-muted">Crew working the overtime</span>
+            <input
+              type="number"
+              inputMode="numeric"
+              min={1}
+              max={12}
+              step={1}
+              value={formState.overtimeCrew}
+              onChange={e => {
+                formState.overtimeCrew = e.target.value;
+                tick();
+              }}
+              placeholder="2"
+              className="min-h-control-lg w-full rounded-card border border-line bg-surface px-4 py-3 text-[16px] text-fg outline-none transition focus:border-brand focus:ring-2 focus:ring-brand/25"
+            />
+            <span className="pl-0.5 text-helper text-fg-subtle">
+              Use the number of people who actually worked the overtime.
+            </span>
+          </label>
         </div>
       );
 
@@ -879,14 +907,7 @@ function StepDock({
             fullWidth
             size="lg"
             loading={busy}
-            blockedReason={
-              offlineReason ??
-              (formState.overtimeMinutes.trim() === ""
-                ? "Enter the overtime minutes — use 0 if there was none."
-                : Number(formState.overtimeMinutes) < 0 || Number.isNaN(Number(formState.overtimeMinutes))
-                  ? "Overtime must be a number of minutes."
-                  : undefined)
-            }
+            blockedReason={overtimeBlockedReason(offlineReason)}
             onBlocked={onBlocked}
             onClick={() =>
               onAction("SUBMIT_OVERTIME", {

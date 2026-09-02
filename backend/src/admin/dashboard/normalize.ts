@@ -84,9 +84,10 @@ export async function normalizeMongoDataset(dataset: MongoDataset): Promise<Norm
     const timingTrustworthy = isTimingTrustworthy(job.bookedStart) && isTimingTrustworthy(job.actualStart);
 
     const basePrice = safePence(job.basePrice);
+    const extraChargeSelections = Array.isArray(job.extraCharges) ? job.extraCharges : [];
     let extraChargesPounds = 0;
-    if (job.extraCharges?.includes(ExtraChargeType.CONGESTION)) extraChargesPounds += env.congestionCharge;
-    if (job.extraCharges?.includes(ExtraChargeType.TUNNEL)) extraChargesPounds += env.tunnelCharge;
+    if (extraChargeSelections.includes(ExtraChargeType.CONGESTION)) extraChargesPounds += env.congestionCharge;
+    if (extraChargeSelections.includes(ExtraChargeType.TUNNEL)) extraChargesPounds += env.tunnelCharge;
     const extraCharges = extraChargesPounds > 0 ? fromPounds(extraChargesPounds) : pence(0);
     const overtimeMinutes = job.overtimeMinutes || 0;
     const overtimeCharge = safePence(job.overtimeCharge);
@@ -136,9 +137,12 @@ export async function normalizeMongoDataset(dataset: MongoDataset): Promise<Norm
       crewSize: job.crewSize || 1,
       driverInitials, driverName, driverEmail,
       status, currentState, workflowCompletionPct,
-      basePrice, extraCharges, overtimeMinutes, overtimeCharge, totalCharges, reconciled,
+      basePrice, extraChargeSelections, extraCharges, overtimeMinutes, overtimeCharge, totalCharges, reconciled,
       paymentMethod: job.paymentMethod || "Not recorded",
       paymentStatus: job.paymentStatus || "Not recorded",
+      managerReviewStatus: job.managerReviewStatus || "Pending",
+      managerReviewNote: job.managerReviewNote || "",
+      managerReviewedAt: job.managerReviewedAt || undefined,
       paidOnline: Boolean(job.paidOnline),
       evidenceCompleteness: completeness,
       evidenceItems: items,
