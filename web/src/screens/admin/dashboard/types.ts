@@ -195,7 +195,7 @@ export interface VanMileageItem {
   driverEmail: string;
   driverInitials: string;
   vanRegistration: string;
-  mileage?: number;
+  mileage?: number | null;
   photoUrl: string;
   thumbUrl: string;
 }

@@ -6,7 +6,7 @@ export interface VanMileageRecordDoc {
   driverName: string;
   driverInitials: string;
   vanRegistration: string;
-  mileage?: number;
+  mileage?: number | null;
   photoUrl: string;
   submittedAt: string;
 }

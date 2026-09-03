@@ -111,7 +111,7 @@ export function VanMileagePage() {
                     <td className="px-4">
                       <span className="inline-flex items-center gap-1.5 rounded-control bg-admin-surface border border-admin-line px-2.5 py-1 text-[12px] font-semibold text-admin-ink">
                         <Gauge className="w-3.5 h-3.5 text-admin-muted" />
-                        {item.mileage === undefined ? "-" : item.mileage.toLocaleString()}
+                        {item.mileage == null ? "-" : item.mileage.toLocaleString()}
                       </span>
                     </td>
                     <td className="px-4">
@@ -170,7 +170,7 @@ function VanMileageModal({ item, onClose }: { item: VanMileageItem; onClose: () 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <Detail label="Driver email" value={item.driverEmail} />
             <Detail label="Van registration" value={item.vanRegistration || "-"} />
-            <Detail label="Mileage" value={item.mileage === undefined ? "-" : item.mileage.toLocaleString()} />
+            <Detail label="Mileage" value={item.mileage == null ? "-" : item.mileage.toLocaleString()} />
           </div>
           <div className="bg-white rounded-module border border-admin-line p-4">
             <div className="text-[12px] font-bold text-admin-muted uppercase tracking-wider mb-3">Mileage photo</div>
