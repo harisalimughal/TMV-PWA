@@ -1,15 +1,14 @@
 import React from "react";
-import { ArrowLeft, ChevronRight, Smartphone } from "lucide-react";
+import { ArrowLeft, ChevronRight } from "lucide-react";
 import type { DriverProfile } from "../api/auth";
 import { AppShell } from "../app/AppShell";
 import { IconButton } from "../ui";
 import { ThemeToggle } from "../components/driver";
+import { NotificationsCard } from "./pwa-settings/components/NotificationsCard";
 
 interface AccountSettingsScreenProps {
   driver: DriverProfile;
   onLogout: () => void;
-  /** Opens the backend-backed PWA Settings drill-in. */
-  onOpenPwaSettings: () => void;
   /** Present only when reached as a drill-in; the Profile tab omits it. */
   onBack?: () => void;
 }
@@ -21,7 +20,6 @@ interface AccountSettingsScreenProps {
 export function AccountSettingsScreen({
   driver,
   onLogout,
-  onOpenPwaSettings,
   onBack
 }: AccountSettingsScreenProps) {
   return (
@@ -48,20 +46,7 @@ export function AccountSettingsScreen({
         </p>
 
         <h2 className="pb-2 pt-7 text-card text-fg">App</h2>
-        <button
-          type="button"
-          onClick={onOpenPwaSettings}
-          className="flex w-full items-center justify-between gap-3 border-y border-line py-3.5 text-left transition-colors hover:bg-surface-sunken"
-        >
-          <span className="flex items-center gap-3">
-            <Smartphone className="size-[18px] shrink-0 text-fg-subtle" aria-hidden />
-            <span className="text-body font-medium text-fg">PWA Settings</span>
-          </span>
-          <ChevronRight className="size-4 shrink-0 text-fg-subtle" aria-hidden />
-        </button>
-        <p className="pt-2.5 text-helper text-fg-subtle">
-          Manage push notifications for this device.
-        </p>
+        <NotificationsCard />
 
         <h2 className="pb-2 pt-7 text-card text-fg">Personal details</h2>
         <InfoRow label="Name" value={driver.fullName} />

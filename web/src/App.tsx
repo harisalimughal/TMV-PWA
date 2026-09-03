@@ -318,7 +318,6 @@ export function App() {
         <AccountSettingsScreen
           driver={view.driver}
           onLogout={() => setConfirmLogout(true)}
-          onOpenPwaSettings={() => setView({ name: "pwa-settings", driver: view.driver })}
         />
       );
       break;
