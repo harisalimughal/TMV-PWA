@@ -144,7 +144,6 @@ export function PhotoPicker({ label, min = 0, max, onChange, hint }: PhotoPicker
         open={cameraOpen}
         onClose={() => setCameraOpen(false)}
         onCapture={file => void handleCapture(file)}
-        allowMultiple={max > 1}
         title={`Take ${label.toLowerCase()}`}
       />
     </section>
