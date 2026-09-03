@@ -5,16 +5,13 @@ import { NormalizedJob } from "../types";
 import { JobDetailDrawer } from "../components/JobDetailDrawer";
 import { JobStatusBadge, DelayBandBadge } from "../components/StatusBadge";
 import { DateRangePicker } from "../components/DateRangePicker";
-import { AddJobModal } from "../components/AddJobModal";
 import { ApiErrorState } from "../components/ApiErrorState";
 import { formatLondonDateTime } from "../utils/date";
 import { downloadCsv, stampForFilename, toCsv } from "../utils/csv";
 import { resolveDriver, formatVanReg } from "../utils/drivers";
-import { Button } from "../../../../ui";
 import {
   Search,
   Download,
-  Plus,
   LayoutGrid,
   List,
   ChevronDown,
@@ -36,7 +33,6 @@ export function JobsPage() {
   );
   const [reassignOpen, setReassignOpen] = useState(false);
   const [drawerJob, setDrawerJob] = useState<NormalizedJob | null>(null);
-  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   
   // Filtering & Pagination
   const [from, setFrom] = useState<string | undefined>();
@@ -248,9 +244,6 @@ export function JobsPage() {
       {/* HEADER SECTION */}
       <div className="flex items-center justify-between px-2">
         <h2 className="text-title text-fg">Jobs Archive</h2>
-        <Button onClick={() => setIsAddModalOpen(true)} iconLeft={<Plus />}>
-          Add job
-        </Button>
       </div>
 
       {/* CONSOLIDATED TOOLBAR CARD */}
@@ -582,8 +575,6 @@ export function JobsPage() {
           onUpdated={() => refetch()}
         />
       )}
-
-      <AddJobModal isOpen={isAddModalOpen} onClose={() => setIsAddModalOpen(false)} />
 
       {reassignOpen && (
         <BulkReassignModal

@@ -21,9 +21,8 @@ import { PaperScenarioReport } from "../components/PaperScenarioReport";
 import { formatLondonDateTime } from "../utils/date";
 import { DateRangePicker } from "../components/DateRangePicker";
 import { LiabilityConfigModal } from "../components/LiabilityConfigModal";
-import { LiabilityMobileForm } from "../components/LiabilityMobileForm";
 import { ApiErrorState } from "../components/ApiErrorState";
-import { Settings2, Smartphone } from "lucide-react";
+import { Settings2 } from "lucide-react";
 
 interface Props {
   kind: "checkin" | "checkout" | "parking" | "liability";
@@ -86,7 +85,6 @@ export function ScenariosPage({ kind }: Props) {
    *  autoDownload prop. */
   const [autoDownloadId, setAutoDownloadId] = useState<string | null>(null);
   const [isConfigOpen, setIsConfigOpen] = useState(false);
-  const [isMobileOpen, setIsMobileOpen] = useState(false);
 
   const { data, isLoading, isError, error, refetch } = useQuery({
     queryKey: ["scenarios", kind, page, from, to],
@@ -133,14 +131,6 @@ export function ScenariosPage({ kind }: Props) {
                 className="shrink-0"
               >
                 <span className="hidden sm:inline">Manage categories</span>
-              </Button>
-              <Button
-                onClick={() => setIsMobileOpen(true)}
-                iconLeft={<Smartphone />}
-                aria-label="Preview mobile form"
-                className="shrink-0"
-              >
-                <span className="hidden sm:inline">Preview mobile form</span>
               </Button>
               <div className="hidden sm:block w-[1px] h-6 bg-admin-line mx-1" />
             </>
@@ -465,8 +455,7 @@ export function ScenariosPage({ kind }: Props) {
          </div>
       )}
 
-          {kind === "liability" && <LiabilityConfigModal isOpen={isConfigOpen} onClose={() => setIsConfigOpen(false)} />}
-      {kind === "liability" && <LiabilityMobileForm isOpen={isMobileOpen} onClose={() => setIsMobileOpen(false)} />}
+      {kind === "liability" && <LiabilityConfigModal isOpen={isConfigOpen} onClose={() => setIsConfigOpen(false)} />}
       {previewJob && (
         <SubmissionDetailDrawer
           job={previewJob}
