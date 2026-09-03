@@ -130,13 +130,37 @@ function startBackgroundSync(): void {
   setInterval(run, env.calendarSyncTtlMs);
 }
 
-async function main(): Promise<void> {
-  await ensureIndexes();
+/**
+ * Retries ensureIndexes() forever, rather than main() awaiting it once and letting a
+ * Mongo outage at boot take the whole process down.
+ *
+ * Before this, a Mongo connectivity failure at startup (e.g. the Sept 2026 incident
+ * where the VPS's network path to Atlas broke for hours) meant main() threw, the
+ * process exited, and restart:unless-stopped just kept repeating the same failure
+ * forever -- the site was completely unreachable (not even the static shell or
+ * /healthz) for as long as the outage lasted, which is strictly worse than serving
+ * everything except the DB-backed routes (which already fail cleanly with the
+ * friendly "we're having a problem" messaging -- see lib/apiErrors.ts on the frontend
+ * and this route's own error handling). Indexes are idempotent to create and nothing
+ * here depends on them existing before the first request; worst case during the
+ * (Mongo-unreachable, so no requests can succeed anyway) gap is moot.
+ */
+function ensureIndexesWithRetry(): void {
+  const RETRY_MS = 30_000;
+  ensureIndexes()
+    .then(() => log.info("mongo indexes verified"))
+    .catch(error => {
+      log.warn("ensureIndexes failed; retrying", { error: String(error), retry_in_ms: RETRY_MS });
+      setTimeout(ensureIndexesWithRetry, RETRY_MS);
+    });
+}
 
+function main(): void {
   const server = app.listen(env.port, () => {
     log.info("TMV PWA backend listening", { port: env.port, node_env: env.nodeEnv });
   });
 
+  ensureIndexesWithRetry();
   warmupAuth().catch(error => log.warn("auth warmup failed at startup", { error: String(error) }));
   startBackgroundSync();
 
@@ -148,7 +172,4 @@ async function main(): Promise<void> {
   process.on("SIGINT", shutdown);
 }
 
-main().catch(error => {
-  log.error("fatal startup error", error);
-  process.exit(1);
-});
+main();
