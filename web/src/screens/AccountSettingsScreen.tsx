@@ -40,6 +40,13 @@ export function AccountSettingsScreen({
           <p className="text-label font-normal text-fg-muted">Driver</p>
         </div>
 
+        <h2 className="pb-2 pt-7 text-card text-fg">Personal details</h2>
+        <InfoRow label="Name" value={driver.fullName} />
+        <InfoRow label="Email" value={driver.email} />
+        <p className="pt-3 text-helper text-fg-subtle">
+          Your name and email come from your The Man Van account. Contact operations to change either.
+        </p>
+
         <h2 className="pb-3 pt-7 text-card text-fg">Appearance</h2>
         <ThemeToggle />
         <p className="pt-2.5 text-helper text-fg-subtle">
@@ -51,13 +58,6 @@ export function AccountSettingsScreen({
           <InstallAppCard />
           <NotificationsCard />
         </div>
-
-        <h2 className="pb-2 pt-7 text-card text-fg">Personal details</h2>
-        <InfoRow label="Name" value={driver.fullName} />
-        <InfoRow label="Email" value={driver.email} />
-        <p className="pt-3 text-helper text-fg-subtle">
-          Your name and email come from your The Man Van account. Contact operations to change either.
-        </p>
 
         <h2 className="pb-2 pt-7 text-card text-fg">Account</h2>
         <button
