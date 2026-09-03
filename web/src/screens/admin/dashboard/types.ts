@@ -38,6 +38,13 @@ export interface JobException {
   timestamp: string;
 }
 
+export interface BookingDetails {
+  vanSize?: string;
+  duration?: string;
+  notes?: string;
+  inventory?: string;
+}
+
 export interface NormalizedJob {
   jobId: string;
   calendarEventId: string;
@@ -85,6 +92,7 @@ export interface NormalizedJob {
   evidenceItems: NormalizedEvidenceItem[];
   /** Verbatim Calendar event title this job was synced from. */
   rawTitle: string;
+  bookingDetails: BookingDetails;
   clientConfirmedName?: string;
   signatureUrl?: string;
   driveFolderId?: string;

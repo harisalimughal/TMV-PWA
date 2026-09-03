@@ -17,6 +17,62 @@ import { reconcileFinancials } from "./finance";
 import { calculateDelayMinutes, calculateMinutes, getDelayBand, isTimingTrustworthy, toUtcIso } from "./timezone";
 import { ActivityEntry, EvidenceCategory, EvidenceState, JobException, NormalizedEvidenceItem, NormalizedJob } from "./types";
 
+function htmlToText(html: string): string {
+  return html
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<\/(p|div|li)>/gi, "\n")
+    .replace(/<[^>]+>/g, "")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;/gi, "'");
+}
+
+const DETAIL_LABELS = [
+  "Client name", "Customer", "Name", "Email", "Email address", "Client email",
+  "Phone", "Phone number", "Telephone", "Mobile", "Pickup", "Pick up address",
+  "Pickup address", "Move From", "From", "Drop-off", "Dropoff", "Drop off",
+  "Drop-off address", "Drop off address", "Delivery address", "Move To", "To",
+  "Move date", "Start time", "Finish time", "Van size", "Duration",
+  "Duration of van hire", "Notes", "Extra request", "Inventory item"
+];
+
+function field(description: string, labels: string[], multiline = false): string {
+  const lines = htmlToText(description).split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+  for (const label of labels) {
+    const regex = new RegExp(`^${label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s*[:=-]\\s*(.*)$`, "i");
+    for (let i = 0; i < lines.length; i++) {
+      const found = lines[i].match(regex);
+      if (!found) continue;
+      const inlineValue = found[1]?.trim();
+      if (inlineValue) return inlineValue;
+
+      const values: string[] = [];
+      for (let j = i + 1; j < lines.length; j++) {
+        if (DETAIL_LABELS.some(nextLabel => {
+          const nextRegex = new RegExp(`^${nextLabel.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s*[:=-]`, "i");
+          return nextRegex.test(lines[j]);
+        })) break;
+        values.push(lines[j]);
+        if (!multiline) break;
+      }
+      return values.join(multiline ? "\n" : " ").trim();
+    }
+  }
+  return "";
+}
+
+function parseBookingDetails(description: string): NormalizedJob["bookingDetails"] {
+  return {
+    vanSize: field(description, ["Van size"]),
+    duration: field(description, ["Duration", "Duration of van hire"]),
+    notes: field(description, ["Notes", "Extra request"], true),
+    inventory: field(description, ["Inventory item"], true)
+  };
+}
+
 export async function normalizeMongoDataset(dataset: MongoDataset): Promise<NormalizedJob[]> {
   const drivers = await listDriverProfiles();
   const driversByInitials = new Map(drivers.filter(d => d.initials).map(d => [d.initials.toUpperCase(), d]));
@@ -152,6 +208,7 @@ export async function normalizeMongoDataset(dataset: MongoDataset): Promise<Norm
       driveFolderUrl: undefined,
       activity: activity.sort((a, b) => a.timestamp.localeCompare(b.timestamp)),
       exceptions,
+      bookingDetails: parseBookingDetails(job.rawDescription || ""),
       rawTitle: job.rawTitle || "",
       created: toUtcIso(job.createdAt),
       updated: toUtcIso(job.updatedAt)

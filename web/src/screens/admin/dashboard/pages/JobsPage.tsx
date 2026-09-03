@@ -43,7 +43,7 @@ export function JobsPage() {
   const [to, setTo] = useState<string | undefined>();
   const [searchQuery, setSearchQuery] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState("All"); // All, In Progress, Delivered
+  const [statusFilter, setStatusFilter] = useState("All"); // All, In Progress
   
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
@@ -98,9 +98,7 @@ export function JobsPage() {
     
     // Status Filter
     if (statusFilter === "In Progress") {
-      filtered = filtered.filter(j => j.status !== "COMPLETED" && j.status !== "CANCELLED");
-    } else if (statusFilter === "Delivered") {
-      filtered = filtered.filter(j => j.status === "COMPLETED");
+      filtered = filtered.filter(j => j.status === "IN_PROGRESS");
     }
 
     // Search Filter
@@ -285,7 +283,7 @@ export function JobsPage() {
         </div>
 
         <div className="flex items-center bg-admin-surface p-1 rounded-card border border-admin-line/50 shrink-0">
-          {["All", "In Progress", "Delivered"].map(status => (
+          {["All", "In Progress"].map(status => (
             <button
               key={status}
               onClick={() => { setStatusFilter(status); setPage(1); }}

@@ -22,6 +22,16 @@ export interface CameraStreamApi {
   toggleFacing: () => void;
 }
 
+const CAMERA_PERMISSION_GRANTED_KEY = "tmv.camera.permissionGranted.v1";
+
+function rememberCameraPermission() {
+  try {
+    window.localStorage.setItem(CAMERA_PERMISSION_GRANTED_KEY, "1");
+  } catch {
+    /* Storage can be unavailable in private browsing; permission still belongs to the browser. */
+  }
+}
+
 /**
  * Owns a single MediaStream from `getUserMedia`.
  *
@@ -87,6 +97,7 @@ export function useCameraStream(): CameraStreamApi {
         streamRef.current = next;
         setStream(next);
         setStatus("ready");
+        rememberCameraPermission();
 
         try {
           const devices = await navigator.mediaDevices.enumerateDevices();

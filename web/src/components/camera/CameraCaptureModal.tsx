@@ -20,6 +20,27 @@ type Phase = "live" | "preview";
 
 const FOCUSABLE =
   'a[href],button:not([disabled]),input:not([disabled]),[tabindex]:not([tabindex="-1"])';
+const CAMERA_PERMISSION_GRANTED_KEY = "tmv.camera.permissionGranted.v1";
+
+function hasRememberedCameraPermission(): boolean {
+  try {
+    return window.localStorage.getItem(CAMERA_PERMISSION_GRANTED_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+async function hasGrantedCameraPermission(): Promise<boolean> {
+  if (hasRememberedCameraPermission()) return true;
+  const permissions = navigator.permissions;
+  if (!permissions?.query) return false;
+  try {
+    const status = await permissions.query({ name: "camera" as PermissionName });
+    return status.state === "granted";
+  } catch {
+    return false;
+  }
+}
 
 /**
  * The one camera surface for the whole driver app. A live rear-camera preview, a
@@ -50,6 +71,7 @@ export function CameraCaptureModal({
   const [capturedUrl, setCapturedUrl] = useState<string | null>(null);
   const [capturedFile, setCapturedFile] = useState<File | null>(null);
   const [capturing, setCapturing] = useState(false);
+  const [needsPermissionTap, setNeedsPermissionTap] = useState(false);
   const titleId = useId();
 
   const clearCaptured = useCallback(() => {
@@ -61,18 +83,30 @@ export function CameraCaptureModal({
     setCapturedFile(null);
   }, []);
 
-  // Open / close lifecycle: request the camera on open, tear everything down on close.
+  // Open / close lifecycle: start automatically after the first grant, otherwise wait
+  // for an explicit permission tap so browsers do not keep showing prompt-like flows.
   useEffect(() => {
     if (!open) return;
+    let cancelled = false;
     restoreRef.current = document.activeElement as HTMLElement;
     const prevOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     setPhase("live");
-    void start("environment");
+    setNeedsPermissionTap(false);
+    void hasGrantedCameraPermission().then(granted => {
+      if (cancelled) return;
+      if (granted) {
+        void start("environment");
+      } else {
+        setNeedsPermissionTap(true);
+      }
+    });
 
     return () => {
+      cancelled = true;
       stop();
       clearCaptured();
+      setNeedsPermissionTap(false);
       document.body.style.overflow = prevOverflow;
       restoreRef.current?.focus?.();
     };
@@ -157,6 +191,7 @@ export function CameraCaptureModal({
   function handleRetake() {
     clearCaptured();
     setPhase("live");
+    setNeedsPermissionTap(false);
     void start();
   }
 
@@ -241,6 +276,31 @@ export function CameraCaptureModal({
             alt="The photo you just took"
             className="absolute inset-0 h-full w-full object-contain"
           />
+        )}
+
+        {/* First permission request */}
+        {phase === "live" && needsPermissionTap && status === "idle" && (
+          <div
+            className="absolute inset-0 flex flex-col items-center justify-center gap-4 px-8 text-center"
+            role="status"
+            aria-live="polite"
+          >
+            <span className="grid size-14 place-items-center rounded-pill bg-white/10">
+              <Camera className="size-7 text-white" aria-hidden />
+            </span>
+            <p className="text-[16px] font-semibold">Camera permission is needed once.</p>
+            <button
+              type="button"
+              onClick={() => {
+                setNeedsPermissionTap(false);
+                void start("environment");
+              }}
+              className="inline-flex h-control items-center gap-2 rounded-control bg-white px-5 text-[14px] font-semibold text-black transition-transform active:scale-[0.98] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+            >
+              <Camera className="size-4" aria-hidden />
+              Allow camera
+            </button>
+          </div>
         )}
 
         {/* Requesting */}

@@ -45,6 +45,13 @@ export interface JobException {
   timestamp: string;
 }
 
+export interface BookingDetails {
+  vanSize?: string;
+  duration?: string;
+  notes?: string;
+  inventory?: string;
+}
+
 export interface NormalizedJob {
   jobId: string;
   calendarEventId: string;
@@ -105,6 +112,7 @@ export interface NormalizedJob {
 
   activity: ActivityEntry[];
   exceptions: JobException[];
+  bookingDetails: BookingDetails;
   /** Verbatim Calendar event title this job was synced from -- lets ops see exactly
    *  what the booking's title says, not just the already-parsed fields. */
   rawTitle: string;

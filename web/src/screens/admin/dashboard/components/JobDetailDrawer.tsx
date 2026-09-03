@@ -10,6 +10,10 @@ import {
   Check, 
   Download, 
   AlertTriangle,
+  Mail,
+  Phone,
+  Truck,
+  Package,
   Edit2,
   Save,
   Loader2,
@@ -23,7 +27,6 @@ import { formatLondonDateTime } from "../utils/date";
 import { JobStatusBadge } from "./StatusBadge";
 import { DelayBandBadge } from "./StatusBadge";
 import { EvidenceCompletenessPill } from "./EvidenceCompletenessPill";
-import { PaperDossierReport } from "./PaperDossierReport";
 import { PdfPreviewModal } from "./PdfPreviewModal";
 import { waitForPrintImages } from "../utils/printReady";
 import { PhotoModal } from "./PhotoModal";
@@ -43,7 +46,6 @@ interface Props {
 export function JobDetailDrawer({ job: initialJob, isOpen, onClose, onUpdated }: Props) {
   const [job, setJob] = useState<NormalizedJob>(initialJob);
   const [copiedId, setCopiedId] = useState(false);
-  const [showRawTitle, setShowRawTitle] = useState(false);
   const [activePhoto, setActivePhoto] = useState<{title: string, url: string, driveUrl?: string} | null>(null);
   const [toast, setToast] = useState<string | null>(null);
 
@@ -78,7 +80,6 @@ export function JobDetailDrawer({ job: initialJob, isOpen, onClose, onUpdated }:
     setJob(initialJob);
     setIsEditing(false);
     setIsReassigning(false);
-    setShowRawTitle(false);
   }, [initialJob]);
 
   // Sync to Edit Form
@@ -178,31 +179,14 @@ export function JobDetailDrawer({ job: initialJob, isOpen, onClose, onUpdated }:
 
   const isCancelled = job.status === "CANCELLED";
   const totalPounds = (job.totalCharges || 0) / 100;
-  
-  // 10-Stage Lifecycle Audit Timeline
-  const rawStages = [
-    { name: "Booking Created", time: job.bookedStart, actor: "System", state: "COMPLETED", detail: "API Ingestion" },
-    { name: "Driver Assigned", time: job.bookedStart, actor: "Dispatcher", state: "COMPLETED", detail: `${job.driverName} (${job.driverInitials})` },
-    { name: "En Route to Pickup", time: job.actualStart || job.bookedStart, actor: job.driverName, state: job.status !== "READY" ? "COMPLETED" : "PENDING", detail: "GPS match: 51.48, -0.15" },
-    { name: "Arrived at Pickup", time: job.actualStart, actor: job.driverName, state: job.actualStart ? "COMPLETED" : "PENDING", detail: "Ping: 2m before door" },
-    { name: "Loading Van & Evidence", time: job.actualStart, actor: job.driverName, state: job.evidenceCompleteness?.vanLoaded === "COMPLETED" ? "COMPLETED" : "PENDING", detail: "Photos uploaded" },
-    { name: "In Transit to Dropoff", time: job.actualStart, actor: job.driverName, state: job.status === "IN_PROGRESS" || job.status === "COMPLETED" ? "COMPLETED" : "PENDING", detail: "Location streaming..." },
-    { name: "Unloading & Empty Van", time: job.actualFinish, actor: job.driverName, state: job.evidenceCompleteness?.emptyVan === "COMPLETED" ? "COMPLETED" : "PENDING", detail: "Confirmed empty" },
-    { name: "Payment Received", time: job.actualFinish, actor: "Customer / Driver", state: job.reconciled ? "COMPLETED" : "PENDING", detail: job.paymentMethod || "Card (Stripe)" },
-    { name: "Customer Sign-off", time: job.actualFinish, actor: job.clientConfirmedName || job.customerName, state: job.signatureUrl ? "COMPLETED" : "PENDING", detail: "Signature Hash: e3b2...a9" },
-    { name: "Job Completed", time: job.actualFinish, actor: "System Bot", state: job.status === "COMPLETED" ? "COMPLETED" : "PENDING", detail: "Archived & locked" }
-  ];
-
-  let firstPendingIndex = rawStages.findIndex(s => s.state === "PENDING");
-  if (firstPendingIndex === -1) firstPendingIndex = 999;
-  
-  const stages = rawStages.map((stg, i) => {
-    const isOutOfSequence = stg.state === "COMPLETED" && i > firstPendingIndex;
-    return { ...stg, isOutOfSequence };
-  });
+  const bookingDetails = job.bookingDetails ?? {};
+  const valueOrDash = (value?: string | null) => {
+    const trimmed = String(value ?? "").trim();
+    return trimmed && trimmed.toLowerCase() !== "not recorded" ? trimmed : "-";
+  };
 
   return (
-    <div className="fixed inset-0 z-[100] overflow-hidden bg-admin-ink/70 backdrop-blur-sm flex justify-end">
+    <div className="fixed inset-0 z-[100] overflow-hidden bg-admin-ink/70 backdrop-blur-sm flex items-center justify-center p-3 sm:p-6">
       
       {/* Toast Notification */}
       {toast && (
@@ -213,10 +197,10 @@ export function JobDetailDrawer({ job: initialJob, isOpen, onClose, onUpdated }:
       )}
 
       {/* Backdrop click to close */}
-      <div className="flex-1 cursor-pointer" onClick={onClose} />
+      <div className="absolute inset-0 cursor-pointer" onClick={onClose} />
 
-      {/* Drawer Container */}
-      <div className="w-full max-w-2xl bg-[#F5F5F5] shadow-2xl flex flex-col h-full overflow-hidden animate-in slide-in-from-right-10 duration-200">
+      {/* Detail Modal */}
+      <div className="relative z-10 w-full max-w-5xl bg-[#F5F5F5] shadow-2xl flex flex-col max-h-[94vh] overflow-hidden rounded-module border border-white/10 animate-in zoom-in-95 fade-in duration-200">
         
         {/* 1. Header */}
         <div className="px-6 py-5 bg-white border-b border-admin-line shadow-[0_4px_20px_rgb(0,0,0,0.03)] z-10 flex flex-col gap-4">
@@ -252,29 +236,40 @@ export function JobDetailDrawer({ job: initialJob, isOpen, onClose, onUpdated }:
             </span>
           </div>
 
-          {/* Raw Calendar title -- click to reveal exactly what the booking's Calendar
-              event title says, verbatim. Useful for spotting a mistyped/unrecognised
-              driver-initials tag or other parsing surprises that the already-parsed
-              fields above hide. */}
-          <button
-            type="button"
-            onClick={() => setShowRawTitle(v => !v)}
-            className="flex items-center gap-1.5 self-start text-[11px] font-semibold text-admin-muted hover:text-admin-ink transition"
-          >
-            {showRawTitle ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
-            Calendar title
-          </button>
-          {showRawTitle && (
-            <div className="rounded-card bg-admin-surface border border-admin-line px-3 py-2 -mt-2 animate-in fade-in slide-in-from-top-1">
-              <span className="block font-mono text-[12px] text-admin-ink break-words">
-                {job.rawTitle || "Not available -- this job was synced before this field existed."}
-              </span>
-            </div>
-          )}
+          <div className="rounded-card bg-admin-surface border border-admin-line px-3 py-2">
+            <span className="block text-[10px] font-bold uppercase tracking-wider text-admin-muted">Calendar title</span>
+            <span className="mt-1 block font-mono text-[12px] text-admin-ink break-words">
+              {job.rawTitle || "-"}
+            </span>
+          </div>
         </div>
 
         {/* 2. Scrollable Body Content */}
         <div className="flex-1 overflow-y-auto p-6 space-y-6 text-[13px] text-admin-ink relative">
+
+          <div className="bg-white p-5 rounded-module border border-admin-line shadow-[0_2px_10px_rgb(0,0,0,0.02)]">
+            <h4 className="text-[12px] font-bold text-admin-muted uppercase tracking-wider flex items-center gap-1.5 mb-4">
+              <User className="w-4 h-4 text-admin-brand" /> Client Details
+            </h4>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div className="min-w-0">
+                <span className="block text-[10px] font-bold uppercase tracking-wider text-admin-muted">Name</span>
+                <span className="mt-1 block text-[14px] font-semibold text-admin-ink break-words">{valueOrDash(job.customerName)}</span>
+              </div>
+              <div className="min-w-0">
+                <span className="block text-[10px] font-bold uppercase tracking-wider text-admin-muted flex items-center gap-1">
+                  <Mail className="w-3 h-3" /> Email
+                </span>
+                <span className="mt-1 block text-[14px] font-semibold text-admin-ink break-words">{valueOrDash(job.customerEmail)}</span>
+              </div>
+              <div className="min-w-0">
+                <span className="block text-[10px] font-bold uppercase tracking-wider text-admin-muted flex items-center gap-1">
+                  <Phone className="w-3 h-3" /> Phone
+                </span>
+                <span className="mt-1 block text-[14px] font-semibold text-admin-ink break-words">{valueOrDash(job.customerPhone)}</span>
+              </div>
+            </div>
+          </div>
           
           {/* Key Metrics Strip */}
           <div className="grid grid-cols-3 gap-4">
@@ -384,7 +379,36 @@ export function JobDetailDrawer({ job: initialJob, isOpen, onClose, onUpdated }:
             </div>
           </div>
 
-          {/* 10-Stage Lifecycle Timeline */}
+          <div className="bg-white p-5 rounded-module border border-admin-line shadow-[0_2px_10px_rgb(0,0,0,0.02)]">
+            <h4 className="text-[12px] font-bold text-admin-muted uppercase tracking-wider flex items-center gap-1.5 mb-4">
+              <Truck className="w-4 h-4 text-admin-brand" /> Move Details
+            </h4>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div>
+                <span className="block text-[10px] font-bold uppercase tracking-wider text-admin-muted">Van size</span>
+                <span className="mt-1 block text-[14px] font-semibold text-admin-ink break-words">{valueOrDash(bookingDetails.vanSize)}</span>
+              </div>
+              <div>
+                <span className="block text-[10px] font-bold uppercase tracking-wider text-admin-muted">Duration</span>
+                <span className="mt-1 block text-[14px] font-semibold text-admin-ink break-words">{valueOrDash(bookingDetails.duration)}</span>
+              </div>
+              <div>
+                <span className="block text-[10px] font-bold uppercase tracking-wider text-admin-muted">Notes</span>
+                <span className="mt-1 block text-[14px] font-semibold text-admin-ink whitespace-pre-wrap break-words">{valueOrDash(bookingDetails.notes)}</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white p-5 rounded-module border border-admin-line shadow-[0_2px_10px_rgb(0,0,0,0.02)]">
+            <h4 className="text-[12px] font-bold text-admin-muted uppercase tracking-wider flex items-center gap-1.5 mb-3">
+              <Package className="w-4 h-4 text-admin-brand" /> Inventory
+            </h4>
+            <p className="text-[14px] font-semibold text-admin-ink whitespace-pre-wrap break-words">
+              {valueOrDash(bookingDetails.inventory)}
+            </p>
+          </div>
+
+          {/* Audit Lifecycle Timeline */}
           <div className="bg-white rounded-module border border-admin-line shadow-[0_2px_10px_rgb(0,0,0,0.02)] flex flex-col overflow-hidden">
             <div className="p-5 border-b border-admin-line">
               <h4 className="text-[12px] font-bold text-admin-muted uppercase tracking-wider flex items-center gap-1.5">
@@ -396,45 +420,51 @@ export function JobDetailDrawer({ job: initialJob, isOpen, onClose, onUpdated }:
               <div className="absolute left-[27px] top-6 bottom-6 w-0.5 bg-admin-line" />
               
               <div className="space-y-6 relative z-10">
-                {stages.map((stg, i) => {
-                  const isComp = stg.state === "COMPLETED";
+                {job.activity.length === 0 ? (
+                  <div className="relative flex items-start text-[13px]">
+                    <div className="w-3 h-3 mt-1 mr-4 rounded-full border-2 border-admin-muted bg-white ring-4 ring-white shrink-0" />
+                    <div>
+                      <span className="font-bold text-admin-muted">No activity recorded yet</span>
+                      <span className="text-[11px] text-admin-muted block mt-0.5 font-medium">
+                        Driver actions will appear here as the job moves through the app.
+                      </span>
+                    </div>
+                  </div>
+                ) : job.activity.map((entry, i) => {
                   const expanded = expandedStages.has(i);
 
                   return (
                     <div 
                       key={i} 
-                      className={`relative flex items-start justify-between text-[13px] group ${isComp ? 'cursor-pointer' : ''}`}
-                      onClick={() => isComp && toggleStage(i)}
+                      className="relative flex items-start justify-between gap-4 text-[13px] group cursor-pointer"
+                      onClick={() => toggleStage(i)}
                     >
-                      {stg.isOutOfSequence ? (
-                         <div className="w-3 h-3 mt-1 mr-4 rounded-full border-2 border-admin-brand bg-admin-brand-soft ring-4 ring-white shrink-0" title="Completed out of sequence" />
-                      ) : isComp ? (
-                         <div className="w-3 h-3 mt-1 mr-4 rounded-full border-2 border-admin-status-green bg-admin-status-green ring-4 ring-white shrink-0" />
-                      ) : (
-                         <div className="w-3 h-3 mt-1 mr-4 rounded-full border-2 border-admin-muted bg-white ring-4 ring-white shrink-0" />
-                      )}
+                      <div className="w-3 h-3 mt-1 mr-4 rounded-full border-2 border-admin-status-green bg-admin-status-green ring-4 ring-white shrink-0" />
                       
-                      <div className="flex-1">
-                        <span className={`font-bold flex items-center gap-1 ${isComp ? "text-admin-ink group-hover:text-admin-brand transition" : "text-admin-muted"}`}>
-                          {stg.name}
-                          {isComp && (expanded ? <ChevronDown className="w-3 h-3 text-admin-muted" /> : <ChevronRight className="w-3 h-3 text-admin-muted" />)}
+                      <div className="flex-1 min-w-0">
+                        <span className="font-bold flex items-center gap-1 text-admin-ink group-hover:text-admin-brand transition">
+                          {entry.action.replace(/_/g, " ")}
+                          {expanded ? <ChevronDown className="w-3 h-3 text-admin-muted" /> : <ChevronRight className="w-3 h-3 text-admin-muted" />}
                         </span>
                         
-                        {expanded && isComp && (
+                        {expanded && (
                           <div className="mt-2 p-3 rounded-card bg-admin-surface border border-admin-line text-[12px] text-admin-ink shadow-inner animate-in fade-in slide-in-from-top-1">
-                             <div className="flex items-center gap-2 mb-1"><User className="w-3 h-3 text-admin-muted" /> <span className="font-semibold text-admin-muted">Actor:</span> {stg.actor}</div>
-                             <div className="flex items-center gap-2"><Info className="w-3 h-3 text-admin-muted" /> <span className="font-semibold text-admin-muted">Detail:</span> {stg.detail || "No additional logs"}</div>
+                             <div className="flex items-center gap-2 mb-1"><User className="w-3 h-3 text-admin-muted" /> <span className="font-semibold text-admin-muted">Actor:</span> {entry.driver}</div>
+                             {(entry.fromState || entry.toState) && (
+                               <div className="flex items-center gap-2 mb-1"><Info className="w-3 h-3 text-admin-muted" /> <span className="font-semibold text-admin-muted">State:</span> {entry.fromState || "-"} &rarr; {entry.toState || "-"}</div>
+                             )}
+                             <div className="flex items-center gap-2"><Info className="w-3 h-3 text-admin-muted" /> <span className="font-semibold text-admin-muted">Detail:</span> {entry.detail || "No additional detail"}</div>
                           </div>
                         )}
                         {!expanded && (
                            <span className="text-[11px] text-admin-muted block mt-0.5 font-medium">
-                             {stg.actor}
+                             {entry.driver}
                            </span>
                         )}
                       </div>
                       
                       <span className="text-[11px] font-mono font-semibold text-admin-muted text-right shrink-0">
-                        {isComp && stg.time ? formatLondonDateTime(stg.time) : <span className="px-1.5 py-0.5 rounded bg-admin-surface border border-admin-line text-[9px] uppercase tracking-wider text-admin-muted">Waiting</span>}
+                        {formatLondonDateTime(entry.timestamp)}
                       </span>
                     </div>
                   );
@@ -455,28 +485,38 @@ export function JobDetailDrawer({ job: initialJob, isOpen, onClose, onUpdated }:
               <EvidenceCompletenessPill completeness={job.evidenceCompleteness} />
             </div>
 
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-              {job.evidenceItems?.map((ev, i) => (
-                <div key={ev.id || i} className="p-2 bg-admin-surface rounded-card border border-admin-line text-center space-y-2">
-                  <span className="text-[11px] font-semibold text-admin-muted block truncate">{ev.category}</span>
-                  <ThumbnailPreview
-                    src={ev.fileId ? `/admin/api/jobs/${encodeURIComponent(job.jobId)}/photos/${encodeURIComponent(ev.fileId)}` : undefined}
-                    alt={`${ev.category} photo`}
-                    state={ev.state}
-                    size="lg"
-                    onClick={() => {
-                      if (ev.fileId) {
-                        setActivePhoto({
-                          title: `${job.jobId} - ${ev.category}`,
-                          url: `/admin/api/jobs/${encodeURIComponent(job.jobId)}/photos/${encodeURIComponent(ev.fileId)}`,
-                          driveUrl: ev.driveUrl
-                        });
-                      }
-                    }}
-                  />
-                </div>
-              ))}
-            </div>
+            {job.evidenceItems?.length ? (
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                {job.evidenceItems.map((ev, i) => {
+                  const thumbUrl = ev.thumbProxyUrl || ev.driveUrl;
+                  const fullUrl = ev.driveUrl || ev.thumbProxyUrl;
+                  return (
+                    <div key={ev.id || i} className="p-2 bg-admin-surface rounded-card border border-admin-line text-center space-y-2">
+                      <span className="text-[11px] font-semibold text-admin-muted block truncate">{ev.category}</span>
+                      <ThumbnailPreview
+                        src={thumbUrl}
+                        alt={`${ev.category} photo`}
+                        state={ev.state}
+                        size="lg"
+                        onClick={() => {
+                          if (fullUrl) {
+                            setActivePhoto({
+                              title: `${job.jobId} - ${ev.category}`,
+                              url: fullUrl,
+                              driveUrl: ev.driveUrl
+                            });
+                          }
+                        }}
+                      />
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="rounded-card border border-dashed border-admin-line bg-admin-surface p-4 text-[13px] text-admin-muted">
+                No photos captured yet.
+              </div>
+            )}
           </div>
           
         </div>

@@ -219,22 +219,13 @@ export async function getJobForDriver(
 ): Promise<{ job: Job; driver: DriverProfile }> {
   const [job, driver] = await Promise.all([getJob(jobId), resolveDriver(identifier)]);
   if (!job) throw new Error(`Job ${jobId} was not found.`);
-  if (driver.role.toLowerCase() !== "manager") {
-    // Assigned-only, matching every driver-facing job list (see
-    // getJobsGroupedForDriver/getNextJobForDriver) -- a non-manager driver is blocked
-    // here too, not just left out of the list, so a job they were never assigned
-    // stays genuinely unreachable rather than merely unlisted (e.g. from a stale
-    // link, or an id guessed from another job's). An unassigned job used to be
-    // reachable this way on purpose -- "first driver to open and start it claims
-    // it" -- see the still-present claim logic in startJob below, now effectively
-    // manager-only since a regular driver can no longer get past this check to
-    // reach it.
-    if (!job.driverInitials) {
-      throw new Error("This job hasn't been assigned to a driver yet.");
-    }
-    if (job.driverInitials !== driver.initials) {
-      throw new Error("This job is assigned to another driver.");
-    }
+  // Driver-facing APIs are strictly assigned-only. Admin/manager access to other
+  // jobs belongs in /api/admin, never the driver app.
+  if (!job.driverInitials) {
+    throw new Error("This job hasn't been assigned to a driver yet.");
+  }
+  if (job.driverInitials !== driver.initials) {
+    throw new Error("This job is assigned to another driver.");
   }
   return { job, driver };
 }
@@ -279,19 +270,6 @@ export async function startJob(jobId: string, identifier: string): Promise<Job> 
       throw new ValidationError(`This job is booked for ${bookedDay}. You can't start it until then.`);
     }
 
-    // Unassigned jobs are no longer reachable by a regular driver at all -- see
-    // getJobForDriver's permission check above, which now blocks one before
-    // execution ever gets here. This still runs for a manager identity starting an
-    // unassigned job directly (managers are exempt from that check), assigning it
-    // to them at that point; still inside the lock, so two concurrent starts can't
-    // both claim it.
-    if (!job.driverInitials) {
-      if (!driver.initials) {
-        throw new ValidationError("Your driver record has no initials, so this job cannot be assigned to you.");
-      }
-      log.info("unassigned job claimed", { job_id: job.jobId, driver: driver.initials });
-    }
-
     const from = job.currentState;
     const now = new Date().toISOString();
 
@@ -300,7 +278,6 @@ export async function startJob(jobId: string, identifier: string): Promise<Job> 
     // handlePhotoStep), since that's the real physical start of the job, not the
     // moment the driver taps a button in the app.
     job.currentState = WorkflowState.WAITING_ARRIVAL_PHOTO;
-    if (!job.driverInitials) job.driverInitials = driver.initials;
 
     return saveJob(job, driver, "START_JOB", from, `Server start timestamp ${now}`);
   });

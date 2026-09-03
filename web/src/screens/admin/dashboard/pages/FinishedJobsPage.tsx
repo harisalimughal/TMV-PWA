@@ -18,6 +18,7 @@ import { NormalizedJob, formatGBP, toPounds } from "../types";
 import { DateRangePicker } from "../components/DateRangePicker";
 import { ApiErrorState } from "../components/ApiErrorState";
 import { formatLondonDateTime } from "../utils/date";
+import { DelayBandBadge } from "../components/StatusBadge";
 const isTestOrIncomplete = (job: any) => { return job.customerName === "hh" || String(job.pickup).includes("test") || String(job.dropoff).includes("test"); };
 import { resolveDriver, formatVanReg } from "../utils/drivers";
 
@@ -164,6 +165,7 @@ export function FinishedJobsPage() {
                   <th className="py-4 px-4 font-semibold text-eyebrow text-fg-subtle tracking-[0.03em] min-w-[240px]">Pickup → Drop-off</th>
                   <th className="py-4 px-4 font-semibold text-eyebrow text-fg-subtle tracking-[0.03em]">Started</th>
                   <th className="py-4 px-4 font-semibold text-eyebrow text-fg-subtle tracking-[0.03em]">Finished</th>
+                  <th className="py-4 px-4 font-semibold text-eyebrow text-fg-subtle tracking-[0.03em]">Punctuality</th>
                   <th className="py-4 px-6 font-semibold text-eyebrow text-fg-subtle tracking-[0.03em] text-right">Total (£)</th>
                   <th className="py-4 px-4 font-semibold text-eyebrow text-fg-subtle tracking-[0.03em] text-center">Photos</th>
                   <th className="py-4 px-4 font-semibold text-eyebrow text-fg-subtle tracking-[0.03em] text-center">Signature</th>
@@ -242,6 +244,9 @@ export function FinishedJobsPage() {
 
                         <td className="px-4 text-[13px] font-normal text-admin-muted tabular-nums whitespace-nowrap">{startedTime}</td>
                         <td className="px-4 text-[13px] font-normal text-admin-muted tabular-nums whitespace-nowrap">{finishedTime}</td>
+                        <td className="px-4 whitespace-nowrap">
+                          <DelayBandBadge band={job.delayBand} minutes={job.delayMinutes} />
+                        </td>
 
                         <td className="px-6 text-right">
                           <div className="font-mono text-[15px] font-bold tabular-nums text-admin-ink">
