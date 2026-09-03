@@ -43,7 +43,7 @@ function parseTitle(title: string): { crewSize: number; price: number; paidOnlin
   const crew = Number(title.match(/(\d+)\s*(?:men|man|people|person)/i)?.[1] ?? 0);
   const price = Number(title.match(/(?:£\s*(\d+(?:\.\d+)?)|(\d+(?:\.\d+)?)\s*£)/)?.slice(1).find(Boolean) ?? 0);
   const paidFlag = title.match(/\/\s*([YN])(?:\s*-|\b)/i)?.[1]?.toUpperCase() ?? "N";
-  const driverInitials = title.match(/\/\s*[YN]\s*-\s*([A-Z]{1,5})\b/i)?.[1]?.toUpperCase() ?? "";
+  const driverInitials = title.match(/\/\s*[YN]\s*-\s*([A-Z]{1,2})/i)?.[1]?.toUpperCase() ?? "";
   return { crewSize: crew, price, paidOnline: paidFlag === "Y", driverInitials };
 }
 
@@ -59,8 +59,8 @@ export function parseCalendarEvent(event: calendar_v3.Schema$Event): ParsedCalen
   const customerName = field(description, ["Client name", "Customer", "Name"]);
   const customerEmail = field(description, ["Email", "Email address", "Client email"]);
   const customerPhone = field(description, ["Phone", "Phone number", "Telephone", "Mobile"]);
-  const pickup = field(description, ["Pickup", "Pickup address", "From"]);
-  const dropoff = field(description, ["Drop-off", "Dropoff", "Drop off", "Drop-off address", "To"]);
+  const pickup = field(description, ["Pickup", "Pickup address", "From", "Move From"]);
+  const dropoff = field(description, ["Drop-off", "Dropoff", "Drop off", "Drop-off address", "To", "Move To"]);
 
   return {
     calendarEventId: event.id,
@@ -155,7 +155,8 @@ function isUnchanged(next: Job, existing?: Job): boolean {
   if (!existing) return false;
   const keys: Array<keyof Job> = [
     "driverInitials", "customerName", "customerEmail", "customerPhone", "pickup", "dropoff",
-    "crewSize", "basePrice", "paidOnline", "bookedStart", "bookedFinish", "bookedMinutes", "status"
+    "crewSize", "basePrice", "paidOnline", "bookedStart", "bookedFinish", "bookedMinutes", "status",
+    "rawTitle", "rawDescription"
   ];
   return keys.every(key => String(next[key] ?? "") === String(existing[key] ?? ""));
 }
@@ -251,15 +252,16 @@ async function reconcileDisappeared(existing: Job, reason: string): Promise<Job 
 }
 
 /**
- * Syncs yesterday through the day after tomorrow.
+ * Syncs five days back through five days ahead.
  *
  * A today-only window meant an edit to tomorrow's booking never landed until the
  * morning, and a job moved to a different day left a stale row on the original date
- * that nothing ever revisited.
+ * that nothing ever revisited. The wider window also backfills newer stored fields
+ * like rawTitle/rawDescription for recent jobs without a one-off admin sync.
  */
 export async function syncTodayBookings(): Promise<Job[]> {
   const today = DateTime.now().setZone(env.timezone);
-  const days = [today.minus({ days: 1 }), today, today.plus({ days: 1 }), today.plus({ days: 2 })];
+  const days = Array.from({ length: 11 }, (_, index) => today.plus({ days: index - 5 }));
   const results: Job[] = [];
   for (const day of days) {
     // Sequential: each pass reads and writes jobs for that date, so overlapping them
