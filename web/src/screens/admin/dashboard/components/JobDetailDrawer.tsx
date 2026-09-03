@@ -172,7 +172,7 @@ export function JobDetailDrawer({ job: initialJob, isOpen, onClose, onUpdated }:
     const lower = addr.toLowerCase().trim();
     if (lower.length < 8) return true; 
     if (["hhh", "test", "not recorded"].includes(lower)) return true;
-    if (!/\\s/.test(lower)) return true; // Flags completely spaceless strings like '2Multan-pak'
+    if (!/\s/.test(lower)) return true; // Flags completely spaceless strings like '2Multan-pak'
     return false;
   };
 

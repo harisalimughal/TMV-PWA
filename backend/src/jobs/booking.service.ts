@@ -65,7 +65,7 @@ export function parseCalendarEvent(event: calendar_v3.Schema$Event): ParsedCalen
   const customerEmail = field(description, ["Email", "Email address", "Client email"]);
   const customerPhone = field(description, ["Phone", "Phone number", "Telephone", "Mobile"]);
   const pickup = field(description, ["Pickup", "Pick up address", "Pickup address", "Move From", "From"]);
-  const dropoff = field(description, ["Drop-off", "Dropoff", "Drop off", "Drop-off address", "Delivery address", "Move To", "To"]);
+  const dropoff = field(description, ["Drop-off", "Dropoff", "Drop off", "Drop-off address", "Drop off address", "Delivery address", "Move To", "To"]);
 
   return {
     calendarEventId: event.id,
