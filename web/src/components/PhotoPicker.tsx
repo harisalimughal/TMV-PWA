@@ -47,7 +47,10 @@ export function PhotoPicker({ label, min = 0, max, onChange, hint }: PhotoPicker
     try {
       const [compressed] = await compressAll([file]);
       const added: Preview = { file: compressed, url: URL.createObjectURL(compressed) };
-      const next = [...previews, added].slice(0, max);
+      if (max === 1) {
+        previews.forEach(preview => URL.revokeObjectURL(preview.url));
+      }
+      const next = max === 1 ? [added] : [...previews, added].slice(0, max);
       setPreviews(next);
       onChange(next.map(p => p.file));
       if (next.length >= max) setCameraOpen(false);
@@ -65,7 +68,7 @@ export function PhotoPicker({ label, min = 0, max, onChange, hint }: PhotoPicker
     onChange(next.map(p => p.file));
   }
 
-  const full = previews.length >= max;
+  const full = max > 1 && previews.length >= max;
   const totalBytes = previews.reduce((sum, p) => sum + p.file.size, 0);
   const met = previews.length >= min;
   const captureLabel = previews.length === 0 ? "Take photo" : "Take another";
