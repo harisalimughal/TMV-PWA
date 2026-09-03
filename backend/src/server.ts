@@ -19,6 +19,7 @@ import { adminRoutes } from "./auth/admin.routes";
 import { requireAdminAuth } from "./auth/require-admin-auth";
 import { jobsRoutes } from "./jobs/jobs.routes";
 import { storageRoutes } from "./jobs/storage.routes";
+import { vanRoutes } from "./jobs/van.routes";
 import { pushRoutes } from "./push/push.routes";
 import { syncTodayBookings } from "./jobs/booking.service";
 import { dashboardActivityRoutes } from "./admin/dashboard/activity.routes";
@@ -30,6 +31,7 @@ import { dashboardJobsRoutes } from "./admin/dashboard/jobs.routes";
 import { dashboardNotificationsRoutes } from "./admin/dashboard/notifications.routes";
 import { dashboardScenariosRoutes } from "./admin/dashboard/scenarios.routes";
 import { dashboardSummaryRoutes } from "./admin/dashboard/summary.routes";
+import { dashboardVanRoutes } from "./admin/dashboard/van.routes";
 
 const app = express();
 app.use(express.json({ limit: "2mb" }));
@@ -41,6 +43,7 @@ app.use("/api/auth", authRoutes());
 app.use("/api/admin", adminRoutes());
 app.use("/api/jobs", jobsRoutes());
 app.use("/api/storage", storageRoutes());
+app.use("/api/van", vanRoutes());
 app.use("/api/push", pushRoutes());
 
 // The ported admin dashboard (Overview/Jobs/Live Fleet/Exceptions/Reports/Activity/
@@ -54,6 +57,7 @@ app.use("/api/admin/finance", requireAdminAuth, dashboardFinanceRoutes());
 app.use("/api/admin/exceptions", requireAdminAuth, dashboardExceptionsRoutes());
 app.use("/api/admin/fleet", requireAdminAuth, dashboardFleetRoutes());
 app.use("/api/admin/scenarios", requireAdminAuth, dashboardScenariosRoutes());
+app.use("/api/admin/van", requireAdminAuth, dashboardVanRoutes());
 app.use("/api/admin/activity", requireAdminAuth, dashboardActivityRoutes());
 app.use("/api/admin/notifications", requireAdminAuth, dashboardNotificationsRoutes());
 

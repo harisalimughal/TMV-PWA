@@ -6,6 +6,7 @@ import { Layout } from "./dashboard/Layout";
 import { OverviewPage } from "./dashboard/pages/OverviewPage";
 import { LiveFleetPage } from "./dashboard/pages/LiveFleetPage";
 import { JobsPage } from "./dashboard/pages/JobsPage";
+import { VanMileagePage } from "./dashboard/pages/VanMileagePage";
 import { FinishedJobsPage } from "./dashboard/pages/FinishedJobsPage";
 import { NotificationsPage } from "./dashboard/pages/NotificationsPage";
 import { DriversPage } from "./dashboard/pages/DriversPage";
@@ -105,6 +106,7 @@ export function AdminApp() {
       {activeSection === "overview" && <OverviewPage onSelectSection={handleSelectSection} />}
       {activeSection === "livefleet" && <LiveFleetPage onSelectSection={handleSelectSection} />}
       {activeSection === "jobs" && <JobsPage />}
+      {activeSection === "van" && <VanMileagePage />}
       {activeSection === "finished" && <FinishedJobsPage />}
       {activeSection === "notifications" && <NotificationsPage />}
       {activeSection === "checkin" && <ScenariosPage kind="checkin" />}

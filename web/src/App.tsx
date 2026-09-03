@@ -11,6 +11,7 @@ import { AccountSettingsScreen } from "./screens/AccountSettingsScreen";
 import { PwaSettingsScreen } from "./screens/pwa-settings/PwaSettingsScreen";
 import { StorageHomeScreen } from "./screens/StorageHomeScreen";
 import { StorageCompletionScreen, type StorageSummary } from "./screens/StorageCompletionScreen";
+import { VanScreen } from "./screens/VanScreen";
 import { logout } from "./api/auth";
 import { setUnauthorizedHandler } from "./lib/http";
 import { startOutboxSync } from "./lib/outbox";
@@ -74,6 +75,7 @@ type View =
   // ---- tab destinations (chrome: sidebar on desktop, bottom nav on mobile) ----
   | { name: "jobs"; driver: DriverProfile }
   | { name: "storage-home"; driver: DriverProfile }
+  | { name: "van"; driver: DriverProfile }
   | { name: "settings"; driver: DriverProfile }
   // ---- drill-in flows (own the whole screen, no tab chrome) -------------------
   | { name: "pwa-settings"; driver: DriverProfile }
@@ -89,6 +91,7 @@ const TAB_FOR_VIEW: Record<string, TabId> = {
   "storage-home": "storage",
   "storage-form": "storage",
   "storage-complete": "storage",
+  van: "van",
   settings: "profile"
 };
 
@@ -336,6 +339,10 @@ export function App() {
       );
       break;
 
+    case "van":
+      screen = <VanScreen driver={view.driver} />;
+      break;
+
     case "storage-form":
       screen = (
         <ScenarioFormScreen
@@ -380,7 +387,7 @@ export function App() {
     view.name === "reset-password";
 
   const isTabView =
-    view.name === "jobs" || view.name === "storage-home" || view.name === "settings";
+    view.name === "jobs" || view.name === "storage-home" || view.name === "van" || view.name === "settings";
 
   let framed: React.ReactNode;
   if (isAuthView) {
@@ -399,7 +406,9 @@ export function App() {
               ? { name: "jobs", driver: d }
               : tab === "storage"
                 ? { name: "storage-home", driver: d }
-                : { name: "settings", driver: d }
+                : tab === "van"
+                  ? { name: "van", driver: d }
+                  : { name: "settings", driver: d }
           );
         }}
         driver={view.driver}

@@ -188,6 +188,18 @@ export interface FinanceSummaryResponse {
   timeline: Array<{ period: string; base: number; extras: number; overtime: number; total: number; count: number }>;
 }
 
+export interface VanMileageItem {
+  id: string;
+  submittedAt: string;
+  driverName: string;
+  driverEmail: string;
+  driverInitials: string;
+  vanRegistration: string;
+  mileage?: number;
+  photoUrl: string;
+  thumbUrl: string;
+}
+
 export interface ExceptionItem {
   id: string;
   jobId: string;

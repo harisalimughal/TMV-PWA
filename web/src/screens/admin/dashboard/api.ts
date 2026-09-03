@@ -8,7 +8,7 @@
  * slightly (password not pwaPassword; settings carry `type` not `description`).
  */
 import {
-  DriverSummaryItem, ExceptionItem, FinanceSummaryResponse, NormalizedJob, ScenarioItem, SummaryResponse
+  DriverSummaryItem, ExceptionItem, FinanceSummaryResponse, NormalizedJob, ScenarioItem, SummaryResponse, VanMileageItem
 } from "./types";
 import { SERVER_ERROR_MESSAGE } from "../../../lib/apiErrors";
 
@@ -139,6 +139,16 @@ export async function fetchExceptions(type?: string, from?: string, to?: string,
 export async function fetchScenarios(kind: string, page = 1): Promise<{ kind: string; items: ScenarioItem[]; pagination: PaginationMeta }> {
   const res = await apiFetch(`/api/admin/scenarios/${encodeURIComponent(kind)}?page=${page}`);
   if (!res.ok) throw await apiError(res, `Failed to load scenario ${kind}`);
+  return res.json();
+}
+
+export async function fetchVanMileage(query: Record<string, any> = {}): Promise<{ items: VanMileageItem[]; pagination: PaginationMeta }> {
+  const params = new URLSearchParams();
+  for (const [k, v] of Object.entries(query)) {
+    if (v !== undefined && v !== null && v !== "") params.set(k, String(v));
+  }
+  const res = await apiFetch(`/api/admin/van/mileage?${params.toString()}`);
+  if (!res.ok) throw await apiError(res, "Failed to load van mileage records");
   return res.json();
 }
 

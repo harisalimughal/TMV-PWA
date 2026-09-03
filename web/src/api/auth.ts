@@ -6,6 +6,7 @@ export interface DriverProfile {
   email: string;
   fullName: string;
   initials: string;
+  vanRegistration?: string;
 }
 
 /**

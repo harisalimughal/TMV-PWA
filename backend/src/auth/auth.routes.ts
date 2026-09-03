@@ -63,7 +63,7 @@ export function authRoutes(): Router {
     res.status(200).json({
       ok: true,
       driver: profile
-        ? { email: result.account.email, fullName: profile.fullName, initials: profile.initials }
+        ? { email: result.account.email, fullName: profile.fullName, initials: profile.initials, vanRegistration: profile.vanRegistration }
         : { email: result.account.email, fullName: result.account.email, initials: "" }
     });
   });
@@ -111,7 +111,7 @@ export function authRoutes(): Router {
 
     res.status(200).json({
       ok: true,
-      driver: { email: verified.email, fullName: profile.fullName, initials: profile.initials }
+      driver: { email: verified.email, fullName: profile.fullName, initials: profile.initials, vanRegistration: profile.vanRegistration }
     });
   });
 
@@ -193,7 +193,7 @@ export function authRoutes(): Router {
     res.status(200).json({
       ok: true,
       driver: profile
-        ? { email: verified.email, fullName: profile.fullName, initials: profile.initials }
+        ? { email: verified.email, fullName: profile.fullName, initials: profile.initials, vanRegistration: profile.vanRegistration }
         : { email: verified.email, fullName: verified.email, initials: "" }
     });
   });
@@ -207,7 +207,7 @@ export function authRoutes(): Router {
     const profile = await getDriverProfile(req.driverEmail!);
     res.status(200).json({
       driver: profile
-        ? { email: req.driverEmail, fullName: profile.fullName, initials: profile.initials }
+        ? { email: req.driverEmail, fullName: profile.fullName, initials: profile.initials, vanRegistration: profile.vanRegistration }
         : { email: req.driverEmail, fullName: req.driverEmail, initials: "" }
     });
   });

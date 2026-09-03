@@ -1,13 +1,14 @@
 import React from "react";
-import { Boxes, ClipboardList, Settings } from "lucide-react";
+import { Boxes, ClipboardList, Settings, Truck } from "lucide-react";
 import { cx } from "../../ui";
 import { haptics } from "../../lib/haptics";
 
-export type TabId = "jobs" | "storage" | "profile";
+export type TabId = "jobs" | "storage" | "van" | "profile";
 
 const TABS: Array<{ id: TabId; label: string; icon: React.ComponentType<{ className?: string }> }> = [
   { id: "jobs", label: "Jobs", icon: ClipboardList },
   { id: "storage", label: "Storage", icon: Boxes },
+  { id: "van", label: "Van", icon: Truck },
   { id: "profile", label: "Settings", icon: Settings }
 ];
 
