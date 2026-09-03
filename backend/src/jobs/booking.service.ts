@@ -32,9 +32,14 @@ function htmlToText(html: string): string {
 function field(description: string, labels: string[]): string {
   const lines = htmlToText(description).split(/\r?\n/).map(l => l.trim()).filter(Boolean);
   for (const label of labels) {
-    const regex = new RegExp(`^${label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s*[:=-]\\s*(.+)$`, "i");
-    const found = lines.find(line => regex.test(line));
-    if (found) return found.match(regex)?.[1]?.trim() || "";
+    const regex = new RegExp(`^${label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s*[:=-]\\s*(.*)$`, "i");
+    for (let i = 0; i < lines.length; i++) {
+      const found = lines[i].match(regex);
+      if (!found) continue;
+      const inlineValue = found[1]?.trim();
+      if (inlineValue) return inlineValue;
+      return lines[i + 1]?.trim() || "";
+    }
   }
   return "";
 }
@@ -59,8 +64,8 @@ export function parseCalendarEvent(event: calendar_v3.Schema$Event): ParsedCalen
   const customerName = field(description, ["Client name", "Customer", "Name"]);
   const customerEmail = field(description, ["Email", "Email address", "Client email"]);
   const customerPhone = field(description, ["Phone", "Phone number", "Telephone", "Mobile"]);
-  const pickup = field(description, ["Pickup", "Pickup address", "From", "Move From"]);
-  const dropoff = field(description, ["Drop-off", "Dropoff", "Drop off", "Drop-off address", "To", "Move To"]);
+  const pickup = field(description, ["Pickup", "Pick up address", "Pickup address", "Move From", "From"]);
+  const dropoff = field(description, ["Drop-off", "Dropoff", "Drop off", "Drop-off address", "Delivery address", "Move To", "To"]);
 
   return {
     calendarEventId: event.id,
