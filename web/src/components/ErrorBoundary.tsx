@@ -11,6 +11,34 @@ interface State {
   error: Error | null;
 }
 
+const RELOAD_KEYS = [
+  "tmv:chunk_reload_count",
+  "tmv:preload_reload_count",
+  "tmv:admin_chunk_reloaded"
+];
+
+function clearReloadGuards() {
+  for (const key of RELOAD_KEYS) sessionStorage.removeItem(key);
+}
+
+async function clearCachesAndWorkers() {
+  if (typeof caches !== "undefined") {
+    const keys = await caches.keys();
+    await Promise.all(keys.map(key => caches.delete(key)));
+  }
+
+  if ("serviceWorker" in navigator) {
+    const registrations = await navigator.serviceWorker.getRegistrations();
+    await Promise.all(registrations.map(registration => registration.unregister()));
+  }
+}
+
+function reloadFromNetwork() {
+  const url = new URL(window.location.href);
+  url.searchParams.set("tmv_reload", String(Date.now()));
+  window.location.replace(url.toString());
+}
+
 export class ErrorBoundary extends Component<Props, State> {
   constructor(props: Props) {
     super(props);
@@ -36,27 +64,14 @@ export class ErrorBoundary extends Component<Props, State> {
       const count = parseInt(sessionStorage.getItem(reloadKey) || "0", 10);
       if (count < 2) {
         sessionStorage.setItem(reloadKey, String(count + 1));
-        // Clear caches and reload
-        if (typeof caches !== "undefined") {
-          caches.keys().then(keys => Promise.all(keys.map(k => caches.delete(k)))).finally(() => {
-            window.location.reload();
-          });
-        } else {
-          window.location.reload();
-        }
+        clearCachesAndWorkers().finally(reloadFromNetwork);
       }
     }
   }
 
   handleReload = () => {
-    sessionStorage.removeItem("tmv:chunk_reload_count");
-    if (typeof caches !== "undefined") {
-      caches.keys().then(keys => Promise.all(keys.map(k => caches.delete(k)))).finally(() => {
-        window.location.reload();
-      });
-    } else {
-      window.location.reload();
-    }
+    clearReloadGuards();
+    clearCachesAndWorkers().finally(reloadFromNetwork);
   };
 
   render() {
