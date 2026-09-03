@@ -24,9 +24,9 @@ export function AddDriverModal({ isOpen, onClose, driverToEdit }: Props) {
   const [saveError, setSaveError] = useState("");
   const [saveWarning, setSaveWarning] = useState("");
 
-  // Real roster (see dashboard/server/routes/drivers.route.ts) -- used to catch a
-  // duplicate initials before the write, mirroring what driverWrite()'s Email-keyed
-  // upsert would otherwise do silently.
+  // Driver summary includes account-backed roster rows plus job-only initials rows.
+  // Only a real account can own/block a code; job-only rows are allowed to be folded
+  // into the newly-created driver account with the same initials.
   const { data: driversData } = useQuery({ queryKey: ["drivers_summary"], queryFn: () => fetchDrivers() });
   const roster = driversData?.drivers ?? [];
 
@@ -61,9 +61,10 @@ export function AddDriverModal({ isOpen, onClose, driverToEdit }: Props) {
     }
   };
 
-  // Initials are taken if they exist AND we aren't editing the driver that already owns them
+  // Initials are taken if a real driver account owns them AND we aren't editing that
+  // same driver. Job-only summary rows must not block creating the account.
   const isCodeTaken = roster.some(d =>
-    d.initials === code.toUpperCase() && (!driverToEdit || driverToEdit.initials !== code.toUpperCase())
+    d.hasAccount && d.initials === code.toUpperCase() && (!driverToEdit || driverToEdit.initials !== code.toUpperCase())
   );
   const passwordTooShort = pwaPassword.length > 0 && pwaPassword.length < 8;
 
