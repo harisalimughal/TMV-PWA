@@ -70,15 +70,13 @@ export function JobsPage() {
    *
    * The net effect was a Jobs Archive that could only ever show the first 25 jobs.
    *
-   * Because search, status filtering and sorting are all client-side, mixing in server
-   * pagination would also mean "search" only ever searched the visible page. So there
-   * is now exactly one pagination strategy: fetch the whole date range once, then
-   * filter, sort and paginate it here. `hasMore` tells the user when the range is
-   * larger than we fetched, instead of silently truncating.
+   * Search is also sent to the server. Otherwise the dashboard only searched inside
+   * the first FETCH_LIMIT rows, so an existing booking could show in the driver app
+   * but stay hidden from admin search when it sat beyond that archive slice.
    */
   const { data, isLoading, isError, error, refetch, isFetching } = useQuery({
-    queryKey: ["jobs", from, to, FETCH_LIMIT],
-    queryFn: () => fetchJobs({ page: 1, pageSize: FETCH_LIMIT, from, to })
+    queryKey: ["jobs", from, to, debouncedSearch, FETCH_LIMIT],
+    queryFn: () => fetchJobs({ page: 1, pageSize: FETCH_LIMIT, from, to, q: debouncedSearch || undefined })
   });
 
   const truncated = Boolean(data?.pagination?.hasMore);
@@ -112,9 +110,12 @@ export function JobsPage() {
         return (
           j.jobId.toLowerCase().includes(debouncedSearch) ||
           (j.customerName || "").toLowerCase().includes(debouncedSearch) ||
+          (j.customerPhone || "").toLowerCase().includes(debouncedSearch) ||
+          (j.customerEmail || "").toLowerCase().includes(debouncedSearch) ||
           (j.pickup || "").toLowerCase().includes(debouncedSearch) ||
           (j.dropoff || "").toLowerCase().includes(debouncedSearch) ||
-          (d.name || "").toLowerCase().includes(debouncedSearch)
+          (d.name || "").toLowerCase().includes(debouncedSearch) ||
+          (j.driverInitials || "").toLowerCase().includes(debouncedSearch)
         );
       });
     }
