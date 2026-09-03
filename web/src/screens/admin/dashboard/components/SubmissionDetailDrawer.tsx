@@ -467,8 +467,9 @@ export function SubmissionDetailDrawer({ job: initialJob, isOpen, onClose, onNav
     // outer div being position:fixed at print time meant that ancestor was itself
     // pinned to one viewport-sized box, silently capping the printed report to a
     // single page regardless of .print-content's own positioning.
-    <div className="fixed inset-0 print:static z-[100] flex bg-admin-ink/30 backdrop-blur-[2px] animate-in fade-in duration-200">
-      <div className="flex w-full h-full print:hidden">
+    <div className="fixed inset-0 print:static z-[100] flex items-center justify-center overflow-hidden bg-admin-ink/70 backdrop-blur-sm p-3 sm:p-6 animate-in fade-in duration-200">
+      <div className="absolute inset-0 cursor-pointer print:hidden" onClick={onClose} />
+      <div className="relative z-10 flex w-full h-full items-center justify-center print:hidden">
       
       {toast && (
         <div className="fixed top-6 right-6 z-[200] bg-admin-ink text-white px-5 py-3 rounded-card shadow-2xl flex items-center gap-3 animate-in fade-in slide-in-from-top-4">
@@ -477,8 +478,8 @@ export function SubmissionDetailDrawer({ job: initialJob, isOpen, onClose, onNav
         </div>
       )}
 
-      {/* Main Drawer Container */}
-      <div className={`bg-[#F5F5F5] shadow-2xl flex flex-col h-full overflow-hidden transition-all duration-300 ml-auto ${isFullscreen ? 'w-full' : 'w-full max-w-[1200px]'}`}>
+      {/* Main Modal Container */}
+      <div className={`bg-[#F5F5F5] shadow-2xl flex flex-col overflow-hidden transition-all duration-300 border border-white/10 animate-in zoom-in-95 ${isFullscreen ? 'w-full h-full max-w-none rounded-none' : 'w-full max-w-6xl max-h-[94vh] rounded-module'}`}>
         
         {/* TOP HEADER */}
         <div className="min-h-[72px] bg-white border-b border-admin-line shadow-sm px-3 sm:px-6 py-2 flex flex-wrap items-center justify-between gap-2 shrink-0 relative z-20">
