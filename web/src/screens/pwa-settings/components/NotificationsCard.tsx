@@ -67,7 +67,7 @@ export function NotificationsCard() {
     <SettingCard
       icon={<Bell />}
       title="Push Notifications"
-      description="Receive instant alerts for new jobs, schedule updates, and customer changes on your phone."
+      description="Enable notifications after installing the app so this device can receive job alerts."
     >
       <div className="flex flex-col gap-3" aria-live="polite">
         <StatusRow
@@ -100,7 +100,13 @@ export function NotificationsCard() {
         {/* iOS Web Push Requirement: Must be added to Home Screen on iOS */}
         {platform === "ios" && !standalone && (
           <Alert tone="info" title="iPhone / iPad Notification Tip">
-            On iOS (16.4+), push notifications require adding this app to your Home Screen. Tap the Safari Share button (box with up arrow) and select <strong>&quot;Add to Home Screen&quot;</strong>.
+            Add TMV BOT to the Home Screen from Safari first. Then open the installed app and enable notifications here.
+          </Alert>
+        )}
+
+        {platform === "android" && !standalone && (
+          <Alert tone="info" title="Android Notification Tip">
+            Install TMV BOT from Chrome using Install app or Add to Home screen, then enable notifications here.
           </Alert>
         )}
 

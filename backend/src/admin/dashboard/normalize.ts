@@ -9,6 +9,7 @@
 import { listDriverProfiles } from "../../auth/driver-account.service";
 import { ExtraChargeType } from "../../jobs/job.types";
 import { env } from "../../config/env";
+import { getSetting } from "../../db/settings.repo";
 import { EvidenceStatus, EvidenceType } from "../../jobs/job.types";
 import { fromPounds, Pence, pence } from "../../utils/money";
 import { MongoDataset } from "./read";
@@ -76,6 +77,12 @@ function parseBookingDetails(description: string): NormalizedJob["bookingDetails
 export async function normalizeMongoDataset(dataset: MongoDataset): Promise<NormalizedJob[]> {
   const drivers = await listDriverProfiles();
   const driversByInitials = new Map(drivers.filter(d => d.initials).map(d => [d.initials.toUpperCase(), d]));
+  const [congestionChargeSetting, tunnelChargeSetting] = await Promise.all([
+    getSetting("CONGESTION_CHARGE", String(env.congestionCharge)),
+    getSetting("TUNNEL_CHARGE", String(env.tunnelCharge))
+  ]);
+  const congestionCharge = parseFloat(congestionChargeSetting) || env.congestionCharge;
+  const tunnelCharge = parseFloat(tunnelChargeSetting) || env.tunnelCharge;
 
   const evidenceByJob = new Map<string, typeof dataset.evidence>();
   for (const e of dataset.evidence) {
@@ -142,8 +149,8 @@ export async function normalizeMongoDataset(dataset: MongoDataset): Promise<Norm
     const basePrice = safePence(job.basePrice);
     const extraChargeSelections = Array.isArray(job.extraCharges) ? job.extraCharges : [];
     let extraChargesPounds = 0;
-    if (extraChargeSelections.includes(ExtraChargeType.CONGESTION)) extraChargesPounds += env.congestionCharge;
-    if (extraChargeSelections.includes(ExtraChargeType.TUNNEL)) extraChargesPounds += env.tunnelCharge;
+    if (extraChargeSelections.includes(ExtraChargeType.CONGESTION)) extraChargesPounds += congestionCharge;
+    if (extraChargeSelections.includes(ExtraChargeType.TUNNEL)) extraChargesPounds += tunnelCharge;
     const extraCharges = extraChargesPounds > 0 ? fromPounds(extraChargesPounds) : pence(0);
     const overtimeMinutes = job.overtimeMinutes || 0;
     const overtimeCharge = safePence(job.overtimeCharge);

@@ -1,5 +1,5 @@
 import React from "react";
-import { Boxes, ClipboardList, UserRound } from "lucide-react";
+import { Boxes, ClipboardList, Settings } from "lucide-react";
 import { cx } from "../../ui";
 import { haptics } from "../../lib/haptics";
 
@@ -8,7 +8,7 @@ export type TabId = "jobs" | "storage" | "profile";
 const TABS: Array<{ id: TabId; label: string; icon: React.ComponentType<{ className?: string }> }> = [
   { id: "jobs", label: "Jobs", icon: ClipboardList },
   { id: "storage", label: "Storage", icon: Boxes },
-  { id: "profile", label: "Profile", icon: UserRound }
+  { id: "profile", label: "Settings", icon: Settings }
 ];
 
 export interface BottomNavProps {

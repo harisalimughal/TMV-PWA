@@ -4,6 +4,7 @@ import type { DriverProfile } from "../api/auth";
 import { AppShell } from "../app/AppShell";
 import { IconButton } from "../ui";
 import { ThemeToggle } from "../components/driver";
+import { InstallAppCard } from "./pwa-settings/components/InstallAppCard";
 import { NotificationsCard } from "./pwa-settings/components/NotificationsCard";
 
 interface AccountSettingsScreenProps {
@@ -29,7 +30,7 @@ export function AccountSettingsScreen({
           {onBack && (
             <IconButton aria-label="Back to jobs" icon={<ArrowLeft />} onClick={onBack} className="-ml-1.5 text-fg" />
           )}
-          <span className="text-heading text-fg">Profile</span>
+          <span className="text-heading text-fg">Settings</span>
         </div>
       }
     >
@@ -46,7 +47,10 @@ export function AccountSettingsScreen({
         </p>
 
         <h2 className="pb-2 pt-7 text-card text-fg">App</h2>
-        <NotificationsCard />
+        <div className="flex flex-col gap-4">
+          <InstallAppCard />
+          <NotificationsCard />
+        </div>
 
         <h2 className="pb-2 pt-7 text-card text-fg">Personal details</h2>
         <InfoRow label="Name" value={driver.fullName} />

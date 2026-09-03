@@ -37,6 +37,17 @@ export function InstallAppCard() {
       description="Install TMV BOT on this device for faster access and an app-like experience."
     >
       <div className="flex flex-col gap-3" aria-live="polite">
+        <Alert tone="info" title="Android">
+          Open this site in Chrome, tap the browser menu, then choose{" "}
+          <strong className="font-semibold">Install app</strong> or{" "}
+          <strong className="font-semibold">Add to Home screen</strong>.
+        </Alert>
+
+        <Alert tone="info" title="iPhone / iPad">
+          Open this site in Safari, tap Share, then choose{" "}
+          <strong className="font-semibold">Add to Home Screen</strong>. On iOS, notifications work only after the app is added to the Home Screen.
+        </Alert>
+
         {status === "installed" && (
           <Alert tone="success" title="Installed on this device">
             You're running the installed TMV BOT app. Updates are handled below.

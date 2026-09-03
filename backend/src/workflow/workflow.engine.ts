@@ -30,16 +30,20 @@ function crewRateKey(crewSize: number): string {
   return `CREW_RATE_${crewSize}_MAN`;
 }
 
-function extraChargeAmount(job: Job): number {
+async function extraChargeAmount(job: Job): Promise<number> {
   let total = 0;
-  if (job.extraCharges.includes(ExtraChargeType.CONGESTION)) total += env.congestionCharge;
-  if (job.extraCharges.includes(ExtraChargeType.TUNNEL)) total += env.tunnelCharge;
+  if (job.extraCharges.includes(ExtraChargeType.CONGESTION)) {
+    total += parseFloat(await getSetting("CONGESTION_CHARGE", String(env.congestionCharge))) || env.congestionCharge;
+  }
+  if (job.extraCharges.includes(ExtraChargeType.TUNNEL)) {
+    total += parseFloat(await getSetting("TUNNEL_CHARGE", String(env.tunnelCharge))) || env.tunnelCharge;
+  }
   total += job.overtimeCharge;
   return total;
 }
 
-export function suggestedTotal(job: Job): number {
-  return Math.round((job.basePrice + extraChargeAmount(job)) * 100) / 100;
+export async function suggestedTotal(job: Job): Promise<number> {
+  return Math.round((job.basePrice + await extraChargeAmount(job)) * 100) / 100;
 }
 
 export async function beginJob(jobId: string, identifier: string): Promise<Job> {
@@ -256,7 +260,7 @@ export async function handleAction(
       assertState(job.currentState, WorkflowState.WAITING_TOTAL_CHARGES);
       const total = validateCurrency(input.total_charges?.[0] ?? "");
       job.totalCharges = total;
-      const suggested = suggestedTotal(job);
+      const suggested = await suggestedTotal(job);
       const from = job.currentState;
       job.currentState = WorkflowState.WAITING_PAYMENT;
       const mismatch = equalPence(fromPounds(total), fromPounds(suggested))

@@ -115,7 +115,7 @@ export function jobsRoutes(): Router {
         readEvidenceSummary(job.jobId),
         getConfirmationText()
       ]);
-      res.status(200).json({ job, activity, evidence, suggestedTotal: suggestedTotal(job), confirmationText });
+      res.status(200).json({ job, activity, evidence, suggestedTotal: await suggestedTotal(job), confirmationText });
     } catch (error) {
       errorResponse(res, error);
     }
@@ -175,7 +175,7 @@ export function jobsRoutes(): Router {
       const action = String(req.body?.action ?? "");
       const input = (req.body?.input ?? {}) as Record<string, string[]>;
       const job = await handleAction(action, String(req.params.jobId), req.driverEmail!, input);
-      res.status(200).json({ job, suggestedTotal: suggestedTotal(job) });
+      res.status(200).json({ job, suggestedTotal: await suggestedTotal(job) });
     } catch (error) {
       errorResponse(res, error);
     }

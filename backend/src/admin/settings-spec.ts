@@ -65,6 +65,8 @@ export const SETTINGS_SPEC: SettingFieldSpec[] = [
     hint: "Leave blank to use the relevant crew/packing rate above instead."
   },
   { key: "OVERTIME_GRACE_MINS", label: "Overtime Grace (minutes)", type: "number", fallback: String(env.overtimeGraceMinutes) },
+  { key: "CONGESTION_CHARGE", label: "Congestion Charge (£)", type: "number", fallback: String(env.congestionCharge) },
+  { key: "TUNNEL_CHARGE", label: "Tunnel Charge (£)", type: "number", fallback: String(env.tunnelCharge) },
   {
     key: "JOB_STARTED_MESSAGE_TEXT",
     label: "Customer Message — On My Way",
