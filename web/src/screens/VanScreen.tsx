@@ -62,7 +62,11 @@ export function VanScreen({ driver }: VanScreenProps) {
       banner={<OfflineBanner />}
       contentWidth="content"
       dock={
-        <BottomActionBar note={blockedReason} noteTone="warning">
+        <BottomActionBar
+          note={blockedReason}
+          noteTone="warning"
+          className="mb-[calc(var(--bottom-nav-height)+env(safe-area-inset-bottom))] lg:mb-0"
+        >
           <Button
             size="lg"
             fullWidth
@@ -76,7 +80,7 @@ export function VanScreen({ driver }: VanScreenProps) {
         </BottomActionBar>
       }
     >
-      <div className="flex flex-col gap-7 px-4 py-5 scroll-pb-dock">
+      <div className="flex flex-col gap-7 px-4 pt-5 pb-[calc(var(--dock-height)+var(--bottom-nav-height)+env(safe-area-inset-bottom)+24px)] lg:pb-[calc(var(--dock-height)+env(safe-area-inset-bottom)+24px)]">
         <header className="flex items-start gap-3">
           <span className="grid size-11 shrink-0 place-items-center rounded-card bg-brand text-brand-fg">
             <Truck className="size-5" aria-hidden />
