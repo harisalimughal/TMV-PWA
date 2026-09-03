@@ -1,15 +1,11 @@
 import React, { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
-  TrendingUp,
   Truck,
   CheckCircle2,
   Clock,
-  ArrowUpRight,
-  ShieldCheck,
   Banknote,
-  AlertTriangle,
-  MoreHorizontal
+  AlertTriangle
 } from "lucide-react";
 import {
   AreaChart,
@@ -17,11 +13,9 @@ import {
   XAxis,
   YAxis,
   Tooltip,
-  ResponsiveContainer,
-  BarChart,
-  Bar
+  ResponsiveContainer
 } from "recharts";
-import { fetchJobs, fetchSummary, fetchExceptions } from "../api";
+import { fetchSummary, fetchExceptions } from "../api";
 import { DateRangePicker } from "../components/DateRangePicker";
 import { formatLondonDate, formatLondonDateTime } from "../utils/date";
 import { completionRate } from "../utils/kpi";
@@ -74,6 +68,12 @@ export function OverviewPage({ onSelectSection }: Props) {
   const completionPct = completionRate(kpis.completed, kpis.totalJobs);
   const totalRevenue = kpis.revenuePounds || 0;
   const activityFeed = exceptionsData?.items.slice(0, 5) || [];
+  const delayTone =
+    kpis.avgDelayMinutes <= 0
+      ? { label: "On time", className: "text-admin-status-green", chip: "bg-admin-status-green/10" }
+      : kpis.avgDelayMinutes <= 15
+        ? { label: "Within tolerance", className: "text-admin-status-green", chip: "bg-admin-status-green/10" }
+        : { label: "Needs attention", className: "text-admin-status-red", chip: "bg-admin-status-red/10" };
 
   return (
     <div className="max-w-[1440px] mx-auto space-y-6">
@@ -107,9 +107,9 @@ export function OverviewPage({ onSelectSection }: Props) {
               <div className="text-[44px] leading-none font-bold text-admin-ink tracking-tighter mb-2">
                 £{totalRevenue.toLocaleString("en-GB", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
               </div>
-              <div className="flex items-center gap-2 text-[13px] font-medium text-admin-status-green">
-                <span className="px-2 py-0.5 rounded-full bg-admin-status-green/10">+14.2%</span>
-                <span className="text-admin-muted font-normal">vs last month</span>
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[13px] font-medium text-admin-muted">
+                <span>Cash Â£{kpis.cashCollectedPounds.toLocaleString("en-GB", { maximumFractionDigits: 0 })}</span>
+                <span>Card/bank Â£{kpis.cardBankPounds.toLocaleString("en-GB", { maximumFractionDigits: 0 })}</span>
               </div>
             </div>
 
@@ -140,9 +140,9 @@ export function OverviewPage({ onSelectSection }: Props) {
                   <span className="font-normal">No jobs in the selected range</span>
                 </div>
               ) : (
-                <div className="flex items-center gap-2 text-[13px] font-medium text-admin-status-green">
-                  <span className="px-2 py-0.5 rounded-full bg-admin-status-green/10">Optimal</span>
-                  <span className="text-admin-muted font-normal">SLA Target &gt;95%</span>
+                <div className="flex items-center gap-2 text-[13px] font-medium text-admin-muted">
+                  <span>{kpis.completed} completed</span>
+                  <span className="font-normal">of {kpis.totalJobs} total</span>
                 </div>
               )}
             </div>
@@ -155,9 +155,9 @@ export function OverviewPage({ onSelectSection }: Props) {
               <div className="text-[44px] leading-none font-bold text-admin-ink tracking-tighter mb-2">
                 {kpis.avgDelayMinutes}<span className="text-[20px] font-medium text-admin-muted ml-1">min</span>
               </div>
-              <div className="flex items-center gap-2 text-[13px] font-medium text-admin-status-red">
-                <span className="px-2 py-0.5 rounded-full bg-admin-status-red/10">High Traffic</span>
-                <span className="text-admin-muted font-normal">Tol &lt;15m</span>
+              <div className={`flex items-center gap-2 text-[13px] font-medium ${delayTone.className}`}>
+                <span className={`px-2 py-0.5 rounded-full ${delayTone.chip}`}>{delayTone.label}</span>
+                <span className="text-admin-muted font-normal">{kpis.late} late starts</span>
               </div>
             </div>
 
@@ -218,7 +218,7 @@ export function OverviewPage({ onSelectSection }: Props) {
                       {d.initials}
                     </div>
                     <div>
-                      <div className="text-card text-fg">{d.initials} Driver</div>
+                      <div className="text-card text-fg">{d.driverName || `${d.initials} Driver`}</div>
                       <div className="text-[12px] text-admin-muted">{d.completed} delivered</div>
                     </div>
                   </div>
