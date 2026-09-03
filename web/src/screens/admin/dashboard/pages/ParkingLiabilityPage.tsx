@@ -23,8 +23,8 @@ export function ParkingLiabilityPage() {
   const [selectedSubmission, setSelectedSubmission] = useState<any>(null);
 
   const { data: response, isLoading, isError, error, refetch, isFetching } = useQuery({
-    queryKey: ["scenarios", "parking", from, to],
-    queryFn: () => fetchScenarios("ALL")
+    queryKey: ["scenarios", "parking", page, from, to],
+    queryFn: () => fetchScenarios("parking", page)
   });
 
   const processedData = useMemo(() => {
