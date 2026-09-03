@@ -7,7 +7,7 @@ import { OfflineBanner } from "../app/OfflineBanner";
 import { PhotoPicker } from "../components/PhotoPicker";
 import { useToast } from "../components/ui/Toast";
 import { useOnline } from "../lib/net";
-import { Alert, BottomActionBar, Button, Field, Input, Section } from "../ui";
+import { Alert, Button, Field, Input, Section } from "../ui";
 
 interface VanScreenProps {
   driver: DriverProfile;
@@ -61,26 +61,8 @@ export function VanScreen({ driver }: VanScreenProps) {
     <AppShell
       banner={<OfflineBanner />}
       contentWidth="content"
-      dock={
-        <BottomActionBar
-          note={blockedReason}
-          noteTone="warning"
-          className="mb-[calc(var(--bottom-nav-height)+env(safe-area-inset-bottom))] lg:mb-0"
-        >
-          <Button
-            size="lg"
-            fullWidth
-            loading={submitting}
-            blockedReason={blockedReason}
-            onClick={() => void handleSubmit()}
-            iconLeft={!online ? <CloudOff /> : <Camera />}
-          >
-            {submitting ? busyLabel : "Upload mileage photo"}
-          </Button>
-        </BottomActionBar>
-      }
     >
-      <div className="flex flex-col gap-7 px-4 pt-5 pb-[calc(var(--dock-height)+var(--bottom-nav-height)+env(safe-area-inset-bottom)+24px)] lg:pb-[calc(var(--dock-height)+env(safe-area-inset-bottom)+24px)]">
+      <div className="flex flex-col gap-7 px-4 pt-5 scroll-pb-nav">
         <header className="flex items-start gap-3">
           <span className="grid size-11 shrink-0 place-items-center rounded-card bg-brand text-brand-fg">
             <Truck className="size-5" aria-hidden />
@@ -119,6 +101,22 @@ export function VanScreen({ driver }: VanScreenProps) {
             onChange={setPhotos}
           />
         </Section>
+
+        <div className="flex flex-col gap-3">
+          {blockedReason && (
+            <p className="text-center text-meta font-semibold text-warning">{blockedReason}</p>
+          )}
+          <Button
+            size="lg"
+            fullWidth
+            loading={submitting}
+            blockedReason={blockedReason}
+            onClick={() => void handleSubmit()}
+            iconLeft={!online ? <CloudOff /> : <Camera />}
+          >
+            {submitting ? busyLabel : "Upload mileage photo"}
+          </Button>
+        </div>
 
         {error && <Alert tone="danger">{error}</Alert>}
 
