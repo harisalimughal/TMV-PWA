@@ -32,6 +32,18 @@ function rememberCameraPermission() {
   }
 }
 
+function wait(ms: number): Promise<void> {
+  return new Promise(resolve => window.setTimeout(resolve, ms));
+}
+
+function isCameraBusyError(err: unknown): boolean {
+  const name =
+    err && typeof err === "object" && "name" in err
+      ? String((err as { name: unknown }).name)
+      : String(err);
+  return name === "NotReadableError" || name === "TrackStartError" || name === "AbortError";
+}
+
 /**
  * Owns a single MediaStream from `getUserMedia`.
  *
@@ -79,8 +91,8 @@ export function useCameraStream(): CameraStreamApi {
       setError(null);
       setFacingMode(nextFacing);
 
-      try {
-        const next = await navigator.mediaDevices.getUserMedia({
+      const openCamera = () =>
+        navigator.mediaDevices.getUserMedia({
           video: {
             facingMode: { ideal: nextFacing },
             width: { ideal: 1920 },
@@ -88,6 +100,16 @@ export function useCameraStream(): CameraStreamApi {
           },
           audio: false,
         });
+
+      try {
+        let next: MediaStream;
+        try {
+          next = await openCamera();
+        } catch (err) {
+          if (!isCameraBusyError(err)) throw err;
+          await wait(650);
+          next = await openCamera();
+        }
 
         if (!mountedRef.current) {
           next.getTracks().forEach(track => track.stop());

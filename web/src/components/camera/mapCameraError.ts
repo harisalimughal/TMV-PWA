@@ -65,8 +65,8 @@ export function mapCameraError(err: unknown): CameraErrorInfo {
     case "AbortError":
       return {
         status: "inuse",
-        message: "The camera is being used by another app.",
-        hint: "Close any other app that might be using the camera, then try again.",
+        message: "The camera couldn't start yet.",
+        hint: "Wait a moment and try again. If it still fails, close any app or browser tab that might be using the camera.",
       };
     case "TypeError":
       return {
