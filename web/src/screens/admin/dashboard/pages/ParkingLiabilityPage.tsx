@@ -6,6 +6,7 @@ import { resolveDriver } from "../utils/drivers";
 import { evidencePhotoCount } from "../utils/evidence";
 import { SubmissionDetailDrawer } from "../components/SubmissionDetailDrawer";
 import { SubmissionPageTemplate } from "../components/SubmissionPageTemplate";
+import { ApiErrorState } from "../components/ApiErrorState";
 import { ClipboardList, Search } from "lucide-react";
 
 export function ParkingLiabilityPage() {
@@ -21,7 +22,7 @@ export function ParkingLiabilityPage() {
 
   const [selectedSubmission, setSelectedSubmission] = useState<any>(null);
 
-  const { data: response, isLoading, refetch, isFetching } = useQuery({
+  const { data: response, isLoading, isError, error, refetch, isFetching } = useQuery({
     queryKey: ["scenarios", "parking", from, to],
     queryFn: () => fetchScenarios("ALL")
   });
@@ -71,7 +72,13 @@ export function ParkingLiabilityPage() {
   );
 
   const tableBody = (
-    isLoading ? (
+    isError ? (
+      <tr>
+        <td colSpan={9} className="p-0 border-none">
+          <ApiErrorState message={(error as Error)?.message} onRetry={() => refetch()} className="border-none shadow-none" />
+        </td>
+      </tr>
+    ) : isLoading ? (
       Array.from({ length: 5 }).map((_, i) => (
         <tr key={i} className="h-[60px]">
           <td colSpan={9} className="px-4">

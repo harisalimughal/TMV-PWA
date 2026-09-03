@@ -4,13 +4,14 @@ import { ChevronRight, FileText, Download } from "lucide-react";
 import { fetchActivity } from "../api";
 import { DateRangePicker } from "../components/DateRangePicker";
 import { formatLondonDateTime } from "../utils/date";
+import { ApiErrorState } from "../components/ApiErrorState";
 
 export function ActivityPage() {
   const [page, setPage] = useState(1);
   const [from, setFrom] = useState<string | undefined>();
   const [to, setTo] = useState<string | undefined>();
 
-  const { data, isLoading, error } = useQuery({
+  const { data, isLoading, error, refetch } = useQuery({
     queryKey: ["activity_log", page, from, to],
     queryFn: () => fetchActivity(page, from, to)
   });
@@ -64,8 +65,8 @@ export function ActivityPage() {
 
               {error && (
                 <tr>
-                  <td colSpan={7} className="py-12 text-center text-admin-status-red">
-                    Failed to fetch activity log.
+                  <td colSpan={7} className="p-0 border-none">
+                    <ApiErrorState message={(error as Error)?.message} onRetry={() => refetch()} className="border-none shadow-none" />
                   </td>
                 </tr>
               )}

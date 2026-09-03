@@ -15,6 +15,7 @@ import {
 import { DateRangePicker } from "../components/DateRangePicker";
 import { getAvatarColor, formatVanReg } from "../utils/drivers";
 import { AddDriverModal } from "../components/AddDriverModal";
+import { ApiErrorState } from "../components/ApiErrorState";
 import { DriverSummaryItem } from "../types";
 import { Button } from "../../../../ui";
 
@@ -28,7 +29,7 @@ export function DriversPage() {
   // Real roster + real per-driver stats (assigned/completed/revenue/missing evidence,
   // avg delay/duration) -- all computed server-side against actual job data, not the
   // old localStorage-backed roster + a re-aggregation of fetchJobs() here.
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, error, refetch } = useQuery({
     queryKey: ["drivers_summary", from, to],
     queryFn: () => fetchDrivers(from, to),
     staleTime: 30000
@@ -97,7 +98,10 @@ export function DriversPage() {
         </span>
       </div>
 
+      {isError && <ApiErrorState message={(error as Error)?.message} onRetry={() => refetch()} />}
+
       {/* DRIVER CARDS GRID */}
+      {!isError && (
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 items-stretch">
         {!isLoading && roster.map((driver) => (
           <div
@@ -228,6 +232,7 @@ export function DriversPage() {
           </div>
         ))}
       </div>
+      )}
 
       <AddDriverModal
         isOpen={isAddModalOpen || !!editingDriver}

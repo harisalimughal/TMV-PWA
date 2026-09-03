@@ -9,17 +9,23 @@ interface Props {
 }
 
 export function LiveFleetPage({ onSelectSection }: Props) {
-  const { data: jobsData } = useQuery({
+  const { data: jobsData, isError: jobsErrored } = useQuery({
     queryKey: ["live_fleet_jobs"],
     queryFn: () => fetchJobs({ status: "IN_PROGRESS", limit: 50 }),
     refetchInterval: 10000
   });
 
-  const { data: fleetData } = useQuery({
+  const { data: fleetData, isError: fleetErrored } = useQuery({
     queryKey: ["fleet_live"],
     queryFn: fetchLiveFleet,
     refetchInterval: 10000
   });
+
+  // This page already polls every 10s, so a transient failure self-heals without the
+  // admin doing anything -- a low-key badge (rather than replacing the whole map with
+  // a full error state) is enough to say "this data may be stale" without disrupting
+  // an otherwise-live view.
+  const hasError = jobsErrored || fleetErrored;
 
   const activeJobs = jobsData?.items || [];
   const vehicles = fleetData?.vehicles || [];
@@ -48,6 +54,13 @@ export function LiveFleetPage({ onSelectSection }: Props) {
             <Radio className="w-3.5 h-3.5 animate-pulse" />
             <span>{movingCount} moving &bull; {vehicles.length} tracked</span>
           </div>
+
+          {hasError && (
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-pill bg-admin-status-red-bg border border-admin-status-red/20 text-xs font-mono font-medium text-admin-status-red">
+              <ShieldAlert className="w-3.5 h-3.5" />
+              <span>Connection problem -- data may be stale, retrying…</span>
+            </div>
+          )}
 
           {unmatchedCount > 0 ? (
             <div className="flex items-center gap-2 px-3 py-1.5 rounded-pill bg-amber-100 border border-amber-200 text-xs font-mono font-medium text-amber-700">

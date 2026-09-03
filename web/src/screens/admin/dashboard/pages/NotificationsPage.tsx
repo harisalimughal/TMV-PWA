@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { fetchNotifications, NotificationRow } from "../api";
 import { DateRangePicker } from "../components/DateRangePicker";
+import { ApiErrorState } from "../components/ApiErrorState";
 import { formatLondonDateTime } from "../utils/date";
 import { getAvatarColor } from "../utils/drivers";
 import { usePushNotifications } from "../../../../lib/pwa/usePushNotifications";
@@ -86,7 +87,7 @@ export function NotificationsPage() {
     else toast.info("Push notification permission not granted.");
   };
 
-  const { data, isLoading, error } = useQuery({
+  const { data, isLoading, error, refetch } = useQuery({
     queryKey: ["notifications"],
     queryFn: () => fetchNotifications()
   });
@@ -212,11 +213,7 @@ export function NotificationsPage() {
         </div>
       )}
 
-      {error && (
-        <div className="p-12 text-center bg-white rounded-module border border-admin-status-red/20 text-admin-status-red">
-          Failed to load notification logs.
-        </div>
-      )}
+      {error && <ApiErrorState message={(error as Error)?.message} onRetry={() => refetch()} />}
 
       {!isLoading && !error && filtered.length === 0 && (
         <div className="p-12 text-center bg-white rounded-module border border-admin-line text-admin-muted">

@@ -1,9 +1,10 @@
 import React, { useId, useState } from "react";
 import { ArrowRight, Lock, Mail } from "lucide-react";
-import { login, type DriverProfile } from "../api/auth";
+import { login, type ApiError, type DriverProfile } from "../api/auth";
 import { Alert, Button, Field, Input } from "../ui";
 import { AuthHeading, AuthLayout, PasswordToggle, usePasswordVisibility } from "./auth/AuthKit";
 import { useOnline } from "../lib/net";
+import { SERVER_ERROR_MESSAGE } from "../lib/apiErrors";
 
 interface LoginScreenProps {
   onLoggedIn: (driver: DriverProfile) => void;
@@ -17,7 +18,12 @@ export function LoginScreen({ onLoggedIn, onForgotPassword, notice }: LoginScree
   const [password, setPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [missing, setMissing] = useState(false);
-  const [authFailed, setAuthFailed] = useState(false);
+  // "credentials" (a 401 -- deliberately generic either way, never revealing which of
+  // the two was wrong or whether the account exists) vs "server" (anything else: a
+  // 5xx, offline, timeout) -- our infrastructure being down is not the same failure as
+  // a wrong password, and telling a driver to "check your password" during an outage
+  // is actively misleading, not just unhelpful.
+  const [authError, setAuthError] = useState<"credentials" | "server" | null>(null);
   const pw = usePasswordVisibility();
   const online = useOnline();
   const pwId = useId();
@@ -26,7 +32,7 @@ export function LoginScreen({ onLoggedIn, onForgotPassword, notice }: LoginScree
     event.preventDefault();
     if (submitting) return;
     setMissing(false);
-    setAuthFailed(false);
+    setAuthError(null);
 
     if (!email.trim() || !password) {
       setMissing(true);
@@ -36,10 +42,8 @@ export function LoginScreen({ onLoggedIn, onForgotPassword, notice }: LoginScree
     setSubmitting(true);
     try {
       onLoggedIn(await login(email.trim(), password));
-    } catch {
-      // Deliberately generic — never reveal which of the two was wrong, or whether
-      // the account exists.
-      setAuthFailed(true);
+    } catch (err) {
+      setAuthError((err as ApiError)?.status === 401 ? "credentials" : "server");
     } finally {
       setSubmitting(false);
     }
@@ -101,9 +105,14 @@ export function LoginScreen({ onLoggedIn, onForgotPassword, notice }: LoginScree
         </div>
 
         {missing && <Alert tone="danger">Enter your email and password.</Alert>}
-        {authFailed && (
+        {authError === "credentials" && (
           <Alert tone="danger" title="Unable to sign in">
             Check your email and password and try again.
+          </Alert>
+        )}
+        {authError === "server" && (
+          <Alert tone="danger" title="Unable to sign in">
+            {SERVER_ERROR_MESSAGE}
           </Alert>
         )}
         {!online && <Alert tone="warning">You're offline. Signing in needs a connection.</Alert>}

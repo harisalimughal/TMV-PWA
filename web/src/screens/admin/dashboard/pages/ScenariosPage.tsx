@@ -22,6 +22,7 @@ import { formatLondonDateTime } from "../utils/date";
 import { DateRangePicker } from "../components/DateRangePicker";
 import { LiabilityConfigModal } from "../components/LiabilityConfigModal";
 import { LiabilityMobileForm } from "../components/LiabilityMobileForm";
+import { ApiErrorState } from "../components/ApiErrorState";
 import { Settings2, Smartphone } from "lucide-react";
 
 interface Props {
@@ -244,11 +245,7 @@ export function ScenariosPage({ kind }: Props) {
         </div>
       )}
 
-      {isError && (
-        <div className="p-8 text-center text-admin-status-red bg-admin-status-red-bg rounded-module border border-admin-status-red/20 shadow-sm">
-          Failed to load {config.title.toLowerCase()} records.
-        </div>
-      )}
+      {isError && <ApiErrorState message={(error as Error)?.message} onRetry={() => refetch()} />}
 
       {/* TABLE VIEW */}
       {!isLoading && !isError && viewMode === "table" && (

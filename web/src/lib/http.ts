@@ -15,6 +15,8 @@
  *     message and a different fix from a 500, but both read identically to the driver.
  */
 
+import { SERVER_ERROR_MESSAGE } from "./apiErrors";
+
 export interface ApiError {
   code: string;
   message: string;
@@ -156,7 +158,12 @@ export async function request<T>(url: string, options: RequestOptions = {}): Pro
 
   if (status < 200 || status >= 300) {
     const server = body?.error;
-    throw apiError(server?.code ?? "UNKNOWN", server?.message ?? "Something went wrong. Try again.", {
+    // A 5xx is our own infrastructure failing, not anything the driver did -- whatever
+    // terse message the backend attached ("Failed to fetch jobs list.") isn't as
+    // reassuring or actionable as just saying so plainly. A 4xx keeps the backend's
+    // specific reason, same as before.
+    const message = status >= 500 ? SERVER_ERROR_MESSAGE : server?.message ?? "Something went wrong. Try again.";
+    throw apiError(status >= 500 ? "SERVER_ERROR" : server?.code ?? "UNKNOWN", message, {
       status,
       pending: server?.pending,
       failedTypes: server?.failedTypes

@@ -16,6 +16,7 @@ import { FileText } from "lucide-react";
 import { fetchJobs } from "../api";
 import { NormalizedJob, formatGBP, toPounds } from "../types";
 import { DateRangePicker } from "../components/DateRangePicker";
+import { ApiErrorState } from "../components/ApiErrorState";
 import { formatLondonDateTime } from "../utils/date";
 const isTestOrIncomplete = (job: any) => { return job.customerName === "hh" || String(job.pickup).includes("test") || String(job.dropoff).includes("test"); };
 import { resolveDriver, formatVanReg } from "../utils/drivers";
@@ -83,10 +84,8 @@ export function FinishedJobsPage() {
         </div>
       )}
 
-      {error && (
-        <div className="p-8 text-center text-admin-status-red bg-admin-status-red-bg rounded-module border border-admin-status-red/20 shadow-sm">
-          Failed to load finished jobs.
-        </div>
+      {!isLoading && error && (
+        <ApiErrorState message={(error as Error)?.message} onRetry={() => refetch()} />
       )}
 
       {/* Main Table View */}

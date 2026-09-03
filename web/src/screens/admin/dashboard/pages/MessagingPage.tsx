@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { MessageSquare, Save, RotateCcw, AlertTriangle } from "lucide-react";
 import { EditableSetting, fetchSettings, saveSetting } from "../api";
 import { Button } from "../../../../ui";
+import { ApiErrorState } from "../components/ApiErrorState";
 
 // The real, single-shared placeholder syntax renderMessageTemplate() (src/notifications/message.ts)
 // actually substitutes -- not every setting supports every token, see VARIABLES_BY_KEY.
@@ -58,7 +59,7 @@ function renderPreview(content: string): string {
 // syntax and template categories the bot has no capability to send.
 export function MessagingPage() {
   const queryClient = useQueryClient();
-  const { data, isLoading, error } = useQuery({ queryKey: ["settings"], queryFn: () => fetchSettings() });
+  const { data, isLoading, error, refetch } = useQuery({ queryKey: ["settings"], queryFn: () => fetchSettings() });
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [savingKey, setSavingKey] = useState<string | null>(null);
   const [saveErrors, setSaveErrors] = useState<Record<string, string>>({});
@@ -109,11 +110,7 @@ export function MessagingPage() {
         </div>
       )}
 
-      {error && (
-        <div className="p-8 text-center text-admin-status-red bg-admin-status-red-bg rounded-module border border-admin-status-red/20 shadow-sm">
-          Failed to load message templates.
-        </div>
-      )}
+      {error && <ApiErrorState message={(error as Error)?.message} onRetry={() => refetch()} />}
 
       {!isLoading && !error && settings.length === 0 && (
         <div className="bg-white rounded-module border border-admin-line shadow-sm p-12 text-center">

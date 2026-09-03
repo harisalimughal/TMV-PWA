@@ -6,6 +6,7 @@ import { JobDetailDrawer } from "../components/JobDetailDrawer";
 import { JobStatusBadge, DelayBandBadge } from "../components/StatusBadge";
 import { DateRangePicker } from "../components/DateRangePicker";
 import { AddJobModal } from "../components/AddJobModal";
+import { ApiErrorState } from "../components/ApiErrorState";
 import { formatLondonDateTime } from "../utils/date";
 import { downloadCsv, stampForFilename, toCsv } from "../utils/csv";
 import { resolveDriver, formatVanReg } from "../utils/drivers";
@@ -75,7 +76,7 @@ export function JobsPage() {
    * filter, sort and paginate it here. `hasMore` tells the user when the range is
    * larger than we fetched, instead of silently truncating.
    */
-  const { data, isLoading, refetch, isFetching } = useQuery({
+  const { data, isLoading, isError, error, refetch, isFetching } = useQuery({
     queryKey: ["jobs", from, to, FETCH_LIMIT],
     queryFn: () => fetchJobs({ page: 1, pageSize: FETCH_LIMIT, from, to })
   });
@@ -320,8 +321,10 @@ export function JobsPage() {
         </button>
       </div>
 
+      {isError && <ApiErrorState message={(error as Error)?.message} onRetry={() => refetch()} />}
+
       {/* TABLE CARD */}
-      {viewMode === "table" && (
+      {!isError && viewMode === "table" && (
         <div className="bg-white rounded-module shadow-sm overflow-hidden border border-admin-line">
           <div className="overflow-x-auto relative min-h-[400px]">
             <table className="w-full text-left text-[14px] border-collapse relative">
@@ -558,7 +561,7 @@ export function JobsPage() {
         </div>
       )}
 
-      {viewMode === "cards" && (
+      {!isError && viewMode === "cards" && (
         <JobCardList
           jobs={paginatedData}
           isLoading={isLoading}
