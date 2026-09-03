@@ -123,16 +123,16 @@ export function PaperScenarioReport({ item, kind, isPreview = false }: Props) {
 
         {/* PHOTOS */}
         {photos.length > 0 && (
-          <div className="flex-1 flex flex-col mb-3 min-h-0">
+          <div className="shrink-0 flex flex-col mb-3 min-h-0">
             <div className="text-[12px] font-semibold text-[#8A8A8A] mb-1.5 shrink-0">
               Submitted Image{photos.length > 1 ? "s" : ""} / Evidence
             </div>
             {photos.length === 1 ? (
-              <div className="flex-1 min-h-[160px] max-h-[300px] flex items-center justify-center border border-admin-line rounded-card p-2 shadow-sm bg-[#FAFAFA]">
+              <div className="h-[360px] max-h-[38vh] overflow-hidden flex items-center justify-center border border-admin-line rounded-card p-2 shadow-sm bg-[#FAFAFA]">
                 <img
                   src={photos[0].thumbUrl}
                   alt="Evidence"
-                  className="max-w-full max-h-full object-contain rounded-card"
+                  className="w-full h-full object-contain rounded-card"
                 />
               </div>
             ) : (
@@ -140,9 +140,9 @@ export function PaperScenarioReport({ item, kind, isPreview = false }: Props) {
                 {photos.map((p, i) => (
                   <div
                     key={p.fileId || i}
-                    className="aspect-square max-h-[160px] flex items-center justify-center border border-admin-line rounded-card p-1 shadow-sm bg-[#FAFAFA]"
+                    className="aspect-square max-h-[160px] overflow-hidden flex items-center justify-center border border-admin-line rounded-card p-1 shadow-sm bg-[#FAFAFA]"
                   >
-                    <img src={p.thumbUrl} alt={`Evidence ${i + 1}`} className="max-w-full max-h-full object-contain rounded-card" />
+                    <img src={p.thumbUrl} alt={`Evidence ${i + 1}`} className="w-full h-full object-contain rounded-card" />
                   </div>
                 ))}
               </div>
