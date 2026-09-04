@@ -11,7 +11,9 @@ type VanRecordApiItem = {
   driverInitials: string;
   vanRegistration: string;
   mileage?: number | null;
+  odometerReading?: number | null;
   fuelCost?: number | null;
+  serviceMileage?: number | null;
   serviceType?: string;
   serviceDate?: string;
   photoUrl: string;
@@ -56,7 +58,9 @@ function vanRecordItem(r: Awaited<ReturnType<typeof listVanRecords>>[number]): V
     driverInitials: r.driverInitials,
     vanRegistration: r.vanRegistration,
     mileage: r.mileage,
+    odometerReading: r.odometerReading,
     fuelCost: r.fuelCost,
+    serviceMileage: r.serviceMileage,
     serviceType: r.serviceType,
     serviceDate: r.serviceDate,
     photoUrl: r.photoUrl,
@@ -80,7 +84,7 @@ export function dashboardVanRoutes(): Router {
       if (to) rows = rows.filter(r => r.submittedAt <= to);
       if (q) {
         rows = rows.filter(r =>
-          [r._id, r.driverName, r.driverEmail, r.driverInitials, r.vanRegistration, r.mileage, r.fuelCost, r.serviceType]
+          [r._id, r.driverName, r.driverEmail, r.driverInitials, r.vanRegistration, r.mileage, r.odometerReading, r.fuelCost, r.serviceMileage, r.serviceType]
             .some(v => String(v ?? "").toLowerCase().includes(q))
         );
       }
@@ -137,13 +141,13 @@ export function dashboardVanRoutes(): Router {
 
       const columns = [
         "Type", "Reference", "Submitted", "Driver", "Initials", "Van Registration",
-        "Mileage", "Fuel Cost", "Service Type", "Service Date", "Photo URL"
+        "Mileage", "Odometer Reading", "Fuel Cost", "Service Mileage", "Service Type", "Service Date", "Photo URL"
       ];
       const csvContent = "﻿" + [
         columns.map(escapeCsvField).join(","),
         ...rows.map(r => [
           r.type, r._id, r.submittedAt, r.driverName || r.driverEmail, r.driverInitials,
-          r.vanRegistration, r.mileage ?? "", r.fuelCost ?? "", r.serviceType ?? "", r.serviceDate ?? "", r.photoUrl
+          r.vanRegistration, r.mileage ?? "", r.odometerReading ?? "", r.fuelCost ?? "", r.serviceMileage ?? "", r.serviceType ?? "", r.serviceDate ?? "", r.photoUrl
         ].map(escapeCsvField).join(","))
       ].join("\r\n");
 
@@ -170,7 +174,7 @@ export function dashboardVanRoutes(): Router {
       if (to) rows = rows.filter(r => r.submittedAt <= to);
       if (q) {
         rows = rows.filter(r =>
-          [r._id, r.driverName, r.driverEmail, r.driverInitials, r.vanRegistration, r.mileage, r.fuelCost, r.serviceType]
+          [r._id, r.driverName, r.driverEmail, r.driverInitials, r.vanRegistration, r.mileage, r.odometerReading, r.fuelCost, r.serviceMileage, r.serviceType]
             .some(v => String(v ?? "").toLowerCase().includes(q))
         );
       }

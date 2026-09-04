@@ -4,7 +4,7 @@ import { ToastProvider } from "../components/ui/Toast";
 import { VanScreen } from "./VanScreen";
 
 describe("VanScreen", () => {
-  it("renders mileage, fuel and service submission cards, each with a required photo", () => {
+  it("renders fuel, service and compliance cards for the assigned van", () => {
     render(
       <ToastProvider>
         <VanScreen
@@ -18,18 +18,25 @@ describe("VanScreen", () => {
       </ToastProvider>
     );
 
-    expect(screen.getByRole("heading", { name: "Van" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Vehicle Details" })).toBeInTheDocument();
+    expect(screen.getAllByText("AB12 CDE")).toHaveLength(2);
 
-    expect(screen.getByLabelText(/Mileage reading/)).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Add Fuel Entry" })).toBeInTheDocument();
+    expect(screen.getByLabelText(/Odometer reading/)).toBeInTheDocument();
     expect(screen.getByLabelText(/Total cost/)).toBeInTheDocument();
+
+    expect(screen.getByRole("heading", { name: "Record Service" })).toBeInTheDocument();
+    expect(screen.getByLabelText(/Service mileage/)).toBeInTheDocument();
     expect(screen.getByLabelText(/Service type/)).toBeInTheDocument();
     expect(screen.getByLabelText(/Service date/)).toBeInTheDocument();
 
-    // One PhotoPicker ("Take photo") per card -- all three photos are required.
-    expect(screen.getAllByRole("button", { name: /take photo/i })).toHaveLength(3);
+    expect(screen.getByRole("heading", { name: "Vehicle Compliance" })).toBeInTheDocument();
+    expect(screen.getByText("Road tax renewal")).toBeInTheDocument();
+    expect(screen.getByText("MOT expiry")).toBeInTheDocument();
 
-    expect(screen.getByRole("button", { name: /submit mileage/i })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /submit fuel/i })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /submit service/i })).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: /take photo/i })).toHaveLength(2);
+    expect(screen.getAllByRole("button", { name: /upload/i })).toHaveLength(2);
+    expect(screen.getByRole("button", { name: /submit add fuel entry/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /submit record service/i })).toBeInTheDocument();
   });
 });

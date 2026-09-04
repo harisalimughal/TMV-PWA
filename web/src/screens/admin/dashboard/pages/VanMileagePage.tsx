@@ -17,9 +17,16 @@ function recordDetail(item: VanRecordItem | null, type: VanRecordType): string {
   if (!item) return "-";
   switch (type) {
     case "FUEL":
-      return item.fuelCost == null ? "-" : `£${item.fuelCost.toFixed(2)}`;
+      return [
+        item.odometerReading == null ? "" : `${item.odometerReading.toLocaleString()} mi`,
+        item.fuelCost == null ? "" : `£${item.fuelCost.toFixed(2)}`
+      ].filter(Boolean).join(" · ") || "-";
     case "SERVICE":
-      return [item.serviceType, item.serviceDate ? formatLondonDate(item.serviceDate) : ""].filter(Boolean).join(" · ") || "-";
+      return [
+        item.serviceMileage == null ? "" : `${item.serviceMileage.toLocaleString()} mi`,
+        item.serviceType,
+        item.serviceDate ? formatLondonDate(item.serviceDate) : ""
+      ].filter(Boolean).join(" · ") || "-";
     case "MILEAGE":
     default:
       return item.mileage == null ? "-" : item.mileage.toLocaleString();

@@ -91,23 +91,35 @@ export function vanRoutes(): Router {
 
   router.post("/fuel", upload.single("photo"), (req, res) =>
     submitVanRecord(req, res, "FUEL", "fuel receipt photo", () => {
+      const rawOdometer = String(req.body?.odometerReading ?? "").trim();
       const rawCost = String(req.body?.fuelCost ?? "").trim();
+      if (!rawOdometer) throw new ValidationError("Enter the odometer reading.");
+      const odometerReading = Number(rawOdometer);
+      if (!Number.isFinite(odometerReading) || odometerReading < 0 || odometerReading > 2_000_000) {
+        throw new ValidationError("Enter a valid odometer reading.");
+      }
       if (!rawCost) throw new ValidationError("Enter the fuel cost.");
       const fuelCost = Number(rawCost);
       if (!Number.isFinite(fuelCost) || fuelCost <= 0 || fuelCost > 10_000) {
         throw new ValidationError("Enter a valid fuel cost.");
       }
-      return { fuelCost };
+      return { odometerReading, fuelCost };
     })
   );
 
   router.post("/service", upload.single("photo"), (req, res) =>
     submitVanRecord(req, res, "SERVICE", "service invoice/receipt photo", () => {
+      const rawServiceMileage = String(req.body?.serviceMileage ?? "").trim();
       const serviceType = String(req.body?.serviceType ?? "").trim();
       const serviceDate = String(req.body?.serviceDate ?? "").trim();
+      if (!rawServiceMileage) throw new ValidationError("Enter the service mileage.");
+      const serviceMileage = Number(rawServiceMileage);
+      if (!Number.isFinite(serviceMileage) || serviceMileage < 0 || serviceMileage > 2_000_000) {
+        throw new ValidationError("Enter a valid service mileage.");
+      }
       if (!serviceType) throw new ValidationError("Select the service type.");
       if (!serviceDate || Number.isNaN(Date.parse(serviceDate))) throw new ValidationError("Enter a valid service date.");
-      return { serviceType, serviceDate };
+      return { serviceMileage, serviceType, serviceDate };
     })
   );
 

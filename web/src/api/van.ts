@@ -10,7 +10,9 @@ export interface VanRecord {
   driverInitials: string;
   vanRegistration: string;
   mileage?: number;
+  odometerReading?: number;
   fuelCost?: number;
+  serviceMileage?: number;
   serviceType?: string;
   serviceDate?: string;
   photoUrl: string;
@@ -33,11 +35,13 @@ export function submitVanMileage(
 }
 
 export function submitVanFuel(
+  odometerReading: string,
   fuelCost: string,
   photo: File,
   onProgress?: (fraction: number) => void
 ): Promise<VanRecord> {
   const form = new FormData();
+  form.append("odometerReading", odometerReading.trim());
   form.append("fuelCost", fuelCost.trim());
   form.append("photo", photo);
   return request<{ record: VanRecord }>("/api/van/fuel", {
@@ -48,12 +52,14 @@ export function submitVanFuel(
 }
 
 export function submitVanService(
+  serviceMileage: string,
   serviceType: string,
   serviceDate: string,
   photo: File,
   onProgress?: (fraction: number) => void
 ): Promise<VanRecord> {
   const form = new FormData();
+  form.append("serviceMileage", serviceMileage.trim());
   form.append("serviceType", serviceType);
   form.append("serviceDate", serviceDate);
   form.append("photo", photo);

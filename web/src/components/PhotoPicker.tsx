@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-import { Camera, Loader2, X } from "lucide-react";
+import { Camera, FileUp, Loader2, X } from "lucide-react";
 import { compressAll, formatBytes } from "../lib/image";
 import { haptics } from "../lib/haptics";
 import { cx } from "../ui";
@@ -13,6 +13,7 @@ export interface PhotoPickerProps {
   onChange: (files: File[]) => void;
   /** Rendered under the label, e.g. what the photo needs to show. */
   hint?: string;
+  allowUpload?: boolean;
 }
 
 interface Preview {
@@ -30,10 +31,11 @@ interface Preview {
  *  - Files are downscaled before they ever reach the caller (see lib/image.ts).
  *  - Object URLs are revoked on unmount, not just on replace/remove.
  */
-export function PhotoPicker({ label, min = 0, max, onChange, hint }: PhotoPickerProps) {
+export function PhotoPicker({ label, min = 0, max, onChange, hint, allowUpload = false }: PhotoPickerProps) {
   const [previews, setPreviews] = useState<Preview[]>([]);
   const [processing, setProcessing] = useState(false);
   const [cameraOpen, setCameraOpen] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   // Revoke every URL this component ever created, on unmount.
   const urlsRef = useRef<string[]>([]);
@@ -42,15 +44,15 @@ export function PhotoPicker({ label, min = 0, max, onChange, hint }: PhotoPicker
   }, [previews]);
   useEffect(() => () => urlsRef.current.forEach(URL.revokeObjectURL), []);
 
-  async function handleCapture(file: File) {
+  async function addFiles(files: File[]) {
     setProcessing(true);
     try {
-      const [compressed] = await compressAll([file]);
-      const added: Preview = { file: compressed, url: URL.createObjectURL(compressed) };
+      const compressed = await compressAll(files.slice(0, max));
+      const added: Preview[] = compressed.map(file => ({ file, url: URL.createObjectURL(file) }));
       if (max === 1) {
         previews.forEach(preview => URL.revokeObjectURL(preview.url));
       }
-      const next = max === 1 ? [added] : [...previews, added].slice(0, max);
+      const next = max === 1 ? added.slice(0, 1) : [...previews, ...added].slice(0, max);
       setPreviews(next);
       onChange(next.map(p => p.file));
       if (next.length >= max) setCameraOpen(false);
@@ -58,6 +60,10 @@ export function PhotoPicker({ label, min = 0, max, onChange, hint }: PhotoPicker
     } finally {
       setProcessing(false);
     }
+  }
+
+  async function handleCapture(file: File) {
+    await addFiles([file]);
   }
 
   function removeAt(index: number) {
@@ -116,7 +122,44 @@ export function PhotoPicker({ label, min = 0, max, onChange, hint }: PhotoPicker
         </ul>
       )}
 
-      {!full && (
+      {!full && allowUpload && (
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*"
+          className="hidden"
+          onChange={event => {
+            const files = Array.from(event.target.files ?? []);
+            event.target.value = "";
+            if (files.length > 0) void addFiles(files);
+          }}
+        />
+      )}
+
+      {!full && allowUpload && (
+        <div className="grid grid-cols-2 overflow-hidden rounded-card bg-slate-900 p-1 shadow-xs">
+          <button
+            type="button"
+            onClick={() => setCameraOpen(true)}
+            disabled={processing}
+            className="flex min-h-control-lg items-center justify-center gap-2 rounded-control text-button text-white transition duration-fast hover:bg-white/10 active:scale-[0.985] disabled:opacity-60 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
+          >
+            {processing ? <Loader2 className="size-[20px] animate-spin" aria-hidden /> : <Camera className="size-[22px]" aria-hidden />}
+            Take photo
+          </button>
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={processing}
+            className="flex min-h-control-lg items-center justify-center gap-2 rounded-control text-button text-white transition duration-fast hover:bg-white/10 active:scale-[0.985] disabled:opacity-60 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
+          >
+            <FileUp className="size-[22px]" aria-hidden />
+            Upload
+          </button>
+        </div>
+      )}
+
+      {!full && !allowUpload && (
         <button
           type="button"
           onClick={() => setCameraOpen(true)}

@@ -13,7 +13,9 @@ export interface VanRecordDoc {
   driverInitials: string;
   vanRegistration: string;
   mileage?: number | null;
+  odometerReading?: number | null;
   fuelCost?: number | null;
+  serviceMileage?: number | null;
   serviceType?: string;
   serviceDate?: string;
   photoUrl: string;
