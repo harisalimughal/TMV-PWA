@@ -1,7 +1,8 @@
 import React, { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Calendar, Camera, CloudOff, FileText, Fuel, ShieldCheck, Truck, Wrench } from "lucide-react";
 import type { DriverProfile } from "../api/auth";
-import { submitVanFuel, submitVanService } from "../api/van";
+import { fetchVanCompliance, submitVanFuel, submitVanService } from "../api/van";
 import { AppShell } from "../app/AppShell";
 import { OfflineBanner } from "../app/OfflineBanner";
 import { PhotoPicker } from "../components/PhotoPicker";
@@ -14,6 +15,7 @@ interface VanScreenProps {
 }
 
 const SERVICE_TYPES = ["Full", "Interim", "MOT"];
+const todayInputValue = () => new Date().toISOString().slice(0, 10);
 
 export function VanScreen({ driver }: VanScreenProps) {
   const online = useOnline();
@@ -237,6 +239,8 @@ function ServiceCard({ online }: { online: boolean }) {
     return Number.isFinite(value) && value >= 0 && value <= 2_000_000;
   })();
   const fieldsValid = mileageValid && Boolean(serviceDate && serviceType);
+  const maxDate = todayInputValue();
+  const futureDate = Boolean(serviceDate && serviceDate > maxDate);
 
   return (
     <VanRecordCard
@@ -249,7 +253,7 @@ function ServiceCard({ online }: { online: boolean }) {
       allowUpload
       tone="blue"
       online={online}
-      fieldsValid={fieldsValid}
+      fieldsValid={fieldsValid && !futureDate}
       fieldsError={
         !serviceMileage.trim()
           ? "Enter the service mileage."
@@ -257,6 +261,8 @@ function ServiceCard({ online }: { online: boolean }) {
             ? "Enter a valid service mileage."
             : !serviceDate
               ? "Enter the service date."
+              : futureDate
+                ? "Service date can't be in the future."
               : "Select the service type."
       }
       onSubmit={(photo, onProgress) =>
@@ -285,6 +291,7 @@ function ServiceCard({ online }: { online: boolean }) {
           <Input
             {...p}
             type="date"
+            max={maxDate}
             value={serviceDate}
             onChange={e => setServiceDate(e.target.value)}
           />
@@ -304,6 +311,13 @@ function ServiceCard({ online }: { online: boolean }) {
 }
 
 function ComplianceCard({ driver }: { driver: DriverProfile }) {
+  const { data: compliance } = useQuery({
+    queryKey: ["van-compliance", driver.vanRegistration],
+    queryFn: fetchVanCompliance,
+    retry: 1,
+    enabled: Boolean(driver.vanRegistration)
+  });
+
   return (
     <section className="overflow-hidden rounded-card border border-line bg-surface shadow-xs">
       <div className="flex items-center gap-3 bg-warning px-4 py-3 text-black">
@@ -316,9 +330,10 @@ function ComplianceCard({ driver }: { driver: DriverProfile }) {
         </div>
       </div>
       <div className="grid gap-3 p-4">
-        <ComplianceRow icon={<Calendar className="size-4" />} label="Road tax renewal" value="Not recorded" />
-        <ComplianceRow icon={<Calendar className="size-4" />} label="MOT expiry" value="Not recorded" />
-        <ComplianceRow icon={<FileText className="size-4" />} label="Insurance" value="Not recorded" />
+        <ComplianceRow icon={<Calendar className="size-4" />} label="Road tax renewal" value={compliance?.roadTaxRenewalDate || "Not recorded"} />
+        <ComplianceRow icon={<Calendar className="size-4" />} label="MOT expiry" value={compliance?.motExpiryDate || "Not recorded"} />
+        <ComplianceRow icon={<FileText className="size-4" />} label="Insurance" value={compliance?.insuranceExpiryDate || "Not recorded"} />
+        {compliance?.notes && <ComplianceRow icon={<FileText className="size-4" />} label="Notes" value={compliance.notes} />}
       </div>
     </section>
   );

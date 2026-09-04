@@ -6,6 +6,7 @@ import { resolveDriver } from "./jobs.service";
 import { looksLikeImage } from "./evidence.service";
 import { uploadEvidenceImage } from "../storage/cloudinary";
 import { insertVanRecord, VanRecordDoc, VanRecordType } from "../db/van.repo";
+import { getVanCompliance } from "../db/van-compliance.repo";
 import { ValidationError } from "../workflow/validation.engine";
 import { log } from "../utils/logger";
 
@@ -77,6 +78,16 @@ export function vanRoutes(): Router {
   const router = Router();
   router.use(requireDriverAuth);
 
+  router.get("/compliance", async (req, res) => {
+    try {
+      const driver = await resolveDriver(req.driverEmail!);
+      const compliance = driver.vanRegistration ? await getVanCompliance(driver.vanRegistration) : null;
+      res.status(200).json({ compliance });
+    } catch (error) {
+      errorResponse(res, error);
+    }
+  });
+
   router.post("/mileage", upload.single("photo"), (req, res) =>
     submitVanRecord(req, res, "MILEAGE", "mileage photo", () => {
       const rawMileage = String(req.body?.mileage ?? "").trim();
@@ -119,6 +130,9 @@ export function vanRoutes(): Router {
       }
       if (!serviceType) throw new ValidationError("Select the service type.");
       if (!serviceDate || Number.isNaN(Date.parse(serviceDate))) throw new ValidationError("Enter a valid service date.");
+      const today = new Date();
+      today.setHours(23, 59, 59, 999);
+      if (new Date(serviceDate).getTime() > today.getTime()) throw new ValidationError("Service date can't be in the future.");
       return { serviceMileage, serviceType, serviceDate };
     })
   );

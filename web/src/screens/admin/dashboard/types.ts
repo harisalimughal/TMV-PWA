@@ -209,6 +209,15 @@ export interface VanRecordItem {
   thumbUrl: string;
 }
 
+export interface VanComplianceItem {
+  vanRegistration: string;
+  roadTaxRenewalDate?: string;
+  motExpiryDate?: string;
+  insuranceExpiryDate?: string;
+  notes?: string;
+  updatedAt?: string;
+}
+
 export interface VanDriverRecordItem {
   id: string;
   driverName: string;
@@ -219,6 +228,7 @@ export interface VanDriverRecordItem {
   latestMileage: VanRecordItem | null;
   latestFuel: VanRecordItem | null;
   latestService: VanRecordItem | null;
+  compliance: VanComplianceItem | null;
   records: VanRecordItem[];
 }
 

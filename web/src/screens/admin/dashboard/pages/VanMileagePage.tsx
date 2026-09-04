@@ -3,8 +3,8 @@ import { useQuery } from "@tanstack/react-query";
 import { Camera, Download, Fuel, RefreshCw, Search, ShieldCheck, Truck, Wrench, X } from "lucide-react";
 import { DateRangePicker } from "../components/DateRangePicker";
 import { ApiErrorState } from "../components/ApiErrorState";
-import { fetchVanDriverRecords } from "../api";
-import { VanDriverRecordItem, VanRecordItem, VanRecordType } from "../types";
+import { fetchVanDriverRecords, saveVanCompliance } from "../api";
+import { VanComplianceItem, VanDriverRecordItem, VanRecordItem, VanRecordType } from "../types";
 import { formatLondonDate, formatLondonDateTime } from "../utils/date";
 
 const TYPE_META: Record<VanRecordType, { label: string; icon: React.ComponentType<{ className?: string }>; className: string }> = {
@@ -47,14 +47,17 @@ function RecordCell({ item, type }: { item: VanRecordItem | null; type: VanRecor
   );
 }
 
-function ComplianceCell() {
+function ComplianceCell({ compliance }: { compliance: VanComplianceItem | null }) {
+  const hasAny = Boolean(compliance?.roadTaxRenewalDate || compliance?.motExpiryDate || compliance?.insuranceExpiryDate);
   return (
     <div className="min-w-[150px]">
       <div className="inline-flex items-center gap-1.5 rounded-control border border-admin-status-amber/20 bg-admin-status-amber-bg px-2 py-1 text-[11px] font-semibold text-admin-status-amber">
         <ShieldCheck className="w-3.5 h-3.5" /> Compliance
       </div>
-      <div className="mt-2 text-[13px] font-semibold text-admin-ink">Not recorded</div>
-      <div className="mt-0.5 text-[11px] text-admin-muted">Tax, MOT, insurance</div>
+      <div className="mt-2 text-[13px] font-semibold text-admin-ink">{hasAny ? "Recorded" : "Not recorded"}</div>
+      <div className="mt-0.5 text-[11px] text-admin-muted">
+        MOT {compliance?.motExpiryDate || "-"} · Tax {compliance?.roadTaxRenewalDate || "-"}
+      </div>
     </div>
   );
 }
@@ -158,7 +161,7 @@ export function VanMileagePage() {
                     <td className="px-4"><RecordCell item={item.latestFuel} type="FUEL" /></td>
                     <td className="px-4"><RecordCell item={item.latestService} type="SERVICE" /></td>
                     <td className="px-4">
-                      <ComplianceCell />
+                      <ComplianceCell compliance={item.compliance} />
                     </td>
                   </tr>
                 ))}
@@ -181,12 +184,21 @@ export function VanMileagePage() {
         </div>
       )}
 
-      {selected && <VanDriverModal item={selected} onClose={() => setSelected(null)} />}
+      {selected && (
+        <VanDriverModal
+          item={selected}
+          onClose={() => setSelected(null)}
+          onSaved={updated => {
+            setSelected(current => current ? { ...current, compliance: updated } : current);
+            void refetch();
+          }}
+        />
+      )}
     </div>
   );
 }
 
-function VanDriverModal({ item, onClose }: { item: VanDriverRecordItem; onClose: () => void }) {
+function VanDriverModal({ item, onClose, onSaved }: { item: VanDriverRecordItem; onClose: () => void; onSaved: (compliance: VanComplianceItem) => void }) {
   return (
     <div className="fixed inset-0 z-[100] overflow-hidden bg-admin-ink/70 backdrop-blur-sm flex items-center justify-center p-3 sm:p-6">
       <div className="absolute inset-0 cursor-pointer" onClick={onClose} />
@@ -209,7 +221,7 @@ function VanDriverModal({ item, onClose }: { item: VanDriverRecordItem; onClose:
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <RecordPreview title="Fuel" item={item.latestFuel} type="FUEL" />
             <RecordPreview title="Service" item={item.latestService} type="SERVICE" />
-            <CompliancePreview />
+            <CompliancePreview item={item} onSaved={onSaved} />
           </div>
 
           <div className="bg-white rounded-module border border-admin-line overflow-hidden">
@@ -256,26 +268,76 @@ function RecordPreview({ title, item, type }: { title: string; item: VanRecordIt
   );
 }
 
-function CompliancePreview() {
+function CompliancePreview({ item, onSaved }: { item: VanDriverRecordItem; onSaved: (compliance: VanComplianceItem) => void }) {
+  const [roadTaxRenewalDate, setRoadTaxRenewalDate] = useState(item.compliance?.roadTaxRenewalDate || "");
+  const [motExpiryDate, setMotExpiryDate] = useState(item.compliance?.motExpiryDate || "");
+  const [insuranceExpiryDate, setInsuranceExpiryDate] = useState(item.compliance?.insuranceExpiryDate || "");
+  const [notes, setNotes] = useState(item.compliance?.notes || "");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  async function handleSave() {
+    if (!item.vanRegistration || saving) return;
+    setSaving(true);
+    setError("");
+    try {
+      const compliance = await saveVanCompliance(item.vanRegistration, {
+        roadTaxRenewalDate,
+        motExpiryDate,
+        insuranceExpiryDate,
+        notes
+      });
+      onSaved(compliance);
+    } catch (err: any) {
+      setError(err?.message || "Failed to save compliance.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
   return (
     <div className="bg-white rounded-module border border-admin-line p-4">
       <div className="inline-flex items-center gap-1.5 rounded-control border border-admin-status-amber/20 bg-admin-status-amber-bg px-2.5 py-1 text-[12px] font-semibold text-admin-status-amber">
         <ShieldCheck className="w-3.5 h-3.5" /> Compliance
       </div>
       <div className="mt-4 space-y-3">
-        <ComplianceDetail label="Road tax renewal" value="Not recorded" />
-        <ComplianceDetail label="MOT expiry" value="Not recorded" />
-        <ComplianceDetail label="Insurance" value="Not recorded" />
+        <ComplianceInput label="Road tax renewal" value={roadTaxRenewalDate} onChange={setRoadTaxRenewalDate} />
+        <ComplianceInput label="MOT expiry" value={motExpiryDate} onChange={setMotExpiryDate} />
+        <ComplianceInput label="Insurance expiry" value={insuranceExpiryDate} onChange={setInsuranceExpiryDate} />
+        <label className="block">
+          <span className="text-[10px] font-bold uppercase tracking-wider text-admin-muted">Notes</span>
+          <textarea
+            value={notes}
+            onChange={event => setNotes(event.target.value)}
+            rows={3}
+            className="mt-1 w-full rounded-card border border-admin-line bg-admin-surface px-3 py-2 text-[13px] font-medium text-admin-ink outline-none focus:border-admin-brand focus:bg-white"
+            placeholder="Optional"
+          />
+        </label>
+        {error && <div className="text-[12px] font-semibold text-admin-status-red">{error}</div>}
+        <button
+          type="button"
+          disabled={!item.vanRegistration || saving}
+          onClick={() => void handleSave()}
+          className="h-9 w-full rounded-card bg-admin-brand px-3 text-[13px] font-bold text-white transition hover:bg-admin-brand/90 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {saving ? "Saving..." : "Save compliance"}
+        </button>
       </div>
     </div>
   );
 }
 
-function ComplianceDetail({ label, value }: { label: string; value: string }) {
+function ComplianceInput({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) {
   return (
-    <div className="rounded-card border border-admin-line bg-admin-surface px-3 py-2">
-      <div className="text-[10px] font-bold uppercase tracking-wider text-admin-muted">{label}</div>
-      <div className="mt-1 text-[13px] font-semibold text-admin-ink">{value}</div>
-    </div>
+    <label className="block">
+      <span className="text-[10px] font-bold uppercase tracking-wider text-admin-muted">{label}</span>
+      <input
+        type="date"
+        value={value}
+        onChange={event => onChange(event.target.value)}
+        className="mt-1 h-9 w-full rounded-card border border-admin-line bg-admin-surface px-3 text-[13px] font-semibold text-admin-ink outline-none focus:border-admin-brand focus:bg-white"
+      />
+    </label>
   );
 }

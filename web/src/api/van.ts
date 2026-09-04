@@ -19,6 +19,19 @@ export interface VanRecord {
   submittedAt: string;
 }
 
+export interface VanCompliance {
+  vanRegistration: string;
+  roadTaxRenewalDate?: string;
+  motExpiryDate?: string;
+  insuranceExpiryDate?: string;
+  notes?: string;
+  updatedAt?: string;
+}
+
+export function fetchVanCompliance(): Promise<VanCompliance | null> {
+  return request<{ compliance: VanCompliance | null }>("/api/van/compliance").then(data => data.compliance);
+}
+
 export function submitVanMileage(
   mileage: string,
   photo: File,

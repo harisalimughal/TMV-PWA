@@ -1,21 +1,29 @@
 import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { describe, expect, it, vi } from "vitest";
 import { ToastProvider } from "../components/ui/Toast";
 import { VanScreen } from "./VanScreen";
 
 describe("VanScreen", () => {
   it("renders fuel, service and compliance cards for the assigned van", () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
+      status: 200,
+      json: () => Promise.resolve({ compliance: null })
+    }));
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     render(
-      <ToastProvider>
-        <VanScreen
-          driver={{
-            email: "driver@example.com",
-            fullName: "Test Driver",
-            initials: "TD",
-            vanRegistration: "AB12 CDE"
-          }}
-        />
-      </ToastProvider>
+      <QueryClientProvider client={queryClient}>
+        <ToastProvider>
+          <VanScreen
+            driver={{
+              email: "driver@example.com",
+              fullName: "Test Driver",
+              initials: "TD",
+              vanRegistration: "AB12 CDE"
+            }}
+          />
+        </ToastProvider>
+      </QueryClientProvider>
     );
 
     expect(screen.getByRole("heading", { name: "Vehicle Details" })).toBeInTheDocument();

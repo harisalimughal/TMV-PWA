@@ -8,7 +8,7 @@
  * slightly (password not pwaPassword; settings carry `type` not `description`).
  */
 import {
-  DriverSummaryItem, ExceptionItem, FinanceSummaryResponse, NormalizedJob, ScenarioItem, SummaryResponse, VanDriverRecordItem, VanRecordItem
+  DriverSummaryItem, ExceptionItem, FinanceSummaryResponse, NormalizedJob, ScenarioItem, SummaryResponse, VanComplianceItem, VanDriverRecordItem, VanRecordItem
 } from "./types";
 import { SERVER_ERROR_MESSAGE } from "../../../lib/apiErrors";
 
@@ -160,6 +160,20 @@ export async function fetchVanDriverRecords(query: Record<string, any> = {}): Pr
   const res = await apiFetch(`/api/admin/van/drivers?${params.toString()}`);
   if (!res.ok) throw await apiError(res, "Failed to load van driver records");
   return res.json();
+}
+
+export async function saveVanCompliance(
+  vanRegistration: string,
+  payload: Pick<VanComplianceItem, "roadTaxRenewalDate" | "motExpiryDate" | "insuranceExpiryDate" | "notes">
+): Promise<VanComplianceItem> {
+  const res = await apiFetch(`/api/admin/van/compliance/${encodeURIComponent(vanRegistration)}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload)
+  });
+  if (!res.ok) throw await apiError(res, "Failed to save van compliance");
+  const data = await res.json();
+  return data.compliance;
 }
 
 export async function fetchActivity(page = 1, from?: string, to?: string): Promise<{

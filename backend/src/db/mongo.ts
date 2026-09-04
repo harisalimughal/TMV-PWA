@@ -4,6 +4,7 @@ import { log } from "../utils/logger";
 import { Job } from "../jobs/job.types";
 import { EvidenceRecord } from "../jobs/job.types";
 import type { VanRecordDoc } from "./van.repo";
+import type { VanComplianceDoc } from "./van-compliance.repo";
 
 export interface DriverAccountDoc {
   /** Lower-cased. Primary lookup key for login. */
@@ -141,11 +142,16 @@ export async function vanRecordsCollection(): Promise<Collection<VanRecordDoc>> 
   return db.collection<VanRecordDoc>("van_mileage_records");
 }
 
+export async function vanComplianceCollection(): Promise<Collection<VanComplianceDoc>> {
+  const db = await getDb();
+  return db.collection<VanComplianceDoc>("van_compliance");
+}
+
 /** Creates indexes if they don't exist yet. Safe to call every startup -- createIndex
  * is a no-op when the index already matches. */
 export async function ensureIndexes(): Promise<void> {
-  const [accounts, jobs, evidence, activity, settings, pushSubs, vanRecords] = await Promise.all([
-    driverAccounts(), jobsCollection(), evidenceCollection(), activityCollection(), settingsCollection(), pushSubscriptionsCollection(), vanRecordsCollection()
+  const [accounts, jobs, evidence, activity, settings, pushSubs, vanRecords, vanCompliance] = await Promise.all([
+    driverAccounts(), jobsCollection(), evidenceCollection(), activityCollection(), settingsCollection(), pushSubscriptionsCollection(), vanRecordsCollection(), vanComplianceCollection()
   ]);
   await Promise.all([
     accounts.createIndex({ email: 1 }, { unique: true }),
@@ -163,7 +169,8 @@ export async function ensureIndexes(): Promise<void> {
     pushSubs.createIndex({ role: 1 }),
     vanRecords.createIndex({ submittedAt: -1 }),
     vanRecords.createIndex({ driverInitials: 1, submittedAt: -1 }),
-    vanRecords.createIndex({ type: 1, submittedAt: -1 })
+    vanRecords.createIndex({ type: 1, submittedAt: -1 }),
+    vanCompliance.createIndex({ vanRegistration: 1 }, { unique: true })
   ]);
   log.info("mongo indexes verified");
 }

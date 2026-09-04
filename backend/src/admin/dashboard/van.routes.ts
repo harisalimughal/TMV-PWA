@@ -1,5 +1,7 @@
 import { Request, Response, Router } from "express";
 import { listVanRecords, VanRecordType } from "../../db/van.repo";
+import { listVanCompliance, saveVanCompliance, VanComplianceDoc } from "../../db/van-compliance.repo";
+import { listDriverProfiles } from "../../auth/driver-account.service";
 import { toThumbnailUrl } from "../../storage/cloudinary";
 
 type VanRecordApiItem = {
@@ -30,6 +32,7 @@ type VanDriverApiItem = {
   latestMileage: VanRecordApiItem | null;
   latestFuel: VanRecordApiItem | null;
   latestService: VanRecordApiItem | null;
+  compliance: VanComplianceDoc | null;
   records: VanRecordApiItem[];
 };
 
@@ -71,6 +74,21 @@ function vanRecordItem(r: Awaited<ReturnType<typeof listVanRecords>>[number]): V
 export function dashboardVanRoutes(): Router {
   const router = Router();
 
+  router.post("/compliance/:vanRegistration", async (req: Request, res: Response) => {
+    try {
+      const vanRegistration = String(req.params.vanRegistration || "");
+      const doc = await saveVanCompliance(vanRegistration, {
+        roadTaxRenewalDate: String(req.body?.roadTaxRenewalDate || ""),
+        motExpiryDate: String(req.body?.motExpiryDate || ""),
+        insuranceExpiryDate: String(req.body?.insuranceExpiryDate || ""),
+        notes: String(req.body?.notes || "")
+      });
+      res.status(200).json({ compliance: doc });
+    } catch {
+      res.status(500).json({ error: { code: "VAN_COMPLIANCE_SAVE_FAILED", message: "Failed to save van compliance." } });
+    }
+  });
+
   router.get("/drivers", async (req: Request, res: Response) => {
     try {
       const page = Math.max(1, Number(req.query.page) || 1);
@@ -79,7 +97,14 @@ export function dashboardVanRoutes(): Router {
       const to = String(req.query.to || "");
       const q = String(req.query.q || "").trim().toLowerCase();
 
-      let rows = await listVanRecords();
+      const [allRows, drivers, complianceRows] = await Promise.all([
+        listVanRecords(),
+        listDriverProfiles(),
+        listVanCompliance()
+      ]);
+      const complianceByVan = new Map(complianceRows.map(row => [row.vanRegistration.toUpperCase(), row]));
+
+      let rows = allRows;
       if (from) rows = rows.filter(r => r.submittedAt >= from);
       if (to) rows = rows.filter(r => r.submittedAt <= to);
       if (q) {
@@ -90,6 +115,25 @@ export function dashboardVanRoutes(): Router {
       }
 
       const grouped = new Map<string, VanDriverApiItem>();
+
+      for (const driver of drivers) {
+        const key = driver.email || driver.initials || driver.fullName;
+        if (!key) continue;
+        const vanRegistration = driver.vanRegistration || "";
+        grouped.set(key, {
+          id: key,
+          driverName: driver.fullName,
+          driverEmail: driver.email,
+          driverInitials: driver.initials,
+          vanRegistration,
+          latestSubmittedAt: "",
+          latestMileage: null,
+          latestFuel: null,
+          latestService: null,
+          compliance: vanRegistration ? complianceByVan.get(vanRegistration.toUpperCase()) ?? null : null,
+          records: []
+        });
+      }
 
       for (const row of rows) {
         const item = vanRecordItem(row);
@@ -105,6 +149,7 @@ export function dashboardVanRoutes(): Router {
           latestMileage: null,
           latestFuel: null,
           latestService: null,
+          compliance: row.vanRegistration ? complianceByVan.get(row.vanRegistration.toUpperCase()) ?? null : null,
           records: []
         };
         target.latestSubmittedAt = target.latestSubmittedAt > row.submittedAt ? target.latestSubmittedAt : row.submittedAt;
@@ -118,7 +163,10 @@ export function dashboardVanRoutes(): Router {
 
       const allItems = Array.from(grouped.values())
         .map(item => ({ ...item, records: item.records.sort((a, b) => b.submittedAt.localeCompare(a.submittedAt)) }))
-        .sort((a, b) => b.latestSubmittedAt.localeCompare(a.latestSubmittedAt));
+        .sort((a, b) => {
+          if (a.latestSubmittedAt || b.latestSubmittedAt) return b.latestSubmittedAt.localeCompare(a.latestSubmittedAt);
+          return (a.driverName || a.driverEmail).localeCompare(b.driverName || b.driverEmail);
+        });
       const total = allItems.length;
       const totalPages = Math.ceil(total / pageSize);
       const items = allItems.slice((page - 1) * pageSize, page * pageSize);
