@@ -56,6 +56,7 @@ function VanRecordCard({
   hint,
   photoLabel,
   photoHint,
+  allowUpload = false,
   tone,
   online,
   fieldsValid,
@@ -68,6 +69,7 @@ function VanRecordCard({
   hint: string;
   photoLabel: string;
   photoHint: string;
+  allowUpload?: boolean;
   tone: "green" | "blue";
   online: boolean;
   fieldsValid: boolean;
@@ -130,7 +132,7 @@ function VanRecordCard({
           min={1}
           max={1}
           onChange={setPhotos}
-          allowUpload
+          allowUpload={allowUpload}
         />
 
         {error && <Alert tone="danger">{error}</Alert>}
@@ -170,7 +172,7 @@ function FuelCard({ online }: { online: boolean }) {
       title="Add Fuel Entry"
       hint="Record odometer and fuel cost."
       photoLabel="Upload receipt"
-      photoHint="Take a photo or upload the fuel receipt."
+      photoHint="Take a clear photo of the fuel receipt."
       tone="green"
       online={online}
       fieldsValid={odometerValid && costValid}
@@ -240,6 +242,7 @@ function ServiceCard({ online }: { online: boolean }) {
       hint="Record service mileage, date and type."
       photoLabel="Upload invoice/receipt"
       photoHint="Take a photo or upload the service invoice or receipt."
+      allowUpload
       tone="blue"
       online={online}
       fieldsValid={fieldsValid}

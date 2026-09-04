@@ -35,7 +35,7 @@ describe("VanScreen", () => {
     expect(screen.getByText("MOT expiry")).toBeInTheDocument();
 
     expect(screen.getAllByRole("button", { name: /take photo/i })).toHaveLength(2);
-    expect(screen.getAllByRole("button", { name: /upload/i })).toHaveLength(2);
+    expect(screen.getAllByRole("button", { name: /upload/i })).toHaveLength(1);
     expect(screen.getByRole("button", { name: /submit add fuel entry/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /submit record service/i })).toBeInTheDocument();
   });
