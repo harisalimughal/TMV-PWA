@@ -8,7 +8,7 @@
  * slightly (password not pwaPassword; settings carry `type` not `description`).
  */
 import {
-  DriverSummaryItem, ExceptionItem, FinanceSummaryResponse, NormalizedJob, ScenarioItem, SummaryResponse, VanRecordItem
+  DriverSummaryItem, ExceptionItem, FinanceSummaryResponse, NormalizedJob, ScenarioItem, SummaryResponse, VanDriverRecordItem, VanRecordItem
 } from "./types";
 import { SERVER_ERROR_MESSAGE } from "../../../lib/apiErrors";
 
@@ -149,6 +149,16 @@ export async function fetchVanRecords(query: Record<string, any> = {}): Promise<
   }
   const res = await apiFetch(`/api/admin/van/records?${params.toString()}`);
   if (!res.ok) throw await apiError(res, "Failed to load van records");
+  return res.json();
+}
+
+export async function fetchVanDriverRecords(query: Record<string, any> = {}): Promise<{ items: VanDriverRecordItem[]; pagination: PaginationMeta }> {
+  const params = new URLSearchParams();
+  for (const [k, v] of Object.entries(query)) {
+    if (v !== undefined && v !== null && v !== "") params.set(k, String(v));
+  }
+  const res = await apiFetch(`/api/admin/van/drivers?${params.toString()}`);
+  if (!res.ok) throw await apiError(res, "Failed to load van driver records");
   return res.json();
 }
 

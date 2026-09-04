@@ -207,6 +207,19 @@ export interface VanRecordItem {
   thumbUrl: string;
 }
 
+export interface VanDriverRecordItem {
+  id: string;
+  driverName: string;
+  driverEmail: string;
+  driverInitials: string;
+  vanRegistration: string;
+  latestSubmittedAt: string;
+  latestMileage: VanRecordItem | null;
+  latestFuel: VanRecordItem | null;
+  latestService: VanRecordItem | null;
+  records: VanRecordItem[];
+}
+
 export interface ExceptionItem {
   id: string;
   jobId: string;
