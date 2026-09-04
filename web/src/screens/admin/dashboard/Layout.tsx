@@ -41,7 +41,7 @@ const NAV_CONFIG: NavSectionItem[] = [
   { id: "overview", label: "Overview", icon: LayoutDashboard, desc: "Executive KPI telemetry, revenue velocity and operational health" },
   { id: "livefleet", label: "Live Fleet", icon: Navigation, isLive: true, desc: "Real-time GPS vehicle positions and driver telemetry" },
   { id: "jobs", label: "Jobs", icon: Truck, desc: "Operational moves joined across Jobs, Drivers, Workflow and Evidence" },
-  { id: "van", label: "Van", icon: Truck, desc: "Driver van mileage photo records" },
+  { id: "van", label: "Van", icon: Truck, desc: "Driver mileage, fuel and service records" },
   { id: "finished", label: "Finished Jobs", icon: CheckSquare, desc: "Completed moves audit with verified evidence and sign-off records" },
   { type: "header", label: "Scenarios" },
   { id: "checkin", label: "Check In", icon: LogIn, desc: "Storage facility entry logs and client container check-ins" },

@@ -69,6 +69,23 @@ export async function sendJobCompletionEmail(job: Job, template: string): Promis
   await sendPlainTextEmail(job.customerEmail, subject, renderMessageTemplate(template, job));
 }
 
+/** Sent by reminder.service.ts's sweep, ~TMV_JOB_REMINDER_LEAD_MS (default 1 hour)
+ *  before a job's booked start. Driver-facing, so it's a plain internal notice rather
+ *  than the admin-editable customer templates above. */
+export async function sendJobReminderEmail(
+  driverEmail: string, job: Job, leadMinutes: number
+): Promise<void> {
+  if (!driverEmail) return;
+  const subject = `Job starting soon — ${job.customerName || "your next job"}`;
+  const body =
+    `You have a job starting in about ${leadMinutes} minutes.\n\n` +
+    `Customer: ${job.customerName || "Not recorded"}\n` +
+    `Pickup: ${job.pickup || "Not recorded"}\n` +
+    `Drop-off: ${job.dropoff || "Not recorded"}\n` +
+    `Job ID: ${job.jobId}\n`;
+  await sendPlainTextEmail(driverEmail, subject, body);
+}
+
 /** Sent from POST /api/auth/forgot-password. The link is valid for 30 minutes (see
  * auth/reset-token.ts) and is single-use in practice -- completing a reset bumps the
  * account's tokenVersion, which invalidates any other outstanding reset link too. */

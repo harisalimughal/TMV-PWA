@@ -1,22 +1,49 @@
 import React, { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Camera, Download, Gauge, RefreshCw, Search, Truck, X } from "lucide-react";
+import { Camera, Download, Fuel, Gauge, RefreshCw, Search, Truck, Wrench, X } from "lucide-react";
 import { DateRangePicker } from "../components/DateRangePicker";
 import { ApiErrorState } from "../components/ApiErrorState";
-import { fetchVanMileage } from "../api";
-import { VanMileageItem } from "../types";
-import { formatLondonDateTime } from "../utils/date";
+import { fetchVanRecords } from "../api";
+import { VanRecordItem, VanRecordType } from "../types";
+import { formatLondonDate, formatLondonDateTime } from "../utils/date";
+
+const TYPE_TABS: Array<{ value: VanRecordType | "ALL"; label: string }> = [
+  { value: "ALL", label: "All" },
+  { value: "MILEAGE", label: "Mileage" },
+  { value: "FUEL", label: "Fuel" },
+  { value: "SERVICE", label: "Service" }
+];
+
+const TYPE_BADGE: Record<VanRecordType, { label: string; icon: React.ComponentType<{ className?: string }>; className: string }> = {
+  MILEAGE: { label: "Mileage", icon: Gauge, className: "bg-admin-surface border-admin-line text-admin-ink" },
+  FUEL: { label: "Fuel", icon: Fuel, className: "bg-admin-status-amber-bg border-admin-status-amber/20 text-admin-status-amber" },
+  SERVICE: { label: "Service", icon: Wrench, className: "bg-[#EFF6FF] border-[#2563EB]/20 text-[#2563EB]" }
+};
+
+/** The one line of type-specific detail shown in the table/modal for a record. */
+function recordDetail(item: VanRecordItem): string {
+  switch (item.type) {
+    case "FUEL":
+      return item.fuelCost == null ? "-" : `£${item.fuelCost.toFixed(2)}`;
+    case "SERVICE":
+      return [item.serviceType, item.serviceDate ? formatLondonDate(item.serviceDate) : ""].filter(Boolean).join(" · ") || "-";
+    case "MILEAGE":
+    default:
+      return item.mileage == null ? "-" : item.mileage.toLocaleString();
+  }
+}
 
 export function VanMileagePage() {
+  const [type, setType] = useState<VanRecordType | "ALL">("ALL");
   const [page, setPage] = useState(1);
   const [from, setFrom] = useState<string | undefined>();
   const [to, setTo] = useState<string | undefined>();
   const [search, setSearch] = useState("");
-  const [selected, setSelected] = useState<VanMileageItem | null>(null);
+  const [selected, setSelected] = useState<VanRecordItem | null>(null);
 
   const { data, isLoading, isError, error, refetch, isFetching } = useQuery({
-    queryKey: ["van-mileage", page, from, to, search],
-    queryFn: () => fetchVanMileage({ page, from, to, q: search }),
+    queryKey: ["van-records", type, page, from, to, search],
+    queryFn: () => fetchVanRecords({ type: type === "ALL" ? undefined : type, page, from, to, q: search }),
     retry: 1
   });
 
@@ -34,7 +61,9 @@ export function VanMileagePage() {
         </div>
         <button
           onClick={() => {
-            window.location.href = "/api/admin/van/mileage/export.csv";
+            const params = new URLSearchParams();
+            if (type !== "ALL") params.set("type", type);
+            window.location.href = `/api/admin/van/records/export.csv?${params.toString()}`;
           }}
           className="h-9 px-3 rounded-card border border-admin-line bg-white text-[13px] font-medium text-admin-ink hover:bg-admin-surface transition flex items-center gap-2"
         >
@@ -42,12 +71,26 @@ export function VanMileagePage() {
         </button>
       </div>
 
+      <div className="flex items-center gap-1 bg-admin-surface p-1 rounded-card border border-admin-line w-fit">
+        {TYPE_TABS.map(tab => (
+          <button
+            key={tab.value}
+            onClick={() => { setType(tab.value); setPage(1); }}
+            className={`px-3 py-1.5 rounded-control text-[13px] font-medium transition ${
+              type === tab.value ? "bg-white text-admin-brand shadow-sm font-bold" : "text-admin-muted hover:text-admin-ink"
+            }`}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
       <div className="p-2 bg-white rounded-module shadow-sm border border-admin-line flex flex-wrap items-center gap-4">
         <div className="relative flex-1 min-w-[220px]">
           <Search className="w-4 h-4 text-admin-muted absolute left-3 top-2.5" />
           <input
             type="text"
-            placeholder="Search driver, initials, van or mileage..."
+            placeholder="Search driver, initials, van..."
             value={search}
             onChange={e => {
               setSearch(e.target.value);
@@ -77,12 +120,12 @@ export function VanMileagePage() {
             <table className="w-full text-left text-[14px] border-collapse">
               <thead className="bg-white border-b border-admin-line">
                 <tr>
-                  <th className="py-4 px-4 w-12 text-center"><input type="checkbox" className="rounded text-admin-brand" /></th>
                   <th className="py-4 px-2 w-12 text-center font-semibold text-[12px] text-admin-muted uppercase tracking-[0.03em]">#</th>
+                  <th className="py-4 px-4 font-semibold text-[12px] text-admin-muted uppercase tracking-[0.03em]">Type</th>
                   <th className="py-4 px-4 font-semibold text-[12px] text-admin-muted uppercase tracking-[0.03em]">Submitted</th>
                   <th className="py-4 px-4 font-semibold text-[12px] text-admin-muted uppercase tracking-[0.03em]">Driver</th>
                   <th className="py-4 px-4 font-semibold text-[12px] text-admin-muted uppercase tracking-[0.03em]">Van</th>
-                  <th className="py-4 px-4 font-semibold text-[12px] text-admin-muted uppercase tracking-[0.03em]">Mileage</th>
+                  <th className="py-4 px-4 font-semibold text-[12px] text-admin-muted uppercase tracking-[0.03em]">Detail</th>
                   <th className="py-4 px-4 font-semibold text-[12px] text-admin-muted uppercase tracking-[0.03em]">Photo</th>
                 </tr>
               </thead>
@@ -90,39 +133,42 @@ export function VanMileagePage() {
                 {isLoading ? (
                   <tr><td colSpan={7} className="py-16 text-center text-admin-muted">Loading van records...</td></tr>
                 ) : items.length === 0 ? (
-                  <tr><td colSpan={7} className="py-16 text-center text-admin-muted">No van mileage records found.</td></tr>
-                ) : items.map((item, index) => (
-                  <tr key={item.id} onClick={() => setSelected(item)} className="h-[64px] group cursor-pointer hover:bg-[#F9FAFB] transition">
-                    <td className="px-4 text-center"><input type="checkbox" className="rounded text-admin-brand" onClick={e => e.stopPropagation()} /></td>
-                    <td className="px-2 text-center text-[13px] text-admin-muted tabular-nums">{(page - 1) * 25 + index + 1}</td>
-                    <td className="px-4 text-[13px] text-admin-ink font-medium">{formatLondonDateTime(item.submittedAt)}</td>
-                    <td className="px-4">
-                      <div className="flex items-center gap-2.5">
-                        <div className="w-8 h-8 rounded-full bg-admin-brand-soft text-admin-brand border border-admin-brand/20 flex items-center justify-center font-bold text-[11px]">
-                          {item.driverInitials || "UN"}
+                  <tr><td colSpan={7} className="py-16 text-center text-admin-muted">No van records found.</td></tr>
+                ) : items.map((item, index) => {
+                  const badge = TYPE_BADGE[item.type];
+                  const BadgeIcon = badge.icon;
+                  return (
+                    <tr key={item.id} onClick={() => setSelected(item)} className="h-[64px] group cursor-pointer hover:bg-[#F9FAFB] transition">
+                      <td className="px-2 text-center text-[13px] text-admin-muted tabular-nums">{(page - 1) * 25 + index + 1}</td>
+                      <td className="px-4">
+                        <span className={`inline-flex items-center gap-1.5 rounded-control border px-2.5 py-1 text-[12px] font-semibold ${badge.className}`}>
+                          <BadgeIcon className="w-3.5 h-3.5" /> {badge.label}
+                        </span>
+                      </td>
+                      <td className="px-4 text-[13px] text-admin-ink font-medium">{formatLondonDateTime(item.submittedAt)}</td>
+                      <td className="px-4">
+                        <div className="flex items-center gap-2.5">
+                          <div className="w-8 h-8 rounded-full bg-admin-brand-soft text-admin-brand border border-admin-brand/20 flex items-center justify-center font-bold text-[11px]">
+                            {item.driverInitials || "UN"}
+                          </div>
+                          <div>
+                            <div className="text-[13px] font-semibold text-admin-ink">{item.driverName || item.driverEmail}</div>
+                            <div className="text-[11px] text-admin-muted">{item.driverEmail}</div>
+                          </div>
                         </div>
-                        <div>
-                          <div className="text-[13px] font-semibold text-admin-ink">{item.driverName || item.driverEmail}</div>
-                          <div className="text-[11px] text-admin-muted">{item.driverEmail}</div>
-                        </div>
-                      </div>
-                    </td>
-                    <td className="px-4 font-mono text-[13px] text-admin-ink">{item.vanRegistration || "-"}</td>
-                    <td className="px-4">
-                      <span className="inline-flex items-center gap-1.5 rounded-control bg-admin-surface border border-admin-line px-2.5 py-1 text-[12px] font-semibold text-admin-ink">
-                        <Gauge className="w-3.5 h-3.5 text-admin-muted" />
-                        {item.mileage == null ? "-" : item.mileage.toLocaleString()}
-                      </span>
-                    </td>
-                    <td className="px-4">
-                      {item.thumbUrl ? (
-                        <img src={item.thumbUrl} alt="Mileage" className="w-12 h-12 rounded-card object-cover border border-admin-line bg-admin-surface" />
-                      ) : (
-                        <Camera className="w-4 h-4 text-admin-muted opacity-40" />
-                      )}
-                    </td>
-                  </tr>
-                ))}
+                      </td>
+                      <td className="px-4 font-mono text-[13px] text-admin-ink">{item.vanRegistration || "-"}</td>
+                      <td className="px-4 text-[13px] font-semibold text-admin-ink">{recordDetail(item)}</td>
+                      <td className="px-4">
+                        {item.thumbUrl ? (
+                          <img src={item.thumbUrl} alt={badge.label} className="w-12 h-12 rounded-card object-cover border border-admin-line bg-admin-surface" />
+                        ) : (
+                          <Camera className="w-4 h-4 text-admin-muted opacity-40" />
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -142,12 +188,13 @@ export function VanMileagePage() {
         </div>
       )}
 
-      {selected && <VanMileageModal item={selected} onClose={() => setSelected(null)} />}
+      {selected && <VanRecordModal item={selected} onClose={() => setSelected(null)} />}
     </div>
   );
 }
 
-function VanMileageModal({ item, onClose }: { item: VanMileageItem; onClose: () => void }) {
+function VanRecordModal({ item, onClose }: { item: VanRecordItem; onClose: () => void }) {
+  const badge = TYPE_BADGE[item.type];
   return (
     <div className="fixed inset-0 z-[100] overflow-hidden bg-admin-ink/70 backdrop-blur-sm flex items-center justify-center p-3 sm:p-6">
       <div className="absolute inset-0 cursor-pointer" onClick={onClose} />
@@ -170,12 +217,15 @@ function VanMileageModal({ item, onClose }: { item: VanMileageItem; onClose: () 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <Detail label="Driver email" value={item.driverEmail} />
             <Detail label="Van registration" value={item.vanRegistration || "-"} />
-            <Detail label="Mileage" value={item.mileage == null ? "-" : item.mileage.toLocaleString()} />
+            {item.type === "MILEAGE" && <Detail label="Mileage" value={item.mileage == null ? "-" : item.mileage.toLocaleString()} />}
+            {item.type === "FUEL" && <Detail label="Fuel cost" value={item.fuelCost == null ? "-" : `£${item.fuelCost.toFixed(2)}`} />}
+            {item.type === "SERVICE" && <Detail label="Service type" value={item.serviceType || "-"} />}
+            {item.type === "SERVICE" && <Detail label="Service date" value={item.serviceDate ? formatLondonDate(item.serviceDate) : "-"} />}
           </div>
           <div className="bg-white rounded-module border border-admin-line p-4">
-            <div className="text-[12px] font-bold text-admin-muted uppercase tracking-wider mb-3">Mileage photo</div>
+            <div className="text-[12px] font-bold text-admin-muted uppercase tracking-wider mb-3">{badge.label} photo</div>
             <a href={item.photoUrl} target="_blank" rel="noreferrer" className="block">
-              <img src={item.photoUrl} alt="Van mileage" className="w-full max-h-[65vh] object-contain rounded-card bg-admin-surface border border-admin-line" />
+              <img src={item.photoUrl} alt={badge.label} className="w-full max-h-[65vh] object-contain rounded-card bg-admin-surface border border-admin-line" />
             </a>
           </div>
         </div>

@@ -3,7 +3,7 @@ import { env } from "../config/env";
 import { log } from "../utils/logger";
 import { Job } from "../jobs/job.types";
 import { EvidenceRecord } from "../jobs/job.types";
-import type { VanMileageRecordDoc } from "./van.repo";
+import type { VanRecordDoc } from "./van.repo";
 
 export interface DriverAccountDoc {
   /** Lower-cased. Primary lookup key for login. */
@@ -133,16 +133,19 @@ export async function pushSubscriptionsCollection(): Promise<Collection<PushSubs
   return db.collection<PushSubscriptionDoc>("push_subscriptions");
 }
 
-export async function vanMileageCollection(): Promise<Collection<VanMileageRecordDoc>> {
+/** Collection name kept as-is (predates the Fuel/Service record types) -- renaming a
+ *  live Mongo collection isn't worth the migration risk for what's just an internal
+ *  identifier. */
+export async function vanRecordsCollection(): Promise<Collection<VanRecordDoc>> {
   const db = await getDb();
-  return db.collection<VanMileageRecordDoc>("van_mileage_records");
+  return db.collection<VanRecordDoc>("van_mileage_records");
 }
 
 /** Creates indexes if they don't exist yet. Safe to call every startup -- createIndex
  * is a no-op when the index already matches. */
 export async function ensureIndexes(): Promise<void> {
-  const [accounts, jobs, evidence, activity, settings, pushSubs, vanMileage] = await Promise.all([
-    driverAccounts(), jobsCollection(), evidenceCollection(), activityCollection(), settingsCollection(), pushSubscriptionsCollection(), vanMileageCollection()
+  const [accounts, jobs, evidence, activity, settings, pushSubs, vanRecords] = await Promise.all([
+    driverAccounts(), jobsCollection(), evidenceCollection(), activityCollection(), settingsCollection(), pushSubscriptionsCollection(), vanRecordsCollection()
   ]);
   await Promise.all([
     accounts.createIndex({ email: 1 }, { unique: true }),
@@ -158,8 +161,9 @@ export async function ensureIndexes(): Promise<void> {
     pushSubs.createIndex({ endpoint: 1 }, { unique: true }),
     pushSubs.createIndex({ driverInitials: 1 }),
     pushSubs.createIndex({ role: 1 }),
-    vanMileage.createIndex({ submittedAt: -1 }),
-    vanMileage.createIndex({ driverInitials: 1, submittedAt: -1 })
+    vanRecords.createIndex({ submittedAt: -1 }),
+    vanRecords.createIndex({ driverInitials: 1, submittedAt: -1 }),
+    vanRecords.createIndex({ type: 1, submittedAt: -1 })
   ]);
   log.info("mongo indexes verified");
 }

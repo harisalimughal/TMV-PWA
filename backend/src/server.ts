@@ -22,6 +22,7 @@ import { storageRoutes } from "./jobs/storage.routes";
 import { vanRoutes } from "./jobs/van.routes";
 import { pushRoutes } from "./push/push.routes";
 import { syncTodayBookings } from "./jobs/booking.service";
+import { sweepJobReminders } from "./jobs/reminder.service";
 import { dashboardActivityRoutes } from "./admin/dashboard/activity.routes";
 import { dashboardDriversSummaryRoutes } from "./admin/dashboard/drivers-summary.routes";
 import { dashboardExceptionsRoutes } from "./admin/dashboard/exceptions.routes";
@@ -134,6 +135,17 @@ function startBackgroundSync(): void {
   setInterval(run, env.calendarSyncTtlMs);
 }
 
+/** Same fixed-interval pattern as startBackgroundSync above -- checks for jobs due a
+ *  "starting soon" driver reminder (see reminder.service.ts) on every pass. */
+function startReminderSweep(): void {
+  const run = () => {
+    sweepJobReminders()
+      .catch(error => log.warn("job reminder sweep failed", { error: String(error) }));
+  };
+  run();
+  setInterval(run, env.jobReminderSweepIntervalMs);
+}
+
 /**
  * Retries ensureIndexes() forever, rather than main() awaiting it once and letting a
  * Mongo outage at boot take the whole process down.
@@ -167,6 +179,7 @@ function main(): void {
   ensureIndexesWithRetry();
   warmupAuth().catch(error => log.warn("auth warmup failed at startup", { error: String(error) }));
   startBackgroundSync();
+  startReminderSweep();
 
   const shutdown = () => {
     log.info("SIGTERM received; draining");

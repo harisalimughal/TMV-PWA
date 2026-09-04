@@ -66,6 +66,10 @@ export interface Job {
   managerReviewedAt?: string;
   clientNamePostcode: string;
   clientConfirmedBy: string;
+  /** ISO timestamp of the "starting soon" driver email+push reminder (see
+   *  reminder.service.ts), or unset if it hasn't fired yet. Prevents a re-run of the
+   *  sweep from reminding the same driver twice for the same job. */
+  reminderSentAt?: string;
   /** Cloudinary URL of the customer's drawn signature, once captured -- replaces the
    * old Sheets "Signatures" tab. Empty until WAITING_CLIENT_CONFIRMATION is completed. */
   signatureUrl: string;

@@ -189,14 +189,20 @@ export interface FinanceSummaryResponse {
   timeline: Array<{ period: string; base: number; extras: number; overtime: number; total: number; count: number }>;
 }
 
-export interface VanMileageItem {
+export type VanRecordType = "MILEAGE" | "FUEL" | "SERVICE";
+
+export interface VanRecordItem {
   id: string;
+  type: VanRecordType;
   submittedAt: string;
   driverName: string;
   driverEmail: string;
   driverInitials: string;
   vanRegistration: string;
   mileage?: number | null;
+  fuelCost?: number | null;
+  serviceType?: string;
+  serviceDate?: string;
   photoUrl: string;
   thumbUrl: string;
 }

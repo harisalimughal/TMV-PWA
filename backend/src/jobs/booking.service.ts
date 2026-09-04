@@ -5,7 +5,7 @@ import { env } from "../config/env";
 import { listCalendarEvents } from "../google/calendar";
 import { listJobs, upsertJob } from "../db/jobs.repo";
 import { recordException } from "../db/exceptions.repo";
-import { sendPushToAdmins } from "../push/push.service";
+import { sendPushToAdmins, sendPushToDriver } from "../push/push.service";
 import { Job, JobStatus, ParsedCalendarBooking } from "./job.types";
 import { WorkflowState } from "../workflow/workflow.states";
 import { log } from "../utils/logger";
@@ -153,6 +153,9 @@ function toJob(parsed: ParsedCalendarBooking, existing?: Job): Job {
     paymentStatus: existing?.paymentStatus ?? (paidOnline ? "Paid Online" : "Pending"),
     clientNamePostcode: existing?.clientNamePostcode ?? "",
     clientConfirmedBy: existing?.clientConfirmedBy ?? "",
+    // Cleared when the booked start actually moves, so a rescheduled job reminds the
+    // driver again for its real new time instead of staying silent forever.
+    reminderSentAt: existing?.bookedStart === bookedStart ? existing?.reminderSentAt : undefined,
     signatureUrl: existing?.signatureUrl ?? "",
     driveFolderId: "",
     driveFolderUrl: "",
@@ -194,6 +197,10 @@ export async function syncBookingsForDate(date = DateTime.now().setZone(env.time
   const synced: Job[] = [];
   const writes: Job[] = [];
   const seenEventIds = new Set<string>();
+  // Jobs newly assigned to a driver this pass (a brand-new job with a driver already on
+  // the title, or an existing one whose driver initials just changed) -- notified once
+  // the write batch below actually lands, not signalled anywhere before this.
+  const newlyAssigned: Job[] = [];
 
   for (const event of events) {
     if (event.id) seenEventIds.add(event.id);
@@ -214,6 +221,9 @@ export async function syncBookingsForDate(date = DateTime.now().setZone(env.time
     synced.push(job);
 
     if (!isUnchanged(job, existing)) writes.push(job);
+    if (job.driverInitials && job.driverInitials !== existing?.driverInitials) {
+      newlyAssigned.push(job);
+    }
   }
 
   // A booking that was on this date and is no longer returned has been moved or
@@ -241,6 +251,14 @@ export async function syncBookingsForDate(date = DateTime.now().setZone(env.time
   }
 
   await Promise.all(writes.map(upsertJob));
+
+  for (const job of newlyAssigned) {
+    sendPushToDriver(job.driverInitials, {
+      title: "New Job Assigned",
+      body: `New job for ${job.customerName || "a customer"} — pickup at ${job.pickup || "TBC"}.`,
+      url: "/?tab=jobs"
+    }).catch(err => log.warn("failed to send new-job push", { error: String(err), driverInitials: job.driverInitials, job_id: job.jobId }));
+  }
 
   return synced;
 }

@@ -59,6 +59,11 @@ export const env = {
   // Caching / throttling. Safe to lower to 0 to disable.
   calendarSyncTtlMs: numberEnv("TMV_CALENDAR_SYNC_TTL_MS", 120_000),
 
+  // How long before a job's booked start the driver's "starting soon" email + push
+  // reminder fires, and how often the sweep that checks for due reminders runs.
+  jobReminderLeadMs: numberEnv("TMV_JOB_REMINDER_LEAD_MS", 60 * 60_000),
+  jobReminderSweepIntervalMs: numberEnv("TMV_JOB_REMINDER_SWEEP_INTERVAL_MS", 2 * 60_000),
+
   // Hard ceilings so a slow Google call can never hold a driver on a spinner.
   mediaDownloadTimeoutMs: numberEnv("TMV_MEDIA_DOWNLOAD_TIMEOUT_MS", 15_000),
   emailTimeoutMs: numberEnv("TMV_EMAIL_TIMEOUT_MS", 5_000),
