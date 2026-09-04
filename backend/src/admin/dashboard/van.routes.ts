@@ -20,7 +20,7 @@ function parseType(raw: unknown): VanRecordType | undefined {
 export function dashboardVanRoutes(): Router {
   const router = Router();
 
-  router.get("/records/export.csv", async (req, res) => {
+  router.get(["/records/export.csv", "/mileage/export.csv"], async (req, res) => {
     try {
       const type = parseType(req.query.type);
       let rows = await listVanRecords();
@@ -46,7 +46,7 @@ export function dashboardVanRoutes(): Router {
     }
   });
 
-  router.get("/records", async (req, res) => {
+  router.get(["/records", "/mileage"], async (req, res) => {
     try {
       const page = Math.max(1, Number(req.query.page) || 1);
       const pageSize = Math.min(100, Math.max(1, Number(req.query.pageSize) || 25));

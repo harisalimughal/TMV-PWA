@@ -62,6 +62,10 @@ app.use("/api/admin/van", requireAdminAuth, dashboardVanRoutes());
 app.use("/api/admin/activity", requireAdminAuth, dashboardActivityRoutes());
 app.use("/api/admin/notifications", requireAdminAuth, dashboardNotificationsRoutes());
 
+app.use("/api", (_req, res) => {
+  res.status(404).json({ error: { code: "API_ROUTE_NOT_FOUND", message: "API route not found." } });
+});
+
 // Serve the built PWA frontend (web/dist), if present. This whole domain IS the app --
 // unlike TMV-Chat-bot's /ops, there's no separate public marketing site sharing the
 // host, so the SPA shell is served at the root and everything not matched above (i.e.
