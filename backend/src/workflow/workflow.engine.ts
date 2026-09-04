@@ -8,11 +8,11 @@ import { uploadEvidence } from "../jobs/evidence.service";
 import { completeJob, getJobForDriver, getNextJobForDriver, saveJob, startJob } from "../jobs/jobs.service";
 import { WorkflowState, nextAfterPhoto, PHOTO_STATES } from "./workflow.states";
 import {
-  assertState, validateCrewSize, validateCurrency,
+  assertState, validateCrewSize,
   validateExtraCharges, validateMinutes, validatePaymentMethod, ValidationError
 } from "./validation.engine";
 import { log, setContext } from "../utils/logger";
-import { equalPence, formatPounds, fromPounds } from "../utils/money";
+import { formatPounds } from "../utils/money";
 import { sendJobCompletionEmail, sendReviewRequestEmail } from "../google/gmail";
 import { JOB_COMPLETION_EMAIL_TEMPLATE, REVIEW_REQUEST_EMAIL_TEMPLATE } from "../notifications/message";
 import { sendPushToAdmins } from "../push/push.service";
@@ -258,15 +258,15 @@ export async function handleAction(
 
     case "SUBMIT_TOTAL_CHARGES": {
       assertState(job.currentState, WorkflowState.WAITING_TOTAL_CHARGES);
-      const total = validateCurrency(input.total_charges?.[0] ?? "");
+      // The driver only ever sees this figure, never edits it -- it's base price plus
+      // whatever extras/overtime were recorded earlier in this same job, so there's
+      // nothing left to negotiate on the doorstep. total_charges is computed here, not
+      // read from input, so a modified client can't submit a different figure either.
+      const total = await suggestedTotal(job);
       job.totalCharges = total;
-      const suggested = await suggestedTotal(job);
       const from = job.currentState;
       job.currentState = WorkflowState.WAITING_PAYMENT;
-      const mismatch = equalPence(fromPounds(total), fromPounds(suggested))
-        ? formatPounds(total)
-        : `Entered ${formatPounds(total)}; suggested ${formatPounds(suggested)}`;
-      return saveJob(job, driver, action, from, mismatch);
+      return saveJob(job, driver, action, from, formatPounds(total));
     }
 
     case "SUBMIT_PAYMENT": {

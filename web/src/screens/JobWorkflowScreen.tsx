@@ -372,14 +372,12 @@ const formState: {
   extraCharges: string[];
   overtimeMinutes: string;
   overtimeCrew: string;
-  total: string;
   payment: string;
   photos: File[];
 } = {
   extraCharges: [],
   overtimeMinutes: "",
   overtimeCrew: "2",
-  total: "",
   payment: "",
   photos: []
 };
@@ -388,7 +386,6 @@ function resetFormState() {
   formState.extraCharges = [];
   formState.overtimeMinutes = "";
   formState.overtimeCrew = "2";
-  formState.total = "";
   formState.payment = "";
   formState.photos = [];
 }
@@ -449,12 +446,11 @@ function StepBody({
     formState.overtimeMinutes =
       state === "WAITING_OVERTIME" && job.overtimeMinutes ? String(job.overtimeMinutes) : "";
     formState.overtimeCrew = defaultOvertimeCrewSize(job);
-    formState.total = suggestedTotal ? suggestedTotal.toFixed(2) : "";
     formState.payment = "";
     formState.photos = [];
     tick();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [state, job.jobId, suggestedTotal]);
+  }, [state, job.jobId]);
 
   switch (state) {
     case "READY":
@@ -639,35 +635,15 @@ function StepBody({
       return (
         <div className="flex flex-col gap-4">
           <div className="rounded-card border border-brand-line bg-brand-subtle px-4 py-3.5">
-            <p className="text-eyebrow uppercase text-brand-subtle-fg">Suggested total</p>
+            <p className="text-eyebrow uppercase text-brand-subtle-fg">Total to charge</p>
             <p className="mt-0.5 text-display tabular-nums text-brand-subtle-fg">
               £{suggestedTotal.toFixed(2)}
             </p>
             <p className="mt-1 text-helper text-fg-muted">
-              Base price plus the extras and overtime you entered. Change it below if the customer agreed
-              something different.
+              Base price plus the extras and overtime you entered. This isn't editable here — call the
+              office if the customer needs a different amount.
             </p>
           </div>
-          <label className="flex flex-col gap-1.5">
-            <span className="pl-0.5 text-label text-fg-muted">Total charged (£)</span>
-            <div className="relative">
-              <span className="absolute left-4 top-1/2 -translate-y-1/2 text-[18px] font-semibold text-fg-subtle">
-                £
-              </span>
-              <input
-                type="text"
-                inputMode="decimal"
-                value={formState.total}
-                onChange={e => {
-                  formState.total = e.target.value;
-                  tick();
-                }}
-                placeholder="0.00"
-                className="w-full rounded-card border border-line bg-surface py-3 pl-9 pr-4 text-[20px] font-semibold tabular-nums text-fg outline-none transition focus:border-brand focus:ring-2 focus:ring-brand/25"
-                style={{ minHeight: "56px" }}
-              />
-            </div>
-          </label>
         </div>
       );
 
@@ -921,30 +897,24 @@ function StepDock({
         </BottomActionBar>
       );
 
-    case "WAITING_TOTAL_CHARGES": {
-      const parsed = Number(formState.total.replace(/[£,\s]/g, ""));
+    case "WAITING_TOTAL_CHARGES":
+      // Nothing to validate -- the total is server-computed and read-only on this
+      // screen (see StepBody's WAITING_TOTAL_CHARGES case), and the backend now
+      // computes it itself rather than trusting whatever this call sends.
       return (
         <BottomActionBar>
           <Button
             fullWidth
             size="lg"
             loading={busy}
-            blockedReason={
-              offlineReason ??
-              (formState.total.trim() === ""
-                ? "Enter the total charged."
-                : Number.isNaN(parsed) || parsed < 0
-                  ? "That total isn't a valid amount."
-                  : undefined)
-            }
+            blockedReason={offlineReason}
             onBlocked={onBlocked}
-            onClick={() => onAction("SUBMIT_TOTAL_CHARGES", { total_charges: [String(parsed.toFixed(2))] })}
+            onClick={() => onAction("SUBMIT_TOTAL_CHARGES")}
           >
             Continue
           </Button>
         </BottomActionBar>
       );
-    }
 
     case "WAITING_PAYMENT":
       return (

@@ -184,6 +184,16 @@ export function JobDetailDrawer({ job: initialJob, isOpen, onClose, onUpdated }:
     const trimmed = String(value ?? "").trim();
     return trimmed && trimmed.toLowerCase() !== "not recorded" ? trimmed : "-";
   };
+  // Booked duration comes from the Calendar event's own start/end time
+  // (job.bookedMinutes), never from free-text in the event description -- a
+  // "Duration:" line there can say anything and drift from the actual booked slot.
+  const bookedDuration = (() => {
+    const minutes = job.bookedMinutes;
+    if (!minutes) return "-";
+    const hrs = Math.floor(minutes / 60);
+    const mins = minutes % 60;
+    return [hrs ? `${hrs}h` : "", mins ? `${mins}m` : ""].filter(Boolean).join(" ") || "0m";
+  })();
 
   return (
     <div className="fixed inset-0 z-[100] overflow-hidden bg-admin-ink/70 backdrop-blur-sm flex items-center justify-center p-3 sm:p-6">
@@ -365,8 +375,11 @@ export function JobDetailDrawer({ job: initialJob, isOpen, onClose, onUpdated }:
               ) : (
                  <span className="font-medium text-admin-ink block">{job.pickup}</span>
               )}
+              {!isEditing && job.floorFrom && (
+                <span className="mt-1.5 block text-[12px] font-medium text-admin-muted">Floor: {job.floorFrom}</span>
+              )}
             </div>
-            
+
             <div className="bg-white rounded-module border border-admin-line border-l-4 border-l-[#2563EB] shadow-[0_2px_10px_rgb(0,0,0,0.02)] p-4">
               <span className="text-[10px] font-bold text-[#2563EB] uppercase tracking-wider block mb-1">Dropoff</span>
               {isEditing ? (
@@ -375,6 +388,9 @@ export function JobDetailDrawer({ job: initialJob, isOpen, onClose, onUpdated }:
                  <div className="flex items-center gap-1.5 text-admin-muted/70 text-[13px]"><AlertTriangle className="w-3.5 h-3.5" /> Address not properly recorded</div>
               ) : (
                  <span className="font-medium text-admin-ink block">{job.dropoff}</span>
+              )}
+              {!isEditing && job.floorTo && (
+                <span className="mt-1.5 block text-[12px] font-medium text-admin-muted">Floor: {job.floorTo}</span>
               )}
             </div>
           </div>
@@ -390,7 +406,7 @@ export function JobDetailDrawer({ job: initialJob, isOpen, onClose, onUpdated }:
               </div>
               <div>
                 <span className="block text-[10px] font-bold uppercase tracking-wider text-admin-muted">Duration</span>
-                <span className="mt-1 block text-[14px] font-semibold text-admin-ink break-words">{valueOrDash(bookingDetails.duration)}</span>
+                <span className="mt-1 block text-[14px] font-semibold text-admin-ink break-words">{bookedDuration}</span>
               </div>
               <div>
                 <span className="block text-[10px] font-bold uppercase tracking-wider text-admin-muted">Notes</span>

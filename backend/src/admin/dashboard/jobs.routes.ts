@@ -61,6 +61,17 @@ export function dashboardJobsRoutes(): Router {
         error: { code: "VALIDATION_FAILED", message: "Customer name, pickup, drop-off, start and finish time are all required." }
       });
     }
+    // The Y/N tag this writes into the Calendar title is the same one
+    // parseCalendarEvent() reads to decide whether a booking is confirmed --
+    // booking.service.ts now skips syncing anything tagged N, so a job created here
+    // with the box unchecked would round-trip to nothing and never appear anywhere.
+    // A job added by hand through this form is real, contracted work either way, so
+    // require the box rather than silently creating a job that can never sync.
+    if (!paidOnline) {
+      return res.status(400).json({
+        error: { code: "VALIDATION_FAILED", message: "Only confirmed bookings can be added -- check \"Paid online\" before saving." }
+      });
+    }
     if (!Number.isInteger(crewSize) || crewSize <= 0) {
       return res.status(400).json({ error: { code: "VALIDATION_FAILED", message: "Crew size must be a whole number greater than 0." } });
     }
@@ -427,7 +438,7 @@ async function mirrorNewJob(calendarEventId: string, fields: NewJobFields): Prom
     jobId, calendarEventId,
     driverInitials: fields.driverInitials, customerName: fields.customerName,
     customerEmail: fields.customerEmail, customerPhone: fields.customerPhone,
-    pickup: fields.pickup, dropoff: fields.dropoff, crewSize: fields.crewSize,
+    pickup: fields.pickup, dropoff: fields.dropoff, floorFrom: "", floorTo: "", crewSize: fields.crewSize,
     basePrice: fields.price, paidOnline: fields.paidOnline,
     bookedStart: fields.bookedStart, bookedFinish: fields.bookedFinish,
     actualStart: "", actualFinish: "", bookedMinutes, actualMinutes: 0, differenceMinutes: 0,

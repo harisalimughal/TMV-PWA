@@ -68,7 +68,6 @@ function field(description: string, labels: string[], multiline = false): string
 function parseBookingDetails(description: string): NormalizedJob["bookingDetails"] {
   return {
     vanSize: field(description, ["Van size"]),
-    duration: field(description, ["Duration", "Duration of van hire"]),
     notes: field(description, ["Notes", "Extra request"], true),
     inventory: field(description, ["Inventory item"], true)
   };
@@ -197,6 +196,8 @@ export async function normalizeMongoDataset(dataset: MongoDataset): Promise<Norm
       customerPhone: job.customerPhone || undefined,
       pickup: job.pickup || "Not recorded",
       dropoff: job.dropoff || "Not recorded",
+      floorFrom: job.floorFrom || undefined,
+      floorTo: job.floorTo || undefined,
       crewSize: job.crewSize || 1,
       driverInitials, driverName, driverEmail,
       status, currentState, workflowCompletionPct,

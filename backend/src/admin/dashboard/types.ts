@@ -47,7 +47,6 @@ export interface JobException {
 
 export interface BookingDetails {
   vanSize?: string;
-  duration?: string;
   notes?: string;
   inventory?: string;
 }
@@ -71,6 +70,8 @@ export interface NormalizedJob {
   customerPhone?: string;
   pickup: string;
   dropoff: string;
+  floorFrom?: string;
+  floorTo?: string;
   crewSize: number;
 
   driverInitials: string;

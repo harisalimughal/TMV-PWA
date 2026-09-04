@@ -42,6 +42,8 @@ export interface Job {
   customerPhone: string;
   pickup: string;
   dropoff: string;
+  floorFrom: string;
+  floorTo: string;
   crewSize: number;
   basePrice: number;
   paidOnline: boolean;
@@ -89,6 +91,8 @@ export interface ParsedCalendarBooking {
   customerPhone: string;
   pickup: string;
   dropoff: string;
+  floorFrom: string;
+  floorTo: string;
   crewSize: number;
   price: number;
   paidOnline: boolean;

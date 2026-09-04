@@ -36,7 +36,10 @@ export function AddJobModal({ isOpen, onClose }: Props) {
     dropoff: "",
     crewSize: 2,
     price: "",
-    paidOnline: false,
+    // Defaults on: this flag now also marks the booking as confirmed (the backend
+    // won't sync/save an unconfirmed job at all), and a job typed in here by an admin
+    // is real, contracted work either way.
+    paidOnline: true,
     start: "",
     finish: "",
     driverId: "" // "" means unassigned -- holds a real driver's initials
@@ -281,6 +284,11 @@ export function AddJobModal({ isOpen, onClose }: Props) {
               />
               <span className="text-[13px] font-medium text-admin-ink">Paid online</span>
             </label>
+            {!form.paidOnline && (
+              <p className="text-[11px] text-admin-status-red mt-1.5">
+                Unconfirmed jobs aren't tracked -- this must stay checked to save.
+              </p>
+            )}
           </section>
 
           {/* 4. SCHEDULE */}

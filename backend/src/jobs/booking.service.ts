@@ -61,11 +61,21 @@ export function parseCalendarEvent(event: calendar_v3.Schema$Event): ParsedCalen
   const bookedFinish = event.end?.dateTime || event.end?.date || "";
   if (!bookedStart || !bookedFinish) return null;
 
+  // Title carries a "/Y-XX" or "/N-XX" confirmation tag (Y = confirmed, N = tentative
+  // -- see parseTitle). An unconfirmed (N) booking, or one with no tag at all, is not
+  // synced into a Job: it isn't real work yet and shouldn't appear on a driver's list
+  // or the admin dashboard. Once ops flips the tag to Y in Calendar, the next sync
+  // pass (background interval, or a driver/admin request triggering syncIfStale)
+  // parses this same event again and it lands normally -- nothing else has to happen.
+  if (!parsedTitle.paidOnline) return null;
+
   const customerName = field(description, ["Client name", "Customer", "Name"]);
   const customerEmail = field(description, ["Email", "Email address", "Client email"]);
   const customerPhone = field(description, ["Phone", "Phone number", "Telephone", "Mobile"]);
   const pickup = field(description, ["Pickup", "Pick up address", "Pickup address", "Move From", "From"]);
   const dropoff = field(description, ["Drop-off", "Dropoff", "Drop off", "Drop-off address", "Drop off address", "Delivery address", "Move To", "To"]);
+  const floorFrom = field(description, ["Floor from", "From floor", "Pickup floor"]);
+  const floorTo = field(description, ["Floor to", "To floor", "Dropoff floor", "Drop off floor", "Delivery floor"]);
 
   return {
     calendarEventId: event.id,
@@ -75,6 +85,8 @@ export function parseCalendarEvent(event: calendar_v3.Schema$Event): ParsedCalen
     customerPhone,
     pickup,
     dropoff,
+    floorFrom,
+    floorTo,
     crewSize: parsedTitle.crewSize,
     price: parsedTitle.price,
     paidOnline: parsedTitle.paidOnline,
@@ -120,6 +132,8 @@ function toJob(parsed: ParsedCalendarBooking, existing?: Job): Job {
     customerPhone: parsed.customerPhone,
     pickup: parsed.pickup,
     dropoff: parsed.dropoff,
+    floorFrom: parsed.floorFrom,
+    floorTo: parsed.floorTo,
     crewSize,
     basePrice,
     paidOnline,
@@ -160,6 +174,7 @@ function isUnchanged(next: Job, existing?: Job): boolean {
   if (!existing) return false;
   const keys: Array<keyof Job> = [
     "driverInitials", "customerName", "customerEmail", "customerPhone", "pickup", "dropoff",
+    "floorFrom", "floorTo",
     "crewSize", "basePrice", "paidOnline", "bookedStart", "bookedFinish", "bookedMinutes", "status",
     "rawTitle", "rawDescription"
   ];
