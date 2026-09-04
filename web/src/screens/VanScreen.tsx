@@ -56,6 +56,7 @@ function VanRecordCard({
   hint,
   photoLabel,
   photoHint,
+  submitLabel,
   allowUpload = false,
   tone,
   online,
@@ -69,6 +70,7 @@ function VanRecordCard({
   hint: string;
   photoLabel: string;
   photoHint: string;
+  submitLabel: string;
   allowUpload?: boolean;
   tone: "green" | "blue";
   online: boolean;
@@ -144,7 +146,7 @@ function VanRecordCard({
           onClick={() => void handleSubmit()}
           iconLeft={!online ? <CloudOff /> : <Camera />}
         >
-          {submitting ? busyLabel : `Submit ${title.toLowerCase()}`}
+          {submitting ? busyLabel : submitLabel}
         </Button>
       </div>
     </section>
@@ -173,6 +175,7 @@ function FuelCard({ online }: { online: boolean }) {
       hint="Record odometer and fuel cost."
       photoLabel="Upload receipt"
       photoHint="Take a clear photo of the fuel receipt."
+      submitLabel="Submit fuel entry"
       tone="green"
       online={online}
       fieldsValid={odometerValid && costValid}
@@ -242,6 +245,7 @@ function ServiceCard({ online }: { online: boolean }) {
       hint="Record service mileage, date and type."
       photoLabel="Upload invoice/receipt"
       photoHint="Take a photo or upload the service invoice or receipt."
+      submitLabel="Submit service record"
       allowUpload
       tone="blue"
       online={online}
