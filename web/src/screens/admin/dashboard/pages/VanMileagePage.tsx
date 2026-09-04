@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Camera, Download, Fuel, Gauge, RefreshCw, Search, Truck, Wrench, X } from "lucide-react";
+import { Camera, Download, Fuel, RefreshCw, Search, ShieldCheck, Truck, Wrench, X } from "lucide-react";
 import { DateRangePicker } from "../components/DateRangePicker";
 import { ApiErrorState } from "../components/ApiErrorState";
 import { fetchVanDriverRecords } from "../api";
@@ -8,7 +8,7 @@ import { VanDriverRecordItem, VanRecordItem, VanRecordType } from "../types";
 import { formatLondonDate, formatLondonDateTime } from "../utils/date";
 
 const TYPE_META: Record<VanRecordType, { label: string; icon: React.ComponentType<{ className?: string }>; className: string }> = {
-  MILEAGE: { label: "Mileage", icon: Gauge, className: "bg-admin-surface border-admin-line text-admin-ink" },
+  MILEAGE: { label: "Mileage", icon: Fuel, className: "bg-admin-surface border-admin-line text-admin-ink" },
   FUEL: { label: "Fuel", icon: Fuel, className: "bg-admin-status-amber-bg border-admin-status-amber/20 text-admin-status-amber" },
   SERVICE: { label: "Service", icon: Wrench, className: "bg-[#EFF6FF] border-[#2563EB]/20 text-[#2563EB]" }
 };
@@ -43,6 +43,18 @@ function RecordCell({ item, type }: { item: VanRecordItem | null; type: VanRecor
       </div>
       <div className="mt-2 text-[13px] font-semibold text-admin-ink">{recordDetail(item, type)}</div>
       <div className="mt-0.5 text-[11px] text-admin-muted">{item ? formatLondonDateTime(item.submittedAt) : "Not uploaded"}</div>
+    </div>
+  );
+}
+
+function ComplianceCell() {
+  return (
+    <div className="min-w-[150px]">
+      <div className="inline-flex items-center gap-1.5 rounded-control border border-admin-status-amber/20 bg-admin-status-amber-bg px-2 py-1 text-[11px] font-semibold text-admin-status-amber">
+        <ShieldCheck className="w-3.5 h-3.5" /> Compliance
+      </div>
+      <div className="mt-2 text-[13px] font-semibold text-admin-ink">Not recorded</div>
+      <div className="mt-0.5 text-[11px] text-admin-muted">Tax, MOT, insurance</div>
     </div>
   );
 }
@@ -85,7 +97,7 @@ export function VanMileagePage() {
           <Search className="w-4 h-4 text-admin-muted absolute left-3 top-2.5" />
           <input
             type="text"
-            placeholder="Search driver, initials, van, mileage, fuel or service..."
+            placeholder="Search driver, initials, van, fuel or service..."
             value={search}
             onChange={e => {
               setSearch(e.target.value);
@@ -118,17 +130,16 @@ export function VanMileagePage() {
                   <th className="py-4 px-2 w-12 text-center font-semibold text-[12px] text-admin-muted uppercase tracking-[0.03em]">#</th>
                   <th className="py-4 px-4 font-semibold text-[12px] text-admin-muted uppercase tracking-[0.03em]">Driver</th>
                   <th className="py-4 px-4 font-semibold text-[12px] text-admin-muted uppercase tracking-[0.03em]">Van</th>
-                  <th className="py-4 px-4 font-semibold text-[12px] text-admin-muted uppercase tracking-[0.03em]">Mileage</th>
                   <th className="py-4 px-4 font-semibold text-[12px] text-admin-muted uppercase tracking-[0.03em]">Fuel</th>
                   <th className="py-4 px-4 font-semibold text-[12px] text-admin-muted uppercase tracking-[0.03em]">Service</th>
-                  <th className="py-4 px-4 font-semibold text-[12px] text-admin-muted uppercase tracking-[0.03em]">Photos</th>
+                  <th className="py-4 px-4 font-semibold text-[12px] text-admin-muted uppercase tracking-[0.03em]">Compliance</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-admin-line">
                 {isLoading ? (
-                  <tr><td colSpan={7} className="py-16 text-center text-admin-muted">Loading van records...</td></tr>
+                  <tr><td colSpan={6} className="py-16 text-center text-admin-muted">Loading van records...</td></tr>
                 ) : items.length === 0 ? (
-                  <tr><td colSpan={7} className="py-16 text-center text-admin-muted">No van records found.</td></tr>
+                  <tr><td colSpan={6} className="py-16 text-center text-admin-muted">No van records found.</td></tr>
                 ) : items.map((item, index) => (
                   <tr key={item.id} onClick={() => setSelected(item)} className="h-[84px] group cursor-pointer hover:bg-[#F9FAFB] transition">
                     <td className="px-2 text-center text-[13px] text-admin-muted tabular-nums">{(page - 1) * 25 + index + 1}</td>
@@ -144,17 +155,10 @@ export function VanMileagePage() {
                       </div>
                     </td>
                     <td className="px-4 font-mono text-[13px] text-admin-ink">{item.vanRegistration || "-"}</td>
-                    <td className="px-4"><RecordCell item={item.latestMileage} type="MILEAGE" /></td>
                     <td className="px-4"><RecordCell item={item.latestFuel} type="FUEL" /></td>
                     <td className="px-4"><RecordCell item={item.latestService} type="SERVICE" /></td>
                     <td className="px-4">
-                      <div className="flex items-center gap-1.5">
-                        {item.records.slice(0, 3).map(record => (
-                          <img key={record.id} src={record.thumbUrl || record.photoUrl} alt={TYPE_META[record.type].label} className="w-10 h-10 rounded-card object-cover border border-admin-line bg-admin-surface" />
-                        ))}
-                        {item.records.length === 0 && <Camera className="w-4 h-4 text-admin-muted opacity-40" />}
-                        {item.records.length > 3 && <span className="text-[12px] font-semibold text-admin-muted">+{item.records.length - 3}</span>}
-                      </div>
+                      <ComplianceCell />
                     </td>
                   </tr>
                 ))}
@@ -203,9 +207,9 @@ function VanDriverModal({ item, onClose }: { item: VanDriverRecordItem; onClose:
         </div>
         <div className="p-6 overflow-y-auto space-y-5">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <RecordPreview title="Mileage" item={item.latestMileage} type="MILEAGE" />
             <RecordPreview title="Fuel" item={item.latestFuel} type="FUEL" />
             <RecordPreview title="Service" item={item.latestService} type="SERVICE" />
+            <CompliancePreview />
           </div>
 
           <div className="bg-white rounded-module border border-admin-line overflow-hidden">
@@ -248,6 +252,30 @@ function RecordPreview({ title, item, type }: { title: string; item: VanRecordIt
           <Camera className="w-5 h-5" />
         </div>
       )}
+    </div>
+  );
+}
+
+function CompliancePreview() {
+  return (
+    <div className="bg-white rounded-module border border-admin-line p-4">
+      <div className="inline-flex items-center gap-1.5 rounded-control border border-admin-status-amber/20 bg-admin-status-amber-bg px-2.5 py-1 text-[12px] font-semibold text-admin-status-amber">
+        <ShieldCheck className="w-3.5 h-3.5" /> Compliance
+      </div>
+      <div className="mt-4 space-y-3">
+        <ComplianceDetail label="Road tax renewal" value="Not recorded" />
+        <ComplianceDetail label="MOT expiry" value="Not recorded" />
+        <ComplianceDetail label="Insurance" value="Not recorded" />
+      </div>
+    </div>
+  );
+}
+
+function ComplianceDetail({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-card border border-admin-line bg-admin-surface px-3 py-2">
+      <div className="text-[10px] font-bold uppercase tracking-wider text-admin-muted">{label}</div>
+      <div className="mt-1 text-[13px] font-semibold text-admin-ink">{value}</div>
     </div>
   );
 }
