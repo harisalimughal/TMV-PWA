@@ -1,20 +1,23 @@
 import React, { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Calendar, Camera, CloudOff, FileText, Fuel, ShieldCheck, Truck, Wrench } from "lucide-react";
+import { Camera, CloudOff, Fuel, ShieldCheck, Truck, Wrench } from "lucide-react";
 import type { DriverProfile } from "../api/auth";
-import { fetchVanCompliance, submitVanFuel, submitVanService } from "../api/van";
+import { fetchVanCompliance, submitVanFuel, submitVanService, type VanCompliance } from "../api/van";
 import { AppShell } from "../app/AppShell";
 import { OfflineBanner } from "../app/OfflineBanner";
 import { PhotoPicker } from "../components/PhotoPicker";
 import { useToast } from "../components/ui/Toast";
 import { useOnline } from "../lib/net";
-import { Alert, Button, Field, Input, Select } from "../ui";
+import { Alert, Button, Field, Input, Select, cx } from "../ui";
 
 interface VanScreenProps {
   driver: DriverProfile;
 }
 
 const SERVICE_TYPES = ["Full", "Interim", "MOT"];
+const COMPLIANCE_ALERT_DAYS = 30;
+const COMPLIANCE_RING_ORANGE = "#ff8a00";
+const DAY_MS = 24 * 60 * 60 * 1000;
 const todayInputValue = () => new Date().toISOString().slice(0, 10);
 
 export function VanScreen({ driver }: VanScreenProps) {
@@ -317,6 +320,9 @@ function ComplianceCard({ driver }: { driver: DriverProfile }) {
     retry: 1,
     enabled: Boolean(driver.vanRegistration)
   });
+  const items = complianceItems(compliance);
+  const urgentItems = items.filter(item => item.daysRemaining !== null && item.daysRemaining <= COMPLIANCE_ALERT_DAYS);
+  const firstUrgent = urgentItems[0];
 
   return (
     <section className="overflow-hidden rounded-card border border-line bg-surface shadow-xs">
@@ -329,24 +335,161 @@ function ComplianceCard({ driver }: { driver: DriverProfile }) {
           <p className="text-helper opacity-80">{driver.vanRegistration || "Current van"}</p>
         </div>
       </div>
-      <div className="grid gap-3 p-4">
-        <ComplianceRow icon={<Calendar className="size-4" />} label="Road tax renewal" value={compliance?.roadTaxRenewalDate || "Not recorded"} />
-        <ComplianceRow icon={<Calendar className="size-4" />} label="MOT expiry" value={compliance?.motExpiryDate || "Not recorded"} />
-        <ComplianceRow icon={<FileText className="size-4" />} label="Insurance" value={compliance?.insuranceExpiryDate || "Not recorded"} />
-        {compliance?.notes && <ComplianceRow icon={<FileText className="size-4" />} label="Notes" value={compliance.notes} />}
+      <div className="flex flex-col gap-4 p-4">
+        {firstUrgent && (
+          <Alert
+            tone={firstUrgent.daysRemaining !== null && firstUrgent.daysRemaining < 0 ? "danger" : "warning"}
+            title={`${driver.vanRegistration || "Current van"} ${firstUrgent.label} ${firstUrgent.alertLabel}`}
+          >
+            Renew soon. Alerts show when 30 days or less remain.
+          </Alert>
+        )}
+
+        <div className="grid gap-3 sm:grid-cols-3">
+          {items.map(item => (
+            <ComplianceStatus key={item.key} item={item} />
+          ))}
+        </div>
+
+        {compliance?.notes && (
+          <div className="rounded-card border border-line bg-surface-sunken px-3 py-3">
+            <p className="text-label font-semibold text-fg">Notes</p>
+            <p className="mt-1 text-body text-fg-muted">{compliance.notes}</p>
+          </div>
+        )}
       </div>
     </section>
   );
 }
 
-function ComplianceRow({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {
+type ComplianceStatusItem = {
+  key: keyof Pick<VanCompliance, "roadTaxRenewalDate" | "motExpiryDate" | "insuranceExpiryDate">;
+  label: string;
+  shortLabel: string;
+  rawDate?: string;
+  formattedDate: string;
+  daysRemaining: number | null;
+  centerLabel: string;
+  alertLabel: string;
+  tone: "ok" | "warning" | "danger" | "empty";
+  ringPercent: number;
+};
+
+function complianceItems(compliance?: VanCompliance | null): ComplianceStatusItem[] {
+  return [
+    buildComplianceItem("roadTaxRenewalDate", "Next road tax renewal", "Road tax", compliance?.roadTaxRenewalDate),
+    buildComplianceItem("motExpiryDate", "Next MOT date", "MOT", compliance?.motExpiryDate),
+    buildComplianceItem("insuranceExpiryDate", "Insurance renewal", "Insurance", compliance?.insuranceExpiryDate)
+  ];
+}
+
+function buildComplianceItem(
+  key: ComplianceStatusItem["key"],
+  label: string,
+  shortLabel: string,
+  rawDate?: string
+): ComplianceStatusItem {
+  const daysRemaining = daysUntil(rawDate);
+  const hasDate = daysRemaining !== null;
+  const expired = hasDate && daysRemaining < 0;
+  const dueSoon = hasDate && daysRemaining >= 0 && daysRemaining <= COMPLIANCE_ALERT_DAYS;
+  const tone = !hasDate ? "empty" : expired ? "danger" : dueSoon ? "warning" : "ok";
+  const ringPercent = !hasDate
+    ? 0
+    : expired
+      ? 100
+      : dueSoon
+        ? Math.max(8, Math.round(((COMPLIANCE_ALERT_DAYS - daysRemaining) / COMPLIANCE_ALERT_DAYS) * 100))
+        : 100;
+
+  return {
+    key,
+    label,
+    shortLabel,
+    rawDate,
+    formattedDate: rawDate ? formatComplianceDate(rawDate) : "Not recorded",
+    daysRemaining,
+    centerLabel: centerLabel(daysRemaining),
+    alertLabel: alertLabel(daysRemaining),
+    tone,
+    ringPercent
+  };
+}
+
+function daysUntil(rawDate?: string): number | null {
+  if (!rawDate) return null;
+  const dateOnly = rawDate.slice(0, 10);
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateOnly);
+  if (!match) return null;
+  const target = Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+  const now = new Date();
+  const today = Date.UTC(now.getFullYear(), now.getMonth(), now.getDate());
+  return Math.round((target - today) / DAY_MS);
+}
+
+function formatComplianceDate(rawDate: string): string {
+  const dateOnly = rawDate.slice(0, 10);
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateOnly);
+  if (!match) return rawDate;
+  const date = new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3])));
+  return new Intl.DateTimeFormat("en-GB", { day: "2-digit", month: "short", year: "numeric", timeZone: "UTC" })
+    .format(date)
+    .toUpperCase();
+}
+
+function centerLabel(daysRemaining: number | null): string {
+  if (daysRemaining === null) return "Missing";
+  if (daysRemaining < 0) return "Expired";
+  if (daysRemaining === 0) return "Today";
+  return `${daysRemaining} days`;
+}
+
+function alertLabel(daysRemaining: number | null): string {
+  if (daysRemaining === null) return "date not recorded";
+  if (daysRemaining < 0) return `expired ${Math.abs(daysRemaining)} day${Math.abs(daysRemaining) === 1 ? "" : "s"} ago`;
+  if (daysRemaining === 0) return "due today";
+  return `due in ${daysRemaining} day${daysRemaining === 1 ? "" : "s"}`;
+}
+
+function ComplianceStatus({ item }: { item: ComplianceStatusItem }) {
+  const ringColor = item.tone === "empty" ? "rgb(var(--line-strong))" : COMPLIANCE_RING_ORANGE;
+  const trackColor = "rgb(var(--line))";
+  const statusLabel =
+    item.tone === "danger"
+      ? item.alertLabel
+      : item.tone === "warning"
+        ? item.alertLabel
+        : item.tone === "ok"
+          ? "Status: OK"
+          : "Add date";
+
   return (
-    <div className="flex items-center justify-between gap-3 rounded-card border border-line bg-surface-sunken px-3 py-3">
-      <div className="flex items-center gap-2 text-body font-semibold text-fg">
-        <span className="text-fg-muted">{icon}</span>
-        {label}
+    <div className="flex min-h-[224px] flex-col items-center justify-between gap-3 rounded-card border border-line bg-surface-sunken px-3 py-4 text-center">
+      <div>
+        <h3 className="text-label font-semibold uppercase text-fg">{item.label}</h3>
+        <p className={cx("mt-1 text-heading", item.tone === "ok" ? "text-success" : "text-fg")}>{item.formattedDate}</p>
       </div>
-      <span className="text-label font-semibold text-fg-muted">{value}</span>
+
+      <div
+        className="grid size-24 place-items-center rounded-full"
+        style={{
+          background: `conic-gradient(${ringColor} ${item.ringPercent}%, ${trackColor} 0)`
+        }}
+        aria-label={`${item.shortLabel}: ${item.formattedDate}, ${statusLabel}`}
+      >
+        <div className="grid size-16 place-items-center rounded-full bg-surface">
+          <span className={cx("px-1 text-center text-card", item.tone === "danger" ? "text-danger" : "text-fg")}>
+            {item.centerLabel}
+          </span>
+        </div>
+      </div>
+
+      <p className={cx(
+        "text-label font-semibold",
+        item.tone === "danger" ? "text-danger" : item.tone === "warning" ? "text-warning" : item.tone === "ok" ? "text-success" : "text-fg-muted"
+      )}>
+        {statusLabel}
+      </p>
     </div>
   );
 }

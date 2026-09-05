@@ -1,10 +1,14 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { ToastProvider } from "../components/ui/Toast";
 import { VanScreen } from "./VanScreen";
 
 describe("VanScreen", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
   it("renders fuel, service and compliance cards for the assigned van", () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
       status: 200,
@@ -39,12 +43,67 @@ describe("VanScreen", () => {
     expect(screen.getByLabelText(/Service date/)).toBeInTheDocument();
 
     expect(screen.getByRole("heading", { name: "Vehicle Compliance" })).toBeInTheDocument();
-    expect(screen.getByText("Road tax renewal")).toBeInTheDocument();
-    expect(screen.getByText("MOT expiry")).toBeInTheDocument();
+    expect(screen.getByText("Next road tax renewal")).toBeInTheDocument();
+    expect(screen.getByText("Next MOT date")).toBeInTheDocument();
+    expect(screen.getByText("Insurance renewal")).toBeInTheDocument();
 
     expect(screen.getAllByRole("button", { name: /take photo/i })).toHaveLength(2);
     expect(screen.getAllByRole("button", { name: /upload/i })).toHaveLength(1);
     expect(screen.getByRole("button", { name: /submit fuel entry/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /submit service record/i })).toBeInTheDocument();
   });
+
+  it("shows exact circular compliance status and warns inside 30 days", async () => {
+    const roadTaxDate = dateFromToday(23);
+    const motDate = dateFromToday(71);
+    const insuranceDate = dateFromToday(15);
+
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
+      status: 200,
+      json: () => Promise.resolve({
+        compliance: {
+          vanRegistration: "AB12 CDE",
+          roadTaxRenewalDate: roadTaxDate.raw,
+          motExpiryDate: motDate.raw,
+          insuranceExpiryDate: insuranceDate.raw
+        }
+      })
+    }));
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <ToastProvider>
+          <VanScreen
+            driver={{
+              email: "driver@example.com",
+              fullName: "Test Driver",
+              initials: "TD",
+              vanRegistration: "AB12 CDE"
+            }}
+          />
+        </ToastProvider>
+      </QueryClientProvider>
+    );
+
+    await waitFor(() => expect(screen.getByText(roadTaxDate.formatted)).toBeInTheDocument());
+
+    expect(screen.getByLabelText(`Road tax: ${roadTaxDate.formatted}, due in 23 days`)).toBeInTheDocument();
+    expect(screen.getByLabelText(`MOT: ${motDate.formatted}, Status: OK`)).toBeInTheDocument();
+    expect(screen.getByLabelText(`Insurance: ${insuranceDate.formatted}, due in 15 days`)).toBeInTheDocument();
+    expect(screen.getByLabelText(`MOT: ${motDate.formatted}, Status: OK`).getAttribute("style")).toContain("#ff8a00");
+    expect(screen.getByText("AB12 CDE Next road tax renewal due in 23 days")).toBeInTheDocument();
+    expect(screen.getByText(/Alerts show when 30 days or less remain\./)).toBeInTheDocument();
+  });
 });
+
+function dateFromToday(days: number): { raw: string; formatted: string } {
+  const date = new Date();
+  date.setHours(12, 0, 0, 0);
+  date.setDate(date.getDate() + days);
+  const raw = date.toISOString().slice(0, 10);
+  const formatted = new Intl.DateTimeFormat("en-GB", { day: "2-digit", month: "short", year: "numeric", timeZone: "UTC" })
+    .format(new Date(`${raw}T00:00:00Z`))
+    .toUpperCase();
+  return { raw, formatted };
+}
