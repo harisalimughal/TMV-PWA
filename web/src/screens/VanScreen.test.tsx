@@ -45,7 +45,7 @@ describe("VanScreen", () => {
     expect(screen.getByRole("heading", { name: "Vehicle Compliance" })).toBeInTheDocument();
     expect(screen.getByText("Next road tax renewal")).toBeInTheDocument();
     expect(screen.getByText("Next MOT date")).toBeInTheDocument();
-    expect(screen.getByText("Insurance renewal")).toBeInTheDocument();
+    expect(screen.queryByText("Insurance renewal")).not.toBeInTheDocument();
 
     expect(screen.getAllByRole("button", { name: /take photo/i })).toHaveLength(2);
     expect(screen.getAllByRole("button", { name: /upload/i })).toHaveLength(1);
@@ -90,8 +90,10 @@ describe("VanScreen", () => {
 
     expect(screen.getByLabelText(`Road tax: ${roadTaxDate.formatted}, due in 23 days`)).toBeInTheDocument();
     expect(screen.getByLabelText(`MOT: ${motDate.formatted}, Status: OK`)).toBeInTheDocument();
-    expect(screen.getByLabelText(`Insurance: ${insuranceDate.formatted}, due in 15 days`)).toBeInTheDocument();
-    expect(screen.getByLabelText(`MOT: ${motDate.formatted}, Status: OK`).getAttribute("style")).toContain("#ff8a00");
+    expect(screen.queryByText("Insurance renewal")).not.toBeInTheDocument();
+    expect(screen.queryByText(insuranceDate.formatted)).not.toBeInTheDocument();
+    expect(screen.getByLabelText(`Road tax: ${roadTaxDate.formatted}, due in 23 days`).querySelector("[data-compliance-ring]")).toHaveAttribute("data-ring-color", "#ff8a00");
+    expect(screen.getByLabelText(`MOT: ${motDate.formatted}, Status: OK`).querySelector("[data-compliance-ring]")).toBeNull();
     expect(screen.getByText("AB12 CDE Next road tax renewal due in 23 days")).toBeInTheDocument();
     expect(screen.getByText(/Alerts show when 30 days or less remain\./)).toBeInTheDocument();
   });

@@ -17,6 +17,7 @@ interface VanScreenProps {
 const SERVICE_TYPES = ["Full", "Interim", "MOT"];
 const COMPLIANCE_ALERT_DAYS = 30;
 const COMPLIANCE_RING_ORANGE = "#ff8a00";
+const COMPLIANCE_RING_TRACK = "#d6d6d6";
 const DAY_MS = 24 * 60 * 60 * 1000;
 const todayInputValue = () => new Date().toISOString().slice(0, 10);
 
@@ -326,7 +327,7 @@ function ComplianceCard({ driver }: { driver: DriverProfile }) {
 
   return (
     <section className="overflow-hidden rounded-card border border-line bg-surface shadow-xs">
-      <div className="flex items-center gap-3 bg-warning px-4 py-3 text-black">
+      <div className="flex items-center gap-3 px-4 py-3 text-white" style={{ backgroundColor: COMPLIANCE_RING_ORANGE }}>
         <span className="grid size-9 shrink-0 place-items-center rounded-card bg-white/25">
           <ShieldCheck className="size-4" aria-hidden />
         </span>
@@ -345,7 +346,7 @@ function ComplianceCard({ driver }: { driver: DriverProfile }) {
           </Alert>
         )}
 
-        <div className="grid gap-3 sm:grid-cols-3">
+        <div className="divide-y divide-line">
           {items.map(item => (
             <ComplianceStatus key={item.key} item={item} />
           ))}
@@ -363,7 +364,7 @@ function ComplianceCard({ driver }: { driver: DriverProfile }) {
 }
 
 type ComplianceStatusItem = {
-  key: keyof Pick<VanCompliance, "roadTaxRenewalDate" | "motExpiryDate" | "insuranceExpiryDate">;
+  key: keyof Pick<VanCompliance, "roadTaxRenewalDate" | "motExpiryDate">;
   label: string;
   shortLabel: string;
   rawDate?: string;
@@ -378,8 +379,7 @@ type ComplianceStatusItem = {
 function complianceItems(compliance?: VanCompliance | null): ComplianceStatusItem[] {
   return [
     buildComplianceItem("roadTaxRenewalDate", "Next road tax renewal", "Road tax", compliance?.roadTaxRenewalDate),
-    buildComplianceItem("motExpiryDate", "Next MOT date", "MOT", compliance?.motExpiryDate),
-    buildComplianceItem("insuranceExpiryDate", "Insurance renewal", "Insurance", compliance?.insuranceExpiryDate)
+    buildComplianceItem("motExpiryDate", "Next MOT date", "MOT", compliance?.motExpiryDate)
   ];
 }
 
@@ -453,7 +453,6 @@ function alertLabel(daysRemaining: number | null): string {
 
 function ComplianceStatus({ item }: { item: ComplianceStatusItem }) {
   const ringColor = item.tone === "empty" ? "rgb(var(--line-strong))" : COMPLIANCE_RING_ORANGE;
-  const trackColor = "rgb(var(--line))";
   const statusLabel =
     item.tone === "danger"
       ? item.alertLabel
@@ -462,30 +461,39 @@ function ComplianceStatus({ item }: { item: ComplianceStatusItem }) {
         : item.tone === "ok"
           ? "Status: OK"
           : "Add date";
+  const showRing = item.tone === "warning" || item.tone === "danger";
 
   return (
-    <div className="flex min-h-[224px] flex-col items-center justify-between gap-3 rounded-card border border-line bg-surface-sunken px-3 py-4 text-center">
+    <div
+      className="flex flex-col items-center gap-3 px-3 py-5 text-center"
+      role="group"
+      aria-label={`${item.shortLabel}: ${item.formattedDate}, ${statusLabel}`}
+    >
       <div>
-        <h3 className="text-label font-semibold uppercase text-fg">{item.label}</h3>
-        <p className={cx("mt-1 text-heading", item.tone === "ok" ? "text-success" : "text-fg")}>{item.formattedDate}</p>
+        <h3 className="text-heading font-semibold uppercase text-fg">{item.label}</h3>
+        <p className={cx("mt-1 text-title", item.tone === "ok" ? "text-success" : "text-fg")}>{item.formattedDate}</p>
       </div>
 
-      <div
-        className="grid size-24 place-items-center rounded-full"
-        style={{
-          background: `conic-gradient(${ringColor} ${item.ringPercent}%, ${trackColor} 0)`
-        }}
-        aria-label={`${item.shortLabel}: ${item.formattedDate}, ${statusLabel}`}
-      >
-        <div className="grid size-16 place-items-center rounded-full bg-surface">
-          <span className={cx("px-1 text-center text-card", item.tone === "danger" ? "text-danger" : "text-fg")}>
-            {item.centerLabel}
-          </span>
+      {showRing && (
+        <div
+          data-compliance-ring
+          data-ring-color={ringColor}
+          className="grid size-[132px] place-items-center rounded-full"
+          style={{
+            background: `conic-gradient(${ringColor} ${item.ringPercent}%, ${COMPLIANCE_RING_TRACK} 0)`
+          }}
+          aria-hidden
+        >
+          <div className="grid size-[110px] place-items-center rounded-full bg-surface">
+            <span className={cx("px-2 text-center text-heading", item.tone === "danger" ? "text-danger" : "text-fg")}>
+              {item.centerLabel}
+            </span>
+          </div>
         </div>
-      </div>
+      )}
 
       <p className={cx(
-        "text-label font-semibold",
+        "text-label font-semibold uppercase",
         item.tone === "danger" ? "text-danger" : item.tone === "warning" ? "text-warning" : item.tone === "ok" ? "text-success" : "text-fg-muted"
       )}>
         {statusLabel}
