@@ -18,7 +18,7 @@ export function PaperAnalyticsReport({ reportType, from, to, driver, summary, jo
   const kpis = summary?.kpis;
   const totalJobs = kpis?.totalJobs ?? jobs.length;
   const completedJobs = kpis?.completed ?? jobs.filter(j => j.status === "COMPLETED").length;
-  const revenuePounds = kpis?.revenuePounds ?? jobs.reduce((acc, j) => acc + (j.totalCharges || 0) / 100, 0);
+  const revenuePounds = kpis?.revenuePounds ?? jobs.reduce((acc, j) => acc + (j.amountCharged || 0) / 100, 0);
   const compRate = completionRate(completedJobs, totalJobs);
   const avgDelay = kpis?.avgDelayMinutes ?? 0;
 
@@ -169,7 +169,7 @@ export function PaperAnalyticsReport({ reportType, from, to, driver, summary, jo
                     </span>
                   </td>
                   <td className="p-1.5 border border-[#E5E7EB] text-right font-mono font-semibold">
-                    £{((j.totalCharges || 0) / 100).toFixed(2)}
+                    £{((j.amountCharged || 0) / 100).toFixed(2)}
                   </td>
                 </tr>
               ))}
@@ -198,4 +198,3 @@ export function PaperAnalyticsReport({ reportType, from, to, driver, summary, jo
     </div>
   );
 }
-

@@ -82,8 +82,8 @@ export function dashboardDriversSummaryRoutes(): Router {
         stat.assignedCount++;
         if (j.status === "COMPLETED") {
           stat.completedCount++;
-          stat.revenuePence += j.totalCharges;
-          if (j.paymentMethod.toLowerCase().includes("cash")) stat.cashCollectedPence += j.totalCharges;
+          stat.revenuePence += j.amountCharged;
+          if (j.paymentMethod.toLowerCase().includes("cash")) stat.cashCollectedPence += j.amountCharged;
         } else if (j.status === "CANCELLED") {
           stat.cancelledCount++;
         }

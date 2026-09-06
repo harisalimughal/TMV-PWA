@@ -12,7 +12,7 @@ export function PaperDossierReport({ job, isPreview = false }: Props) {
   
   // Helpers
   const formatPounds = (cents: number | undefined) => `£${((cents || 0) / 100).toFixed(2)}`;
-  const calculatedTotal = (job.basePrice || 0) + (job.extraCharges || 0) + (job.overtimeCharge || 0);
+  const totalCharges = job.totalCharges || job.calculatedTotalCharges || (job.basePrice || 0) + (job.extraCharges || 0) + (job.overtimeCharge || 0);
   const MoneyRow = ({ label, value, strong = false }: { label: string; value: number; strong?: boolean }) => (
     <div className="flex items-center justify-between p-3 border-b border-[#E5E7EB] bg-white last:border-b-0">
       <span className="text-label font-medium text-fg-muted">{label}</span>
@@ -173,8 +173,8 @@ export function PaperDossierReport({ job, isPreview = false }: Props) {
                   <MoneyRow label="Base Price" value={job.basePrice || 0} />
                   <MoneyRow label="Extra Charges" value={job.extraCharges || 0} />
                   <MoneyRow label="Overtime" value={job.overtimeCharge || 0} />
-                  <MoneyRow label="Total Charges" value={job.calculatedTotalCharges || calculatedTotal} strong />
-                  <MoneyRow label="Amount Charged" value={job.totalCharges || 0} strong />
+                  <MoneyRow label="Total Charges" value={totalCharges} strong />
+                  <MoneyRow label="Amount Charged" value={job.amountCharged || 0} strong />
                   <div className="flex items-center justify-between p-3 bg-white">
                     <span className="text-label font-medium text-fg-muted">Reconciliation</span>
                     <span className={`text-[11px] font-bold uppercase tracking-[0.03em] ${job.reconciled ? "text-admin-status-green" : "text-admin-status-red"}`}>
@@ -189,7 +189,7 @@ export function PaperDossierReport({ job, isPreview = false }: Props) {
               <div className="mb-3 border border-[#E5E7EB] rounded-card overflow-hidden shrink-0">
                 <div className="flex items-center justify-between p-3 border-b border-[#E5E7EB] bg-white">
                   <span className="text-label font-medium text-fg-muted">Amount Charged</span>
-                  <span className="text-[13px] font-bold text-admin-ink">{formatPounds(job.totalCharges)}</span>
+                  <span className="text-[13px] font-bold text-admin-ink">{formatPounds(job.amountCharged)}</span>
                 </div>
                 <div className="flex items-center justify-between p-3 bg-white">
                   <span className="text-label font-medium text-fg-muted">Payment Method</span>

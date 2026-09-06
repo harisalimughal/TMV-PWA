@@ -124,8 +124,8 @@ export function JobsPage() {
           valA = new Date(a.bookedStart || 0).getTime();
           valB = new Date(b.bookedStart || 0).getTime();
         } else if (sortConfig.key === "Total") {
-          valA = a.totalCharges || 0;
-          valB = b.totalCharges || 0;
+          valA = a.amountCharged || 0;
+          valB = b.amountCharged || 0;
         } else if (sortConfig.key === "Status") {
           valA = a.status;
           valB = b.status;
@@ -176,8 +176,8 @@ export function JobsPage() {
     { header: "Status", value: (j: NormalizedJob) => j.status },
     { header: "Delay (min)", value: (j: NormalizedJob) => j.delayMinutes ?? "" },
     { header: "Payment method", value: (j: NormalizedJob) => j.paymentMethod },
-    { header: "Total Charges (GBP)", value: (j: NormalizedJob) => toPounds(j.calculatedTotalCharges).toFixed(2) },
-    { header: "Amount Charged (GBP)", value: (j: NormalizedJob) => toPounds(j.totalCharges).toFixed(2) }
+    { header: "Total Charges (GBP)", value: (j: NormalizedJob) => toPounds(j.totalCharges).toFixed(2) },
+    { header: "Amount Charged (GBP)", value: (j: NormalizedJob) => toPounds(j.amountCharged).toFixed(2) }
   ];
 
   function exportRows(rows: NormalizedJob[], suffix: string) {
@@ -400,8 +400,8 @@ export function JobsPage() {
                   paginatedData.map((job: NormalizedJob, index: number) => {
                     const rowNumber = (safePage - 1) * pageSize + index + 1;
                     const formattedTime = formatLondonDateTime(job.bookedStart);
+                    const amountPounds = toPounds(job.amountCharged);
                     const totalPounds = toPounds(job.totalCharges);
-                    const calculatedPounds = toPounds(job.calculatedTotalCharges);
                     const isCancelled = job.status === "CANCELLED";
                     const photoCount = job.evidenceItems?.filter(e => (e.thumbProxyUrl || e.driveUrl)).length || 0;
                     
@@ -497,14 +497,14 @@ export function JobsPage() {
                         </td>
 
                         <td className="px-6 text-right">
-                          <div className={`font-mono text-[14px] font-bold tabular-nums ${totalPounds === 0 ? "text-[#B0B0B0] italic" : "text-admin-ink"}`}>
-                            {totalPounds === 0 ? "-" : `£${totalPounds.toLocaleString("en-GB", { minimumFractionDigits: 2 })}`}
+                          <div className={`font-mono text-[14px] font-bold tabular-nums ${amountPounds === 0 ? "text-[#B0B0B0] italic" : "text-admin-ink"}`}>
+                            {amountPounds === 0 ? "-" : `£${amountPounds.toLocaleString("en-GB", { minimumFractionDigits: 2 })}`}
                           </div>
                         </td>
 
                         <td className="px-6 text-right">
-                          <div className={`font-mono text-[13px] font-semibold tabular-nums ${calculatedPounds === 0 ? "text-[#B0B0B0] italic" : "text-admin-muted"}`}>
-                            {calculatedPounds === 0 ? "-" : `£${calculatedPounds.toLocaleString("en-GB", { minimumFractionDigits: 2 })}`}
+                          <div className={`font-mono text-[13px] font-semibold tabular-nums ${totalPounds === 0 ? "text-[#B0B0B0] italic" : "text-admin-muted"}`}>
+                            {totalPounds === 0 ? "-" : `£${totalPounds.toLocaleString("en-GB", { minimumFractionDigits: 2 })}`}
                           </div>
                         </td>
 
@@ -656,8 +656,8 @@ function JobCardList({
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
         {jobs.map(job => {
           const driver = resolveDriver(job.driverName, job.driverInitials);
+          const amount = toPounds(job.amountCharged);
           const total = toPounds(job.totalCharges);
-          const calculated = toPounds(job.calculatedTotalCharges);
           const isSelected = selected.has(job.jobId);
           return (
             <article
@@ -698,10 +698,10 @@ function JobCardList({
                     </span>
                     <span className="flex shrink-0 flex-col items-end gap-0.5 font-mono tabular-nums">
                       <span className="text-[14px] font-bold text-admin-ink">
-                        {total === 0 ? "—" : `£${total.toLocaleString("en-GB", { minimumFractionDigits: 2 })}`}
+                        {amount === 0 ? "—" : `£${amount.toLocaleString("en-GB", { minimumFractionDigits: 2 })}`}
                       </span>
                       <span className="text-[11px] font-semibold text-admin-muted">
-                        Total {calculated === 0 ? "—" : `£${calculated.toLocaleString("en-GB", { minimumFractionDigits: 2 })}`}
+                        Total {total === 0 ? "—" : `£${total.toLocaleString("en-GB", { minimumFractionDigits: 2 })}`}
                       </span>
                     </span>
                   </div>

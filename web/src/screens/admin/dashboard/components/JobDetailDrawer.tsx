@@ -88,7 +88,7 @@ export function JobDetailDrawer({ job: initialJob, isOpen, onClose, onUpdated }:
       setEditData({
         pickup: job.pickup || "",
         dropoff: job.dropoff || "",
-        billed: ((job.totalCharges || 0) / 100).toFixed(2),
+        billed: ((job.amountCharged || 0) / 100).toFixed(2),
         crew: String(job.crewSize || 2)
       });
     }
@@ -137,7 +137,7 @@ export function JobDetailDrawer({ job: initialJob, isOpen, onClose, onUpdated }:
       ...job,
       pickup: editData.pickup,
       dropoff: editData.dropoff,
-      totalCharges: valBilled * 100,
+      amountCharged: valBilled * 100,
       crewSize: valCrew
     });
     
@@ -178,8 +178,8 @@ export function JobDetailDrawer({ job: initialJob, isOpen, onClose, onUpdated }:
   };
 
   const isCancelled = job.status === "CANCELLED";
-  const totalPounds = (job.totalCharges || 0) / 100;
-  const calculatedTotalPounds = (job.calculatedTotalCharges || job.totalCharges || 0) / 100;
+  const totalPounds = (job.totalCharges || job.calculatedTotalCharges || 0) / 100;
+  const amountChargedPounds = (job.amountCharged || 0) / 100;
   const bookingDetails = job.bookingDetails ?? {};
   const valueOrDash = (value?: string | null) => {
     const trimmed = String(value ?? "").trim();
@@ -290,7 +290,7 @@ export function JobDetailDrawer({ job: initialJob, isOpen, onClose, onUpdated }:
                   <DollarSign className="w-3 h-3" /> Total Charges
                 </span>
               </div>
-              <span className="text-[20px] font-bold font-mono text-admin-ink">£{calculatedTotalPounds.toFixed(2)}</span>
+              <span className="text-[20px] font-bold font-mono text-admin-ink">£{totalPounds.toFixed(2)}</span>
             </div>
 
             <div className="bg-white p-4 rounded-module border border-admin-line shadow-[0_2px_10px_rgb(0,0,0,0.02)] flex flex-col justify-between transition-all">
@@ -305,7 +305,7 @@ export function JobDetailDrawer({ job: initialJob, isOpen, onClose, onUpdated }:
                   <input type="number" className="w-full h-8 pl-6 pr-2 rounded-control border border-admin-line text-[14px] font-bold font-mono outline-none focus:border-admin-brand" value={editData.billed} onChange={e => setEditData({...editData, billed: e.target.value})} />
                 </div>
               ) : (
-                <span className="text-[20px] font-bold font-mono text-admin-ink">£{totalPounds.toFixed(2)}</span>
+                <span className="text-[20px] font-bold font-mono text-admin-ink">£{amountChargedPounds.toFixed(2)}</span>
               )}
             </div>
             

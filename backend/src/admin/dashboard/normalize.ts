@@ -152,14 +152,27 @@ export async function normalizeMongoDataset(dataset: MongoDataset): Promise<Norm
     const extraCharges = extraChargesPounds > 0 ? fromPounds(extraChargesPounds) : pence(0);
     const overtimeMinutes = job.overtimeMinutes || 0;
     const overtimeCharge = safePence(job.overtimeCharge);
+    const status = job.status;
+    const currentState = job.currentState || status;
+    const totalSubmittedStates = new Set([
+      "WAITING_PAYMENT",
+      "WAITING_EMPTY_VAN_ISSUES_CHECK",
+      "WAITING_EMPTY_VAN_ISSUES_CHOICE",
+      "WAITING_EMPTY_VAN_PHOTO",
+      "WAITING_CLIENT_CONFIRMATION",
+      "WAITING_REVIEW_CHECK",
+      "WAITING_REVIEW_SEND",
+      "COMPLETED"
+    ]);
+    const hasSubmittedTotal = totalSubmittedStates.has(currentState) || status === "COMPLETED";
     const calculatedTotalCharges = job.calculatedTotalCharges !== undefined && job.calculatedTotalCharges !== null
       ? safePence(job.calculatedTotalCharges)
       : pence(basePrice + extraCharges + overtimeCharge);
-    const totalCharges = safePence(job.totalCharges);
-    const reconciled = totalCharges === pence(0) || calculatedTotalCharges === totalCharges;
-
-    const status = job.status;
-    const currentState = job.currentState || status;
+    const totalCharges = calculatedTotalCharges;
+    const amountCharged = hasSubmittedTotal
+      ? (job.amountCharged !== undefined && job.amountCharged !== null ? safePence(job.amountCharged) : safePence(job.totalCharges))
+      : pence(0);
+    const reconciled = amountCharged === pence(0) || totalCharges === amountCharged;
 
     const jobEvidence = evidenceByJob.get(jobId) || [];
     const jobScenarios = scenariosByJob.get(jobId) || [];
@@ -203,7 +216,7 @@ export async function normalizeMongoDataset(dataset: MongoDataset): Promise<Norm
       crewSize: job.crewSize || 1,
       driverInitials, driverName, driverEmail,
       status, currentState, workflowCompletionPct,
-      basePrice, extraChargeSelections, extraCharges, overtimeMinutes, overtimeCharge, calculatedTotalCharges, totalCharges, reconciled,
+      basePrice, extraChargeSelections, extraCharges, overtimeMinutes, overtimeCharge, calculatedTotalCharges, totalCharges, amountCharged, reconciled,
       paymentMethod: job.paymentMethod || "Not recorded",
       paymentStatus: job.paymentStatus || "Not recorded",
       managerReviewStatus: job.managerReviewStatus || "Pending",

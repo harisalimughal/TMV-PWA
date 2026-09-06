@@ -77,6 +77,7 @@ export interface NormalizedJob {
   overtimeCharge: number;
   calculatedTotalCharges: number;
   totalCharges: number;
+  amountCharged: number;
   reconciled: boolean;
   paymentMethod: string;
   paymentStatus: string;

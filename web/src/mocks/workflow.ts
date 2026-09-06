@@ -157,7 +157,8 @@ export function applyTrigger(
     }
     case "SUBMIT_TOTAL_CHARGES":
       next.calculatedTotalCharges = calculatedTotal(job);
-      next.totalCharges = input.total_charges?.[0]
+      next.totalCharges = next.calculatedTotalCharges;
+      next.amountCharged = input.total_charges?.[0]
         ? Math.round((Number(input.total_charges[0]) || 0) * 100) / 100
         : next.calculatedTotalCharges;
       next.totalAdjustmentNote = input.total_adjustment_note?.[0] ?? "";
@@ -178,6 +179,7 @@ export function applyTrigger(
     next.status = "COMPLETED";
     if (!next.actualFinish) next.actualFinish = now;
     if (!next.totalCharges) next.totalCharges = job.basePrice + (job.overtimeCharge ?? 0);
+    if (!next.amountCharged) next.amountCharged = next.totalCharges;
   }
 
   return next;

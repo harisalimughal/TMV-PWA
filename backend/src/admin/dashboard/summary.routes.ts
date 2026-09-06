@@ -34,14 +34,14 @@ export function dashboardSummaryRoutes(): Router {
 
       for (const j of jobs) {
         if (j.status !== "CANCELLED") {
-          totalRevenue = addPence(totalRevenue, j.totalCharges);
+          totalRevenue = addPence(totalRevenue, j.amountCharged);
           totalExtras = addPence(totalExtras, j.extraCharges);
           totalOvertime = addPence(totalOvertime, j.overtimeCharge);
 
           if (j.paymentMethod.toLowerCase().includes("cash")) {
-            cashCollected = addPence(cashCollected, j.totalCharges);
+            cashCollected = addPence(cashCollected, j.amountCharged);
           } else if (["card", "bank", "invoice"].some(m => j.paymentMethod.toLowerCase().includes(m))) {
-            cardBankCollected = addPence(cardBankCollected, j.totalCharges);
+            cardBankCollected = addPence(cardBankCollected, j.amountCharged);
           }
 
           if (j.actualMinutes && j.actualMinutes > 0) { totalDuration += j.actualMinutes; durationCount++; }
@@ -73,7 +73,7 @@ export function dashboardSummaryRoutes(): Router {
         const dateKey = (j.actualStart || j.bookedStart || "").slice(0, 10);
         if (!dateKey) continue;
         const existing = dailyRevenue.get(dateKey) || { revenuePounds: 0, count: 0 };
-        existing.revenuePounds += toPounds(j.totalCharges);
+        existing.revenuePounds += toPounds(j.amountCharged);
         existing.count++;
         dailyRevenue.set(dateKey, existing);
       }
@@ -86,7 +86,7 @@ export function dashboardSummaryRoutes(): Router {
         if (j.status === "CANCELLED") continue;
         const method = j.paymentMethod || "Not recorded";
         const cur = paySplit.get(method) || { pounds: 0, count: 0 };
-        cur.pounds += toPounds(j.totalCharges);
+        cur.pounds += toPounds(j.amountCharged);
         cur.count++;
         paySplit.set(method, cur);
       }

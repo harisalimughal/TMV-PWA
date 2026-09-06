@@ -188,8 +188,8 @@ export function SubmissionDetailDrawer({ job: initialJob, isOpen, onClose, onNav
         ? formatLondonDateTime((job as NormalizedJob).actualFinish)
         : ((job as NormalizedJob).bookedStart ? formatLondonDateTime((job as NormalizedJob).bookedStart) : 'Unknown Time'));
   const normalizedJob = !isScenario ? (job as NormalizedJob) : null;
-  const calculatedTotal = normalizedJob
-    ? normalizedJob.calculatedTotalCharges || normalizedJob.basePrice + normalizedJob.extraCharges + normalizedJob.overtimeCharge
+  const totalCharges = normalizedJob
+    ? normalizedJob.totalCharges || normalizedJob.calculatedTotalCharges || normalizedJob.basePrice + normalizedJob.extraCharges + normalizedJob.overtimeCharge
     : 0;
 
   const handleSaveReview = async () => {
@@ -411,8 +411,8 @@ export function SubmissionDetailDrawer({ job: initialJob, isOpen, onClose, onNav
             <ChargeRow label="Base price" value={normalizedJob.basePrice} />
             <ChargeRow label="Extra charges" value={normalizedJob.extraCharges} />
             <ChargeRow label="Overtime" value={normalizedJob.overtimeCharge} />
-            <ChargeRow label="Total Charges" value={calculatedTotal} strong />
-            <ChargeRow label="Amount Charged" value={normalizedJob.totalCharges} strong brand />
+            <ChargeRow label="Total Charges" value={totalCharges} strong />
+            <ChargeRow label="Amount Charged" value={normalizedJob.amountCharged} strong brand />
           </div>
         </div>
       )}

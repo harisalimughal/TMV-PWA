@@ -285,12 +285,14 @@ export async function handleAction(
       assertState(job.currentState, WorkflowState.WAITING_TOTAL_CHARGES);
       const manualTotal = input.total_charges?.[0];
       const adjustmentNote = input.total_adjustment_note?.[0]?.trim() ?? "";
-      const total = manualTotal ? validateManualTotal(manualTotal) : await suggestedTotal(job);
+      const systemTotal = await suggestedTotal(job);
+      const total = manualTotal ? validateManualTotal(manualTotal) : systemTotal;
       if (manualTotal && !adjustmentNote) {
         throw new ValidationError("Add a reason for the total charges adjustment.");
       }
-      job.calculatedTotalCharges = await suggestedTotal(job);
-      job.totalCharges = total;
+      job.calculatedTotalCharges = systemTotal;
+      job.totalCharges = systemTotal;
+      job.amountCharged = total;
       job.totalAdjustmentNote = manualTotal ? adjustmentNote : "";
       const from = job.currentState;
       job.currentState = WorkflowState.WAITING_PAYMENT;

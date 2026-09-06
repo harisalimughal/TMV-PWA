@@ -24,7 +24,7 @@ export function dashboardFinanceRoutes(): Router {
 
       const unreconciledJobs: Array<{
         jobId: string; customerName: string; basePrice: number; extraCharges: number;
-        overtimeCharge: number; totalCharges: number; differencePence: number;
+        overtimeCharge: number; totalCharges: number; amountCharged: number; differencePence: number;
       }> = [];
 
       const timeSeriesMap = new Map<string, { period: string; base: number; extras: number; overtime: number; total: number; count: number }>();
@@ -35,21 +35,20 @@ export function dashboardFinanceRoutes(): Router {
         totalBase = addPence(totalBase, j.basePrice);
         totalExtras = addPence(totalExtras, j.extraCharges);
         totalOvertime = addPence(totalOvertime, j.overtimeCharge);
-        totalRevenue = addPence(totalRevenue, j.totalCharges);
+        totalRevenue = addPence(totalRevenue, j.amountCharged);
 
         const method = j.paymentMethod.toLowerCase();
-        if (method.includes("cash")) totalCash = addPence(totalCash, j.totalCharges);
-        else if (method.includes("card")) totalCard = addPence(totalCard, j.totalCharges);
-        else if (method.includes("bank")) totalBank = addPence(totalBank, j.totalCharges);
-        else if (method.includes("invoice")) totalInvoice = addPence(totalInvoice, j.totalCharges);
+        if (method.includes("cash")) totalCash = addPence(totalCash, j.amountCharged);
+        else if (method.includes("card")) totalCard = addPence(totalCard, j.amountCharged);
+        else if (method.includes("bank")) totalBank = addPence(totalBank, j.amountCharged);
+        else if (method.includes("invoice")) totalInvoice = addPence(totalInvoice, j.amountCharged);
 
         if (!j.reconciled && j.status === "COMPLETED") {
-          const sum = j.basePrice + j.extraCharges + j.overtimeCharge;
           unreconciledJobs.push({
             jobId: j.jobId, customerName: j.customerName,
             basePrice: toPounds(j.basePrice), extraCharges: toPounds(j.extraCharges),
             overtimeCharge: toPounds(j.overtimeCharge), totalCharges: toPounds(j.totalCharges),
-            differencePence: Math.abs(sum - j.totalCharges)
+            amountCharged: toPounds(j.amountCharged), differencePence: Math.abs(j.totalCharges - j.amountCharged)
           });
         }
 
@@ -69,7 +68,7 @@ export function dashboardFinanceRoutes(): Router {
           cur.base += toPounds(j.basePrice);
           cur.extras += toPounds(j.extraCharges);
           cur.overtime += toPounds(j.overtimeCharge);
-          cur.total += toPounds(j.totalCharges);
+          cur.total += toPounds(j.amountCharged);
           cur.count++;
           timeSeriesMap.set(periodKey, cur);
         }

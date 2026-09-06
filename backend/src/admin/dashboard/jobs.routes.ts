@@ -299,7 +299,7 @@ export function dashboardJobsRoutes(): Router {
         "Job ID", "Calendar Event ID", "Driver", "Customer", "Phone", "Pickup", "Dropoff",
         "Booked Start (London)", "Actual Start (London)", "Actual Finish (London)",
         "Scheduled Minutes", "Actual Minutes", "Delay (Minutes)", "Delay Band", "Status",
-        "Base Price (£)", "Extra Charges (£)", "Overtime (£)", "Total (£)",
+        "Base Price (£)", "Extra Charges (£)", "Overtime (£)", "Total Charges (£)", "Amount Charged (£)",
         "Payment Method", "Payment Status", "Evidence Status", "Drive Folder"
       ];
 
@@ -323,6 +323,7 @@ export function dashboardJobsRoutes(): Router {
         escapeCsvField(toPounds(j.extraCharges).toFixed(2)),
         escapeCsvField(toPounds(j.overtimeCharge).toFixed(2)),
         escapeCsvField(toPounds(j.totalCharges).toFixed(2)),
+        escapeCsvField(toPounds(j.amountCharged).toFixed(2)),
         escapeCsvField(j.paymentMethod),
         escapeCsvField(j.paymentStatus),
         escapeCsvField(
@@ -443,7 +444,7 @@ async function mirrorNewJob(calendarEventId: string, fields: NewJobFields): Prom
     bookedStart: fields.bookedStart, bookedFinish: fields.bookedFinish,
     actualStart: "", actualFinish: "", bookedMinutes, actualMinutes: 0, differenceMinutes: 0,
     delayStatus: "Waiting", extraCharges: [], overtimeMinutes: 0, overtimeCharge: 0,
-    calculatedTotalCharges: fields.price, totalCharges: fields.price, totalAdjustmentNote: "", paymentMethod: "",
+    calculatedTotalCharges: fields.price, totalCharges: fields.price, amountCharged: 0, totalAdjustmentNote: "", paymentMethod: "",
     paymentStatus: fields.paidOnline ? "Paid Online" : "Pending",
     clientNamePostcode: "", clientConfirmedBy: "", signatureUrl: "",
     driveFolderId: "", driveFolderUrl: "",

@@ -87,6 +87,8 @@ export function generateJobPdf(job: NormalizedJob): Buffer {
   addLine(left + 15, 324, right - 15, 324);
   addText("TOTAL CHARGES:", left + 15, 308, 10, "/F2", "0.06 0.11 0.18");
   addText(formatGBP(job.totalCharges), right - 100, 308, 11, "/F2", "0.10 0.46 0.74");
+  addText("AMOUNT CHARGED:", left + 15, 292, 10, "/F2", "0.06 0.11 0.18");
+  addText(formatGBP(job.amountCharged), right - 100, 292, 11, "/F2", "0.10 0.46 0.74");
 
   addRect(left, 160, right - left, 115, "1 1 1", "0.85 0.88 0.92");
   addText("CUSTOMER SIGN-OFF & FIELD EVIDENCE AUDIT", left + 15, 258, 9, "/F2", "0.10 0.46 0.74");

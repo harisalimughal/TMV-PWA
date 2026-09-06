@@ -9,7 +9,8 @@ interface Props {
 }
 
 export function PaperJobReport({ job, onClose }: Props) {
-  const calculatedTotalCharges = job.calculatedTotalCharges || job.basePrice + job.extraCharges + job.overtimeCharge;
+  const totalCharges = job.totalCharges || job.calculatedTotalCharges || job.basePrice + job.extraCharges + job.overtimeCharge;
+  const formatPounds = (pence: number | undefined) => `£${((pence || 0) / 100).toFixed(2)}`;
   const photoCategories = [
     { key: "Arrival", label: "Arrival and Start the Job !" },
     { key: "Loaded", label: "Proof Of Van Loaded" },
@@ -159,23 +160,23 @@ export function PaperJobReport({ job, onClose }: Props) {
             <div className="grid grid-cols-2 gap-x-12 gap-y-3">
               <div className="flex justify-between py-1 border-b border-admin-line/50">
                 <span className="text-[12px] text-[#8A8A8A]">Base Price</span>
-                <span className="text-[12px] font-medium text-[#1A1A1A]">£{(job.basePrice || 0).toFixed(2)}</span>
+                <span className="text-[12px] font-medium text-[#1A1A1A]">{formatPounds(job.basePrice)}</span>
               </div>
               <div className="flex justify-between py-1 border-b border-admin-line/50">
                 <span className="text-[12px] text-[#8A8A8A]">Extra Charges</span>
-                <span className="text-[12px] font-medium text-[#1A1A1A]">£{(job.extraCharges || 0).toFixed(2)}</span>
+                <span className="text-[12px] font-medium text-[#1A1A1A]">{formatPounds(job.extraCharges)}</span>
               </div>
               <div className="flex justify-between py-1 border-b border-admin-line/50">
                 <span className="text-[12px] text-[#8A8A8A]">Overtime ({job.overtimeMinutes}m)</span>
-                <span className="text-[12px] font-medium text-[#1A1A1A]">£{(job.overtimeCharge || 0).toFixed(2)}</span>
+                <span className="text-[12px] font-medium text-[#1A1A1A]">{formatPounds(job.overtimeCharge)}</span>
               </div>
               <div className="flex justify-between py-1 border-b border-[#1A1A1A]/20">
                 <span className="text-[12px] font-bold text-[#1A1A1A]">Total Charges</span>
-                <span className="text-[14px] font-bold text-[#1A1A1A]">£{(calculatedTotalCharges || 0).toFixed(2)}</span>
+                <span className="text-[14px] font-bold text-[#1A1A1A]">{formatPounds(totalCharges)}</span>
               </div>
               <div className="flex justify-between py-1 border-b border-[#1A1A1A]/20">
                 <span className="text-[12px] font-bold text-[#1A1A1A]">Amount Charged</span>
-                <span className="text-[14px] font-bold text-[#1A1A1A]">£{(job.totalCharges || 0).toFixed(2)}</span>
+                <span className="text-[14px] font-bold text-[#1A1A1A]">{formatPounds(job.amountCharged)}</span>
               </div>
               <div className="flex justify-between py-1 border-b border-admin-line/50">
                 <span className="text-[12px] text-[#8A8A8A]">Payment Method</span>

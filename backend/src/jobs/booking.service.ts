@@ -122,6 +122,13 @@ function toJob(parsed: ParsedCalendarBooking, existing?: Job): Job {
   const paidOnline = started ? existing!.paidOnline : parsed.paidOnline;
   const bookedStart = started ? existing!.bookedStart : parsed.bookedStart;
   const bookedFinish = started ? existing!.bookedFinish : parsed.bookedFinish;
+  const carriedAmountCharged =
+    existing?.amountCharged ??
+    (existing?.calculatedTotalCharges !== undefined ? existing.totalCharges : 0);
+  const carriedTotalCharges =
+    existing?.amountCharged === undefined && existing?.calculatedTotalCharges !== undefined
+      ? existing.calculatedTotalCharges
+      : existing?.totalCharges ?? basePrice;
 
   return {
     jobId: jobIdForEvent(parsed.calendarEventId),
@@ -149,7 +156,8 @@ function toJob(parsed: ParsedCalendarBooking, existing?: Job): Job {
     overtimeMinutes: existing?.overtimeMinutes ?? 0,
     overtimeCharge: existing?.overtimeCharge ?? 0,
     calculatedTotalCharges: existing?.calculatedTotalCharges,
-    totalCharges: existing?.totalCharges ?? basePrice,
+    totalCharges: carriedTotalCharges,
+    amountCharged: carriedAmountCharged,
     totalAdjustmentNote: existing?.totalAdjustmentNote ?? "",
     paymentMethod: existing?.paymentMethod ?? "",
     paymentStatus: existing?.paymentStatus ?? (paidOnline ? "Paid Online" : "Pending"),

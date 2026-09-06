@@ -23,7 +23,8 @@ export interface CompletionSummaryProps {
  * record as ruled rows. Black text, no confetti.
  */
 export function CompletionSummary({ job }: CompletionSummaryProps) {
-  const totalCharges = job.calculatedTotalCharges ?? job.totalCharges;
+  const totalCharges = job.totalCharges;
+  const amountCharged = job.amountCharged ?? job.totalCharges;
 
   return (
     <div className="pt-6">
@@ -37,7 +38,7 @@ export function CompletionSummary({ job }: CompletionSummaryProps) {
 
       <dl className="mt-7">
         <Row label="Total Charges" value={gbp(totalCharges)} />
-        <Row label="Amount Charged" value={gbp(job.totalCharges)} strong />
+        <Row label="Amount Charged" value={gbp(amountCharged)} strong />
         <Row label="Payment" value={job.paymentMethod || "Not recorded"} />
         <Row label="Signed by" value={job.clientConfirmedBy || job.customerName || "—"} />
         <Row label="Status" value="Recorded" />

@@ -89,6 +89,7 @@ export interface NormalizedJob {
   overtimeCharge: Pence;
   calculatedTotalCharges: Pence;
   totalCharges: Pence;
+  amountCharged: Pence;
   reconciled: boolean;
 
   paymentMethod: string;
