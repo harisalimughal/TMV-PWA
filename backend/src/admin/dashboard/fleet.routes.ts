@@ -5,7 +5,9 @@
  * too, since DriverProfile fields are already typed instead of raw row strings.
  */
 import { Request, Response, Router } from "express";
-import { fetchGpsLiveDevices, GpsLiveDevice } from "../../integrations/gpslive";
+import {
+  buildDriverMatchIndex, fetchGpsLiveDevices, GpsLiveDevice, matchDriverByPlateAndName
+} from "../../integrations/gpslive";
 import { listDriverProfiles } from "../../auth/driver-account.service";
 import { log } from "../../utils/logger";
 
@@ -35,20 +37,6 @@ function toNumber(raw: string | undefined): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
-/** GPSLive plate numbers and our own Van Registration field are typed freely
- * ("WN69 FEH" vs "wn69feh") -- compare on letters/digits only. */
-function normalizePlate(raw: string): string {
-  return raw.toUpperCase().replace(/[^A-Z0-9]/g, "");
-}
-
-/** GPSLive device names follow "<PLATE> - <DRIVER INITIALS>" for vans labelled that
- * way in the GPSLive dashboard -- not guaranteed for every device, only a fallback
- * when the plate itself doesn't match. */
-function parseTrailingInitials(name: string): string | null {
-  const match = name.match(/-\s*([A-Za-z]{2,4})\s*$/);
-  return match ? match[1].toUpperCase() : null;
-}
-
 const FLEET_CACHE_TTL_MS = 8_000;
 let cachedVehicles: LiveFleetVehicle[] | null = null;
 let cachedAt = 0;
@@ -69,24 +57,10 @@ async function getLiveFleet(): Promise<LiveFleetVehicle[]> {
     })
   ]);
 
-  // Plate is the authoritative signal once a driver has one on file; initials-matching
-  // is only offered for drivers who have no van registration on file to match by instead.
-  const driversByPlate = new Map<string, { initials: string; fullName: string }>();
-  const driversByInitials = new Map<string, { initials: string; fullName: string }>();
-  for (const d of drivers) {
-    if (!d.initials) continue;
-    if (d.vanRegistration) {
-      driversByPlate.set(normalizePlate(d.vanRegistration), { initials: d.initials, fullName: d.fullName });
-    } else {
-      driversByInitials.set(d.initials, { initials: d.initials, fullName: d.fullName });
-    }
-  }
+  const driverIndex = buildDriverMatchIndex(drivers);
 
   const vehicles: LiveFleetVehicle[] = devices.map((device: GpsLiveDevice) => {
-    const byPlate = driversByPlate.get(normalizePlate(device.plateNumber || ""));
-    const trailingInitials = parseTrailingInitials(device.name || "");
-    const byInitials = trailingInitials ? driversByInitials.get(trailingInitials) : undefined;
-    const matched = byPlate || byInitials || null;
+    const matched = matchDriverByPlateAndName(device.plateNumber || "", device.name || "", driverIndex);
     const params = device.params || {};
 
     return {

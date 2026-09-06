@@ -34,6 +34,10 @@ export interface Job {
   paymentStatus: string;
   clientNamePostcode: string;
   clientConfirmedBy: string;
+  /** ISO timestamp of when this job's van was first detected inside the London
+   *  Congestion Charge zone (GPSLive geofence webhook) -- drives the extra-charges
+   *  suggestion banner. Unset if never detected. */
+  congestionZoneEnteredAt?: string;
   signatureUrl: string;
   status: "READY" | "IN_PROGRESS" | "COMPLETED" | "CANCELLED";
   currentState: string;

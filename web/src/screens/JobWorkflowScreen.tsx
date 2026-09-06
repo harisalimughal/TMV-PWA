@@ -31,6 +31,7 @@ import { useOnline } from "../lib/net";
 import type { ScenarioKey } from "../scenarioSpec";
 import {
   BACK_ELIGIBLE,
+  CONGESTION_CHARGE,
   EXTRA_CHARGE_OPTIONS,
   NO_EXTRAS,
   overtimeApplies,
@@ -698,28 +699,35 @@ function StepBody({
 
     case "WAITING_EXTRA_CHARGES":
       return (
-        <ChoiceGroup legend="Extra charges" hint="Select every one that applies.">
-          {EXTRA_CHARGE_OPTIONS.map(option => (
-            <Choice
-              key={option}
-              type="checkbox"
-              label={option}
-              selected={formState.extraCharges.includes(option)}
-              onToggle={() => {
-                const current = formState.extraCharges;
-                if (option === NO_EXTRAS) {
-                  formState.extraCharges = current.includes(option) ? [] : [option];
-                } else {
-                  const withoutNone = current.filter(v => v !== NO_EXTRAS);
-                  formState.extraCharges = withoutNone.includes(option)
-                    ? withoutNone.filter(v => v !== option)
-                    : [...withoutNone, option];
-                }
-                tick();
-              }}
-            />
-          ))}
-        </ChoiceGroup>
+        <div className="flex flex-col gap-4">
+          {job.congestionZoneEnteredAt && (
+            <Alert tone="info" title="Central London detected">
+              This job passed through the Congestion Charge zone — consider adding "{CONGESTION_CHARGE}" below.
+            </Alert>
+          )}
+          <ChoiceGroup legend="Extra charges" hint="Select every one that applies.">
+            {EXTRA_CHARGE_OPTIONS.map(option => (
+              <Choice
+                key={option}
+                type="checkbox"
+                label={option}
+                selected={formState.extraCharges.includes(option)}
+                onToggle={() => {
+                  const current = formState.extraCharges;
+                  if (option === NO_EXTRAS) {
+                    formState.extraCharges = current.includes(option) ? [] : [option];
+                  } else {
+                    const withoutNone = current.filter(v => v !== NO_EXTRAS);
+                    formState.extraCharges = withoutNone.includes(option)
+                      ? withoutNone.filter(v => v !== option)
+                      : [...withoutNone, option];
+                  }
+                  tick();
+                }}
+              />
+            ))}
+          </ChoiceGroup>
+        </div>
       );
 
     case "WAITING_OVERTIME":

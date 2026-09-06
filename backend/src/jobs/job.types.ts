@@ -73,6 +73,13 @@ export interface Job {
    *  reminder.service.ts), or unset if it hasn't fired yet. Prevents a re-run of the
    *  sweep from reminding the same driver twice for the same job. */
   reminderSentAt?: string;
+  /** ISO timestamp of when this job's van was first detected inside the London
+   *  Congestion Charge zone, via GPSLive's "CHARGES - ALERTS" geofence webhook (see
+   *  integrations/gpslive-webhook.routes.ts) -- drives the "Entered Central London"
+   *  driver push and the extra-charges suggestion banner. Set once per job (a van
+   *  leaving and re-entering the zone doesn't notify again); unset if never detected,
+   *  or if GPSLive tracking isn't wired up for this van. */
+  congestionZoneEnteredAt?: string;
   /** Cloudinary URL of the customer's drawn signature, once captured -- replaces the
    * old Sheets "Signatures" tab. Empty until WAITING_CLIENT_CONFIRMATION is completed. */
   signatureUrl: string;

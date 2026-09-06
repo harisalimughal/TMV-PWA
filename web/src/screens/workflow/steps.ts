@@ -123,8 +123,12 @@ export const BACK_ELIGIBLE = new Set([
  *  minutes to record, so the step, its progress slot and its data all disappear. */
 export const EXTRA_TIME_CHARGE = "Extra time / Charges";
 
+/** The option a GPSLive congestion-zone detection (see Job.congestionZoneEnteredAt)
+ *  suggests on the Extra Charges step. */
+export const CONGESTION_CHARGE = "London Congestion charge";
+
 export const EXTRA_CHARGE_OPTIONS = [
-  "London Congestion charge",
+  CONGESTION_CHARGE,
   "Tunnel Charges",
   EXTRA_TIME_CHARGE,
   "No Extras Time"

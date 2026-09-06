@@ -12,6 +12,7 @@ import { withJobLock } from "../utils/lock";
 import { ValidationError } from "../workflow/validation.engine";
 import { sendJobStartedSms } from "../integrations/firetext";
 import { JOB_STARTED_MESSAGE_TEMPLATE } from "../notifications/message";
+import { checkCongestionZoneAtJobStart } from "./congestion-zone.service";
 
 export function driverIdentifier(email?: string, chatUserName?: string): string {
   return email?.trim() || chatUserName?.trim() || "";
@@ -326,6 +327,11 @@ export async function startJob(jobId: string, identifier: string): Promise<Job> 
 
     const startedJob = await saveJob(job, driver, "START_JOB", from, `Server start timestamp ${now}`);
     sendJobStartedSmsIfAny(startedJob, driver);
+    // Best-effort, never awaited by the response -- see the function's own doc
+    // comment for why a job can need this even though the real-time webhook exists.
+    checkCongestionZoneAtJobStart(startedJob, driver.initials, driver.vanRegistration).catch(error =>
+      log.warn("congestion zone job-start check failed to launch", { error: String(error), job_id: startedJob.jobId })
+    );
     return startedJob;
   });
 }

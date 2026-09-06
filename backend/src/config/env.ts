@@ -90,6 +90,13 @@ export const env = {
   gpsApiKey: process.env.GPS_API?.trim() || "",
   gpsTimeoutMs: numberEnv("TMV_GPS_TIMEOUT_MS", 5_000),
 
+  /** Shared secret embedded in the webhook URL registered in GPSLive's own dashboard
+   * (Settings > Webhooks, "Alerts" type) -- that feature has no signing/HMAC option
+   * (just Name/URL/Type in its config form), so a long random path segment on
+   * /api/webhooks/gpslive/:token is the only way to tell a real GPSLive delivery
+   * apart from a random POST. Blank means that endpoint refuses everything with 404. */
+  gpsLiveWebhookToken: process.env.TMV_GPSLIVE_WEBHOOK_TOKEN?.trim() || "",
+
   // ---------------------------------------------------------------------------
   // Background processing
   // ---------------------------------------------------------------------------

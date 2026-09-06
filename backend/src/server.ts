@@ -21,6 +21,7 @@ import { jobsRoutes } from "./jobs/jobs.routes";
 import { storageRoutes } from "./jobs/storage.routes";
 import { vanRoutes } from "./jobs/van.routes";
 import { pushRoutes } from "./push/push.routes";
+import { gpsLiveWebhookRoutes } from "./integrations/gpslive-webhook.routes";
 import { syncTodayBookings } from "./jobs/booking.service";
 import { sweepJobReminders } from "./jobs/reminder.service";
 import { dashboardActivityRoutes } from "./admin/dashboard/activity.routes";
@@ -46,6 +47,10 @@ app.use("/api/jobs", jobsRoutes());
 app.use("/api/storage", storageRoutes());
 app.use("/api/van", vanRoutes());
 app.use("/api/push", pushRoutes());
+// Public (no driver/admin session) -- protected only by the random token in the URL
+// path itself, since GPSLive's webhook feature has no signing option. See
+// gpslive-webhook.routes.ts's own doc comment.
+app.use("/api/webhooks/gpslive", gpsLiveWebhookRoutes());
 
 // The ported admin dashboard (Overview/Jobs/Live Fleet/Exceptions/Reports/Activity/
 // Messaging/Scenarios/Finance/driver performance stats) -- same requireAdminAuth
