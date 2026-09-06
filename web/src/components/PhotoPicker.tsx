@@ -14,6 +14,8 @@ export interface PhotoPickerProps {
   /** Rendered under the label, e.g. what the photo needs to show. */
   hint?: string;
   allowUpload?: boolean;
+  /** Accept camera captures immediately instead of showing Retake / Use photo. */
+  autoAcceptCapture?: boolean;
 }
 
 interface Preview {
@@ -31,7 +33,15 @@ interface Preview {
  *  - Files are downscaled before they ever reach the caller (see lib/image.ts).
  *  - Object URLs are revoked on unmount, not just on replace/remove.
  */
-export function PhotoPicker({ label, min = 0, max, onChange, hint, allowUpload = false }: PhotoPickerProps) {
+export function PhotoPicker({
+  label,
+  min = 0,
+  max,
+  onChange,
+  hint,
+  allowUpload = false,
+  autoAcceptCapture = false
+}: PhotoPickerProps) {
   const [previews, setPreviews] = useState<Preview[]>([]);
   const [processing, setProcessing] = useState(false);
   const [cameraOpen, setCameraOpen] = useState(false);
@@ -190,6 +200,7 @@ export function PhotoPicker({ label, min = 0, max, onChange, hint, allowUpload =
         open={cameraOpen}
         onClose={() => setCameraOpen(false)}
         onCapture={file => void handleCapture(file)}
+        autoAcceptCapture={autoAcceptCapture}
         title={`Take ${label.toLowerCase()}`}
       />
     </section>

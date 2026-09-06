@@ -3,7 +3,13 @@ import { Router } from "express";
 import { activityCollection, jobsCollection } from "../../db/mongo";
 import { log } from "../../utils/logger";
 
-const NOTIFY_ACTIONS = new Set(["CLIENT_REVIEW_EMAIL_SENT", "CLIENT_REVIEW_EMAIL_FAILED"]);
+const NOTIFY_ACTIONS = new Set([
+  "CLIENT_REVIEW_EMAIL_SENT",
+  "CLIENT_REVIEW_EMAIL_FAILED",
+  "CLIENT_JOB_STARTED_SMS_SENT",
+  "CLIENT_JOB_STARTED_SMS_FAILED",
+  "CLIENT_JOB_STARTED_SMS_SKIPPED"
+]);
 
 function notifyStatus(
   hasTarget: boolean,
@@ -17,9 +23,7 @@ function notifyStatus(
 }
 
 /**
- * Real ActivityLog-backed delivery status for the customer review-request email -- the
- * only customer notification tmv-pwa's workflow (workflow.engine.ts's
- * SEND_REVIEW_EMAIL) currently records an activity entry for. SMS was never wired in.
+ * Real ActivityLog-backed delivery status for customer notifications.
  */
 export function dashboardNotificationsRoutes(): Router {
   const router = Router();
@@ -44,10 +48,18 @@ export function dashboardNotificationsRoutes(): Router {
             latestByJobAction.get(`${job.jobId}::CLIENT_REVIEW_EMAIL_SENT`),
             latestByJobAction.get(`${job.jobId}::CLIENT_REVIEW_EMAIL_FAILED`)
           );
+          const smsSkipped = latestByJobAction.get(`${job.jobId}::CLIENT_JOB_STARTED_SMS_SKIPPED`);
+          const sms = smsSkipped
+            ? { state: "skipped" as const, detail: smsSkipped.detail || "", at: smsSkipped.timestamp || "" }
+            : notifyStatus(
+                Boolean(job.customerPhone),
+                latestByJobAction.get(`${job.jobId}::CLIENT_JOB_STARTED_SMS_SENT`),
+                latestByJobAction.get(`${job.jobId}::CLIENT_JOB_STARTED_SMS_FAILED`)
+              );
           return {
             jobId: job.jobId, customerName: job.customerName || "", customerEmail: job.customerEmail || "",
             customerPhone: job.customerPhone || "", driverInitials: job.driverInitials || "",
-            actualStart: job.actualStart || "", email, sms: { state: "skipped" as const, detail: "", at: "" }
+            actualStart: job.actualStart || "", email, sms
           };
         })
         .sort((a, b) => (b.actualStart || "").localeCompare(a.actualStart || ""));

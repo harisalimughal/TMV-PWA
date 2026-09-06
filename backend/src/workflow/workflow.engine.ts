@@ -3,13 +3,13 @@ import { getJob } from "../db/jobs.repo";
 import { readEvidenceSummary } from "../db/evidence.repo";
 import { appendActivity } from "../db/activity.repo";
 import { getSetting } from "../db/settings.repo";
-import { EvidenceType, ExtraChargeType, Job } from "../jobs/job.types";
+import { EvidenceType, ExtraChargeType, Job, PaymentMethod } from "../jobs/job.types";
 import { uploadEvidence } from "../jobs/evidence.service";
 import { completeJob, getJobForDriver, getNextJobForDriver, saveJob, startJob } from "../jobs/jobs.service";
 import { WorkflowState, nextAfterPhoto, PHOTO_STATES } from "./workflow.states";
 import {
   assertState, validateCrewSize,
-  validateExtraCharges, validateMinutes, validatePaymentMethod, ValidationError
+  validateExtraCharges, validateMinutes, validatePaymentMethods, ValidationError
 } from "./validation.engine";
 import { log, setContext } from "../utils/logger";
 import { formatPounds } from "../utils/money";
@@ -44,6 +44,15 @@ async function extraChargeAmount(job: Job): Promise<number> {
 
 export async function suggestedTotal(job: Job): Promise<number> {
   return Math.round((job.basePrice + await extraChargeAmount(job)) * 100) / 100;
+}
+
+function validateManualTotal(raw: string): number {
+  const normalized = raw.trim().replace(/^£\s*/, "");
+  const value = Number(normalized);
+  if (!Number.isFinite(value) || value < 0) {
+    throw new ValidationError("Enter a valid custom final total amount.");
+  }
+  return Math.round(value * 100) / 100;
 }
 
 export async function beginJob(jobId: string, identifier: string): Promise<Job> {
@@ -258,26 +267,29 @@ export async function handleAction(
 
     case "SUBMIT_TOTAL_CHARGES": {
       assertState(job.currentState, WorkflowState.WAITING_TOTAL_CHARGES);
-      // The driver only ever sees this figure, never edits it -- it's base price plus
-      // whatever extras/overtime were recorded earlier in this same job, so there's
-      // nothing left to negotiate on the doorstep. total_charges is computed here, not
-      // read from input, so a modified client can't submit a different figure either.
-      const total = await suggestedTotal(job);
+      const manualTotal = input.total_charges?.[0];
+      const adjustmentNote = input.total_adjustment_note?.[0]?.trim() ?? "";
+      const total = manualTotal ? validateManualTotal(manualTotal) : await suggestedTotal(job);
+      if (manualTotal && !adjustmentNote) {
+        throw new ValidationError("Add a reason for the total charges adjustment.");
+      }
       job.totalCharges = total;
+      job.totalAdjustmentNote = manualTotal ? adjustmentNote : "";
       const from = job.currentState;
       job.currentState = WorkflowState.WAITING_PAYMENT;
-      return saveJob(job, driver, action, from, formatPounds(total));
+      const detail = manualTotal ? `${formatPounds(total)} adjusted: ${adjustmentNote}` : formatPounds(total);
+      return saveJob(job, driver, action, from, detail);
     }
 
     case "SUBMIT_PAYMENT": {
       assertState(job.currentState, WorkflowState.WAITING_PAYMENT);
-      const method = validatePaymentMethod(input.payment_method?.[0] ?? "");
-      job.paymentMethod = method;
-      job.paymentStatus = method === "Invoice" ? "Outstanding" : "Recorded";
+      const methods = validatePaymentMethods(input.payment_method ?? []);
+      job.paymentMethod = methods.join(", ");
+      job.paymentStatus = methods.includes(PaymentMethod.INVOICE) ? "Outstanding" : "Recorded";
       const from = job.currentState;
       // After Payment the next step is the Empty Van photo directly.
       job.currentState = WorkflowState.WAITING_EMPTY_VAN_PHOTO;
-      return saveJob(job, driver, action, from, method);
+      return saveJob(job, driver, action, from, job.paymentMethod);
     }
 
     case "ISSUES_NONE":

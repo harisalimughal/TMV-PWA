@@ -1,6 +1,6 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Camera, Download, Fuel, RefreshCw, Search, ShieldCheck, Truck, Wrench, X } from "lucide-react";
+import { Camera, Download, Fuel, Pencil, RefreshCw, Search, ShieldCheck, Truck, Wrench, X } from "lucide-react";
 import { DateRangePicker } from "../components/DateRangePicker";
 import { ApiErrorState } from "../components/ApiErrorState";
 import { fetchVanDriverRecords, saveVanCompliance } from "../api";
@@ -12,6 +12,10 @@ const TYPE_META: Record<VanRecordType, { label: string; icon: React.ComponentTyp
   FUEL: { label: "Fuel", icon: Fuel, className: "bg-admin-status-amber-bg border-admin-status-amber/20 text-admin-status-amber" },
   SERVICE: { label: "Service", icon: Wrench, className: "bg-[#EFF6FF] border-[#2563EB]/20 text-[#2563EB]" }
 };
+const COMPLIANCE_ALERT_DAYS = 30;
+const COMPLIANCE_RING_ORANGE = "#ff8a00";
+const COMPLIANCE_RING_TRACK = "#d6d6d6";
+const DAY_MS = 24 * 60 * 60 * 1000;
 
 function recordDetail(item: VanRecordItem | null, type: VanRecordType): string {
   if (!item) return "-";
@@ -271,10 +275,21 @@ function RecordPreview({ title, item, type }: { title: string; item: VanRecordIt
 function CompliancePreview({ item, onSaved }: { item: VanDriverRecordItem; onSaved: (compliance: VanComplianceItem) => void }) {
   const [roadTaxRenewalDate, setRoadTaxRenewalDate] = useState(item.compliance?.roadTaxRenewalDate || "");
   const [motExpiryDate, setMotExpiryDate] = useState(item.compliance?.motExpiryDate || "");
-  const [insuranceExpiryDate, setInsuranceExpiryDate] = useState(item.compliance?.insuranceExpiryDate || "");
   const [notes, setNotes] = useState(item.compliance?.notes || "");
+  const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const complianceItems = buildComplianceItems({
+    roadTaxRenewalDate: item.compliance?.roadTaxRenewalDate || roadTaxRenewalDate,
+    motExpiryDate: item.compliance?.motExpiryDate || motExpiryDate
+  });
+
+  useEffect(() => {
+    setRoadTaxRenewalDate(item.compliance?.roadTaxRenewalDate || "");
+    setMotExpiryDate(item.compliance?.motExpiryDate || "");
+    setNotes(item.compliance?.notes || "");
+    setError("");
+  }, [item.compliance]);
 
   async function handleSave() {
     if (!item.vanRegistration || saving) return;
@@ -284,10 +299,11 @@ function CompliancePreview({ item, onSaved }: { item: VanDriverRecordItem; onSav
       const compliance = await saveVanCompliance(item.vanRegistration, {
         roadTaxRenewalDate,
         motExpiryDate,
-        insuranceExpiryDate,
+        insuranceExpiryDate: item.compliance?.insuranceExpiryDate || "",
         notes
       });
       onSaved(compliance);
+      setEditing(false);
     } catch (err: any) {
       setError(err?.message || "Failed to save compliance.");
     } finally {
@@ -296,36 +312,191 @@ function CompliancePreview({ item, onSaved }: { item: VanDriverRecordItem; onSav
   }
 
   return (
-    <div className="bg-white rounded-module border border-admin-line p-4">
-      <div className="inline-flex items-center gap-1.5 rounded-control border border-admin-status-amber/20 bg-admin-status-amber-bg px-2.5 py-1 text-[12px] font-semibold text-admin-status-amber">
-        <ShieldCheck className="w-3.5 h-3.5" /> Compliance
-      </div>
-      <div className="mt-4 space-y-3">
-        <ComplianceInput label="Road tax renewal" value={roadTaxRenewalDate} onChange={setRoadTaxRenewalDate} />
-        <ComplianceInput label="MOT expiry" value={motExpiryDate} onChange={setMotExpiryDate} />
-        <ComplianceInput label="Insurance expiry" value={insuranceExpiryDate} onChange={setInsuranceExpiryDate} />
-        <label className="block">
-          <span className="text-[10px] font-bold uppercase tracking-wider text-admin-muted">Notes</span>
-          <textarea
-            value={notes}
-            onChange={event => setNotes(event.target.value)}
-            rows={3}
-            className="mt-1 w-full rounded-card border border-admin-line bg-admin-surface px-3 py-2 text-[13px] font-medium text-admin-ink outline-none focus:border-admin-brand focus:bg-white"
-            placeholder="Optional"
-          />
-        </label>
-        {error && <div className="text-[12px] font-semibold text-admin-status-red">{error}</div>}
+    <div className="overflow-hidden rounded-module border border-admin-line bg-white">
+      <div className="flex items-center justify-between gap-3 px-4 py-3 text-white" style={{ backgroundColor: COMPLIANCE_RING_ORANGE }}>
+        <div className="flex min-w-0 items-center gap-2.5">
+          <span className="grid h-8 w-8 shrink-0 place-items-center rounded-card bg-white/25">
+            <ShieldCheck className="h-4 w-4" />
+          </span>
+          <div className="min-w-0">
+            <h3 className="truncate text-[14px] font-bold">Vehicle Compliance</h3>
+            <p className="truncate text-[11px] font-semibold opacity-85">{item.vanRegistration || "No van recorded"}</p>
+          </div>
+        </div>
         <button
           type="button"
-          disabled={!item.vanRegistration || saving}
-          onClick={() => void handleSave()}
-          className="h-9 w-full rounded-card bg-admin-brand px-3 text-[13px] font-bold text-white transition hover:bg-admin-brand/90 disabled:cursor-not-allowed disabled:opacity-50"
+          onClick={() => setEditing(value => !value)}
+          className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-white/20 text-white transition hover:bg-white/30"
+          title={editing ? "Close editor" : "Edit compliance dates"}
+          aria-label={editing ? "Close compliance editor" : "Edit compliance dates"}
         >
-          {saving ? "Saving..." : "Save compliance"}
+          {editing ? <X className="h-4 w-4" /> : <Pencil className="h-4 w-4" />}
         </button>
       </div>
+
+      <div className="divide-y divide-admin-line px-4">
+        {complianceItems.map(complianceItem => (
+          <ComplianceStatus key={complianceItem.key} item={complianceItem} />
+        ))}
+      </div>
+
+      {item.compliance?.notes && !editing && (
+        <div className="border-t border-admin-line px-4 py-3">
+          <p className="text-[10px] font-bold uppercase tracking-wider text-admin-muted">Notes</p>
+          <p className="mt-1 text-[13px] font-medium text-admin-ink">{item.compliance.notes}</p>
+        </div>
+      )}
+
+      {editing && (
+        <div className="space-y-3 border-t border-admin-line bg-admin-surface px-4 py-4">
+          <ComplianceInput label="Road tax renewal" value={roadTaxRenewalDate} onChange={setRoadTaxRenewalDate} />
+          <ComplianceInput label="MOT expiry" value={motExpiryDate} onChange={setMotExpiryDate} />
+          <label className="block">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-admin-muted">Notes</span>
+            <textarea
+              value={notes}
+              onChange={event => setNotes(event.target.value)}
+              rows={3}
+              className="mt-1 w-full rounded-card border border-admin-line bg-white px-3 py-2 text-[13px] font-medium text-admin-ink outline-none focus:border-admin-brand"
+              placeholder="Optional"
+            />
+          </label>
+          {error && <div className="text-[12px] font-semibold text-admin-status-red">{error}</div>}
+          <button
+            type="button"
+            disabled={!item.vanRegistration || saving}
+            onClick={() => void handleSave()}
+            className="h-9 w-full rounded-card bg-admin-brand px-3 text-[13px] font-bold text-white transition hover:bg-admin-brand/90 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {saving ? "Saving..." : "Save compliance"}
+          </button>
+        </div>
+      )}
     </div>
   );
+}
+
+type ComplianceStatusItem = {
+  key: "roadTaxRenewalDate" | "motExpiryDate";
+  label: string;
+  rawDate?: string;
+  formattedDate: string;
+  daysRemaining: number | null;
+  centerLabel: string;
+  statusLabel: string;
+  tone: "ok" | "warning" | "danger" | "empty";
+  ringPercent: number;
+};
+
+function buildComplianceItems(compliance: Pick<VanComplianceItem, "roadTaxRenewalDate" | "motExpiryDate">): ComplianceStatusItem[] {
+  return [
+    buildComplianceItem("roadTaxRenewalDate", "Next road tax renewal", compliance.roadTaxRenewalDate),
+    buildComplianceItem("motExpiryDate", "Next MOT date", compliance.motExpiryDate)
+  ];
+}
+
+function buildComplianceItem(key: ComplianceStatusItem["key"], label: string, rawDate?: string): ComplianceStatusItem {
+  const daysRemaining = daysUntil(rawDate);
+  const hasDate = daysRemaining !== null;
+  const expired = hasDate && daysRemaining < 0;
+  const dueSoon = hasDate && daysRemaining >= 0 && daysRemaining <= COMPLIANCE_ALERT_DAYS;
+  const tone = !hasDate ? "empty" : expired ? "danger" : dueSoon ? "warning" : "ok";
+  const ringPercent = !hasDate
+    ? 0
+    : expired
+      ? 100
+      : dueSoon
+        ? Math.max(8, Math.round(((COMPLIANCE_ALERT_DAYS - daysRemaining) / COMPLIANCE_ALERT_DAYS) * 100))
+        : 0;
+
+  return {
+    key,
+    label,
+    rawDate,
+    formattedDate: rawDate ? formatComplianceDate(rawDate) : "Not recorded",
+    daysRemaining,
+    centerLabel: centerLabel(daysRemaining),
+    statusLabel: statusLabel(daysRemaining),
+    tone,
+    ringPercent
+  };
+}
+
+function ComplianceStatus({ item }: { item: ComplianceStatusItem }) {
+  const showRing = item.tone === "warning" || item.tone === "danger";
+  return (
+    <div className="flex flex-col items-center gap-3 py-5 text-center">
+      <div>
+        <h4 className="text-[14px] font-bold uppercase text-admin-ink">{item.label}</h4>
+        <p className={`mt-1 text-[22px] font-extrabold ${item.tone === "ok" ? "text-admin-status-green" : "text-admin-ink"}`}>
+          {item.formattedDate}
+        </p>
+      </div>
+
+      {showRing && (
+        <div
+          className="grid h-[132px] w-[132px] place-items-center rounded-full"
+          style={{
+            background: `conic-gradient(${COMPLIANCE_RING_ORANGE} ${item.ringPercent}%, ${COMPLIANCE_RING_TRACK} 0)`
+          }}
+        >
+          <div className="grid h-[110px] w-[110px] place-items-center rounded-full bg-white">
+            <span className={`px-2 text-[16px] font-extrabold ${item.tone === "danger" ? "text-admin-status-red" : "text-admin-ink"}`}>
+              {item.centerLabel}
+            </span>
+          </div>
+        </div>
+      )}
+
+      <p className={`text-[13px] font-extrabold uppercase ${
+        item.tone === "danger"
+          ? "text-admin-status-red"
+          : item.tone === "warning"
+            ? "text-admin-status-amber"
+            : item.tone === "ok"
+              ? "text-admin-status-green"
+              : "text-admin-muted"
+      }`}>
+        {item.statusLabel}
+      </p>
+    </div>
+  );
+}
+
+function daysUntil(rawDate?: string): number | null {
+  if (!rawDate) return null;
+  const dateOnly = rawDate.slice(0, 10);
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateOnly);
+  if (!match) return null;
+  const target = Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+  const now = new Date();
+  const today = Date.UTC(now.getFullYear(), now.getMonth(), now.getDate());
+  return Math.round((target - today) / DAY_MS);
+}
+
+function formatComplianceDate(rawDate: string): string {
+  const dateOnly = rawDate.slice(0, 10);
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateOnly);
+  if (!match) return rawDate;
+  const date = new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3])));
+  return new Intl.DateTimeFormat("en-GB", { day: "2-digit", month: "short", year: "numeric", timeZone: "UTC" })
+    .format(date)
+    .toUpperCase();
+}
+
+function centerLabel(daysRemaining: number | null): string {
+  if (daysRemaining === null) return "Missing";
+  if (daysRemaining < 0) return "Expired";
+  if (daysRemaining === 0) return "Today";
+  return `${daysRemaining} days`;
+}
+
+function statusLabel(daysRemaining: number | null): string {
+  if (daysRemaining === null) return "Add date";
+  if (daysRemaining < 0) return `Expired ${Math.abs(daysRemaining)} day${Math.abs(daysRemaining) === 1 ? "" : "s"} ago`;
+  if (daysRemaining === 0) return "Due today";
+  if (daysRemaining <= COMPLIANCE_ALERT_DAYS) return `Alert: Due in ${daysRemaining} day${daysRemaining === 1 ? "" : "s"}`;
+  return "Status: OK";
 }
 
 function ComplianceInput({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) {

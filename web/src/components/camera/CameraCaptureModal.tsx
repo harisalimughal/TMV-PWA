@@ -12,6 +12,8 @@ export interface CameraCaptureModalProps {
   onClose: () => void;
   /** Keep the camera open after "Use photo" so the driver can take another. */
   allowMultiple?: boolean;
+  /** Skip the captured-photo confirmation screen and accept the frame immediately. */
+  autoAcceptCapture?: boolean;
   /** Header wording, e.g. "Take evidence photo". */
   title?: string;
 }
@@ -56,6 +58,7 @@ export function CameraCaptureModal({
   onCapture,
   onClose,
   allowMultiple = false,
+  autoAcceptCapture = false,
   title = "Take photo",
 }: CameraCaptureModalProps) {
   const { status, error, stream, hasMultipleCameras, start, stop, toggleFacing } =
@@ -176,6 +179,17 @@ export function CameraCaptureModal({
           type: "image/jpeg",
           lastModified: Date.now(),
         });
+        if (autoAcceptCapture) {
+          onCapture(file);
+          haptics.success();
+          if (allowMultiple) {
+            setPhase("live");
+            void start();
+          } else {
+            onClose();
+          }
+          return;
+        }
         const url = URL.createObjectURL(blob);
         capturedUrlRef.current = url;
         setCapturedFile(file);

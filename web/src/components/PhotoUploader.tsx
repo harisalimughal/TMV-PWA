@@ -49,7 +49,14 @@ export function PhotoUploader({
 
   return (
     <div className="flex flex-col gap-4">
-      <PhotoPicker label={label} hint={hint} min={minPhotos} max={maxPhotos} onChange={handleChange} />
+      <PhotoPicker
+        label={label}
+        hint={hint}
+        min={minPhotos}
+        max={maxPhotos}
+        onChange={handleChange}
+        autoAcceptCapture
+      />
 
       {submitting && progress !== null && (
         <div className="flex flex-col gap-1.5" role="status" aria-live="polite">

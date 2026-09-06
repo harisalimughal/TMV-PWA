@@ -31,6 +31,12 @@ function boolEnv(name: string, fallback: boolean): boolean {
   return ["1", "true", "yes", "on"].includes(raw.toLowerCase());
 }
 
+function senderIdEnv(name: string, fallback: string): string {
+  const raw = process.env[name]?.trim() || fallback;
+  const sender = raw.replace(/[^A-Za-z0-9]/g, "").slice(0, 11);
+  return sender || fallback;
+}
+
 export const env = {
   nodeEnv: process.env.NODE_ENV ?? "development",
   port: numberEnv("PORT", 8080),
@@ -76,7 +82,7 @@ export const env = {
    */
   firetextApiKey: process.env.FIRETEXT_API_KEY?.trim() || "",
   /** Sender ID shown as the "from" on the text -- 3-11 alphanumeric characters, no spaces. */
-  firetextSenderId: process.env.FIRETEXT_SENDER_ID?.trim() || "",
+  firetextSenderId: senderIdEnv("FIRETEXT_SENDER_ID", "TheManVan"),
 
   /** GPSLive (gpslive.app) live van tracking, for the admin dashboard's Live Fleet
    * page (admin/dashboard/*). Blank means fetchGpsLiveDevices() just returns an empty

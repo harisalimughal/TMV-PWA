@@ -75,6 +75,12 @@ export function validatePaymentMethod(raw: string): PaymentMethod {
   return raw as PaymentMethod;
 }
 
+export function validatePaymentMethods(raw: string[]): PaymentMethod[] {
+  const unique = [...new Set(raw.filter(Boolean))];
+  if (unique.length === 0) throw new ValidationError("Select at least one payment method.");
+  return unique.map(validatePaymentMethod);
+}
+
 export function validateClientDetails(raw: string): string {
   const value = raw.trim();
   if (value.length < 3) throw new ValidationError("Enter the client name and postcode/address confirmation.");

@@ -15,7 +15,7 @@ import { SignatureModal } from "../components/SignatureModal";
 import { Choice, ChoiceGroup } from "../components/ui/Choice";
 import { useToast } from "../components/ui/Toast";
 import { AppShell } from "../app/AppShell";
-import { Alert, BottomActionBar, Button, cx, PageHeader, Skeleton } from "../ui";
+import { Alert, BottomActionBar, Button, cx, Field, Input, PageHeader, Skeleton, Textarea } from "../ui";
 import {
   CompletionSummary,
   IssueChoiceCard,
@@ -45,6 +45,22 @@ interface JobWorkflowScreenProps {
 }
 
 const LONDON = "Europe/London";
+const ISSUE_SCENARIOS = ["parking", "liability"] as const;
+
+type IssueScenario = (typeof ISSUE_SCENARIOS)[number];
+
+const ISSUE_SCENARIO_LABELS: Record<IssueScenario, string> = {
+  parking: "Parking Liability",
+  liability: "Liability Report"
+};
+
+function isIssueScenario(scenario: ScenarioKey): scenario is IssueScenario {
+  return (ISSUE_SCENARIOS as readonly ScenarioKey[]).includes(scenario);
+}
+
+function otherIssueScenario(scenario: IssueScenario): IssueScenario {
+  return scenario === "parking" ? "liability" : "parking";
+}
 
 /** "yyyy-MM-dd" as seen in Europe/London -- the operating timezone, regardless of the
  *  device's own setting. A device several hours ahead previously compared calendar
@@ -90,6 +106,11 @@ export function JobWorkflowScreen({ jobId, onBack }: JobWorkflowScreenProps) {
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
   const [signatureOpen, setSignatureOpen] = useState(false);
   const [openScenario, setOpenScenario] = useState<ScenarioKey | null>(null);
+  const [completedIssueScenarios, setCompletedIssueScenarios] = useState<IssueScenario[]>([]);
+  const [issueCompletion, setIssueCompletion] = useState<{
+    last: IssueScenario;
+    completed: IssueScenario[];
+  } | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const toast = useToast();
   const online = useOnline();
@@ -127,6 +148,18 @@ export function JobWorkflowScreen({ jobId, onBack }: JobWorkflowScreenProps) {
   useEffect(() => () => resetFormState(), []);
 
   const autoSkippedFrom = useRef<string | null>(null);
+
+  const openFirstIssueScenario = useCallback((scenario: ScenarioKey) => {
+    if (isIssueScenario(scenario)) {
+      setCompletedIssueScenarios([]);
+      setIssueCompletion(null);
+    }
+    setOpenScenario(scenario);
+  }, []);
+
+  const openAdditionalIssueScenario = useCallback((scenario: IssueScenario) => {
+    setOpenScenario(scenario);
+  }, []);
 
   /**
    * Runs a workflow action. Returns whether it succeeded so callers (the signature
@@ -222,7 +255,32 @@ export function JobWorkflowScreen({ jobId, onBack }: JobWorkflowScreenProps) {
         scenario={openScenario}
         onCancel={() => setOpenScenario(null)}
         onDone={() => {
+          if (isIssueScenario(openScenario)) {
+            const completed = completedIssueScenarios.includes(openScenario)
+              ? completedIssueScenarios
+              : [...completedIssueScenarios, openScenario];
+            setCompletedIssueScenarios(completed);
+            setIssueCompletion({ last: openScenario, completed });
+            setOpenScenario(null);
+            return;
+          }
           setOpenScenario(null);
+          void load();
+        }}
+      />
+    );
+  }
+
+  if (issueCompletion) {
+    return (
+      <IssueCompletionScreen
+        job={job}
+        completion={issueCompletion}
+        onBack={onBack}
+        onOther={openAdditionalIssueScenario}
+        onContinue={() => {
+          setIssueCompletion(null);
+          setCompletedIssueScenarios([]);
           void load();
         }}
       />
@@ -314,7 +372,7 @@ export function JobWorkflowScreen({ jobId, onBack }: JobWorkflowScreenProps) {
                 uploadProgress={uploadProgress}
                 error={error}
                 suggestedTotal={suggestedTotal}
-                onOpenScenario={setOpenScenario}
+                onOpenScenario={openFirstIssueScenario}
                 onFormChange={bumpForm}
               />
 
@@ -356,6 +414,67 @@ export function JobWorkflowScreen({ jobId, onBack }: JobWorkflowScreenProps) {
   );
 }
 
+function IssueCompletionScreen({
+  job,
+  completion,
+  onBack,
+  onOther,
+  onContinue
+}: {
+  job: Job;
+  completion: { last: IssueScenario; completed: IssueScenario[] };
+  onBack: () => void;
+  onOther: (scenario: IssueScenario) => void;
+  onContinue: () => void;
+}) {
+  const other = otherIssueScenario(completion.last);
+  const canReportOther = !completion.completed.includes(other);
+
+  return (
+    <AppShell
+      header={
+        <JobHeader
+          customerName={job.customerName}
+          jobId={job.jobId}
+          phone={job.customerPhone || undefined}
+          onBack={onBack}
+          status={job.status === "IN_PROGRESS" ? <JobStatusChip job={job} /> : undefined}
+        />
+      }
+      dock={
+        <BottomActionBar>
+          <div className="flex flex-col gap-3">
+            {canReportOther && (
+              <Button fullWidth size="lg" variant="secondary" onClick={() => onOther(other)}>
+                Other liability Issues
+              </Button>
+            )}
+            <Button fullWidth size="lg" onClick={onContinue}>
+              Continue
+            </Button>
+          </div>
+        </BottomActionBar>
+      }
+    >
+      <div className="flex min-h-[calc(100dvh-12rem)] flex-col justify-center px-4 py-8">
+        <span className="grid size-11 place-items-center rounded-full border border-success-line bg-success-subtle text-success-signal">
+          <CheckCircle2 className="size-[22px] stroke-[2.5]" aria-hidden />
+        </span>
+        <h1 className="mt-4 text-title text-fg">{ISSUE_SCENARIO_LABELS[completion.last]} saved</h1>
+        <p className="mt-1.5 text-body text-fg-muted">
+          The report and signature are saved against this job.
+        </p>
+        {canReportOther && (
+          <p className="mt-4 text-body text-fg-muted">
+            If there is another issue, use Other liabilities before continuing.
+          </p>
+        )}
+        <div className="scroll-pb-dock" aria-hidden />
+      </div>
+    </AppShell>
+  );
+}
+
 /* -------------------------------------------------------------------- step body --- */
 
 /**
@@ -372,22 +491,31 @@ const formState: {
   extraCharges: string[];
   overtimeMinutes: string;
   overtimeCrew: string;
-  payment: string;
+  payment: string[];
   photos: File[];
+  totalChargesCorrect: "" | "yes" | "no";
+  totalChargesAmount: string;
+  totalChargesNote: string;
 } = {
   extraCharges: [],
   overtimeMinutes: "",
   overtimeCrew: "2",
-  payment: "",
-  photos: []
+  payment: [],
+  photos: [],
+  totalChargesCorrect: "",
+  totalChargesAmount: "",
+  totalChargesNote: ""
 };
 
 function resetFormState() {
   formState.extraCharges = [];
   formState.overtimeMinutes = "";
   formState.overtimeCrew = "2";
-  formState.payment = "";
+  formState.payment = [];
   formState.photos = [];
+  formState.totalChargesCorrect = "";
+  formState.totalChargesAmount = "";
+  formState.totalChargesNote = "";
 }
 
 function overtimeBlockedReason(offlineReason?: string): string | undefined {
@@ -411,6 +539,27 @@ function overtimeBlockedReason(offlineReason?: string): string | undefined {
   }
 
   return undefined;
+}
+
+function totalChargesBlockedReason(offlineReason?: string): string | undefined {
+  if (offlineReason) return offlineReason;
+  if (!formState.totalChargesCorrect) return "Choose whether the charges are correct.";
+  if (formState.totalChargesCorrect === "yes") return undefined;
+
+  const amount = Number(formState.totalChargesAmount);
+  if (!formState.totalChargesAmount.trim() || !Number.isFinite(amount) || amount < 0) {
+    return "Enter the custom final total amount.";
+  }
+  if (!formState.totalChargesNote.trim()) return "Add a reason for the adjustment.";
+  return undefined;
+}
+
+function totalChargesInput(): Record<string, string[]> | undefined {
+  if (formState.totalChargesCorrect !== "no") return undefined;
+  return {
+    total_charges: [formState.totalChargesAmount],
+    total_adjustment_note: [formState.totalChargesNote.trim()]
+  };
 }
 
 function StepBody({
@@ -446,11 +595,14 @@ function StepBody({
     formState.overtimeMinutes =
       state === "WAITING_OVERTIME" && job.overtimeMinutes ? String(job.overtimeMinutes) : "";
     formState.overtimeCrew = defaultOvertimeCrewSize(job);
-    formState.payment = "";
+    formState.payment = [];
     formState.photos = [];
+    formState.totalChargesCorrect = "";
+    formState.totalChargesAmount = state === "WAITING_TOTAL_CHARGES" ? suggestedTotal.toFixed(2) : "";
+    formState.totalChargesNote = "";
     tick();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [state, job.jobId]);
+  }, [state, job.jobId, suggestedTotal]);
 
   switch (state) {
     case "READY":
@@ -640,10 +792,63 @@ function StepBody({
               £{suggestedTotal.toFixed(2)}
             </p>
             <p className="mt-1 text-helper text-fg-muted">
-              Base price plus the extras and overtime you entered. This isn't editable here — call the
-              office if the customer needs a different amount.
+              Base price plus the extras and overtime you entered.
             </p>
           </div>
+          <ChoiceGroup legend="Are these charges correct?">
+            <Choice
+              type="radio"
+              name="total_charges_correct"
+              label="Yes"
+              selected={formState.totalChargesCorrect === "yes"}
+              onToggle={() => {
+                formState.totalChargesCorrect = "yes";
+                tick();
+              }}
+            />
+            <Choice
+              type="radio"
+              name="total_charges_correct"
+              label="No"
+              selected={formState.totalChargesCorrect === "no"}
+              onToggle={() => {
+                formState.totalChargesCorrect = "no";
+                tick();
+              }}
+            />
+          </ChoiceGroup>
+          {formState.totalChargesCorrect === "no" && (
+            <div className="flex flex-col gap-3 rounded-card border border-line bg-surface px-4 py-3.5">
+              <p className="text-heading text-fg">Custom Edit Price</p>
+              <Field label="Final total amount" required>
+                {control => (
+                  <Input
+                    {...control}
+                    prefix="£"
+                    inputMode="decimal"
+                    value={formState.totalChargesAmount}
+                    onChange={event => {
+                      formState.totalChargesAmount = event.target.value;
+                      tick();
+                    }}
+                  />
+                )}
+              </Field>
+              <Field label="Reason/note for adjustment" required>
+                {control => (
+                  <Textarea
+                    {...control}
+                    rows={3}
+                    value={formState.totalChargesNote}
+                    onChange={event => {
+                      formState.totalChargesNote = event.target.value;
+                      tick();
+                    }}
+                  />
+                )}
+              </Field>
+            </div>
+          )}
         </div>
       );
 
@@ -653,12 +858,13 @@ function StepBody({
           {PAYMENT_METHODS.map(option => (
             <Choice
               key={option}
-              type="radio"
-              name="payment_method"
+              type="checkbox"
               label={option}
-              selected={formState.payment === option}
+              selected={formState.payment.includes(option)}
               onToggle={() => {
-                formState.payment = option;
+                formState.payment = formState.payment.includes(option)
+                  ? formState.payment.filter(value => value !== option)
+                  : [...formState.payment, option];
                 tick();
               }}
             />
@@ -898,18 +1104,15 @@ function StepDock({
       );
 
     case "WAITING_TOTAL_CHARGES":
-      // Nothing to validate -- the total is server-computed and read-only on this
-      // screen (see StepBody's WAITING_TOTAL_CHARGES case), and the backend now
-      // computes it itself rather than trusting whatever this call sends.
       return (
         <BottomActionBar>
           <Button
             fullWidth
             size="lg"
             loading={busy}
-            blockedReason={offlineReason}
+            blockedReason={totalChargesBlockedReason(offlineReason)}
             onBlocked={onBlocked}
-            onClick={() => onAction("SUBMIT_TOTAL_CHARGES")}
+            onClick={() => onAction("SUBMIT_TOTAL_CHARGES", totalChargesInput())}
           >
             Continue
           </Button>
@@ -923,9 +1126,9 @@ function StepDock({
             fullWidth
             size="lg"
             loading={busy}
-            blockedReason={offlineReason ?? (!formState.payment ? "Choose a payment method." : undefined)}
+            blockedReason={offlineReason ?? (formState.payment.length === 0 ? "Choose at least one payment method." : undefined)}
             onBlocked={onBlocked}
-            onClick={() => onAction("SUBMIT_PAYMENT", { payment_method: [formState.payment] })}
+            onClick={() => onAction("SUBMIT_PAYMENT", { payment_method: formState.payment })}
           >
             Continue
           </Button>

@@ -27,6 +27,7 @@ export interface Job {
   overtimeMinutes: number;
   overtimeCharge: number;
   totalCharges: number;
+  totalAdjustmentNote?: string;
   paymentMethod: string;
   paymentStatus: string;
   clientNamePostcode: string;

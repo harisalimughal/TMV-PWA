@@ -3,12 +3,15 @@ import { env } from "../config/env";
 import { getDriverProfile } from "../auth/driver-account.service";
 import { getJob, listJobs, upsertJob } from "../db/jobs.repo";
 import { appendActivity } from "../db/activity.repo";
+import { getSetting } from "../db/settings.repo";
 import { WorkflowState } from "../workflow/workflow.states";
 import { DriverProfile, Job, JobStatus } from "./job.types";
 import { syncTodayBookings } from "./booking.service";
 import { log } from "../utils/logger";
 import { withJobLock } from "../utils/lock";
 import { ValidationError } from "../workflow/validation.engine";
+import { sendJobStartedSms } from "../integrations/firetext";
+import { JOB_STARTED_MESSAGE_TEMPLATE } from "../notifications/message";
 
 export function driverIdentifier(email?: string, chatUserName?: string): string {
   return email?.trim() || chatUserName?.trim() || "";
@@ -245,6 +248,48 @@ export async function saveJob(
   return job;
 }
 
+function sendJobStartedSmsIfAny(job: Job, driver: DriverProfile): void {
+  const actor = driver.email || driver.chatUserName;
+  if (!job.customerPhone) {
+    appendActivity({
+      jobId: job.jobId,
+      driver: actor,
+      action: "CLIENT_JOB_STARTED_SMS_SKIPPED",
+      detail: "No customer phone number"
+    }).catch(err => log.warn("job started SMS skip audit failed", { job_id: job.jobId, error: String(err) }));
+    return;
+  }
+  if (!env.firetextApiKey || !env.firetextSenderId) {
+    appendActivity({
+      jobId: job.jobId,
+      driver: actor,
+      action: "CLIENT_JOB_STARTED_SMS_SKIPPED",
+      detail: "Firetext is not configured"
+    }).catch(err => log.warn("job started SMS skip audit failed", { job_id: job.jobId, error: String(err) }));
+    return;
+  }
+
+  getSetting("JOB_STARTED_MESSAGE_TEXT", JOB_STARTED_MESSAGE_TEMPLATE)
+    .then(template => sendJobStartedSms(job, template, driver))
+    .then(() => appendActivity({
+      jobId: job.jobId,
+      driver: actor,
+      action: "CLIENT_JOB_STARTED_SMS_SENT",
+      detail: job.customerPhone
+    }))
+    .catch(err => {
+      const message = err instanceof Error ? err.message : String(err);
+      log.warn("job started SMS failed (non-fatal)", { job_id: job.jobId, error: message });
+      return appendActivity({
+        jobId: job.jobId,
+        driver: actor,
+        action: "CLIENT_JOB_STARTED_SMS_FAILED",
+        detail: message
+      });
+    })
+    .catch(err => log.warn("job started SMS failure audit failed", { job_id: job.jobId, error: String(err) }));
+}
+
 export async function startJob(jobId: string, identifier: string): Promise<Job> {
   /*
    * The whole read/decide/write sequence runs under the job lock, so two clicks
@@ -279,7 +324,9 @@ export async function startJob(jobId: string, identifier: string): Promise<Job> 
     // moment the driver taps a button in the app.
     job.currentState = WorkflowState.WAITING_ARRIVAL_PHOTO;
 
-    return saveJob(job, driver, "START_JOB", from, `Server start timestamp ${now}`);
+    const startedJob = await saveJob(job, driver, "START_JOB", from, `Server start timestamp ${now}`);
+    sendJobStartedSmsIfAny(startedJob, driver);
+    return startedJob;
   });
 }
 

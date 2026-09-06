@@ -127,7 +127,6 @@ export const EXTRA_CHARGE_OPTIONS = [
   "London Congestion charge",
   "Tunnel Charges",
   EXTRA_TIME_CHARGE,
-  "Packing Service",
   "No Extras Time"
 ];
 

@@ -149,11 +149,14 @@ export function applyTrigger(
       break;
     }
     case "SUBMIT_TOTAL_CHARGES":
-      next.totalCharges = Number(input.total_charges?.[0] ?? "0") || 0;
+      next.totalCharges = input.total_charges?.[0]
+        ? Math.round((Number(input.total_charges[0]) || 0) * 100) / 100
+        : job.basePrice + (job.overtimeCharge ?? 0);
+      next.totalAdjustmentNote = input.total_adjustment_note?.[0] ?? "";
       break;
     case "SUBMIT_PAYMENT":
-      next.paymentMethod = input.payment_method?.[0] ?? "";
-      next.paymentStatus = "PAID";
+      next.paymentMethod = (input.payment_method ?? []).join(", ");
+      next.paymentStatus = next.paymentMethod.includes("Invoice") ? "Outstanding" : "Recorded";
       break;
     case "signature":
       next.clientConfirmedBy = job.customerName;

@@ -72,8 +72,7 @@ export const SETTINGS_SPEC: SettingFieldSpec[] = [
     label: "Customer Message — On My Way",
     type: "textarea",
     fallback: JOB_STARTED_MESSAGE_TEMPLATE,
-    hint: "Ported from the classic dashboard's Settings tab for parity -- not currently sent by tmv-pwa's own " +
-      "workflow (no \"On my way\" step exists there yet). Placeholders: {customerName} {companyName} {pickup} " +
+    hint: "Sent by SMS when the driver starts a job. Placeholders: {customerName} {companyName} {pickup} " +
       "{dropoff} {driverPhone} {vanRegistration}."
   },
   {
