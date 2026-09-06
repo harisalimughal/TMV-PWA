@@ -147,6 +147,22 @@ function notifyAdminsOfCompletion(job: Job, jobId: string): void {
   }).catch(err => log.warn("job completion admin push failed (non-fatal)", { job_id: jobId, error: String(err) }));
 }
 
+async function sendReviewRequestIfAny(job: Job, jobId: string, actor: string, from: string): Promise<void> {
+  if (!job.customerEmail) return;
+  try {
+    const reviewTemplate = await getSetting("REVIEW_REQUEST_EMAIL_TEXT", REVIEW_REQUEST_EMAIL_TEMPLATE);
+    await sendReviewRequestEmail(job, reviewTemplate);
+    await appendActivity({
+      jobId, driver: actor, action: "CLIENT_REVIEW_EMAIL_SENT", fromState: from, toState: from, detail: job.customerEmail
+    });
+  } catch (error) {
+    await appendActivity({
+      jobId, driver: actor, action: "CLIENT_REVIEW_EMAIL_FAILED", fromState: from, toState: from,
+      detail: error instanceof Error ? error.message : String(error)
+    });
+  }
+}
+
 export async function handleAction(
   action: string,
   jobId: string,
@@ -273,6 +289,7 @@ export async function handleAction(
       if (manualTotal && !adjustmentNote) {
         throw new ValidationError("Add a reason for the total charges adjustment.");
       }
+      job.calculatedTotalCharges = await suggestedTotal(job);
       job.totalCharges = total;
       job.totalAdjustmentNote = manualTotal ? adjustmentNote : "";
       const from = job.currentState;
@@ -324,35 +341,22 @@ export async function handleAction(
       return saveJob(job, driver, action, from);
     }
 
-    case "REVIEW_NONE":
+    case "REVIEW_NONE": {
+      assertState(job.currentState, WorkflowState.WAITING_REVIEW_CHECK);
+      sendCompletionEmailIfAny(job, jobId);
+      return completeJob(jobId, identifier);
+    }
+
     case "REVIEW_YES": {
       assertState(job.currentState, WorkflowState.WAITING_REVIEW_CHECK);
-      const from = job.currentState;
-      if (action === "REVIEW_YES") {
-        job.currentState = WorkflowState.WAITING_REVIEW_SEND;
-        return saveJob(job, driver, action, from);
-      }
+      await sendReviewRequestIfAny(job, jobId, actor, job.currentState);
       sendCompletionEmailIfAny(job, jobId);
       return completeJob(jobId, identifier);
     }
 
     case "SEND_REVIEW_EMAIL": {
       assertState(job.currentState, WorkflowState.WAITING_REVIEW_SEND);
-      const from = job.currentState;
-      if (job.customerEmail) {
-        try {
-          const reviewTemplate = await getSetting("REVIEW_REQUEST_EMAIL_TEXT", REVIEW_REQUEST_EMAIL_TEMPLATE);
-          await sendReviewRequestEmail(job, reviewTemplate);
-          await appendActivity({
-            jobId, driver: actor, action: "CLIENT_REVIEW_EMAIL_SENT", fromState: from, toState: from, detail: job.customerEmail
-          });
-        } catch (error) {
-          await appendActivity({
-            jobId, driver: actor, action: "CLIENT_REVIEW_EMAIL_FAILED", fromState: from, toState: from,
-            detail: error instanceof Error ? error.message : String(error)
-          });
-        }
-      }
+      await sendReviewRequestIfAny(job, jobId, actor, job.currentState);
       sendCompletionEmailIfAny(job, jobId);
       return completeJob(jobId, identifier);
     }

@@ -173,8 +173,8 @@ export function PaperDossierReport({ job, isPreview = false }: Props) {
                   <MoneyRow label="Base Price" value={job.basePrice || 0} />
                   <MoneyRow label="Extra Charges" value={job.extraCharges || 0} />
                   <MoneyRow label="Overtime" value={job.overtimeCharge || 0} />
-                  <MoneyRow label="Calculated Total" value={calculatedTotal} strong />
-                  <MoneyRow label="Final Charged Total" value={job.totalCharges || 0} strong />
+                  <MoneyRow label="Total Charges" value={job.calculatedTotalCharges || calculatedTotal} strong />
+                  <MoneyRow label="Amount Charged" value={job.totalCharges || 0} strong />
                   <div className="flex items-center justify-between p-3 bg-white">
                     <span className="text-label font-medium text-fg-muted">Reconciliation</span>
                     <span className={`text-[11px] font-bold uppercase tracking-[0.03em] ${job.reconciled ? "text-admin-status-green" : "text-admin-status-red"}`}>
@@ -188,7 +188,7 @@ export function PaperDossierReport({ job, isPreview = false }: Props) {
             {pageNum === 2 && (
               <div className="mb-3 border border-[#E5E7EB] rounded-card overflow-hidden shrink-0">
                 <div className="flex items-center justify-between p-3 border-b border-[#E5E7EB] bg-white">
-                  <span className="text-label font-medium text-fg-muted">Total Charges</span>
+                  <span className="text-label font-medium text-fg-muted">Amount Charged</span>
                   <span className="text-[13px] font-bold text-admin-ink">{formatPounds(job.totalCharges)}</span>
                 </div>
                 <div className="flex items-center justify-between p-3 bg-white">

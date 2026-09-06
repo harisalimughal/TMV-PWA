@@ -51,7 +51,8 @@ export function FinishedJobsPage() {
     return false;
   };
 
-  const calculatedTotal = (job: NormalizedJob) => job.basePrice + job.extraCharges + job.overtimeCharge;
+  const calculatedTotal = (job: NormalizedJob) =>
+    job.calculatedTotalCharges || job.basePrice + job.extraCharges + job.overtimeCharge;
 
   return (
     <div className="space-y-6 max-w-[1440px] mx-auto">
@@ -116,7 +117,7 @@ export function FinishedJobsPage() {
                     </div>
                     <div className="mt-2 flex items-center justify-between gap-3 rounded-card bg-admin-surface px-3 py-2 text-[12px]">
                       <span className="text-admin-muted">
-                        Calc {formatGBP(calculated)}
+                        Total Charges {formatGBP(calculated)}
                       </span>
                       <span className={job.reconciled ? "font-semibold text-admin-status-green" : "font-semibold text-admin-status-red"}>
                         {job.reconciled ? "Reconciled" : "Check total"}
@@ -166,7 +167,7 @@ export function FinishedJobsPage() {
                   <th className="py-4 px-4 font-semibold text-eyebrow text-fg-subtle tracking-[0.03em]">Started</th>
                   <th className="py-4 px-4 font-semibold text-eyebrow text-fg-subtle tracking-[0.03em]">Finished</th>
                   <th className="py-4 px-4 font-semibold text-eyebrow text-fg-subtle tracking-[0.03em]">Punctuality</th>
-                  <th className="py-4 px-6 font-semibold text-eyebrow text-fg-subtle tracking-[0.03em] text-right">Total (£)</th>
+                  <th className="py-4 px-6 font-semibold text-eyebrow text-fg-subtle tracking-[0.03em] text-right">Amount Charged (£)</th>
                   <th className="py-4 px-4 font-semibold text-eyebrow text-fg-subtle tracking-[0.03em] text-center">Photos</th>
                   <th className="py-4 px-4 font-semibold text-eyebrow text-fg-subtle tracking-[0.03em] text-center">Signature</th>
                   <th className="py-4 px-4 font-semibold text-eyebrow text-fg-subtle tracking-[0.03em] text-center">Docs</th>
@@ -253,7 +254,7 @@ export function FinishedJobsPage() {
                             £{totalPounds.toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                           </div>
                           <div className="mt-0.5 text-[11px] text-admin-muted tabular-nums">
-                            Calc {formatGBP(calculated)}
+                            Total Charges {formatGBP(calculated)}
                           </div>
                           <div className={job.reconciled ? "mt-0.5 text-[10px] font-bold uppercase tracking-[0.03em] text-admin-status-green" : "mt-0.5 text-[10px] font-bold uppercase tracking-[0.03em] text-admin-status-red"}>
                             {job.reconciled ? "Reconciled" : "Mismatch"}

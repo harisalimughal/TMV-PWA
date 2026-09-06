@@ -148,6 +148,7 @@ export function JobWorkflowScreen({ jobId, onBack }: JobWorkflowScreenProps) {
   useEffect(() => () => resetFormState(), []);
 
   const autoSkippedFrom = useRef<string | null>(null);
+  const autoReviewSendFrom = useRef<string | null>(null);
 
   const openFirstIssueScenario = useCallback((scenario: ScenarioKey) => {
     if (isIssueScenario(scenario)) {
@@ -214,6 +215,16 @@ export function JobWorkflowScreen({ jobId, onBack }: JobWorkflowScreenProps) {
     }
     autoSkippedFrom.current = job.jobId;
     void run(() => sendAction(job.jobId, "SUBMIT_OVERTIME", {}));
+  }, [job, busy, online, run]);
+
+  useEffect(() => {
+    if (!job || job.currentState !== "WAITING_REVIEW_SEND") {
+      autoReviewSendFrom.current = null;
+      return;
+    }
+    if (busy || !online || autoReviewSendFrom.current === job.jobId) return;
+    autoReviewSendFrom.current = job.jobId;
+    void run(() => sendAction(job.jobId, "SEND_REVIEW_EMAIL"), "Review email sent");
   }, [job, busy, online, run]);
 
   if (loading) {
@@ -1166,20 +1177,7 @@ function StepDock({
       );
 
     case "WAITING_REVIEW_SEND":
-      return (
-        <BottomActionBar>
-          <Button
-            fullWidth
-            size="lg"
-            loading={busy}
-            blockedReason={offlineReason}
-            onBlocked={onBlocked}
-            onClick={() => onAction("SEND_REVIEW_EMAIL", undefined, "Review email sent")}
-          >
-            {busy ? "Sending…" : "Send review email & finish"}
-          </Button>
-        </BottomActionBar>
-      );
+      return null;
 
     case "COMPLETED":
       return (

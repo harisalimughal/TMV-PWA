@@ -176,7 +176,8 @@ export function JobsPage() {
     { header: "Status", value: (j: NormalizedJob) => j.status },
     { header: "Delay (min)", value: (j: NormalizedJob) => j.delayMinutes ?? "" },
     { header: "Payment method", value: (j: NormalizedJob) => j.paymentMethod },
-    { header: "Total (GBP)", value: (j: NormalizedJob) => toPounds(j.totalCharges).toFixed(2) }
+    { header: "Total Charges (GBP)", value: (j: NormalizedJob) => toPounds(j.calculatedTotalCharges).toFixed(2) },
+    { header: "Amount Charged (GBP)", value: (j: NormalizedJob) => toPounds(j.totalCharges).toFixed(2) }
   ];
 
   function exportRows(rows: NormalizedJob[], suffix: string) {
@@ -360,7 +361,10 @@ export function JobsPage() {
                     className="py-4 px-6 font-semibold text-eyebrow text-fg-subtle tracking-[0.03em] uppercase tracking-[0.03em] text-right group cursor-pointer hover:text-admin-ink transition select-none"
                     onClick={() => handleSort("Total")}
                   >
-                    Total <SortIcon column="Total" />
+                    Amount Charged <SortIcon column="Total" />
+                  </th>
+                  <th className="py-4 px-6 font-semibold text-eyebrow text-fg-subtle tracking-[0.03em] uppercase tracking-[0.03em] text-right">
+                    Total Charges
                   </th>
                   <th className="py-4 px-4 w-10"></th>
                 </tr>
@@ -370,7 +374,7 @@ export function JobsPage() {
                   // Skeleton Rows
                   Array.from({ length: 8 }).map((_, i) => (
                     <tr key={i} className="h-[64px]">
-                       <td colSpan={12} className="px-4">
+                       <td colSpan={13} className="px-4">
                          <div className="h-4 bg-admin-line/40 rounded w-full animate-pulse"></div>
                        </td>
                     </tr>
@@ -378,7 +382,7 @@ export function JobsPage() {
                 ) : paginatedData.length === 0 ? (
                   // Empty State
                   <tr>
-                    <td colSpan={12} className="py-16 text-center">
+                    <td colSpan={13} className="py-16 text-center">
                       <div className="w-12 h-12 bg-admin-surface text-admin-muted rounded-full flex items-center justify-center mx-auto mb-3">
                         <Search className="w-5 h-5" />
                       </div>
@@ -397,6 +401,7 @@ export function JobsPage() {
                     const rowNumber = (safePage - 1) * pageSize + index + 1;
                     const formattedTime = formatLondonDateTime(job.bookedStart);
                     const totalPounds = toPounds(job.totalCharges);
+                    const calculatedPounds = toPounds(job.calculatedTotalCharges);
                     const isCancelled = job.status === "CANCELLED";
                     const photoCount = job.evidenceItems?.filter(e => (e.thumbProxyUrl || e.driveUrl)).length || 0;
                     
@@ -494,6 +499,12 @@ export function JobsPage() {
                         <td className="px-6 text-right">
                           <div className={`font-mono text-[14px] font-bold tabular-nums ${totalPounds === 0 ? "text-[#B0B0B0] italic" : "text-admin-ink"}`}>
                             {totalPounds === 0 ? "-" : `£${totalPounds.toLocaleString("en-GB", { minimumFractionDigits: 2 })}`}
+                          </div>
+                        </td>
+
+                        <td className="px-6 text-right">
+                          <div className={`font-mono text-[13px] font-semibold tabular-nums ${calculatedPounds === 0 ? "text-[#B0B0B0] italic" : "text-admin-muted"}`}>
+                            {calculatedPounds === 0 ? "-" : `£${calculatedPounds.toLocaleString("en-GB", { minimumFractionDigits: 2 })}`}
                           </div>
                         </td>
 
@@ -646,6 +657,7 @@ function JobCardList({
         {jobs.map(job => {
           const driver = resolveDriver(job.driverName, job.driverInitials);
           const total = toPounds(job.totalCharges);
+          const calculated = toPounds(job.calculatedTotalCharges);
           const isSelected = selected.has(job.jobId);
           return (
             <article
@@ -684,8 +696,13 @@ function JobCardList({
                         {formatLondonDateTime(job.bookedStart) || "Not scheduled"}
                       </span>
                     </span>
-                    <span className="font-mono text-[14px] font-bold tabular-nums shrink-0">
-                      {total === 0 ? "—" : `£${total.toLocaleString("en-GB", { minimumFractionDigits: 2 })}`}
+                    <span className="flex shrink-0 flex-col items-end gap-0.5 font-mono tabular-nums">
+                      <span className="text-[14px] font-bold text-admin-ink">
+                        {total === 0 ? "—" : `£${total.toLocaleString("en-GB", { minimumFractionDigits: 2 })}`}
+                      </span>
+                      <span className="text-[11px] font-semibold text-admin-muted">
+                        Total {calculated === 0 ? "—" : `£${calculated.toLocaleString("en-GB", { minimumFractionDigits: 2 })}`}
+                      </span>
                     </span>
                   </div>
                 </button>

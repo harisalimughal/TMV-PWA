@@ -8,6 +8,13 @@
 import type { Job } from "../api/jobs";
 import { overtimeApplies } from "../screens/workflow/steps";
 
+function calculatedTotal(job: Job): number {
+  let extras = 0;
+  if (job.extraCharges?.includes("London Congestion charge")) extras += 18;
+  if (job.extraCharges?.includes("Tunnel Charges")) extras += 13;
+  return job.basePrice + extras + (job.overtimeCharge ?? 0);
+}
+
 export type WorkflowTrigger =
   | "start"
   | "evidence"
@@ -73,7 +80,7 @@ export function nextState(
     case "WAITING_CLIENT_CONFIRMATION":
       return trigger === "signature" ? "WAITING_REVIEW_CHECK" : current;
     case "WAITING_REVIEW_CHECK":
-      if (trigger === "REVIEW_YES") return "WAITING_REVIEW_SEND";
+      if (trigger === "REVIEW_YES") return "COMPLETED";
       if (trigger === "REVIEW_NONE") return "COMPLETED";
       return current;
     case "WAITING_REVIEW_SEND":
@@ -149,9 +156,10 @@ export function applyTrigger(
       break;
     }
     case "SUBMIT_TOTAL_CHARGES":
+      next.calculatedTotalCharges = calculatedTotal(job);
       next.totalCharges = input.total_charges?.[0]
         ? Math.round((Number(input.total_charges[0]) || 0) * 100) / 100
-        : job.basePrice + (job.overtimeCharge ?? 0);
+        : next.calculatedTotalCharges;
       next.totalAdjustmentNote = input.total_adjustment_note?.[0] ?? "";
       break;
     case "SUBMIT_PAYMENT":

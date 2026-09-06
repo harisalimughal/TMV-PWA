@@ -14,7 +14,6 @@ import { EvidenceStatus, EvidenceType } from "../../jobs/job.types";
 import { fromPounds, Pence, pence } from "../../utils/money";
 import { MongoDataset } from "./read";
 import { toThumbnailUrl } from "../../storage/cloudinary";
-import { reconcileFinancials } from "./finance";
 import { calculateDelayMinutes, calculateMinutes, getDelayBand, isTimingTrustworthy, toUtcIso } from "./timezone";
 import { ActivityEntry, EvidenceCategory, EvidenceState, JobException, NormalizedEvidenceItem, NormalizedJob } from "./types";
 
@@ -153,8 +152,11 @@ export async function normalizeMongoDataset(dataset: MongoDataset): Promise<Norm
     const extraCharges = extraChargesPounds > 0 ? fromPounds(extraChargesPounds) : pence(0);
     const overtimeMinutes = job.overtimeMinutes || 0;
     const overtimeCharge = safePence(job.overtimeCharge);
+    const calculatedTotalCharges = job.calculatedTotalCharges !== undefined && job.calculatedTotalCharges !== null
+      ? safePence(job.calculatedTotalCharges)
+      : pence(basePrice + extraCharges + overtimeCharge);
     const totalCharges = safePence(job.totalCharges);
-    const reconciled = reconcileFinancials(basePrice, extraCharges, overtimeCharge, totalCharges);
+    const reconciled = totalCharges === pence(0) || calculatedTotalCharges === totalCharges;
 
     const status = job.status;
     const currentState = job.currentState || status;
@@ -201,7 +203,7 @@ export async function normalizeMongoDataset(dataset: MongoDataset): Promise<Norm
       crewSize: job.crewSize || 1,
       driverInitials, driverName, driverEmail,
       status, currentState, workflowCompletionPct,
-      basePrice, extraChargeSelections, extraCharges, overtimeMinutes, overtimeCharge, totalCharges, reconciled,
+      basePrice, extraChargeSelections, extraCharges, overtimeMinutes, overtimeCharge, calculatedTotalCharges, totalCharges, reconciled,
       paymentMethod: job.paymentMethod || "Not recorded",
       paymentStatus: job.paymentStatus || "Not recorded",
       managerReviewStatus: job.managerReviewStatus || "Pending",

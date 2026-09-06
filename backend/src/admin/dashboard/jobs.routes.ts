@@ -443,7 +443,7 @@ async function mirrorNewJob(calendarEventId: string, fields: NewJobFields): Prom
     bookedStart: fields.bookedStart, bookedFinish: fields.bookedFinish,
     actualStart: "", actualFinish: "", bookedMinutes, actualMinutes: 0, differenceMinutes: 0,
     delayStatus: "Waiting", extraCharges: [], overtimeMinutes: 0, overtimeCharge: 0,
-    totalCharges: fields.price, paymentMethod: "",
+    calculatedTotalCharges: fields.price, totalCharges: fields.price, totalAdjustmentNote: "", paymentMethod: "",
     paymentStatus: fields.paidOnline ? "Paid Online" : "Pending",
     clientNamePostcode: "", clientConfirmedBy: "", signatureUrl: "",
     driveFolderId: "", driveFolderUrl: "",

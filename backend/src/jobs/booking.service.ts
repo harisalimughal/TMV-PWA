@@ -148,7 +148,9 @@ function toJob(parsed: ParsedCalendarBooking, existing?: Job): Job {
     extraCharges: existing?.extraCharges ?? [],
     overtimeMinutes: existing?.overtimeMinutes ?? 0,
     overtimeCharge: existing?.overtimeCharge ?? 0,
+    calculatedTotalCharges: existing?.calculatedTotalCharges,
     totalCharges: existing?.totalCharges ?? basePrice,
+    totalAdjustmentNote: existing?.totalAdjustmentNote ?? "",
     paymentMethod: existing?.paymentMethod ?? "",
     paymentStatus: existing?.paymentStatus ?? (paidOnline ? "Paid Online" : "Pending"),
     clientNamePostcode: existing?.clientNamePostcode ?? "",
@@ -265,7 +267,7 @@ export async function syncBookingsForDate(date = DateTime.now().setZone(env.time
 
 async function reconcileDisappeared(existing: Job, reason: string): Promise<Job | null> {
   if (existing.actualStart) {
-    log.error("started job disappeared from Calendar; needs a human decision", {
+    log.warn("calendar sync skipped auto-cancel for started job", {
       job_id: existing.jobId, reason, status: existing.status
     });
     // Surfaced on the admin dashboard's Exceptions page (TMV-Chat-bot reads this same
@@ -274,12 +276,12 @@ async function reconcileDisappeared(existing: Job, reason: string): Promise<Job 
     await recordException({
       jobId: existing.jobId,
       type: "STARTED_JOB_BOOKING_DISAPPEARED",
-      detail: `${reason}. The job is ${existing.status} and was not auto-cancelled. Needs a human decision.`,
+      detail: `${reason}. The job is ${existing.status} and was not auto-cancelled.`,
       timestamp: new Date().toISOString()
     }).catch(err => log.warn("failed to record exception", { job_id: existing.jobId, error: String(err) }));
     sendPushToAdmins({
-      title: "Exception: Job Needs Attention",
-      body: `Job ${existing.jobId} for ${existing.customerName || "a customer"} disappeared from Calendar mid-job and needs a human decision.`,
+      title: "Exception: Review Job Booking",
+      body: `Job ${existing.jobId} for ${existing.customerName || "a customer"} is no longer present in Calendar and was not auto-cancelled.`,
       url: "/?section=exceptions"
     }).catch(err => log.warn("failed to send exception push", { job_id: existing.jobId, error: String(err) }));
     return null;

@@ -9,6 +9,7 @@ interface Props {
 }
 
 export function PaperJobReport({ job, onClose }: Props) {
+  const calculatedTotalCharges = job.calculatedTotalCharges || job.basePrice + job.extraCharges + job.overtimeCharge;
   const photoCategories = [
     { key: "Arrival", label: "Arrival and Start the Job !" },
     { key: "Loaded", label: "Proof Of Van Loaded" },
@@ -170,6 +171,10 @@ export function PaperJobReport({ job, onClose }: Props) {
               </div>
               <div className="flex justify-between py-1 border-b border-[#1A1A1A]/20">
                 <span className="text-[12px] font-bold text-[#1A1A1A]">Total Charges</span>
+                <span className="text-[14px] font-bold text-[#1A1A1A]">£{(calculatedTotalCharges || 0).toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between py-1 border-b border-[#1A1A1A]/20">
+                <span className="text-[12px] font-bold text-[#1A1A1A]">Amount Charged</span>
                 <span className="text-[14px] font-bold text-[#1A1A1A]">£{(job.totalCharges || 0).toFixed(2)}</span>
               </div>
               <div className="flex justify-between py-1 border-b border-admin-line/50">

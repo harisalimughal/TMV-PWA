@@ -179,6 +179,7 @@ export function JobDetailDrawer({ job: initialJob, isOpen, onClose, onUpdated }:
 
   const isCancelled = job.status === "CANCELLED";
   const totalPounds = (job.totalCharges || 0) / 100;
+  const calculatedTotalPounds = (job.calculatedTotalCharges || job.totalCharges || 0) / 100;
   const bookingDetails = job.bookingDetails ?? {};
   const valueOrDash = (value?: string | null) => {
     const trimmed = String(value ?? "").trim();
@@ -282,11 +283,20 @@ export function JobDetailDrawer({ job: initialJob, isOpen, onClose, onUpdated }:
           </div>
           
           {/* Key Metrics Strip */}
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">
+            <div className="bg-white p-4 rounded-module border border-admin-line shadow-[0_2px_10px_rgb(0,0,0,0.02)] flex flex-col justify-between">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-[11px] uppercase text-admin-muted font-bold tracking-wider flex items-center gap-1.5">
+                  <DollarSign className="w-3 h-3" /> Total Charges
+                </span>
+              </div>
+              <span className="text-[20px] font-bold font-mono text-admin-ink">£{calculatedTotalPounds.toFixed(2)}</span>
+            </div>
+
             <div className="bg-white p-4 rounded-module border border-admin-line shadow-[0_2px_10px_rgb(0,0,0,0.02)] flex flex-col justify-between transition-all">
               <div className="flex items-center justify-between mb-2">
                 <span className="text-[11px] uppercase text-admin-muted font-bold tracking-wider flex items-center gap-1.5">
-                  <DollarSign className="w-3 h-3" /> Billed
+                  <DollarSign className="w-3 h-3" /> Amount Charged
                 </span>
               </div>
               {isEditing ? (
