@@ -9,6 +9,8 @@ import {
   buildDriverMatchIndex, fetchGpsLiveDevices, GpsLiveDevice, matchDriverByPlateAndName
 } from "../../integrations/gpslive";
 import { listDriverProfiles } from "../../auth/driver-account.service";
+import { jobsCollection } from "../../db/mongo";
+import { ExtraChargeType } from "../../jobs/job.types";
 import { log } from "../../utils/logger";
 
 export interface LiveFleetVehicle {
@@ -85,6 +87,54 @@ async function getLiveFleet(): Promise<LiveFleetVehicle[]> {
   return vehicles;
 }
 
+export interface CongestionDetectionRow {
+  jobId: string;
+  customerName: string;
+  driverInitials: string;
+  driverName: string | null;
+  vanRegistration: string | null;
+  detectedAt: string;
+  jobStatus: string;
+  chargeAdded: boolean;
+}
+
+/**
+ * Every job GPSLive (or the job-start check, see jobs/congestion-zone.service.ts)
+ * has flagged as having entered the Congestion Charge zone -- lets ops see whether
+ * the driver actually added the charge on the extra-charges step or not, which
+ * congestionZoneEnteredAt alone doesn't answer.
+ */
+async function getCongestionDetections(): Promise<CongestionDetectionRow[]> {
+  const col = await jobsCollection();
+  const [jobs, drivers] = await Promise.all([
+    col
+      .find({ congestionZoneEnteredAt: { $exists: true, $ne: "" } } as any)
+      .sort({ congestionZoneEnteredAt: -1 })
+      .limit(100)
+      .toArray(),
+    listDriverProfiles().catch(error => {
+      log.warn("congestion detections: driver lookup unavailable", { error: String(error) });
+      return [];
+    })
+  ]);
+
+  const driverByInitials = new Map(drivers.map(d => [d.initials, d]));
+
+  return jobs.map(job => {
+    const driver = driverByInitials.get(job.driverInitials);
+    return {
+      jobId: job.jobId,
+      customerName: job.customerName || "",
+      driverInitials: job.driverInitials || "",
+      driverName: driver?.fullName ?? null,
+      vanRegistration: driver?.vanRegistration ?? null,
+      detectedAt: job.congestionZoneEnteredAt!,
+      jobStatus: job.status,
+      chargeAdded: (job.extraCharges || []).includes(ExtraChargeType.CONGESTION)
+    };
+  });
+}
+
 export function dashboardFleetRoutes(): Router {
   const router = Router();
 
@@ -95,6 +145,16 @@ export function dashboardFleetRoutes(): Router {
     } catch (error) {
       log.error("fleet live lookup failed", error);
       return res.status(502).json({ error: { code: "FLEET_LOOKUP_FAILED", message: "Failed to fetch live vehicle positions." } });
+    }
+  });
+
+  router.get("/congestion", async (_req: Request, res: Response) => {
+    try {
+      const rows = await getCongestionDetections();
+      return res.status(200).json({ rows });
+    } catch (error) {
+      log.error("congestion detections lookup failed", error);
+      return res.status(502).json({ error: { code: "CONGESTION_LOOKUP_FAILED", message: "Failed to fetch congestion zone detections." } });
     }
   });
 

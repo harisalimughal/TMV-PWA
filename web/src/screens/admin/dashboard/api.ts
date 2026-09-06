@@ -325,3 +325,20 @@ export async function fetchLiveFleet(): Promise<{ vehicles: LiveFleetVehicle[]; 
   if (!res.ok) throw await apiError(res, "Failed to load live fleet positions");
   return res.json();
 }
+
+export interface CongestionDetectionRow {
+  jobId: string;
+  customerName: string;
+  driverInitials: string;
+  driverName: string | null;
+  vanRegistration: string | null;
+  detectedAt: string;
+  jobStatus: string;
+  chargeAdded: boolean;
+}
+
+export async function fetchCongestionDetections(): Promise<{ rows: CongestionDetectionRow[] }> {
+  const res = await apiFetch("/api/admin/fleet/congestion");
+  if (!res.ok) throw await apiError(res, "Failed to load congestion zone detections");
+  return res.json();
+}
