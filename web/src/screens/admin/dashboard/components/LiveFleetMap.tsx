@@ -37,6 +37,10 @@ interface Props {
 
 interface FleetVehicle {
   imei: string;
+  /** Straight from GPSLive's device.name -- a fallback identifier for the handful of
+   *  devices whose plateNumber field is blank (the plate only appears inside the
+   *  name, e.g. "MA71XOH-WC"). */
+  name: string;
   plateNumber: string;
   driverInitials: string;
   driverName: string;
@@ -123,9 +127,10 @@ export function LiveFleetMap({ jobs, onSelectJob }: Props) {
 
       return {
         imei: v.imei,
+        name: v.name,
         plateNumber: v.plateNumber,
         driverInitials: v.driverInitials || "??",
-        driverName: v.driverName || v.plateNumber || "Unidentified vehicle",
+        driverName: v.driverName || v.plateNumber || v.name || "Unidentified vehicle",
         matched: !!v.driverInitials,
         lat: v.lat,
         lng: v.lng,
@@ -244,11 +249,27 @@ export function LiveFleetMap({ jobs, onSelectJob }: Props) {
       const bgPill = isSelected ? "#1B75BC" : "#FFFFFF";
       const textColor = isSelected ? "#FFFFFF" : pinColor;
 
+      // GPSLive's own map always labels a pin with the device's plate (it comes
+      // straight off the device, not a match) -- shown the same way here regardless
+      // of whether this van's plate/initials have a matching driver on file yet.
+      // "matched" only controls the small round badge, which shows the driver's
+      // initials once matched or a plate fragment otherwise (never a dead-end "??").
+      const identifier = veh.plateNumber || veh.name || "Unmatched";
+      const plateLabel = veh.matched ? `${identifier} - ${veh.driverInitials}` : identifier;
+      const badgeText = veh.matched ? veh.driverInitials : identifier.replace(/[^A-Z0-9]/gi, "").slice(0, 2) || "??";
+
       const customIcon = L.divIcon({
         className: "van-marker-container",
         html: `
           <div style="position: relative; display: flex; flex-direction: column; align-items: center; cursor: pointer;">
-            ${veh.isMoving ? `<div class="animate-pulse-beacon" style="position: absolute; top: -4px; left: -4px; width: 36px; height: 36px; border-radius: 999px; background: ${pinColor}; opacity: 0.35;"></div>` : ""}
+            <div style="
+              margin-bottom: 3px; padding: 1px 6px; background: rgba(16, 24, 40, 0.85);
+              border-radius: 4px; color: #ffffff; font-family: 'IBM Plex Mono', monospace;
+              font-size: 9px; font-weight: 600; white-space: nowrap;
+            ">
+              ${plateLabel}
+            </div>
+            ${veh.isMoving ? `<div class="animate-pulse-beacon" style="position: absolute; top: 17px; left: -4px; width: 36px; height: 36px; border-radius: 999px; background: ${pinColor}; opacity: 0.35;"></div>` : ""}
             <div style="
               width: 28px; height: 28px; border-radius: 999px; background: ${bgPill};
               border: 2px solid ${pinColor}; box-shadow: 0 4px 12px rgba(16,24,40,0.25);
@@ -256,7 +277,7 @@ export function LiveFleetMap({ jobs, onSelectJob }: Props) {
               font-family: 'IBM Plex Mono', monospace; font-weight: 700; font-size: 10px;
               color: ${textColor}; z-index: 10; opacity: ${veh.isStale ? 0.6 : 1};
             ">
-              ${veh.driverInitials}
+              ${badgeText}
             </div>
             <div style="margin-top: -3px; width: 0; height: 0; border-left: 5px solid transparent; border-right: 5px solid transparent; border-top: 6px solid ${pinColor};"></div>
             <div style="
@@ -268,8 +289,8 @@ export function LiveFleetMap({ jobs, onSelectJob }: Props) {
             </div>
           </div>
         `,
-        iconSize: [28, 48],
-        iconAnchor: [14, 34]
+        iconSize: [40, 64],
+        iconAnchor: [20, 50]
       });
 
       const marker = L.marker([veh.lat, veh.lng], { icon: customIcon }).addTo(map);
