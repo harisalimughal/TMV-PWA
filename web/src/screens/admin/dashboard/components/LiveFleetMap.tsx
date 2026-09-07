@@ -62,7 +62,7 @@ interface FleetVehicle {
   ecoDrivingScore: number | null;
 }
 
-type FilterId = "ALL" | "MOVING" | "IDLE";
+type FilterId = "ALL" | "MOVING" | "IDLE" | "PARKED";
 
 /** A never-blank short label for a van: the matched driver's initials, otherwise the
  *  first two alphanumerics of its plate / device name. Keeps "??" off every surface. */
@@ -72,10 +72,11 @@ function shortBadge(v: { matched: boolean; driverInitials: string; plateNumber: 
   return src.slice(0, 2).toUpperCase() || "—";
 }
 
-/** A device stops reporting for various real reasons (parked in a basement, ignition
- * off long enough to sleep, SIM issue) -- 10 minutes without an update means "don't
- * trust this position", not "the van doesn't exist". */
-const STALE_AFTER_MINUTES = 10;
+/** A parked van's tracker reports far less often (ignition off -> it sleeps), so a
+ * gap between updates is normal and doesn't mean the van is gone -- GPSLive keeps
+ * showing it at its last position, and so do we. Past this many minutes we just mark
+ * the pin "parked" (greyed, position may be a little old); we never hide it. */
+const STALE_AFTER_MINUTES = 30;
 
 function relativeTime(dtTracker: string): string {
   const dt = DateTime.fromSQL(dtTracker, { zone: "utc" });
@@ -230,16 +231,14 @@ export function LiveFleetMap({ jobs, onSelectJob }: Props) {
     });
   }, [zonesData, showCongestionZone]);
 
-  // Offline / stale devices are hidden from the map entirely -- their last position is
-  // untrustworthy and they just clutter the view. Same as GPSLive's own live map.
-  const onlineVehicles = useMemo(() => vehicles.filter(v => !v.isStale), [vehicles]);
-
-  // Filtered vehicles (always a subset of the online set).
+  // Every van GPSLive knows about is shown, same as its own map -- parked vans just
+  // render greyed. The tabs narrow that set down; "All" is the whole fleet.
   const visibleVehicles = useMemo(() => {
-    if (activeFilter === "MOVING") return onlineVehicles.filter(v => v.isMoving);
-    if (activeFilter === "IDLE") return onlineVehicles.filter(v => !v.isMoving);
-    return onlineVehicles;
-  }, [onlineVehicles, activeFilter]);
+    if (activeFilter === "MOVING") return vehicles.filter(v => v.isMoving);
+    if (activeFilter === "IDLE") return vehicles.filter(v => !v.isStale && !v.isMoving);
+    if (activeFilter === "PARKED") return vehicles.filter(v => v.isStale);
+    return vehicles;
+  }, [vehicles, activeFilter]);
 
   const activeSelected = useMemo(() => {
     if (!selectedId) return visibleVehicles[0] || null;
@@ -272,9 +271,9 @@ export function LiveFleetMap({ jobs, onSelectJob }: Props) {
       const customIcon = L.divIcon({
         className: "van-marker-container",
         html: `
-          <div style="position: relative; display: flex; flex-direction: column; align-items: center; cursor: pointer;">
+          <div style="position: relative; display: flex; flex-direction: column; align-items: center; cursor: pointer; opacity: ${veh.isStale && !isSelected ? 0.7 : 1};">
             <div style="
-              margin-bottom: 4px; padding: 3px 9px; background: ${isSelected ? "#1B75BC" : "rgba(16, 24, 40, 0.9)"};
+              margin-bottom: 4px; padding: 3px 9px; background: ${isSelected ? "#1B75BC" : veh.isStale ? "rgba(71, 84, 103, 0.92)" : "rgba(16, 24, 40, 0.9)"};
               border-radius: 7px; color: #ffffff; font-family: 'IBM Plex Mono', monospace;
               font-size: 12px; font-weight: 700; letter-spacing: 0.02em; white-space: nowrap;
               box-shadow: 0 2px 8px rgba(16,24,40,0.35);
@@ -344,9 +343,9 @@ export function LiveFleetMap({ jobs, onSelectJob }: Props) {
     setTimeout(() => setCopiedText(false), 2000);
   };
 
-  const movingCount = onlineVehicles.filter(v => v.isMoving).length;
-  const idleCount = onlineVehicles.length - movingCount;
-  const offlineCount = vehicles.length - onlineVehicles.length;
+  const movingCount = vehicles.filter(v => v.isMoving).length;
+  const parkedCount = vehicles.filter(v => v.isStale).length;
+  const idleCount = vehicles.length - movingCount - parkedCount;
 
   return (
     <div
@@ -382,19 +381,17 @@ export function LiveFleetMap({ jobs, onSelectJob }: Props) {
         </div>
         <div className="hidden sm:flex items-center gap-1.5 text-xs text-admin-muted font-mono shrink-0">
           <Radio className="w-3.5 h-3.5 text-admin-brand animate-pulse" />
-          <span>
-            {movingCount} in transit &bull; {onlineVehicles.length} live
-            {offlineCount > 0 && <span className="opacity-60"> &bull; {offlineCount} offline</span>}
-          </span>
+          <span>{movingCount} in transit &bull; {vehicles.length} tracked</span>
         </div>
 
         <div className="flex items-center gap-2 flex-wrap sm:ml-auto">
           <div className="flex items-center p-0.5 bg-admin-surface rounded border border-admin-line text-xs font-medium shrink-0">
             {(
               [
-                { id: "ALL", label: `All (${onlineVehicles.length})` },
+                { id: "ALL", label: `All (${vehicles.length})` },
                 { id: "MOVING", label: `Moving (${movingCount})` },
-                { id: "IDLE", label: `Idle (${idleCount})` }
+                { id: "IDLE", label: `Idle (${idleCount})` },
+                { id: "PARKED", label: `Parked (${parkedCount})` }
               ] as const
             ).map(tab => (
               <button
@@ -455,18 +452,12 @@ export function LiveFleetMap({ jobs, onSelectJob }: Props) {
             </button>
           </div>
 
-          {onlineVehicles.length === 0 && (
+          {vehicles.length === 0 && (
             <div className="absolute inset-0 z-[300] flex items-center justify-center bg-white/80 backdrop-blur-xs">
               <div className="text-center px-6">
                 <WifiOff className="w-8 h-8 text-admin-muted mx-auto mb-2 opacity-50" />
-                <p className="text-label font-semibold text-fg">
-                  {vehicles.length === 0 ? "No vehicle positions available" : "No vans reporting right now"}
-                </p>
-                <p className="text-[11px] text-admin-muted mt-1">
-                  {vehicles.length === 0
-                    ? "Waiting for GPSLive telemetry..."
-                    : `${vehicles.length} device${vehicles.length === 1 ? "" : "s"} on the account, all currently offline.`}
-                </p>
+                <p className="text-label font-semibold text-fg">No vehicle positions available</p>
+                <p className="text-[11px] text-admin-muted mt-1">Waiting for GPSLive telemetry...</p>
               </div>
             </div>
           )}
@@ -660,18 +651,18 @@ export function LiveFleetMap({ jobs, onSelectJob }: Props) {
               <p className="text-[11px] text-admin-muted mt-1 max-w-[200px]">
                 {vehicles.length === 0
                   ? "Waiting for the first GPSLive position update."
-                  : "No vans are live right now."}
+                  : "Try a different filter above."}
               </p>
             </div>
           )}
 
-          {onlineVehicles.length > 0 && (
+          {vehicles.length > 0 && (
             <div className="pt-3 mt-3 border-t border-admin-line">
               <span className="text-[11px] font-medium text-admin-muted block mb-2">
-                Live vans ({onlineVehicles.length}) &bull; Click to track
+                Fleet ({vehicles.length}) &bull; Click to track
               </span>
               <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
-                {onlineVehicles.map(veh => {
+                {vehicles.map(veh => {
                   const isSelected = activeSelected?.imei === veh.imei;
                   return (
                     <button
@@ -679,10 +670,10 @@ export function LiveFleetMap({ jobs, onSelectJob }: Props) {
                       onClick={() => handleFocusVehicle(veh)}
                       className={`px-2 py-1 rounded text-xs font-mono font-medium transition flex items-center gap-1.5 flex-shrink-0 ${
                         isSelected ? "bg-admin-brand text-white shadow-card" : "bg-admin-surface border border-admin-line text-admin-ink-2 hover:bg-admin-surface-2"
-                      }`}
+                      } ${veh.isStale ? "opacity-55" : ""}`}
                     >
                       <span>{shortBadge(veh)}</span>
-                      <span className="text-[10px] opacity-75">{`${veh.speedMph}mph`}</span>
+                      <span className="text-[10px] opacity-75">{veh.isStale ? "parked" : `${veh.speedMph}mph`}</span>
                     </button>
                   );
                 })}
