@@ -278,77 +278,66 @@ export function Layout({ activeSection, onSelectSection, onLogout, children }: P
       </aside>
 
       <div className="flex-1 flex flex-col min-w-0">
-        <header className="h-[56px] bg-white border-b border-admin-line px-4 md:px-6 flex items-center justify-between sticky top-0 z-20">
-          <div className="flex items-center gap-4 min-w-0">
+        {/* One bar: page title on the left, the utility cluster on the right. The
+            old separate "Search anything" strip above this was pure vertical cost on
+            every tab -- its controls moved here. */}
+        <header className="shrink-0 bg-white border-b border-admin-line px-4 md:px-8 py-3 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3 min-w-0">
             <button
               onClick={() => setMobileNavOpen(true)}
-              className="md:hidden w-11 h-11 -ml-1 shrink-0 rounded-full hover:bg-admin-surface flex items-center justify-center text-admin-muted hover:text-admin-ink transition"
+              className="md:hidden w-10 h-10 -ml-1 shrink-0 rounded-full hover:bg-admin-surface flex items-center justify-center text-admin-muted hover:text-admin-ink transition"
               title="Open menu"
               aria-label="Open navigation menu"
               aria-expanded={mobileNavOpen}
             >
               <Menu className="w-5 h-5" />
             </button>
-            {/* A button, not a readOnly input. As an input it was focusable but did
-                nothing on Enter, so keyboard users could reach it and not open it. */}
+            <div className="text-admin-brand shrink-0">
+              <currentNav.icon className="w-5 h-5 md:w-6 md:h-6" />
+            </div>
+            <h1 className="text-[17px] md:text-title text-fg tracking-tight truncate">{currentNav.label}</h1>
+          </div>
+
+          <div className="flex items-center gap-1.5 md:gap-2 shrink-0">
             <button
               type="button"
               onClick={() => setPaletteOpen(true)}
-              className="relative hidden md:flex items-center w-[320px] h-10 pl-10 pr-4 bg-admin-surface rounded-full text-sm text-admin-muted hover:bg-admin-line/40 transition text-left"
+              className="relative hidden lg:flex items-center w-[220px] h-9 pl-9 pr-3 bg-admin-surface rounded-full text-[13px] text-admin-muted hover:bg-admin-line/40 transition text-left"
             >
-              <Search className="w-4 h-4 text-admin-muted absolute left-4 pointer-events-none" aria-hidden />
-              Search anything
+              <Search className="w-4 h-4 text-admin-muted absolute left-3 pointer-events-none" aria-hidden />
+              Search
               <kbd className="ml-auto text-[11px] font-sans font-medium text-admin-muted bg-white border border-admin-line rounded px-1.5 py-0.5">
                 ⌘K
               </kbd>
             </button>
-          </div>
-
-          <div className="flex items-center gap-4">
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => setPaletteOpen(true)}
-                className="md:hidden w-9 h-9 rounded-full hover:bg-admin-surface flex items-center justify-center text-admin-muted hover:text-admin-ink transition"
-                title="Search"
-              >
-                <Search className="w-4 h-4" />
-              </button>
-
-              <button
-                onClick={() => refreshMutation.mutate()}
-                disabled={refreshMutation.isPending}
-                className="w-9 h-9 rounded-full hover:bg-admin-surface flex items-center justify-center text-admin-muted hover:text-admin-ink transition"
-                title="Refresh (R)"
-              >
-                <RefreshCw className={`w-4 h-4 ${refreshMutation.isPending ? "animate-spin text-admin-brand" : "text-admin-muted"}`} />
-              </button>
-
-              <button
-                onClick={() => setShortcutsOpen(true)}
-                className="hidden md:flex w-9 h-9 rounded-full hover:bg-admin-surface items-center justify-center text-admin-muted hover:text-admin-ink transition"
-                title="Keyboard shortcuts (?)"
-              >
-                <Command className="w-4 h-4" />
-              </button>
-
-              <NotificationBell />
-
-              <img src="/tmv-logo.png" alt="" className="w-9 h-9 ml-2 rounded-full object-cover border-2 border-white shadow-primary" />
-            </div>
+            <button
+              onClick={() => setPaletteOpen(true)}
+              className="lg:hidden w-9 h-9 rounded-full hover:bg-admin-surface flex items-center justify-center text-admin-muted hover:text-admin-ink transition"
+              title="Search (⌘K)"
+            >
+              <Search className="w-4 h-4" />
+            </button>
+            <button
+              onClick={() => refreshMutation.mutate()}
+              disabled={refreshMutation.isPending}
+              className="w-9 h-9 rounded-full hover:bg-admin-surface flex items-center justify-center text-admin-muted hover:text-admin-ink transition"
+              title="Refresh (R)"
+            >
+              <RefreshCw className={`w-4 h-4 ${refreshMutation.isPending ? "animate-spin text-admin-brand" : "text-admin-muted"}`} />
+            </button>
+            <button
+              onClick={() => setShortcutsOpen(true)}
+              className="hidden md:flex w-9 h-9 rounded-full hover:bg-admin-surface items-center justify-center text-admin-muted hover:text-admin-ink transition"
+              title="Keyboard shortcuts (?)"
+            >
+              <Command className="w-4 h-4" />
+            </button>
+            <NotificationBell />
+            <img src="/tmv-logo.png" alt="" className="w-9 h-9 rounded-full object-cover border-2 border-white shadow-primary" />
           </div>
         </header>
 
         <div className="flex-1 overflow-y-auto flex flex-col">
-          <div className="bg-white border-b border-admin-line px-4 md:px-8 py-4 md:py-5 flex items-center justify-between shrink-0">
-            <div className="flex items-center gap-3 min-w-0">
-              <div className="text-admin-brand shrink-0">
-                <currentNav.icon className="w-5 h-5 md:w-6 md:h-6" />
-              </div>
-              <h1 className="text-[17px] md:text-title text-fg tracking-tight truncate">{currentNav.label}</h1>
-            </div>
-            <div className="flex items-center gap-3" />
-          </div>
-
           <main className="flex-1 p-4 md:p-8">{children}</main>
         </div>
       </div>
