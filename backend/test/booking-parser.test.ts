@@ -88,4 +88,28 @@ describe("parseCalendarEvent field extraction", () => {
     );
     expect(parsed!.pickup).toBe("119 Queens Road, LONDON: SE15 2EZ");
   });
+
+  it("captures van size, hire duration, extra request, inventory and the extra-charge rate", () => {
+    const parsed = parseCalendarEvent(
+      ev(
+        [
+          "ANY EXTRA CHARGE: £55 PER HALF AN HOUR",
+          "Name: Helena Gray",
+          "Van Size: Large - Luton Van",
+          "Duration of Van Hire: 04 Hours",
+          "Number of helpers: 2 Men - Client doesn't need to help",
+          "Extra request: I don't need any extras",
+          "Inventory item:",
+          "Bed sofa table chairs benches sideboard coffee table"
+        ].join("\n"),
+        "£120 /Y-HE" // title has no crew -> falls back to "Number of helpers"
+      )
+    );
+    expect(parsed!.vanSize).toBe("Large - Luton Van");
+    expect(parsed!.hireDurationText).toBe("04 Hours");
+    expect(parsed!.extraRequest).toBe("I don't need any extras");
+    expect(parsed!.inventory).toBe("Bed sofa table chairs benches sideboard coffee table");
+    expect(parsed!.extraChargeText).toBe("£55 PER HALF AN HOUR");
+    expect(parsed!.crewSize).toBe(2);
+  });
 });

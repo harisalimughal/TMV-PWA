@@ -49,6 +49,17 @@ export interface Job {
   floorFrom: string;
   floorTo: string;
   crewSize: number;
+  /* ---- extra booking-form fields, parsed from the Calendar description ---------
+   * Informational only -- surfaced to the driver/admin, not wired into pricing.
+   * Empty on jobs synced before these existed, until their next resync. */
+  vanSize: string;
+  hireDurationText: string;
+  extraRequest: string;
+  inventory: string;
+  /** The booking's stated overtime rate, e.g. "£55 per half an hour". Displayed as a
+   *  reference for the driver on the extra-charges step; the actual overtime figure
+   *  still comes from admin Pricing Settings. */
+  extraChargeText: string;
   basePrice: number;
   paidOnline: boolean;
   bookedStart: string;
@@ -119,6 +130,11 @@ export interface ParsedCalendarBooking {
   floorFrom: string;
   floorTo: string;
   crewSize: number;
+  vanSize: string;
+  hireDurationText: string;
+  extraRequest: string;
+  inventory: string;
+  extraChargeText: string;
   price: number;
   paidOnline: boolean;
   bookedStart: string;

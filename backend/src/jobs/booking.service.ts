@@ -59,6 +59,12 @@ const DROPOFF_LABELS = [
 const FLOOR_FROM_LABELS = ["Floor from", "From floor", "Pickup floor", "Floor at pickup", "Floors from"];
 const FLOOR_TO_LABELS = ["Floor to", "To floor", "Dropoff floor", "Drop off floor", "Delivery floor", "Floor at dropoff", "Floors to"];
 const COMBINED_FLOOR_LABELS = ["Floor from and to", "Floors from and to", "Floor from & to", "Floor", "Floors", "Stairs"];
+const HELPERS_LABELS = ["Number of helpers", "Number of men", "No of helpers", "Helpers", "Men", "Crew", "Movers"];
+const VAN_SIZE_LABELS = ["Van size", "Vehicle size", "Van type", "Van"];
+const HIRE_DURATION_LABELS = ["Duration of van hire", "Hire duration", "Booking duration", "Duration", "Hours booked"];
+const EXTRA_REQUEST_LABELS = ["Extra request", "Extra requests", "Additional requests", "Special requests", "Extras", "Notes", "Additional notes"];
+const INVENTORY_LABELS = ["Inventory item", "Inventory items", "Inventory list", "Inventory", "Items", "Item list", "Goods"];
+const EXTRA_CHARGE_LABELS = ["Any extra charge", "Extra charge", "Extra charges", "Overtime rate", "Additional charge"];
 
 /** Every label the form is known to emit -- including the ones we don't map to a Job
  *  field ("Van Size:", "Inventory item:", ...). Used only to recognise a line as
@@ -67,10 +73,10 @@ const ALL_LABELS = new Set(
   [
     ...NAME_LABELS, ...EMAIL_LABELS, ...PHONE_LABELS, ...PICKUP_LABELS, ...DROPOFF_LABELS,
     ...FLOOR_FROM_LABELS, ...FLOOR_TO_LABELS, ...COMBINED_FLOOR_LABELS,
+    ...HELPERS_LABELS, ...VAN_SIZE_LABELS, ...HIRE_DURATION_LABELS,
+    ...EXTRA_REQUEST_LABELS, ...INVENTORY_LABELS, ...EXTRA_CHARGE_LABELS,
     "Move from", "Move to", "From", "To", "Pick", "Drop", "Pick up", "Drop off",
-    "Move date", "Date", "Van size", "Van", "Duration of van hire", "Duration",
-    "Number of helpers", "Helpers", "Extra request", "Extra requests", "Extras",
-    "Inventory item", "Inventory items", "Inventory", "Any extra charge", "Extra charge"
+    "Move date", "Date"
   ].map(l => l.toLowerCase())
 );
 
@@ -165,6 +171,18 @@ export function parseCalendarEvent(event: calendar_v3.Schema$Event): ParsedCalen
     }
   }
 
+  const vanSize = field(description, VAN_SIZE_LABELS);
+  const hireDurationText = field(description, HIRE_DURATION_LABELS);
+  const extraRequest = field(description, EXTRA_REQUEST_LABELS);
+  const inventory = field(description, INVENTORY_LABELS);
+  const extraChargeText = field(description, EXTRA_CHARGE_LABELS);
+
+  // Crew size comes from the title ("2 Men ..."); fall back to "Number of helpers:"
+  // in the description when the title omits it.
+  const helpersRaw = field(description, HELPERS_LABELS);
+  const helpersCrew = Number(helpersRaw.match(/(\d+)/)?.[1] ?? 0);
+  const crewSize = parsedTitle.crewSize || helpersCrew;
+
   return {
     calendarEventId: event.id,
     driverInitials: parsedTitle.driverInitials,
@@ -175,7 +193,12 @@ export function parseCalendarEvent(event: calendar_v3.Schema$Event): ParsedCalen
     dropoff,
     floorFrom,
     floorTo,
-    crewSize: parsedTitle.crewSize,
+    crewSize,
+    vanSize,
+    hireDurationText,
+    extraRequest,
+    inventory,
+    extraChargeText,
     price: parsedTitle.price,
     paidOnline: parsedTitle.paidOnline,
     bookedStart,
@@ -230,6 +253,11 @@ function toJob(parsed: ParsedCalendarBooking, existing?: Job): Job {
     floorFrom: parsed.floorFrom,
     floorTo: parsed.floorTo,
     crewSize,
+    vanSize: parsed.vanSize,
+    hireDurationText: parsed.hireDurationText,
+    extraRequest: parsed.extraRequest,
+    inventory: parsed.inventory,
+    extraChargeText: parsed.extraChargeText,
     basePrice,
     paidOnline,
     bookedStart,
@@ -275,7 +303,7 @@ function isUnchanged(next: Job, existing?: Job): boolean {
   if (!existing) return false;
   const keys: Array<keyof Job> = [
     "driverInitials", "customerName", "customerEmail", "customerPhone", "pickup", "dropoff",
-    "floorFrom", "floorTo",
+    "floorFrom", "floorTo", "vanSize", "hireDurationText", "extraRequest", "inventory", "extraChargeText",
     "crewSize", "basePrice", "paidOnline", "bookedStart", "bookedFinish", "bookedMinutes", "status",
     "rawTitle", "rawDescription"
   ];

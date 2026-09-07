@@ -923,7 +923,21 @@ function StepBody({
   }
 }
 
+function DetailRow({ label, value }: { label: string; value?: string }) {
+  if (!value) return null;
+  return (
+    <div className="flex items-start justify-between gap-3">
+      <span className="text-body text-fg-muted">{label}</span>
+      <span className="max-w-[62%] text-right text-card text-fg">{value}</span>
+    </div>
+  );
+}
+
 function ReadyCard({ job }: { job: Job }) {
+  const floors =
+    job.floorFrom || job.floorTo
+      ? `${job.floorFrom || "—"} → ${job.floorTo || "—"}`
+      : undefined;
   return (
     <div className="flex flex-col gap-3 rounded-card border border-line bg-surface px-4 py-4">
       <div className="flex items-center justify-between gap-3">
@@ -935,6 +949,30 @@ function ReadyCard({ job }: { job: Job }) {
         <span className="text-body text-fg-muted">Crew</span>
         <span className="text-card text-fg">{job.crewSize || "?"}</span>
       </div>
+      <DetailRow label="Van" value={job.vanSize} />
+      <DetailRow label="Hire time" value={job.hireDurationText} />
+      <DetailRow label="Floors" value={floors} />
+      <DetailRow label="Overtime rate" value={job.extraChargeText} />
+
+      {job.extraRequest && (
+        <>
+          <div className="h-px bg-line" />
+          <div>
+            <span className="text-body text-fg-muted">Extra request</span>
+            <p className="mt-1 whitespace-pre-wrap text-card text-fg">{job.extraRequest}</p>
+          </div>
+        </>
+      )}
+      {job.inventory && (
+        <>
+          <div className="h-px bg-line" />
+          <div>
+            <span className="text-body text-fg-muted">What's moving</span>
+            <p className="mt-1 whitespace-pre-wrap text-card text-fg">{job.inventory}</p>
+          </div>
+        </>
+      )}
+
       {job.paidOnline && (
         <div className="flex items-center gap-2 rounded-control bg-success-subtle px-3 py-2.5 text-label font-medium text-success">
           <CheckCircle2 className="size-4 shrink-0" aria-hidden />

@@ -418,6 +418,18 @@ export function JobDetailDrawer({ job: initialJob, isOpen, onClose, onUpdated }:
                 <span className="block text-[10px] font-bold uppercase tracking-wider text-admin-muted">Duration</span>
                 <span className="mt-1 block text-[14px] font-semibold text-admin-ink break-words">{bookedDuration}</span>
               </div>
+              {bookingDetails.hireDuration && (
+                <div>
+                  <span className="block text-[10px] font-bold uppercase tracking-wider text-admin-muted">Hire time (booked)</span>
+                  <span className="mt-1 block text-[14px] font-semibold text-admin-ink break-words">{bookingDetails.hireDuration}</span>
+                </div>
+              )}
+              {bookingDetails.extraChargeText && (
+                <div>
+                  <span className="block text-[10px] font-bold uppercase tracking-wider text-admin-muted">Overtime rate</span>
+                  <span className="mt-1 block text-[14px] font-semibold text-admin-ink break-words">{bookingDetails.extraChargeText}</span>
+                </div>
+              )}
               <div>
                 <span className="block text-[10px] font-bold uppercase tracking-wider text-admin-muted">Notes</span>
                 <span className="mt-1 block text-[14px] font-semibold text-admin-ink whitespace-pre-wrap break-words">{valueOrDash(bookingDetails.notes)}</span>

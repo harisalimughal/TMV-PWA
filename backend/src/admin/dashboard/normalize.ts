@@ -7,7 +7,7 @@
  * collection (`listDriverProfiles()`) -- the actual point of this whole migration.
  */
 import { listDriverProfiles } from "../../auth/driver-account.service";
-import { ExtraChargeType } from "../../jobs/job.types";
+import { ExtraChargeType, Job } from "../../jobs/job.types";
 import { env } from "../../config/env";
 import { getSetting } from "../../db/settings.repo";
 import { EvidenceStatus, EvidenceType } from "../../jobs/job.types";
@@ -64,11 +64,20 @@ function field(description: string, labels: string[], multiline = false): string
   return "";
 }
 
-function parseBookingDetails(description: string): NormalizedJob["bookingDetails"] {
+/**
+ * Booking extras for the job drawer. The canonical values now live on the Job doc
+ * itself (parsed once in jobs/booking.service.ts with the fuller label vocabulary);
+ * the local description re-parse is only a fallback for jobs synced before those
+ * fields existed.
+ */
+function parseBookingDetails(job: Job): NormalizedJob["bookingDetails"] {
+  const d = job.rawDescription || "";
   return {
-    vanSize: field(description, ["Van size"]),
-    notes: field(description, ["Notes", "Extra request"], true),
-    inventory: field(description, ["Inventory item"], true)
+    vanSize: job.vanSize || field(d, ["Van size"]),
+    notes: job.extraRequest || field(d, ["Notes", "Extra request"], true),
+    inventory: job.inventory || field(d, ["Inventory item"], true),
+    hireDuration: job.hireDurationText || field(d, ["Duration of van hire", "Duration"]),
+    extraChargeText: job.extraChargeText || field(d, ["Any extra charge", "Extra charge"])
   };
 }
 
@@ -231,7 +240,7 @@ export async function normalizeMongoDataset(dataset: MongoDataset): Promise<Norm
       driveFolderUrl: undefined,
       activity: activity.sort((a, b) => a.timestamp.localeCompare(b.timestamp)),
       exceptions,
-      bookingDetails: parseBookingDetails(job.rawDescription || ""),
+      bookingDetails: parseBookingDetails(job),
       rawTitle: job.rawTitle || "",
       created: toUtcIso(job.createdAt),
       updated: toUtcIso(job.updatedAt)

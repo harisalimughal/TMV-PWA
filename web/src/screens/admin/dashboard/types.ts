@@ -42,6 +42,8 @@ export interface BookingDetails {
   vanSize?: string;
   notes?: string;
   inventory?: string;
+  hireDuration?: string;
+  extraChargeText?: string;
 }
 
 export interface NormalizedJob {

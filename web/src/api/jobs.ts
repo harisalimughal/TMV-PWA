@@ -12,6 +12,15 @@ export interface Job {
   customerPhone: string;
   pickup: string;
   dropoff: string;
+  /** Booking-form extras parsed from the Calendar description (see
+   *  backend/src/jobs/booking.service.ts). Informational; may be empty on older jobs. */
+  floorFrom?: string;
+  floorTo?: string;
+  vanSize?: string;
+  hireDurationText?: string;
+  extraRequest?: string;
+  inventory?: string;
+  extraChargeText?: string;
   crewSize: number;
   basePrice: number;
   paidOnline: boolean;
