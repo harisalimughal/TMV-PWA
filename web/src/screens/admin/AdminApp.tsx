@@ -18,6 +18,7 @@ import { ReportsPage } from "./dashboard/pages/ReportsPage";
 import { MessagingPage } from "./dashboard/pages/MessagingPage";
 import { PricingSettingsPage } from "./dashboard/pages/PricingSettingsPage";
 import { usePushNotifications } from "../../lib/pwa/usePushNotifications";
+import { useServiceWorkerUpdate } from "../pwa-settings/hooks/useServiceWorkerUpdate";
 
 /**
  * Entry point for the /admin path on dashboard.themanvan.co.uk (see App.tsx's
@@ -38,6 +39,19 @@ export function AdminApp() {
       .then(setLoggedIn)
       .finally(() => setChecking(false));
   }, []);
+
+  // The dashboard is a desktop ops tool, not an offline PWA -- when a new build ships
+  // there is no value in a "refresh available?" prompt (that's the driver app's
+  // UpdateBanner). Apply a waiting service-worker update automatically so a deploy
+  // lands within a poll cycle instead of being stuck behind the cache until every tab
+  // is closed. The reload is loop-guarded in the registration singleton; the short
+  // delay lets React settle first.
+  const { needRefresh, applyUpdate } = useServiceWorkerUpdate();
+  useEffect(() => {
+    if (!needRefresh) return;
+    const t = setTimeout(() => void applyUpdate(), 2000);
+    return () => clearTimeout(t);
+  }, [needRefresh, applyUpdate]);
 
   // Same auto-prompt as the driver app's App.tsx: fires the browser's own "Allow
   // notifications?" dialog right on login instead of leaving it for the admin to find
