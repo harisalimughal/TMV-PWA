@@ -25,6 +25,7 @@ import { gpsLiveWebhookRoutes } from "./integrations/gpslive-webhook.routes";
 import { syncTodayBookings } from "./jobs/booking.service";
 import { sweepJobReminders } from "./jobs/reminder.service";
 import { dashboardActivityRoutes } from "./admin/dashboard/activity.routes";
+import { dashboardAlertsRoutes } from "./admin/dashboard/alerts.routes";
 import { dashboardDriversSummaryRoutes } from "./admin/dashboard/drivers-summary.routes";
 import { dashboardExceptionsRoutes } from "./admin/dashboard/exceptions.routes";
 import { dashboardFinanceRoutes } from "./admin/dashboard/finance.routes";
@@ -65,6 +66,7 @@ app.use("/api/admin/fleet", requireAdminAuth, dashboardFleetRoutes());
 app.use("/api/admin/scenarios", requireAdminAuth, dashboardScenariosRoutes());
 app.use("/api/admin/van", requireAdminAuth, dashboardVanRoutes());
 app.use("/api/admin/activity", requireAdminAuth, dashboardActivityRoutes());
+app.use("/api/admin/alerts", requireAdminAuth, dashboardAlertsRoutes());
 app.use("/api/admin/notifications", requireAdminAuth, dashboardNotificationsRoutes());
 
 app.use("/api", (_req, res) => {

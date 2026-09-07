@@ -6,7 +6,7 @@
  */
 import { Request, Response, Router } from "express";
 import {
-  buildDriverMatchIndex, fetchGpsLiveDevices, GpsLiveDevice, matchDriverByPlateAndName
+  buildDriverMatchIndex, fetchGpsLiveDevices, fetchGpsLiveZones, GpsLiveDevice, matchDriverByPlateAndName
 } from "../../integrations/gpslive";
 import { listDriverProfiles } from "../../auth/driver-account.service";
 import { jobsCollection } from "../../db/mongo";
@@ -87,6 +87,41 @@ async function getLiveFleet(): Promise<LiveFleetVehicle[]> {
   return vehicles;
 }
 
+export interface CongestionZonePolygon {
+  zoneId: number;
+  zoneName: string;
+  /** [lat, lng] pairs, straight from GPSLive's own zone geometry -- not an
+   *  approximation we maintain ourselves. */
+  vertices: [number, number][];
+}
+
+// Zone shapes are hand-drawn in GPSLive's dashboard and change rarely if ever, unlike
+// vehicle positions -- a much longer cache than getLiveFleet's is fine.
+const ZONE_CACHE_TTL_MS = 5 * 60_000;
+let cachedZones: CongestionZonePolygon[] | null = null;
+let zonesCachedAt = 0;
+
+/**
+ * The Congestion Charge zone polygons already drawn in the client's GPSLive account
+ * (Places > Zones -- "Congestion", "Congestion Zone NE/E/SW"), for drawing the same
+ * shape on our own Live Fleet map. Deliberately excludes the account's other zones
+ * ("Dartford Crossing", "Tunnels-Black-Silver") -- different charge, not this feature.
+ */
+async function getCongestionZones(): Promise<CongestionZonePolygon[]> {
+  if (cachedZones && Date.now() - zonesCachedAt < ZONE_CACHE_TTL_MS) {
+    return cachedZones;
+  }
+
+  const zones = await fetchGpsLiveZones();
+  const congestionZones = zones
+    .filter(z => z.zoneName.includes("Congestion"))
+    .map(z => ({ zoneId: z.zoneId, zoneName: z.zoneName, vertices: z.zoneVertices }));
+
+  cachedZones = congestionZones;
+  zonesCachedAt = Date.now();
+  return congestionZones;
+}
+
 export interface CongestionDetectionRow {
   jobId: string;
   customerName: string;
@@ -145,6 +180,16 @@ export function dashboardFleetRoutes(): Router {
     } catch (error) {
       log.error("fleet live lookup failed", error);
       return res.status(502).json({ error: { code: "FLEET_LOOKUP_FAILED", message: "Failed to fetch live vehicle positions." } });
+    }
+  });
+
+  router.get("/congestion-zones", async (_req: Request, res: Response) => {
+    try {
+      const zones = await getCongestionZones();
+      return res.status(200).json({ zones });
+    } catch (error) {
+      log.error("congestion zones lookup failed", error);
+      return res.status(502).json({ error: { code: "CONGESTION_ZONES_LOOKUP_FAILED", message: "Failed to fetch congestion zone shapes." } });
     }
   });
 

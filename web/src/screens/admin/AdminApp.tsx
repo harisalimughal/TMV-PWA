@@ -5,6 +5,7 @@ import { AdminLoginScreen } from "./AdminLoginScreen";
 import { Layout } from "./dashboard/Layout";
 import { OverviewPage } from "./dashboard/pages/OverviewPage";
 import { LiveFleetPage } from "./dashboard/pages/LiveFleetPage";
+import { AlertsPage } from "./dashboard/pages/AlertsPage";
 import { JobsPage } from "./dashboard/pages/JobsPage";
 import { VanMileagePage } from "./dashboard/pages/VanMileagePage";
 import { FinishedJobsPage } from "./dashboard/pages/FinishedJobsPage";
@@ -105,6 +106,7 @@ export function AdminApp() {
     <Layout activeSection={activeSection} onSelectSection={handleSelectSection} onLogout={handleLogout}>
       {activeSection === "overview" && <OverviewPage onSelectSection={handleSelectSection} />}
       {activeSection === "livefleet" && <LiveFleetPage onSelectSection={handleSelectSection} />}
+      {activeSection === "alerts" && <AlertsPage />}
       {activeSection === "jobs" && <JobsPage />}
       {activeSection === "van" && <VanMileagePage />}
       {activeSection === "finished" && <FinishedJobsPage />}

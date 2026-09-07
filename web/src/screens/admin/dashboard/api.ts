@@ -342,3 +342,34 @@ export async function fetchCongestionDetections(): Promise<{ rows: CongestionDet
   if (!res.ok) throw await apiError(res, "Failed to load congestion zone detections");
   return res.json();
 }
+
+export interface CongestionZonePolygon {
+  zoneId: number;
+  zoneName: string;
+  vertices: [number, number][];
+}
+
+export async function fetchCongestionZones(): Promise<{ zones: CongestionZonePolygon[] }> {
+  const res = await apiFetch("/api/admin/fleet/congestion-zones");
+  if (!res.ok) throw await apiError(res, "Failed to load congestion zone shapes");
+  return res.json();
+}
+
+export type AlertCategory = "congestion" | "tunnel" | "other";
+
+export interface AlertRow {
+  eventId: string;
+  type: string;
+  description: string;
+  category: AlertCategory;
+  deviceName: string | null;
+  driverInitials: string | null;
+  driverName: string | null;
+  detectedAt: string;
+}
+
+export async function fetchAlerts(): Promise<{ rows: AlertRow[] }> {
+  const res = await apiFetch("/api/admin/alerts");
+  if (!res.ok) throw await apiError(res, "Failed to load GPSLive alerts");
+  return res.json();
+}

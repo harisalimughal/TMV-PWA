@@ -28,7 +28,7 @@ import {
   Gauge
 } from "lucide-react";
 import { NormalizedJob } from "../types";
-import { fetchLiveFleet } from "../api";
+import { fetchCongestionZones, fetchLiveFleet } from "../api";
 
 interface Props {
   jobs: NormalizedJob[];
@@ -81,7 +81,7 @@ export function LiveFleetMap({ jobs, onSelectJob }: Props) {
   const mapInstanceRef = useRef<L.Map | null>(null);
   const markersRef = useRef<Record<string, L.Marker>>({});
   const hasFitBoundsRef = useRef(false);
-  const ulezCircleRef = useRef<L.Circle | null>(null);
+  const zonePolygonsRef = useRef<L.Polygon[]>([]);
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [activeFilter, setActiveFilter] = useState<FilterId>("ALL");
@@ -90,7 +90,7 @@ export function LiveFleetMap({ jobs, onSelectJob }: Props) {
   // works, so it's the default. voyager/light stay selectable for whenever a CARTO key
   // gets added, rather than deleting the option outright.
   const [mapTheme, setMapTheme] = useState<"osm" | "voyager" | "light">("osm");
-  const [showUlez, setShowUlez] = useState(true);
+  const [showCongestionZone, setShowCongestionZone] = useState(true);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [copiedText, setCopiedText] = useState(false);
 
@@ -98,6 +98,16 @@ export function LiveFleetMap({ jobs, onSelectJob }: Props) {
     queryKey: ["fleet_live"],
     queryFn: fetchLiveFleet,
     refetchInterval: 10000
+  });
+
+  // The real Congestion Charge zone shape(s) already drawn in GPSLive's own dashboard
+  // (Places > Zones) -- not an approximation we maintain ourselves. Shapes rarely
+  // change, so this polls far less often than vehicle positions.
+  const { data: zonesData } = useQuery({
+    queryKey: ["congestion_zones"],
+    queryFn: fetchCongestionZones,
+    staleTime: 5 * 60_000,
+    refetchInterval: 5 * 60_000
   });
 
   // Real device positions from GPSLive, cross-referenced with today's IN_PROGRESS jobs
@@ -156,16 +166,6 @@ export function LiveFleetMap({ jobs, onSelectJob }: Props) {
 
     L.tileLayer(tileUrls[mapTheme], { maxZoom: 19, subdomains: "abc" }).addTo(map);
 
-    const ulez = L.circle([51.5074, -0.1278], {
-      radius: 9500,
-      color: "#1B75BC",
-      weight: 1.5,
-      dashArray: "6, 6",
-      fillColor: "#1B75BC",
-      fillOpacity: 0.03
-    }).addTo(map);
-
-    ulezCircleRef.current = ulez;
     mapInstanceRef.current = map;
 
     return () => {
@@ -189,15 +189,33 @@ export function LiveFleetMap({ jobs, onSelectJob }: Props) {
     L.tileLayer(tileUrls[mapTheme], { maxZoom: 19, subdomains: "abc" }).addTo(mapInstanceRef.current);
   }, [mapTheme]);
 
-  // Toggle ULEZ
+  // Draw/update the real Congestion Zone polygon(s) from GPSLive -- redrawn whenever
+  // the zone data refreshes or the toggle changes, same pattern as the vehicle
+  // markers effect below.
   useEffect(() => {
-    if (!ulezCircleRef.current || !mapInstanceRef.current) return;
-    if (showUlez) {
-      ulezCircleRef.current.addTo(mapInstanceRef.current);
-    } else {
-      mapInstanceRef.current.removeLayer(ulezCircleRef.current);
-    }
-  }, [showUlez]);
+    const map = mapInstanceRef.current;
+    if (!map) return;
+
+    zonePolygonsRef.current.forEach(p => map.removeLayer(p));
+    zonePolygonsRef.current = [];
+
+    if (!showCongestionZone) return;
+
+    (zonesData?.zones || []).forEach(zone => {
+      const polygon = L.polygon(zone.vertices, {
+        color: "#DC2626",
+        weight: 2,
+        fillColor: "#DC2626",
+        fillOpacity: 0.15
+      }).addTo(map);
+      polygon.bindTooltip(zone.zoneName, {
+        permanent: true,
+        direction: "center",
+        className: "congestion-zone-label"
+      });
+      zonePolygonsRef.current.push(polygon);
+    });
+  }, [zonesData, showCongestionZone]);
 
   // Filtered vehicles
   const visibleVehicles = useMemo(() => {
@@ -295,6 +313,23 @@ export function LiveFleetMap({ jobs, onSelectJob }: Props) {
         isFullscreen ? "fixed inset-4 z-50 flex flex-col shadow-pop" : "relative"
       }`}
     >
+      {/* Leaflet's tooltip DOM isn't reachable via Tailwind classes -- this styles the
+          congestion zone name labels as the small dark pills GPSLive's own map shows,
+          matching its .bindTooltip className above. */}
+      <style>{`
+        .congestion-zone-label {
+          background: rgba(16, 24, 40, 0.85);
+          border: none;
+          color: #fff;
+          font-family: 'IBM Plex Mono', monospace;
+          font-size: 10px;
+          font-weight: 600;
+          padding: 2px 6px;
+          box-shadow: none;
+        }
+        .congestion-zone-label::before { display: none; }
+      `}</style>
+
       {/* 1. TOP MASTER TOOLBAR */}
       <div className="p-3.5 border-b border-admin-line flex flex-wrap items-center gap-3 bg-white">
         <div className="flex items-center gap-2 shrink-0">
@@ -343,13 +378,13 @@ export function LiveFleetMap({ jobs, onSelectJob }: Props) {
           </select>
 
           <button
-            onClick={() => setShowUlez(!showUlez)}
+            onClick={() => setShowCongestionZone(!showCongestionZone)}
             className={`shrink-0 px-2.5 py-1.5 rounded border text-xs font-medium transition ${
-              showUlez ? "bg-admin-brand-soft border-admin-brand/30 text-admin-brand" : "bg-admin-surface border-admin-line text-admin-muted"
+              showCongestionZone ? "bg-admin-brand-soft border-admin-brand/30 text-admin-brand" : "bg-admin-surface border-admin-line text-admin-muted"
             }`}
-            title="Toggle London ULEZ Boundary"
+            title="Toggle London Congestion Charge zone boundary"
           >
-            ULEZ
+            Congestion Zone
           </button>
 
           <button

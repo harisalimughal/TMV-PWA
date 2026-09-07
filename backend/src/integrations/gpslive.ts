@@ -203,3 +203,66 @@ export async function fetchGpsLiveAlertsForDevice(
   const body = (await response.json()) as unknown;
   return Array.isArray(body) ? (body as GpsLiveAlertEvent[]) : [];
 }
+
+/**
+ * The account's last 50 alert notifications across the whole fleet (every alert
+ * type -- Moving, Ignition On, Crash Detection, Zone In/Out, ...), not scoped to one
+ * device or a time range. Same shape as fetchGpsLiveAlertsForDevice's rows.
+ */
+export async function fetchGpsLiveNotifications(): Promise<GpsLiveAlertEvent[]> {
+  if (!env.gpsApiKey) return [];
+
+  const response = await withTimeout(
+    "GPSLive alerts.notifications",
+    withRetry(
+      "gpslive.alerts.notifications",
+      () =>
+        fetch("https://api.gpslive.app/v1/alerts/notifications", {
+          headers: { Authorization: `Bearer ${env.gpsApiKey}` }
+        }),
+      "idempotent"
+    ),
+    env.gpsTimeoutMs
+  );
+
+  if (!response.ok) {
+    throw new GpsLiveError(`GPSLive alerts.notifications failed: HTTP ${response.status}`, response.status);
+  }
+
+  const body = (await response.json()) as unknown;
+  return Array.isArray(body) ? (body as GpsLiveAlertEvent[]) : [];
+}
+
+/** One row from GET /v1/places/zones -- a geofence drawn in the GPSLive dashboard
+ * (Places > Zones), e.g. the client's "Congestion", "Congestion Zone NE/E/SW" and
+ * "Tunnels-Black-Silver"/"Dartford Crossing" polygons. zoneVertices is [lat, lng]
+ * pairs, confirmed against a live response (undocumented in the Swagger schema). */
+export interface GpsLiveZone {
+  zoneId: number;
+  zoneName: string;
+  zoneVertices: [number, number][];
+}
+
+export async function fetchGpsLiveZones(): Promise<GpsLiveZone[]> {
+  if (!env.gpsApiKey) return [];
+
+  const response = await withTimeout(
+    "GPSLive places.zones",
+    withRetry(
+      "gpslive.places.zones",
+      () =>
+        fetch("https://api.gpslive.app/v1/places/zones", {
+          headers: { Authorization: `Bearer ${env.gpsApiKey}` }
+        }),
+      "idempotent"
+    ),
+    env.gpsTimeoutMs
+  );
+
+  if (!response.ok) {
+    throw new GpsLiveError(`GPSLive places.zones failed: HTTP ${response.status}`, response.status);
+  }
+
+  const body = (await response.json()) as unknown;
+  return Array.isArray(body) ? (body as GpsLiveZone[]) : [];
+}
