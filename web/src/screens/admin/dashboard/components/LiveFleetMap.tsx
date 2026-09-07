@@ -142,6 +142,26 @@ export function LiveFleetMap({ jobs, onSelectJob }: Props) {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(true);
   const [search, setSearch] = useState("");
+  /** One-time nudge pointing at the collapse control -- persists once dismissed. */
+  const [showCollapseHint, setShowCollapseHint] = useState(() => {
+    try {
+      return localStorage.getItem("tmv:lf-collapse-hint") !== "1";
+    } catch {
+      return true;
+    }
+  });
+  const dismissCollapseHint = () => {
+    setShowCollapseHint(false);
+    try {
+      localStorage.setItem("tmv:lf-collapse-hint", "1");
+    } catch {
+      /* ignore */
+    }
+  };
+  const collapseDrawer = () => {
+    setDrawerOpen(false);
+    dismissCollapseHint();
+  };
 
   const { data: fleetData } = useQuery({
     queryKey: ["fleet_live"],
@@ -608,15 +628,33 @@ export function LiveFleetMap({ jobs, onSelectJob }: Props) {
         {/* expanded: vehicle list drawer */}
         {drawerOpen && (
           <div className="absolute top-3 left-3 bottom-3 z-[500] w-[320px] max-w-[calc(100%-24px)] flex flex-col rounded-lg bg-white shadow-pop border border-admin-line overflow-hidden">
-            <div className="flex items-center justify-between gap-2 px-3 h-11 border-b border-admin-line shrink-0">
+            <div className="relative flex items-center justify-between gap-2 px-3 h-11 border-b border-admin-line shrink-0">
               <span className="text-xs font-bold text-admin-ink">Vehicles ({visibleVehicles.length})</span>
               <button
-                onClick={() => setDrawerOpen(false)}
-                className="p-1 rounded hover:bg-admin-surface text-admin-muted hover:text-admin-ink transition"
+                onClick={collapseDrawer}
+                className={`p-1 rounded transition ${
+                  showCollapseHint
+                    ? "bg-admin-brand text-white ring-2 ring-admin-brand/30"
+                    : "hover:bg-admin-surface text-admin-muted hover:text-admin-ink"
+                }`}
                 title="Collapse list"
               >
                 <PanelLeftClose className="w-4 h-4" />
               </button>
+
+              {showCollapseHint && (
+                <div className="absolute right-2 top-full z-[10] mt-2 w-[220px]">
+                  <div className="absolute -top-1.5 right-2.5 h-3 w-3 rotate-45 border-l border-t border-admin-brand/40 bg-admin-brand" />
+                  <button
+                    type="button"
+                    onClick={dismissCollapseHint}
+                    className="relative block w-full rounded-lg bg-admin-brand px-3 py-2.5 text-left text-white shadow-pop"
+                  >
+                    <span className="block text-[12px] font-semibold leading-snug">You can collapse here for a bigger map view</span>
+                    <span className="mt-1 block text-[10px] font-bold uppercase tracking-wider text-white/80">Got it</span>
+                  </button>
+                </div>
+              )}
             </div>
 
             <div className="px-2.5 py-2 border-b border-admin-line shrink-0">
