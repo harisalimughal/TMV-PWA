@@ -115,7 +115,7 @@ export function LiveFleetMap({ jobs, onSelectJob }: Props) {
   // The real Congestion Charge zone shape(s) already drawn in GPSLive's own dashboard
   // (Places > Zones) -- not an approximation we maintain ourselves. Shapes rarely
   // change, so this polls far less often than vehicle positions.
-  const { data: zonesData } = useQuery({
+  const { data: zonesData, isFetched: zonesFetched } = useQuery({
     queryKey: ["congestion_zones"],
     queryFn: fetchCongestionZones,
     staleTime: 5 * 60_000,
@@ -305,12 +305,24 @@ export function LiveFleetMap({ jobs, onSelectJob }: Props) {
 
     // Fit bounds once, the first time real positions arrive -- don't re-fit on every
     // 10s poll or the map would keep yanking the view while someone's looking at it.
+    // The frame always includes the Congestion Charge zone so it's on screen even when
+    // the only live van is way out in the suburbs (a single-point fit would otherwise
+    // zoom past central London entirely).
     if (!hasFitBoundsRef.current && visibleVehicles.length > 0) {
-      const bounds = L.latLngBounds(visibleVehicles.map(v => [v.lat, v.lng] as [number, number]));
-      map.fitBounds(bounds, { padding: [60, 60], maxZoom: 13 });
-      hasFitBoundsRef.current = true;
+      const pts: [number, number][] = visibleVehicles.map(v => [v.lat, v.lng] as [number, number]);
+      const zoneVerts = showCongestionZone
+        ? (zonesData?.zones || []).flatMap(z => z.vertices as [number, number][])
+        : [];
+      zoneVerts.forEach(v => pts.push(v));
+      map.fitBounds(L.latLngBounds(pts), { padding: [60, 60], maxZoom: 12 });
+      // Latch only once the zone shapes are actually in the frame (or the toggle is
+      // off, or the zones request has come back empty) -- otherwise let the next run
+      // re-fit when they load.
+      if (!showCongestionZone || zoneVerts.length > 0 || zonesFetched) {
+        hasFitBoundsRef.current = true;
+      }
     }
-  }, [visibleVehicles, activeSelected]);
+  }, [visibleVehicles, activeSelected, zonesData, showCongestionZone, zonesFetched]);
 
   const handleFocusVehicle = (veh: FleetVehicle) => {
     setSelectedId(veh.imei);
@@ -319,8 +331,11 @@ export function LiveFleetMap({ jobs, onSelectJob }: Props) {
 
   const handleFitAllFleet = () => {
     if (!mapInstanceRef.current || visibleVehicles.length === 0) return;
-    const bounds = L.latLngBounds(visibleVehicles.map(v => [v.lat, v.lng] as [number, number]));
-    mapInstanceRef.current.fitBounds(bounds, { padding: [50, 50], maxZoom: 14 });
+    const pts: [number, number][] = visibleVehicles.map(v => [v.lat, v.lng] as [number, number]);
+    if (showCongestionZone) {
+      (zonesData?.zones || []).forEach(z => (z.vertices as [number, number][]).forEach(v => pts.push(v)));
+    }
+    mapInstanceRef.current.fitBounds(L.latLngBounds(pts), { padding: [50, 50], maxZoom: 13 });
   };
 
   const handleCopyCoords = (veh: FleetVehicle) => {
