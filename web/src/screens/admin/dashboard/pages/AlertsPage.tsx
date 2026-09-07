@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { DateTime } from "luxon";
-import { Bell, Search, ShieldAlert, Car, HelpCircle } from "lucide-react";
+import { Bell, Search, ShieldAlert, Car, HelpCircle, LogIn, LogOut, Activity } from "lucide-react";
 import { fetchAlerts, AlertCategory } from "../api";
 import { ApiErrorState } from "../components/ApiErrorState";
 import { getAvatarColor } from "../utils/drivers";
@@ -30,6 +30,46 @@ const CATEGORY_ICON: Record<AlertCategory, React.ReactNode> = {
   tunnel: <Car className="w-3.5 h-3.5" />,
   other: <HelpCircle className="w-3.5 h-3.5" />
 };
+
+/**
+ * What actually happened, from GPSLive's raw `type`. The zone geofence events are
+ * `zone_in` / `zone_out` (same vocab gpslive-webhook.routes.ts keys the driver push
+ * off), so for a congestion row this is the difference between "drove into the
+ * charge zone" and "drove back out". Unknown types are prettified as-is rather than
+ * hidden.
+ */
+function eventVerb(type: string): { label: string; tone: string; icon: React.ReactNode } {
+  const t = (type || "").toLowerCase();
+  if (t === "zone_in" || t === "geofence_in")
+    return { label: "Entered zone", tone: "bg-admin-status-red-bg text-admin-status-red", icon: <LogIn className="w-3 h-3" /> };
+  if (t === "zone_out" || t === "geofence_out")
+    return { label: "Left zone", tone: "bg-admin-status-green-bg text-admin-status-green", icon: <LogOut className="w-3 h-3" /> };
+  const KNOWN: Record<string, string> = {
+    moving: "Started moving",
+    stopped: "Stopped",
+    idle: "Idling",
+    ignition_on: "Ignition on",
+    engine_on: "Ignition on",
+    ignition_off: "Ignition off",
+    engine_off: "Ignition off",
+    overspeed: "Overspeed",
+    speed: "Overspeed",
+    sos: "SOS",
+    panic: "SOS"
+  };
+  const label = KNOWN[t] || (type ? type.replace(/[_-]+/g, " ").replace(/^\w/, c => c.toUpperCase()) : "Event");
+  return { label, tone: "bg-admin-surface text-admin-muted", icon: <Activity className="w-3 h-3" /> };
+}
+
+/** Strip GPSLive's boilerplate alert-rule wrapper ("CHARGES - ALERTS (Congestion
+ *  Zone SW)" -> "Congestion Zone SW") so the column reads as a place, not a rule. */
+function cleanDescription(desc: string): string {
+  if (!desc) return "";
+  let s = desc.replace(/^\s*charges\s*[-–]\s*alerts\s*/i, "").trim();
+  const paren = s.match(/^\((.+)\)$/);
+  if (paren) s = paren[1].trim();
+  return s.replace(/^\w/, c => c.toUpperCase());
+}
 
 /** GPSLive's own alert feed (their Alerts > Notifications page), proxied here so ops
  *  never need to leave this dashboard for it -- see admin/dashboard/alerts.routes.ts.
@@ -133,7 +173,8 @@ export function AlertsPage() {
               <thead>
                 <tr className="border-b border-admin-line bg-admin-surface/60 text-eyebrow text-fg-subtle">
                   <th className="py-3 px-4 font-bold">Category</th>
-                  <th className="py-3 px-4 font-bold">Description</th>
+                  <th className="py-3 px-4 font-bold">Event</th>
+                  <th className="py-3 px-4 font-bold">Location / rule</th>
                   <th className="py-3 px-4 font-bold">Van</th>
                   <th className="py-3 px-4 font-bold">Driver</th>
                   <th className="py-3 px-4 font-bold">Detected (UK)</th>
@@ -150,7 +191,18 @@ export function AlertsPage() {
                         {CATEGORY_LABEL[row.category]}
                       </span>
                     </td>
-                    <td className="px-4 text-[13px] text-admin-ink">{row.description}</td>
+                    <td className="px-4 py-3">
+                      {(() => {
+                        const v = eventVerb(row.type);
+                        return (
+                          <span className={`px-2 py-1 rounded-full text-[11px] font-bold inline-flex items-center gap-1 ${v.tone}`}>
+                            {v.icon}
+                            {v.label}
+                          </span>
+                        );
+                      })()}
+                    </td>
+                    <td className="px-4 text-[13px] text-admin-ink">{cleanDescription(row.description) || "—"}</td>
                     <td className="px-4 text-[13px] text-admin-ink font-mono">{row.deviceName || "—"}</td>
                     <td className="px-4">
                       {row.driverInitials ? (
