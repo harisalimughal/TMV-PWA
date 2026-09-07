@@ -131,6 +131,10 @@ export interface CongestionDetectionRow {
   detectedAt: string;
   jobStatus: string;
   chargeAdded: boolean;
+  /** The device this job was pinned to at start (see jobs/congestion-zone.service.ts)
+   *  -- surfaced mainly so a wrong/missing value is visible here rather than only
+   *  discoverable by reading the job doc directly. */
+  gpsliveImei: string | null;
 }
 
 /**
@@ -165,7 +169,8 @@ async function getCongestionDetections(): Promise<CongestionDetectionRow[]> {
       vanRegistration: driver?.vanRegistration ?? null,
       detectedAt: job.congestionZoneEnteredAt!,
       jobStatus: job.status,
-      chargeAdded: (job.extraCharges || []).includes(ExtraChargeType.CONGESTION)
+      chargeAdded: (job.extraCharges || []).includes(ExtraChargeType.CONGESTION),
+      gpsliveImei: job.gpsliveImei || null
     };
   });
 }

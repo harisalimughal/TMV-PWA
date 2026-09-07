@@ -1,6 +1,6 @@
 import { DateTime } from "luxon";
 import { env } from "../config/env";
-import { Job } from "./job.types";
+import { DriverProfile, Job } from "./job.types";
 import { getJob, upsertJob } from "../db/jobs.repo";
 import { sendPushToDriver } from "../push/push.service";
 import { fetchGpsLiveAlertsForDevice, fetchGpsLiveDevices, findDeviceForDriver } from "../integrations/gpslive";
@@ -48,21 +48,23 @@ export async function flagCongestionZoneEntry(
  * Congestion zone_in/zone_out; if the latest one is zone_in, the van is presumably
  * still inside right now.
  *
+ * This is also the only place a job's device gets resolved at all -- see pinDevice's
+ * own comment for why that matters even when the "already inside" check itself finds
+ * nothing.
+ *
  * Best-effort throughout: GPSLive being unreachable, the van having no matching
  * device, or no Congestion history in the window all just mean no early suggestion --
  * never blocks or fails job start.
  */
-export async function checkCongestionZoneAtJobStart(
-  job: Job,
-  driverInitials: string,
-  vanRegistration: string
-): Promise<void> {
+export async function checkCongestionZoneAtJobStart(job: Job, driver: DriverProfile): Promise<void> {
   if (!env.gpsApiKey) return;
 
   try {
     const devices = await fetchGpsLiveDevices();
-    const device = findDeviceForDriver({ initials: driverInitials, vanRegistration }, devices);
+    const device = findDeviceForDriver(driver, devices);
     if (!device) return;
+
+    await pinDevice(job, device.imei);
 
     const now = DateTime.now();
     const format = (d: DateTime) => d.toFormat("yyyy-MM-dd HH:mm:ss");
@@ -79,11 +81,25 @@ export async function checkCongestionZoneAtJobStart(
 
     if (latest?.type !== "zone_in") return;
 
-    await flagCongestionZoneEntry(job.jobId, driverInitials, {
+    await flagCongestionZoneEntry(job.jobId, driver.initials, {
       title: "Already in Central London",
       body: "Congestion charge may apply -- add it on the Extra Charges step."
     });
   } catch (error) {
     log.warn("congestion zone job-start check failed", { error: String(error), job_id: job.jobId });
   }
+}
+
+/**
+ * Pins the resolved device to this job for its whole lifetime, so
+ * gpslive-webhook.routes.ts can match a later real-time event by device identity
+ * (job.gpsliveImei) instead of re-deriving "whose van is this" from the driver's
+ * profile again at the moment the event arrives -- which could be wrong if the
+ * driver's assigned van has changed (a swap, a profile edit) since this job started.
+ * Set once, never overwritten -- job is the caller's own already-fresh copy, so this
+ * skips a redundant read when nothing needs to change.
+ */
+async function pinDevice(job: Job, imei: string): Promise<void> {
+  if (job.gpsliveImei) return;
+  await upsertJob({ ...job, gpsliveImei: imei });
 }

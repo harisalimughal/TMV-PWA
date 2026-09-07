@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { X, AlertTriangle, CheckCircle2 } from "lucide-react";
-import { fetchDrivers, saveDriver } from "../api";
+import { fetchDrivers, fetchLiveFleet, saveDriver } from "../api";
 import { DriverSummaryItem } from "../types";
 import { Button, IconButton } from "../../../../ui";
 
@@ -16,6 +16,7 @@ export function AddDriverModal({ isOpen, onClose, driverToEdit }: Props) {
   const [name, setName] = useState("");
   const [code, setCode] = useState("");
   const [vehicleReg, setVehicleReg] = useState("");
+  const [imei, setImei] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [active, setActive] = useState(true);
@@ -30,12 +31,24 @@ export function AddDriverModal({ isOpen, onClose, driverToEdit }: Props) {
   const { data: driversData } = useQuery({ queryKey: ["drivers_summary"], queryFn: () => fetchDrivers() });
   const roster = driversData?.drivers ?? [];
 
+  // A picker rather than a free-text box: a wrong digit in a 15-digit IMEI is silent
+  // and effectively unrecoverable (the whole point of using IMEI over a plate is to
+  // avoid exactly that kind of typo), so this only ever offers real, currently-known
+  // GPSLive devices. Only fetched while the modal is open.
+  const { data: fleetData } = useQuery({
+    queryKey: ["fleet_live"],
+    queryFn: fetchLiveFleet,
+    enabled: isOpen
+  });
+  const devices = fleetData?.vehicles ?? [];
+
   // Sync state with driverToEdit when modal opens or driver changes
   useEffect(() => {
     if (driverToEdit) {
       setName(driverToEdit.fullName);
       setCode(driverToEdit.initials);
       setVehicleReg(driverToEdit.vanRegistration || "");
+      setImei(driverToEdit.imei || "");
       setEmail(driverToEdit.email || "");
       setPhone(driverToEdit.phone || "");
       setActive(driverToEdit.active !== false);
@@ -43,6 +56,7 @@ export function AddDriverModal({ isOpen, onClose, driverToEdit }: Props) {
       setName("");
       setCode("");
       setVehicleReg("");
+      setImei("");
       setEmail("");
       setPhone("");
       setActive(true);
@@ -80,6 +94,7 @@ export function AddDriverModal({ isOpen, onClose, driverToEdit }: Props) {
         active,
         phone,
         vanRegistration: vehicleReg,
+        imei,
         // Omitted (not sent empty) when blank, so editing a driver without touching
         // this field never resets/clears their existing app password.
         ...(pwaPassword ? { password: pwaPassword } : {})
@@ -136,13 +151,39 @@ export function AddDriverModal({ isOpen, onClose, driverToEdit }: Props) {
 
             <div>
               <label className="block text-eyebrow text-fg-subtle tracking-wider mb-1.5">Vehicle Registration</label>
-              <input 
-                type="text" 
+              <input
+                type="text"
                 value={vehicleReg}
                 onChange={e => setVehicleReg(e.target.value.toUpperCase())}
                 className="w-full h-11 px-3 rounded-card border border-admin-line bg-admin-surface text-[14px] font-mono text-admin-ink outline-none focus:border-admin-brand focus:bg-white transition uppercase"
                 placeholder="e.g. AB12 CDE"
               />
+            </div>
+
+            <div className="col-span-2">
+              <label className="block text-eyebrow text-fg-subtle tracking-wider mb-1.5">GPSLive Device</label>
+              <select
+                value={imei}
+                onChange={e => setImei(e.target.value)}
+                className="w-full h-11 px-3 rounded-card border border-admin-line bg-admin-surface text-[14px] text-admin-ink outline-none focus:border-admin-brand focus:bg-white transition"
+              >
+                <option value="">— Not assigned —</option>
+                {/* If the currently-assigned imei isn't in today's live device list
+                    (offline, or GPSLive briefly unreachable), keep it selectable so
+                    saving the form without touching this field doesn't silently
+                    clear a real assignment. */}
+                {imei && !devices.some(d => d.imei === imei) && (
+                  <option value={imei}>{imei} (not currently reporting)</option>
+                )}
+                {devices.map(d => (
+                  <option key={d.imei} value={d.imei}>
+                    {d.plateNumber || d.name} {d.plateNumber && d.name !== d.plateNumber ? `(${d.name})` : ""}
+                  </option>
+                ))}
+              </select>
+              <span className="text-[11px] text-admin-muted mt-1 block">
+                Which live GPSLive tracker is this driver's usual van -- picked from the fleet, not typed, so it can't be mistyped.
+              </span>
             </div>
 
             <div className="col-span-2">

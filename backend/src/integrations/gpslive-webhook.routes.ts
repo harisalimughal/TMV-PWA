@@ -59,22 +59,47 @@ export function gpsLiveWebhookRoutes(): Router {
         return;
       }
 
-      const deviceName = event.deviceName || "";
-      const drivers = await listDriverProfiles();
-      const driverIndex = buildDriverMatchIndex(drivers);
-      const matched = matchDriverByPlateAndName(guessPlateFromDeviceName(deviceName), deviceName, driverIndex);
-
-      if (!matched) {
-        log.debug("gpslive congestion webhook: no driver matched", { deviceName, event_id: event.event_id });
-        res.status(200).json({ ok: true, matched: false });
-        return;
-      }
-
       const jobs = await listJobs();
-      const activeJob = jobs.find(j => j.driverInitials === matched.initials && j.status === JobStatus.IN_PROGRESS);
+      const inProgress = jobs.filter(j => j.status === JobStatus.IN_PROGRESS);
+
+      // Primary: the job this exact device was pinned to at start (see
+      // jobs/congestion-zone.service.ts's checkCongestionZoneAtJobStart) -- correct
+      // even if the driver's assigned van on file has changed since (a van swap),
+      // because it's keyed on the device identity that job actually started with,
+      // not a live re-derivation from the driver's current profile.
+      let activeJob = event.imei ? inProgress.find(j => j.gpsliveImei === event.imei) : undefined;
+      let driverInitials = activeJob?.driverInitials;
+      let matchedBy: "pinned_imei" | "plate_fallback" = "pinned_imei";
 
       if (!activeJob) {
-        res.status(200).json({ ok: true, matched: true, activeJob: false });
+        // Fallback for jobs that started with no device pinned -- no GPSLive key
+        // configured at start time, or no matching device for that driver yet. Same
+        // plate/initials guess this route always used, now only a safety net rather
+        // than the primary path.
+        matchedBy = "plate_fallback";
+        const deviceName = event.deviceName || "";
+        const drivers = await listDriverProfiles();
+        const driverIndex = buildDriverMatchIndex(drivers);
+        const matched = matchDriverByPlateAndName(guessPlateFromDeviceName(deviceName), deviceName, driverIndex);
+
+        if (!matched) {
+          log.debug("gpslive congestion webhook: no pinned job or driver matched", {
+            deviceName, imei: event.imei, event_id: event.event_id
+          });
+          res.status(200).json({ ok: true, matched: false });
+          return;
+        }
+
+        activeJob = inProgress.find(j => j.driverInitials === matched.initials);
+        driverInitials = matched.initials;
+      }
+
+      if (!activeJob || !driverInitials) {
+        // driverInitials is set as soon as either strategy identifies a driver, even
+        // if (as here) that driver turns out to have no job in progress -- so this
+        // correctly reports "matched: true, activeJob: false" for that case, not a
+        // false "no match" just because the fallback path was the one that found them.
+        res.status(200).json({ ok: true, matched: Boolean(driverInitials), activeJob: false });
         return;
       }
 
@@ -85,13 +110,13 @@ export function gpsLiveWebhookRoutes(): Router {
         return;
       }
 
-      await flagCongestionZoneEntry(activeJob.jobId, matched.initials, {
+      await flagCongestionZoneEntry(activeJob.jobId, driverInitials, {
         title: "Entered Central London",
         body: "Congestion charge may apply -- add it on the Extra Charges step."
       });
 
       log.info("congestion zone entry detected via webhook", {
-        job_id: activeJob.jobId, driver: matched.initials, event_id: event.event_id
+        job_id: activeJob.jobId, driver: driverInitials, event_id: event.event_id, matched_by: matchedBy
       });
       res.status(200).json({ ok: true, flagged: true });
     } catch (error) {

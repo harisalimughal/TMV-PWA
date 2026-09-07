@@ -135,6 +135,7 @@ function CongestionZonePanel({
                 <th className="py-3 px-4 font-bold">Customer</th>
                 <th className="py-3 px-4 font-bold">Driver</th>
                 <th className="py-3 px-4 font-bold">Van</th>
+                <th className="py-3 px-4 font-bold">Pinned Device</th>
                 <th className="py-3 px-4 font-bold">Detected (UK)</th>
                 <th className="py-3 px-4 font-bold">Job Status</th>
                 <th className="py-3 px-4 font-bold">Congestion Charge</th>
@@ -162,6 +163,9 @@ function CongestionZonePanel({
                       </div>
                     </td>
                     <td className="px-4 text-[13px] text-admin-ink font-mono">{row.vanRegistration || "—"}</td>
+                    <td className="px-4 text-[12px] text-admin-muted font-mono" title={row.gpsliveImei ? "Device pinned at job start" : "No device pinned -- matched via plate/initials fallback"}>
+                      {row.gpsliveImei || "—"}
+                    </td>
                     <td className="px-4 text-[13px] text-admin-muted tabular-nums">{formatLondonDateTime(row.detectedAt)}</td>
                     <td className="px-4 text-[13px] text-admin-ink">{row.jobStatus}</td>
                     <td className="px-4">

@@ -17,6 +17,7 @@ interface DriverStat {
   email?: string;
   phone?: string;
   vanRegistration?: string;
+  imei?: string;
   active: boolean;
   /** True only when a real driver_accounts document backs this entry. False for a
    *  code that only shows up on a job's driverInitials (e.g. typed straight into a
@@ -57,7 +58,8 @@ export function dashboardDriversSummaryRoutes(): Router {
         if (!d.initials) continue;
         driverStats.set(d.initials, {
           initials: d.initials, fullName: d.fullName, email: d.email || undefined,
-          phone: d.phone || undefined, vanRegistration: d.vanRegistration || undefined, active: d.active,
+          phone: d.phone || undefined, vanRegistration: d.vanRegistration || undefined,
+          imei: d.imei || undefined, active: d.active,
           hasAccount: true,
           assignedCount: 0, completedCount: 0, cancelledCount: 0,
           totalDurationMinutes: 0, durationJobsCount: 0, totalDelayMinutes: 0, delayJobsCount: 0,
@@ -107,7 +109,7 @@ export function dashboardDriversSummaryRoutes(): Router {
 
         return {
           initials: s.initials, fullName: s.fullName, email: s.email, phone: s.phone,
-          vanRegistration: s.vanRegistration, active: s.active, hasAccount: s.hasAccount,
+          vanRegistration: s.vanRegistration, imei: s.imei, active: s.active, hasAccount: s.hasAccount,
           assigned: s.assignedCount, completed: s.completedCount, cancelled: s.cancelledCount, completionRate,
           avgDurationMinutes: avgDuration, avgDelayMinutes: avgDelay,
           revenuePounds: toPounds(pence(s.revenuePence)), revenueFormatted: formatGBP(pence(s.revenuePence)),

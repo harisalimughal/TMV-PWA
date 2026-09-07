@@ -17,7 +17,8 @@ function toDriverProfile(doc: DriverAccountDoc): DriverProfile {
     active: doc.active,
     role: doc.role || "Driver",
     phone: doc.phone || "",
-    vanRegistration: doc.vanRegistration || ""
+    vanRegistration: doc.vanRegistration || "",
+    imei: doc.imei || ""
   };
 }
 
@@ -27,6 +28,7 @@ export interface DriverProfileInput {
   fullName: string;
   phone: string;
   vanRegistration: string;
+  imei: string;
   role: string;
   active: boolean;
 }
@@ -51,6 +53,7 @@ export async function upsertDriverProfile(input: DriverProfileInput): Promise<vo
       fullName: input.fullName.trim(),
       phone: input.phone.trim(),
       vanRegistration: input.vanRegistration.trim(),
+      imei: input.imei.trim(),
       role: input.role.trim() || "Driver",
       active: input.active,
       updatedAt: now

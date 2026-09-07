@@ -235,6 +235,7 @@ export interface SaveDriverPayload {
   active?: boolean;
   phone?: string;
   vanRegistration?: string;
+  imei?: string;
   /** Sets/resets the driver's app login. Leave blank on an edit to keep whatever
    * password is already set. */
   password?: string;
@@ -335,6 +336,7 @@ export interface CongestionDetectionRow {
   detectedAt: string;
   jobStatus: string;
   chargeAdded: boolean;
+  gpsliveImei: string | null;
 }
 
 export async function fetchCongestionDetections(): Promise<{ rows: CongestionDetectionRow[] }> {

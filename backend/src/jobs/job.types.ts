@@ -31,6 +31,10 @@ export interface DriverProfile {
   /** Shown in the "I'm on the way" message preview -- blank until an admin fills it in. */
   phone: string;
   vanRegistration: string;
+  /** GPSLive device IMEI for this driver's usual van -- see DriverAccountDoc's own
+   *  comment (db/mongo.ts) for why this exists alongside vanRegistration. "" until an
+   *  admin assigns one. */
+  imei: string;
 }
 
 export interface Job {
@@ -80,6 +84,13 @@ export interface Job {
    *  leaving and re-entering the zone doesn't notify again); unset if never detected,
    *  or if GPSLive tracking isn't wired up for this van. */
   congestionZoneEnteredAt?: string;
+  /** The GPSLive device IMEI resolved for this job's driver at the moment the job
+   *  started (see jobs/congestion-zone.service.ts's checkCongestionZoneAtJobStart) --
+   *  pinned once and never re-resolved, so a driver's van assignment changing later
+   *  (a swap, a profile edit) can't retroactively misattribute an in-flight job's
+   *  congestion events to the wrong van. Unset if no device could be resolved at
+   *  start (no GPSLive key configured, or no matching device for that driver yet). */
+  gpsliveImei?: string;
   /** Cloudinary URL of the customer's drawn signature, once captured -- replaces the
    * old Sheets "Signatures" tab. Empty until WAITING_CLIENT_CONFIRMATION is completed. */
   signatureUrl: string;

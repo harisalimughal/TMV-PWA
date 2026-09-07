@@ -33,6 +33,13 @@ export interface DriverAccountDoc {
   fullName: string;
   phone: string;
   vanRegistration: string;
+  /** GPSLive device IMEI for this driver's usual van, set from a picker of live
+   *  GPSLive devices on the /admin Drivers screen (not typed freely -- a wrong digit
+   *  in a 15-digit IMEI is silent and unrecoverable without this). "" until an admin
+   *  assigns one. The authoritative join to a GPSLive device -- see
+   *  integrations/gpslive.ts's findDeviceForDriver, which prefers this over the older
+   *  vanRegistration/initials string-matching whenever it's set. */
+  imei: string;
   role: string;
 }
 

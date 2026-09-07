@@ -148,6 +148,9 @@ export interface DriverSummaryItem {
   email?: string;
   phone?: string;
   vanRegistration?: string;
+  /** GPSLive device IMEI assigned to this driver's usual van -- see the backend
+   *  DriverAccountDoc's own comment for why this exists. */
+  imei?: string;
   active: boolean;
   /** False when this entry only exists because a job's driverInitials matches this
    *  code -- nobody has actually added this driver via Add Driver. No account backs

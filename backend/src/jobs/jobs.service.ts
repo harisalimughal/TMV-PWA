@@ -329,7 +329,7 @@ export async function startJob(jobId: string, identifier: string): Promise<Job> 
     sendJobStartedSmsIfAny(startedJob, driver);
     // Best-effort, never awaited by the response -- see the function's own doc
     // comment for why a job can need this even though the real-time webhook exists.
-    checkCongestionZoneAtJobStart(startedJob, driver.initials, driver.vanRegistration).catch(error =>
+    checkCongestionZoneAtJobStart(startedJob, driver).catch(error =>
       log.warn("congestion zone job-start check failed to launch", { error: String(error), job_id: startedJob.jobId })
     );
     return startedJob;

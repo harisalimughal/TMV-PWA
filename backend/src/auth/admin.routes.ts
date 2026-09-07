@@ -93,6 +93,7 @@ export function adminRoutes(): Router {
     const fullName = String(body.fullName ?? "").trim();
     const phone = String(body.phone ?? "").trim();
     const vanRegistration = String(body.vanRegistration ?? "").trim();
+    const imei = String(body.imei ?? "").trim();
     const role = String(body.role ?? "").trim();
     const active = body.active !== false;
     const password = String(body.password ?? "").trim();
@@ -107,7 +108,7 @@ export function adminRoutes(): Router {
     }
 
     try {
-      await upsertDriverProfile({ email, initials, fullName, phone, vanRegistration, role, active });
+      await upsertDriverProfile({ email, initials, fullName, phone, vanRegistration, imei, role, active });
     } catch (error) {
       if (isDuplicateKeyError(error)) {
         res.status(409).json({ error: { code: "DUPLICATE_INITIALS", message: "Another driver already uses these initials." } });
