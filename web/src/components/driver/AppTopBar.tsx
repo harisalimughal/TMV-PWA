@@ -32,7 +32,10 @@ export function AppTopBar({ driver, onOpenProfile, className }: AppTopBarProps) 
   return (
     <header
       className={cx(
-        "shrink-0 border-b border-line bg-bar/80 backdrop-blur-xl backdrop-saturate-150 pt-safe",
+        // `relative z-30` so the notification dropdown (which lives inside this bar's
+        // backdrop-blur stacking context) renders above the scrolling screen content,
+        // whose entry animation leaves a `transform` stacking context behind it.
+        "relative z-30 shrink-0 border-b border-line bg-bar/80 backdrop-blur-xl backdrop-saturate-150 pt-safe",
         className
       )}
     >

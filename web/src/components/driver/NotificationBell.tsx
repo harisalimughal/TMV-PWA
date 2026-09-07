@@ -106,7 +106,7 @@ export function NotificationBell() {
           ref={panelRef}
           role="menu"
           style={{ transform: panelShiftX ? `translateX(${panelShiftX}px)` : undefined }}
-          className="absolute right-0 top-full z-50 mt-2 w-[min(360px,calc(100vw-24px))] overflow-hidden rounded-card border border-line bg-surface shadow-md animate-in fade-in zoom-in-95"
+          className="absolute right-0 top-full z-[60] mt-2 w-[min(360px,calc(100vw-24px))] overflow-hidden rounded-card border border-line bg-surface shadow-md animate-in fade-in zoom-in-95"
         >
           <div className="flex items-center justify-between border-b border-line px-4 py-3">
             <span className="text-label font-semibold text-fg">Notifications</span>
