@@ -29,19 +29,96 @@ function htmlToText(html: string): string {
     .replace(/&#39;/gi, "'");
 }
 
+/* ---------------------------------------------------------------------------
+ * Field label vocabulary.
+ *
+ * The booking form that feeds Google Calendar isn't consistent about which label it
+ * writes -- a phone number turns up as "Phone Number:", "Phone:", "Call:" or "Mob:";
+ * a pickup as "Move From:", "Pick address:", "Collection:" or bare "From:". It also
+ * stacks several synonym labels with no value and puts the real value a line or two
+ * further down. These lists (most specific first) plus the stacked-label skip in
+ * field() cover the variants seen in real events. Add to a list; don't reorder past a
+ * more-specific entry.
+ * ------------------------------------------------------------------------- */
+const NAME_LABELS = ["Client name", "Customer name", "Full name", "Contact name", "Customer", "Client", "Name"];
+const EMAIL_LABELS = ["Email address", "Client email address", "Client email", "Customer email", "E-mail", "E mail", "Email"];
+const PHONE_LABELS = [
+  "Phone number", "Contact number", "Mobile number", "Telephone number", "Contact telephone",
+  "Telephone", "Contact", "Phone", "Mobile", "Number", "Mob", "Cell", "Call", "Tel"
+];
+const PICKUP_LABELS = [
+  "Pick up address", "Pickup address", "Pick address", "Collection address", "Move from address",
+  "Loading address", "Address from", "Move From", "Pickup", "Pick up", "Collection", "Load from",
+  "From address", "Pick", "From"
+];
+const DROPOFF_LABELS = [
+  "Drop-off address", "Drop off address", "Dropoff address", "Delivery address", "Move to address",
+  "Unloading address", "Address to", "Move To", "Drop-off", "Drop off", "Dropoff", "Delivery",
+  "Deliver to", "Deliver", "Destination", "Unload to", "To address", "Drop", "To"
+];
+const FLOOR_FROM_LABELS = ["Floor from", "From floor", "Pickup floor", "Floor at pickup", "Floors from"];
+const FLOOR_TO_LABELS = ["Floor to", "To floor", "Dropoff floor", "Drop off floor", "Delivery floor", "Floor at dropoff", "Floors to"];
+const COMBINED_FLOOR_LABELS = ["Floor from and to", "Floors from and to", "Floor from & to", "Floor", "Floors", "Stairs"];
+
+/** Every label the form is known to emit -- including the ones we don't map to a Job
+ *  field ("Van Size:", "Inventory item:", ...). Used only to recognise a line as
+ *  "a label, not a value" while scanning forward for a stacked value. */
+const ALL_LABELS = new Set(
+  [
+    ...NAME_LABELS, ...EMAIL_LABELS, ...PHONE_LABELS, ...PICKUP_LABELS, ...DROPOFF_LABELS,
+    ...FLOOR_FROM_LABELS, ...FLOOR_TO_LABELS, ...COMBINED_FLOOR_LABELS,
+    "Move from", "Move to", "From", "To", "Pick", "Drop", "Pick up", "Drop off",
+    "Move date", "Date", "Van size", "Van", "Duration of van hire", "Duration",
+    "Number of helpers", "Helpers", "Extra request", "Extra requests", "Extras",
+    "Inventory item", "Inventory items", "Inventory", "Any extra charge", "Extra charge"
+  ].map(l => l.toLowerCase())
+);
+
+/** A "Label: value" line where the label reads like a word (no leading digit), so a
+ *  numbered address line ("119 Queens Road, LONDON: SE15 2EZ") is never mistaken for
+ *  one. Group 1 = label text, group 2 = whatever follows the colon/equals. */
+const LABEL_LINE = /^([A-Za-z][A-Za-z /&'().+-]{0,28})\s*[:=]\s*(.*)$/;
+
 function field(description: string, labels: string[]): string {
   const lines = htmlToText(description).split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+  const own = labels.map(l => l.toLowerCase());
   for (const label of labels) {
     const regex = new RegExp(`^${label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s*[:=-]\\s*(.*)$`, "i");
     for (let i = 0; i < lines.length; i++) {
       const found = lines[i].match(regex);
       if (!found) continue;
-      const inlineValue = found[1]?.trim();
+      const inlineValue = (found[1] ?? "").trim();
       if (inlineValue) return inlineValue;
-      return lines[i + 1]?.trim() || "";
+      // No value on the label line. The form stacks synonym labels ("Phone Number:",
+      // "Phone:", "Call:", "Mob:") before the value, so walk forward past any further
+      // bare recognised-label lines to reach it.
+      for (let j = i + 1; j < lines.length && j <= i + 8; j++) {
+        const lm = lines[j].match(LABEL_LINE);
+        if (!lm) return lines[j]; // plain line -> the value
+        const head = lm[1].trim().toLowerCase();
+        const val = lm[2].trim();
+        if (!val) {
+          if (ALL_LABELS.has(head)) continue; // bare recognised label -> keep scanning
+          return ""; // "Word:" we don't recognise -> value is absent
+        }
+        if (own.includes(head)) return val; // "Mob: 07919..." satisfies a phone lookup
+        if (ALL_LABELS.has(head)) return ""; // a *different* field's label+value -> ours is missing
+        return lines[j]; // some other "X: y" -> take the whole line
+      }
+      return "";
     }
   }
   return "";
+}
+
+/** Split a combined floor value like "From: 02 flight of stairs / To: 01 flight of
+ *  stairs" (or "2nd floor / ground floor") into its two halves. */
+function splitCombinedFloor(v: string): { from: string; to: string } {
+  const labelled = v.match(/from\s*[:=-]?\s*(.*?)\s*(?:\/|,|;|\||\bthen\b)\s*to\s*[:=-]?\s*(.*)$/i);
+  if (labelled) return { from: labelled[1].trim(), to: labelled[2].trim() };
+  const plain = v.match(/^(.*?)\s*(?:\/|\||;)\s*(.*)$/);
+  if (plain) return { from: plain[1].trim(), to: plain[2].trim() };
+  return { from: v.trim(), to: "" };
 }
 
 function parseTitle(title: string): { crewSize: number; price: number; paidOnline: boolean; driverInitials: string } {
@@ -69,13 +146,24 @@ export function parseCalendarEvent(event: calendar_v3.Schema$Event): ParsedCalen
   // parses this same event again and it lands normally -- nothing else has to happen.
   if (!parsedTitle.paidOnline) return null;
 
-  const customerName = field(description, ["Client name", "Customer", "Name"]);
-  const customerEmail = field(description, ["Email", "Email address", "Client email"]);
-  const customerPhone = field(description, ["Phone", "Phone number", "Telephone", "Mobile"]);
-  const pickup = field(description, ["Pickup", "Pick up address", "Pickup address", "Move From", "From"]);
-  const dropoff = field(description, ["Drop-off", "Dropoff", "Drop off", "Drop-off address", "Drop off address", "Delivery address", "Move To", "To"]);
-  const floorFrom = field(description, ["Floor from", "From floor", "Pickup floor"]);
-  const floorTo = field(description, ["Floor to", "To floor", "Dropoff floor", "Drop off floor", "Delivery floor"]);
+  const customerName = field(description, NAME_LABELS);
+  const customerEmail = field(description, EMAIL_LABELS);
+  const customerPhone = field(description, PHONE_LABELS);
+  const pickup = field(description, PICKUP_LABELS);
+  const dropoff = field(description, DROPOFF_LABELS);
+
+  let floorFrom = field(description, FLOOR_FROM_LABELS);
+  let floorTo = field(description, FLOOR_TO_LABELS);
+  // The form sometimes writes both floors on one line ("Floor From and To: From: 2nd
+  // / To: ground") rather than two separate labelled lines.
+  if (!floorFrom && !floorTo) {
+    const combined = field(description, COMBINED_FLOOR_LABELS);
+    if (combined) {
+      const split = splitCombinedFloor(combined);
+      floorFrom = split.from;
+      floorTo = split.to;
+    }
+  }
 
   return {
     calendarEventId: event.id,
