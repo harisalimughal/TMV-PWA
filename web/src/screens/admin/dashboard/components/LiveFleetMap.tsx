@@ -2,7 +2,7 @@
    ships inside the lazily loaded admin chunk. It was previously global, meaning 45kB
    of map CSS was downloaded by every driver for a map only this page renders. */
 import "leaflet/dist/leaflet.css";
-import React, { useState, useEffect, useRef, useMemo } from "react";
+import React, { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import L from "leaflet";
 import { useQuery } from "@tanstack/react-query";
 import { DateTime } from "luxon";
@@ -12,20 +12,11 @@ import {
   ZoomOut,
   Maximize2,
   Minimize2,
-  Truck,
-  ArrowUpRight,
-  Copy,
-  Check,
-  Eye,
-  Activity,
-  Compass,
   RotateCcw,
   WifiOff,
-  ShieldAlert,
-  Zap,
-  BatteryMedium,
-  Signal,
-  Gauge
+  PanelLeftClose,
+  PanelLeftOpen,
+  Search
 } from "lucide-react";
 import { NormalizedJob } from "../types";
 import { fetchCongestionZones, fetchLiveFleet } from "../api";
@@ -37,9 +28,6 @@ interface Props {
 
 interface FleetVehicle {
   imei: string;
-  /** Straight from GPSLive's device.name -- a fallback identifier for the handful of
-   *  devices whose plateNumber field is blank (the plate only appears inside the
-   *  name, e.g. "MA71XOH-WC"). */
   name: string;
   plateNumber: string;
   driverInitials: string;
@@ -58,8 +46,6 @@ interface FleetVehicle {
   gpsSignalLevel: number | null;
   gsmSignalLevel: number | null;
   jammingDetected: boolean;
-  ecoDrivingEvent: string | null;
-  ecoDrivingScore: number | null;
 }
 
 type FilterId = "ALL" | "MOVING" | "IDLE" | "PARKED";
@@ -74,8 +60,7 @@ function shortBadge(v: { matched: boolean; driverInitials: string; plateNumber: 
 
 /** A parked van's tracker reports far less often (ignition off -> it sleeps), so a
  * gap between updates is normal and doesn't mean the van is gone -- GPSLive keeps
- * showing it at its last position, and so do we. Past this many minutes we just mark
- * the pin "parked" (greyed, position may be a little old); we never hide it. */
+ * showing it, and so do we; past this many minutes the pin just greys to "parked". */
 const STALE_AFTER_MINUTES = 30;
 
 function relativeTime(dtTracker: string): string {
@@ -89,33 +74,81 @@ function relativeTime(dtTracker: string): string {
   return `${Math.round(hours / 24)}d ago`;
 }
 
+/** Approximate "stopped for" -- how long since the last position report (we don't get
+ *  a true last-moved timestamp from GPSLive's device list, so this is the closest
+ *  honest figure). */
+function stoppedFor(dtTracker: string): string {
+  const dt = DateTime.fromSQL(dtTracker, { zone: "utc" });
+  if (!dt.isValid) return "—";
+  const mins = Math.max(0, Math.round(DateTime.utc().diff(dt, "minutes").minutes));
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  return h > 0 ? `${h}h ${m}m` : `${m}m`;
+}
+
+/** Bearing in degrees (0 = north) between two lat/lng points. Used to point the arrow
+ *  marker the way a moving van is travelling (GPSLive's device list carries no
+ *  heading field, so it's derived from consecutive fixes). */
+function bearing(a: { lat: number; lng: number }, b: { lat: number; lng: number }): number {
+  const toRad = (d: number) => (d * Math.PI) / 180;
+  const y = Math.sin(toRad(b.lng - a.lng)) * Math.cos(toRad(b.lat));
+  const x =
+    Math.cos(toRad(a.lat)) * Math.sin(toRad(b.lat)) -
+    Math.sin(toRad(a.lat)) * Math.cos(toRad(b.lat)) * Math.cos(toRad(b.lng - a.lng));
+  return (Math.atan2(y, x) * 180) / Math.PI;
+}
+
+const STATE_COLOR = {
+  moving: "#16A34A",
+  idle: "#DC2626",
+  parked: "#9CA3AF",
+  selected: "#1B75BC"
+} as const;
+
+function vehState(v: FleetVehicle): keyof typeof STATE_COLOR {
+  if (v.isStale) return "parked";
+  if (v.isMoving) return "moving";
+  return "idle";
+}
+
+const esc = (s: string) =>
+  s.replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]!));
+
 export function LiveFleetMap({ jobs, onSelectJob }: Props) {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<L.Map | null>(null);
   const markersRef = useRef<Record<string, L.Marker>>({});
   const hasFitBoundsRef = useRef(false);
   const zonePolygonsRef = useRef<L.Polygon[]>([]);
+  /** Last position + derived heading per device, so a moving van's arrow can point
+   *  the right way between polls. */
+  const trackRef = useRef<Record<string, { lat: number; lng: number; heading: number }>>({});
+  /** Reverse-geocoded street address per device, filled lazily when a popup opens. */
+  const addrRef = useRef<Record<string, string>>({});
+  /** Which van's popup is open, so it survives the 10s marker rebuild. */
+  const openPopupImeiRef = useRef<string | null>(null);
+  const rebuildingRef = useRef(false);
+  /** Parent passes a fresh onSelectJob each render -- hold it in a ref so the popup
+   *  builder and marker effect don't churn every poll. */
+  const onSelectJobRef = useRef(onSelectJob);
+  useEffect(() => {
+    onSelectJobRef.current = onSelectJob;
+  }, [onSelectJob]);
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [activeFilter, setActiveFilter] = useState<FilterId>("ALL");
-  // CartoDB's voyager/light tiles now require a signed-up API key for anonymous use
-  // (their basemaps.cartocdn.com free tier was retired) -- osm needs no key and just
-  // works, so it's the default. voyager/light stay selectable for whenever a CARTO key
-  // gets added, rather than deleting the option outright.
   const [mapTheme, setMapTheme] = useState<"osm" | "voyager" | "light">("osm");
   const [showCongestionZone, setShowCongestionZone] = useState(true);
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const [copiedText, setCopiedText] = useState(false);
+  const [drawerOpen, setDrawerOpen] = useState(true);
+  const [search, setSearch] = useState("");
 
-  const { data: fleetData, dataUpdatedAt } = useQuery({
+  const { data: fleetData } = useQuery({
     queryKey: ["fleet_live"],
     queryFn: fetchLiveFleet,
     refetchInterval: 10000
   });
 
-  // The real Congestion Charge zone shape(s) already drawn in GPSLive's own dashboard
-  // (Places > Zones) -- not an approximation we maintain ourselves. Shapes rarely
-  // change, so this polls far less often than vehicle positions.
   const { data: zonesData, isFetched: zonesFetched } = useQuery({
     queryKey: ["congestion_zones"],
     queryFn: fetchCongestionZones,
@@ -123,8 +156,6 @@ export function LiveFleetMap({ jobs, onSelectJob }: Props) {
     refetchInterval: 5 * 60_000
   });
 
-  // Real device positions from GPSLive, cross-referenced with today's IN_PROGRESS jobs
-  // so a matched driver's current move shows alongside their position.
   const vehicles: FleetVehicle[] = useMemo(() => {
     return (fleetData?.vehicles || []).map(v => {
       const dt = DateTime.fromSQL(v.lastUpdate, { zone: "utc" });
@@ -153,199 +184,268 @@ export function LiveFleetMap({ jobs, onSelectJob }: Props) {
         batteryVoltage: v.batteryVoltage,
         gpsSignalLevel: v.gpsSignalLevel,
         gsmSignalLevel: v.gsmSignalLevel,
-        jammingDetected: v.jammingDetected,
-        ecoDrivingEvent: v.ecoDrivingEvent,
-        ecoDrivingScore: v.ecoDrivingScore
+        jammingDetected: v.jammingDetected
       };
     });
   }, [fleetData, jobs]);
 
-  // 1. Initialize Real Leaflet Interactive Map
+  // ---- 1. init map -------------------------------------------------------------
   useEffect(() => {
-    if (!mapContainerRef.current) return;
-    if (mapInstanceRef.current) return;
-
+    if (!mapContainerRef.current || mapInstanceRef.current) return;
     const map = L.map(mapContainerRef.current, {
       center: [51.5074, -0.1278],
       zoom: 11,
       zoomControl: false,
       attributionControl: false
     });
-
-    const tileUrls = {
-      voyager: "https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png",
-      light: "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png",
-      osm: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-    };
-
-    L.tileLayer(tileUrls[mapTheme], { maxZoom: 19, subdomains: "abc" }).addTo(map);
-
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19, subdomains: "abc" }).addTo(map);
     mapInstanceRef.current = map;
-
     return () => {
       map.remove();
       mapInstanceRef.current = null;
     };
-    // eslint-disable-next-admin-line react-hooks/exhaustive-deps
   }, []);
 
-  // Update map tile theme
+  // Recalculate size when the container resizes (fullscreen toggle, drawer, etc.).
   useEffect(() => {
-    if (!mapInstanceRef.current) return;
+    const id = setTimeout(() => mapInstanceRef.current?.invalidateSize(), 250);
+    return () => clearTimeout(id);
+  }, [isFullscreen, drawerOpen]);
+
+  // ---- 2. tile theme ---------------------------------------------------------
+  useEffect(() => {
+    const map = mapInstanceRef.current;
+    if (!map) return;
     const tileUrls = {
       voyager: "https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png",
       light: "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png",
       osm: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
     };
-    mapInstanceRef.current.eachLayer(layer => {
-      if (layer instanceof L.TileLayer) mapInstanceRef.current?.removeLayer(layer);
+    map.eachLayer(layer => {
+      if (layer instanceof L.TileLayer) map.removeLayer(layer);
     });
-    L.tileLayer(tileUrls[mapTheme], { maxZoom: 19, subdomains: "abc" }).addTo(mapInstanceRef.current);
+    L.tileLayer(tileUrls[mapTheme], { maxZoom: 19, subdomains: "abc" }).addTo(map);
   }, [mapTheme]);
 
-  // Draw/update the real Congestion Zone polygon(s) from GPSLive -- redrawn whenever
-  // the zone data refreshes or the toggle changes, same pattern as the vehicle
-  // markers effect below.
+  // ---- 3. congestion zone polygons -----------------------------------------
   useEffect(() => {
     const map = mapInstanceRef.current;
     if (!map) return;
-
     zonePolygonsRef.current.forEach(p => map.removeLayer(p));
     zonePolygonsRef.current = [];
-
     if (!showCongestionZone) return;
-
     (zonesData?.zones || []).forEach(zone => {
       const polygon = L.polygon(zone.vertices, {
         color: "#DC2626",
         weight: 2,
         fillColor: "#DC2626",
-        fillOpacity: 0.15
+        fillOpacity: 0.12
       }).addTo(map);
-      polygon.bindTooltip(zone.zoneName, {
-        permanent: true,
-        direction: "center",
-        className: "congestion-zone-label"
-      });
+      polygon.bindTooltip(zone.zoneName, { permanent: true, direction: "center", className: "congestion-zone-label" });
       zonePolygonsRef.current.push(polygon);
     });
   }, [zonesData, showCongestionZone]);
 
-  // Every van GPSLive knows about is shown, same as its own map -- parked vans just
-  // render greyed. The tabs narrow that set down; "All" is the whole fleet.
+  // ---- filtering ----------------------------------------------------------
   const visibleVehicles = useMemo(() => {
-    if (activeFilter === "MOVING") return vehicles.filter(v => v.isMoving);
-    if (activeFilter === "IDLE") return vehicles.filter(v => !v.isStale && !v.isMoving);
-    if (activeFilter === "PARKED") return vehicles.filter(v => v.isStale);
-    return vehicles;
-  }, [vehicles, activeFilter]);
-
-  const activeSelected = useMemo(() => {
-    if (!selectedId) return visibleVehicles[0] || null;
-    return vehicles.find(v => v.imei === selectedId) || visibleVehicles[0] || null;
-  }, [selectedId, visibleVehicles, vehicles]);
-
-  // 2. Sync Leaflet Markers to real positions
-  useEffect(() => {
-    const map = mapInstanceRef.current;
-    if (!map) return;
-
-    Object.values(markersRef.current).forEach(m => map.removeLayer(m));
-    markersRef.current = {};
-
-    visibleVehicles.forEach(veh => {
-      const isSelected = activeSelected?.imei === veh.imei;
-      const pinColor = veh.isStale ? "#98A2B3" : isSelected ? "#1B75BC" : veh.isMoving ? "#101828" : "#475467";
-      const bgPill = isSelected ? "#1B75BC" : "#FFFFFF";
-      const textColor = isSelected ? "#FFFFFF" : pinColor;
-
-      // GPSLive's own map always labels a pin with the device's plate (it comes
-      // straight off the device, not a match) -- shown the same way here regardless
-      // of whether this van's plate/initials have a matching driver on file yet.
-      // "matched" only controls the small round badge, which shows the driver's
-      // initials once matched or a plate fragment otherwise (never a dead-end "??").
-      const identifier = veh.plateNumber || veh.name || "Unmatched";
-      const plateLabel = veh.matched ? `${identifier} · ${veh.driverInitials}` : identifier;
-      const badgeText = shortBadge(veh);
-
-      const customIcon = L.divIcon({
-        className: "van-marker-container",
-        html: `
-          <div style="position: relative; display: flex; flex-direction: column; align-items: center; cursor: pointer; opacity: ${veh.isStale && !isSelected ? 0.7 : 1};">
-            <div style="
-              margin-bottom: 4px; padding: 3px 9px; background: ${isSelected ? "#1B75BC" : veh.isStale ? "rgba(71, 84, 103, 0.92)" : "rgba(16, 24, 40, 0.9)"};
-              border-radius: 7px; color: #ffffff; font-family: 'IBM Plex Mono', monospace;
-              font-size: 12px; font-weight: 700; letter-spacing: 0.02em; white-space: nowrap;
-              box-shadow: 0 2px 8px rgba(16,24,40,0.35);
-            ">
-              ${plateLabel}
-            </div>
-            ${veh.isMoving ? `<div class="animate-pulse-beacon" style="position: absolute; top: 22px; left: -4px; width: 36px; height: 36px; border-radius: 999px; background: ${pinColor}; opacity: 0.35;"></div>` : ""}
-            <div style="
-              width: 30px; height: 30px; border-radius: 999px; background: ${bgPill};
-              border: 2px solid ${pinColor}; box-shadow: 0 4px 12px rgba(16,24,40,0.25);
-              display: flex; align-items: center; justify-content: center;
-              font-family: 'IBM Plex Mono', monospace; font-weight: 700; font-size: 11px;
-              color: ${textColor}; z-index: 10;
-            ">
-              ${badgeText}
-            </div>
-            <div style="margin-top: -3px; width: 0; height: 0; border-left: 5px solid transparent; border-right: 5px solid transparent; border-top: 6px solid ${pinColor};"></div>
-          </div>
-        `,
-        iconSize: [40, 56],
-        iconAnchor: [20, 44]
-      });
-
-      const marker = L.marker([veh.lat, veh.lng], { icon: customIcon }).addTo(map);
-      marker.on("click", () => setSelectedId(veh.imei));
-      markersRef.current[veh.imei] = marker;
-    });
-
-    // Fit bounds once, the first time real positions arrive -- don't re-fit on every
-    // 10s poll or the map would keep yanking the view while someone's looking at it.
-    // The frame always includes the Congestion Charge zone so it's on screen even when
-    // the only live van is way out in the suburbs (a single-point fit would otherwise
-    // zoom past central London entirely).
-    if (!hasFitBoundsRef.current && visibleVehicles.length > 0) {
-      const pts: [number, number][] = visibleVehicles.map(v => [v.lat, v.lng] as [number, number]);
-      const zoneVerts = showCongestionZone
-        ? (zonesData?.zones || []).flatMap(z => z.vertices as [number, number][])
-        : [];
-      zoneVerts.forEach(v => pts.push(v));
-      map.fitBounds(L.latLngBounds(pts), { padding: [60, 60], maxZoom: 12 });
-      // Latch only once the zone shapes are actually in the frame (or the toggle is
-      // off, or the zones request has come back empty) -- otherwise let the next run
-      // re-fit when they load.
-      if (!showCongestionZone || zoneVerts.length > 0 || zonesFetched) {
-        hasFitBoundsRef.current = true;
-      }
+    let list = vehicles;
+    if (activeFilter === "MOVING") list = list.filter(v => v.isMoving);
+    else if (activeFilter === "IDLE") list = list.filter(v => !v.isStale && !v.isMoving);
+    else if (activeFilter === "PARKED") list = list.filter(v => v.isStale);
+    const q = search.trim().toLowerCase();
+    if (q) {
+      list = list.filter(
+        v =>
+          v.plateNumber.toLowerCase().includes(q) ||
+          v.name.toLowerCase().includes(q) ||
+          v.driverName.toLowerCase().includes(q)
+      );
     }
-  }, [visibleVehicles, activeSelected, zonesData, showCongestionZone, zonesFetched]);
-
-  const handleFocusVehicle = (veh: FleetVehicle) => {
-    setSelectedId(veh.imei);
-    mapInstanceRef.current?.flyTo([veh.lat, veh.lng], 14, { animate: true, duration: 1.2 });
-  };
-
-  const handleFitAllFleet = () => {
-    if (!mapInstanceRef.current || visibleVehicles.length === 0) return;
-    const pts: [number, number][] = visibleVehicles.map(v => [v.lat, v.lng] as [number, number]);
-    if (showCongestionZone) {
-      (zonesData?.zones || []).forEach(z => (z.vertices as [number, number][]).forEach(v => pts.push(v)));
-    }
-    mapInstanceRef.current.fitBounds(L.latLngBounds(pts), { padding: [50, 50], maxZoom: 13 });
-  };
-
-  const handleCopyCoords = (veh: FleetVehicle) => {
-    navigator.clipboard.writeText(`${veh.lat}, ${veh.lng}`);
-    setCopiedText(true);
-    setTimeout(() => setCopiedText(false), 2000);
-  };
+    return list;
+  }, [vehicles, activeFilter, search]);
 
   const movingCount = vehicles.filter(v => v.isMoving).length;
   const parkedCount = vehicles.filter(v => v.isStale).length;
   const idleCount = vehicles.length - movingCount - parkedCount;
+
+  // ---- popup HTML ---------------------------------------------------------
+  const popupHtml = useCallback((v: FleetVehicle): string => {
+    const color = STATE_COLOR[vehState(v)];
+    const addr = addrRef.current[v.imei];
+    const stateLabel = v.isStale ? "Parked" : v.isMoving ? "Moving" : "Stopped";
+    const g = (label: string, value: string) =>
+      `<div class="vfm-cell"><span class="vfm-k">${esc(label)}</span><span class="vfm-v">${esc(value)}</span></div>`;
+
+    const job = v.currentJob;
+    const jobBlock = job
+      ? `<div class="vfm-job">
+           <div class="vfm-job-hd">Current job · ${esc(job.jobId)}</div>
+           <div class="vfm-job-row"><b>A</b> ${esc(job.pickup || "—")}</div>
+           <div class="vfm-job-row"><b>B</b> ${esc(job.dropoff || "—")}</div>
+           <div class="vfm-job-cust">${esc(job.customerName || "")}</div>
+           ${onSelectJobRef.current ? `<button class="vfm-btn" data-job="${esc(job.jobId)}">Inspect move</button>` : ""}
+         </div>`
+      : "";
+
+    const unlinked = !v.matched
+      ? `<div class="vfm-warn">Not linked to a driver. On the <b>Drivers</b> page set a driver's van
+           registration to <b>${esc(v.plateNumber || v.name)}</b> to connect them.</div>`
+      : "";
+
+    return `
+      <div class="vfm-pop">
+        <div class="vfm-pop-hd">
+          <span class="vfm-dot" style="background:${color}"></span>
+          <span class="vfm-title">${esc(v.plateNumber || v.name)}</span>
+          ${v.matched ? `<span class="vfm-init">${esc(v.driverInitials)}</span>` : `<span class="vfm-unlinked">Unlinked</span>`}
+        </div>
+        <div class="vfm-addr">${addr ? esc(addr) : "Locating…"}</div>
+        <a class="vfm-maps" href="https://www.google.com/maps?q=${v.lat},${v.lng}" target="_blank" rel="noopener noreferrer">Open in Google Maps</a>
+        ${unlinked}
+        <div class="vfm-grid">
+          ${g("State", stateLabel)}
+          ${g("Speed", `${v.speedMph} mph`)}
+          ${g("Last report", relativeTime(v.lastUpdate))}
+          ${g("Stopped for", v.isMoving ? "—" : stoppedFor(v.lastUpdate))}
+          ${g("Ignition", v.ignitionOn === null ? "—" : v.ignitionOn ? "On" : "Off")}
+          ${g("Battery", v.batteryVoltage === null ? "—" : `${v.batteryVoltage}V`)}
+          ${g("GPS / GSM", `${v.gpsSignalLevel ?? "—"} / ${v.gsmSignalLevel ?? "—"}`)}
+          ${g("Mileage", v.odometerMiles === null ? "—" : `${v.odometerMiles.toLocaleString()} mi`)}
+        </div>
+        <div class="vfm-time">Position time: ${esc(v.lastUpdate)} UTC · Driver: ${esc(v.matched ? v.driverName : "No driver")}</div>
+        ${jobBlock}
+      </div>`;
+  }, []);
+
+  const refreshPopup = useCallback((v: FleetVehicle) => {
+    const m = markersRef.current[v.imei];
+    if (m?.isPopupOpen()) m.setPopupContent(popupHtml(v));
+  }, [popupHtml]);
+
+  /** Lazily reverse-geocode one van's position (Nominatim) and refresh its popup.
+   *  Cached per device for the session; failures fall back to the coords line. */
+  const geocode = useCallback(async (v: FleetVehicle) => {
+    if (addrRef.current[v.imei]) return;
+    try {
+      const res = await fetch(
+        `https://nominatim.openstreetmap.org/reverse?format=json&zoom=18&addressdetails=0&lat=${v.lat}&lon=${v.lng}`,
+        { headers: { "Accept-Language": "en-GB" } }
+      );
+      if (!res.ok) throw new Error(String(res.status));
+      const data = await res.json();
+      addrRef.current[v.imei] = data.display_name || `${v.lat.toFixed(5)}, ${v.lng.toFixed(5)}`;
+    } catch {
+      addrRef.current[v.imei] = `${v.lat.toFixed(5)}, ${v.lng.toFixed(5)}`;
+    }
+    refreshPopup(v);
+  }, [refreshPopup]);
+
+  // ---- 4. markers -------------------------------------------------------------
+  useEffect(() => {
+    const map = mapInstanceRef.current;
+    if (!map) return;
+
+    rebuildingRef.current = true;
+    Object.values(markersRef.current).forEach(m => map.removeLayer(m));
+    markersRef.current = {};
+
+    visibleVehicles.forEach(veh => {
+      const isSelected = selectedId === veh.imei;
+      const state = vehState(veh);
+      const color = isSelected ? STATE_COLOR.selected : STATE_COLOR[state];
+
+      // Derive heading from movement between polls.
+      const prev = trackRef.current[veh.imei];
+      let heading = prev?.heading ?? 0;
+      if (prev && veh.isMoving && (Math.abs(prev.lat - veh.lat) > 1e-5 || Math.abs(prev.lng - veh.lng) > 1e-5)) {
+        heading = bearing(prev, veh);
+      }
+      trackRef.current[veh.imei] = { lat: veh.lat, lng: veh.lng, heading };
+
+      const plate = veh.matched ? `${veh.plateNumber || veh.name} · ${veh.driverInitials}` : veh.plateNumber || veh.name;
+      const showArrow = veh.isMoving;
+
+      const icon = L.divIcon({
+        className: "vfm-marker-wrap",
+        html: `
+          <div class="vfm-marker" style="opacity:${veh.isStale && !isSelected ? 0.75 : 1}">
+            <div class="vfm-plate" style="background:${isSelected ? STATE_COLOR.selected : "rgba(16,24,40,0.9)"}">${esc(plate)}</div>
+            <div class="vfm-glyph" style="${isSelected ? "filter:drop-shadow(0 0 6px rgba(27,117,188,.9));" : ""}${showArrow ? `transform:rotate(${heading}deg);` : ""}">
+              ${
+                showArrow
+                  ? `<svg width="30" height="30" viewBox="0 0 24 24"><path d="M12 2 L20 20 L12 15.5 L4 20 Z" fill="${color}" stroke="#fff" stroke-width="1.6" stroke-linejoin="round"/></svg>`
+                  : `<svg width="26" height="26" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8" fill="${color}" stroke="#fff" stroke-width="2.4"/></svg>`
+              }
+            </div>
+          </div>`,
+        iconSize: [90, 54],
+        iconAnchor: [45, showArrow ? 30 : 27]
+      });
+
+      const marker = L.marker([veh.lat, veh.lng], { icon })
+        .addTo(map)
+        .bindPopup(popupHtml(veh), { minWidth: 250, maxWidth: 300, className: "vfm-popup", autoPanPadding: [40, 40] });
+
+      marker.on("click", () => setSelectedId(veh.imei));
+      marker.on("popupopen", () => {
+        openPopupImeiRef.current = veh.imei;
+        void geocode(veh);
+      });
+      marker.on("popupclose", () => {
+        if (!rebuildingRef.current) openPopupImeiRef.current = null;
+      });
+      markersRef.current[veh.imei] = marker;
+    });
+
+    // Re-open the popup that was open before this rebuild so a 10s refresh doesn't
+    // dismiss the details the admin is reading.
+    rebuildingRef.current = false;
+    const keep = openPopupImeiRef.current;
+    if (keep && markersRef.current[keep]) markersRef.current[keep].openPopup();
+
+    // Fit once vehicles + the zone have both loaded, so central London (and the zone)
+    // stay in frame even when the only live van is out in the suburbs.
+    if (!hasFitBoundsRef.current && visibleVehicles.length > 0) {
+      const pts: [number, number][] = visibleVehicles.map(v => [v.lat, v.lng] as [number, number]);
+      const zoneVerts = showCongestionZone ? (zonesData?.zones || []).flatMap(z => z.vertices as [number, number][]) : [];
+      zoneVerts.forEach(v => pts.push(v));
+      map.fitBounds(L.latLngBounds(pts), { padding: [60, 60], maxZoom: 12 });
+      if (!showCongestionZone || zoneVerts.length > 0 || zonesFetched) hasFitBoundsRef.current = true;
+    }
+  }, [visibleVehicles, selectedId, zonesData, showCongestionZone, zonesFetched, popupHtml, geocode]);
+
+  // Wire the popup's "Inspect move" button (rendered as raw HTML) back to React.
+  useEffect(() => {
+    const map = mapInstanceRef.current;
+    if (!map) return;
+    const handler = (e: L.PopupEvent) => {
+      const el = (e.popup as L.Popup).getElement();
+      el?.querySelector<HTMLButtonElement>("button[data-job]")?.addEventListener("click", ev => {
+        const id = (ev.currentTarget as HTMLButtonElement).dataset.job;
+        if (id) onSelectJobRef.current?.(id);
+      });
+    };
+    map.on("popupopen", handler);
+    return () => {
+      map.off("popupopen", handler);
+    };
+  }, []);
+
+  const focusVehicle = (v: FleetVehicle) => {
+    setSelectedId(v.imei);
+    const map = mapInstanceRef.current;
+    if (!map) return;
+    map.flyTo([v.lat, v.lng], Math.max(map.getZoom(), 14), { animate: true, duration: 0.9 });
+    setTimeout(() => markersRef.current[v.imei]?.openPopup(), 950);
+  };
+
+  const fitAll = () => {
+    const map = mapInstanceRef.current;
+    if (!map || visibleVehicles.length === 0) return;
+    const pts: [number, number][] = visibleVehicles.map(v => [v.lat, v.lng] as [number, number]);
+    if (showCongestionZone) (zonesData?.zones || []).forEach(z => (z.vertices as [number, number][]).forEach(v => pts.push(v)));
+    map.fitBounds(L.latLngBounds(pts), { padding: [50, 50], maxZoom: 13 });
+  };
 
   return (
     <div
@@ -353,24 +453,46 @@ export function LiveFleetMap({ jobs, onSelectJob }: Props) {
         isFullscreen ? "fixed inset-4 z-50 flex flex-col shadow-pop" : "relative"
       }`}
     >
-      {/* Leaflet's tooltip DOM isn't reachable via Tailwind classes -- this styles the
-          congestion zone name labels as the small dark pills GPSLive's own map shows,
-          matching its .bindTooltip className above. */}
       <style>{`
-        .congestion-zone-label {
-          background: rgba(16, 24, 40, 0.85);
-          border: none;
-          color: #fff;
-          font-family: 'IBM Plex Mono', monospace;
-          font-size: 10px;
-          font-weight: 600;
-          padding: 2px 6px;
-          box-shadow: none;
-        }
+        .congestion-zone-label { background: rgba(16,24,40,.85); border: none; color: #fff;
+          font-family: 'IBM Plex Mono', monospace; font-size: 10px; font-weight: 600; padding: 2px 6px; box-shadow: none; }
         .congestion-zone-label::before { display: none; }
+        .vfm-marker-wrap { background: none !important; border: none !important; }
+        .vfm-marker { position: relative; display: flex; flex-direction: column; align-items: center; cursor: pointer; }
+        .vfm-plate { margin-bottom: 3px; padding: 3px 9px; border-radius: 7px; color: #fff;
+          font-family: 'IBM Plex Mono', monospace; font-size: 12px; font-weight: 700; letter-spacing: .02em;
+          white-space: nowrap; box-shadow: 0 2px 8px rgba(16,24,40,.35); }
+        .vfm-glyph { line-height: 0; transition: transform .4s ease; }
+        .vfm-popup .leaflet-popup-content-wrapper { border-radius: 12px; box-shadow: 0 12px 34px -10px rgba(16,24,40,.35); }
+        .vfm-popup .leaflet-popup-content { margin: 0; width: 270px !important; }
+        .vfm-pop { padding: 12px 13px; font-family: inherit; }
+        .vfm-pop-hd { display: flex; align-items: center; gap: 7px; }
+        .vfm-dot { width: 9px; height: 9px; border-radius: 999px; flex: none; }
+        .vfm-title { font-weight: 800; font-size: 14px; color: #101828; }
+        .vfm-init { margin-left: auto; font-family: 'IBM Plex Mono', monospace; font-weight: 700; font-size: 11px;
+          background: #eef2ff; color: #1b75bc; padding: 1px 6px; border-radius: 5px; }
+        .vfm-unlinked { margin-left: auto; font-size: 10px; font-weight: 700; text-transform: uppercase;
+          letter-spacing: .04em; background: #f1f5f9; color: #64748b; padding: 2px 6px; border-radius: 5px; }
+        .vfm-addr { margin-top: 8px; font-size: 12px; line-height: 1.4; color: #334155; }
+        .vfm-maps { display: inline-block; margin-top: 4px; font-size: 11px; font-weight: 600; color: #1b75bc; }
+        .vfm-warn { margin-top: 8px; padding: 7px 8px; border-radius: 7px; background: #fffbeb; border: 1px solid #fde68a;
+          font-size: 10.5px; line-height: 1.45; color: #92400e; }
+        .vfm-grid { margin-top: 10px; display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+        .vfm-cell { background: #f8fafc; border: 1px solid #eef2f6; border-radius: 7px; padding: 5px 7px; }
+        .vfm-k { display: block; font-size: 9.5px; text-transform: uppercase; letter-spacing: .04em; color: #94a3b8; }
+        .vfm-v { display: block; font-size: 12px; font-weight: 700; color: #101828; margin-top: 1px; }
+        .vfm-time { margin-top: 8px; font-size: 9.5px; color: #94a3b8; font-family: 'IBM Plex Mono', monospace; line-height: 1.5; }
+        .vfm-job { margin-top: 9px; padding: 8px; background: #f8fafc; border: 1px solid #eef2f6; border-radius: 8px; }
+        .vfm-job-hd { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: #94a3b8; }
+        .vfm-job-row { margin-top: 4px; font-size: 11px; color: #334155; }
+        .vfm-job-row b { display: inline-block; width: 14px; height: 14px; line-height: 14px; text-align: center;
+          border-radius: 999px; background: #e0edff; color: #1b75bc; font-size: 9px; margin-right: 5px; }
+        .vfm-job-cust { margin-top: 5px; font-size: 11px; font-weight: 600; color: #101828; }
+        .vfm-btn { margin-top: 7px; width: 100%; height: 28px; border: none; border-radius: 6px; cursor: pointer;
+          background: #1b75bc; color: #fff; font-size: 11px; font-weight: 600; }
       `}</style>
 
-      {/* 1. TOP MASTER TOOLBAR */}
+      {/* toolbar */}
       <div className="p-3.5 border-b border-admin-line flex flex-wrap items-center gap-3 bg-white">
         <div className="flex items-center gap-2 shrink-0">
           <span className="relative flex h-3 w-3">
@@ -410,277 +532,141 @@ export function LiveFleetMap({ jobs, onSelectJob }: Props) {
             value={mapTheme}
             onChange={e => setMapTheme(e.target.value as any)}
             className="shrink-0 h-8 px-2 bg-admin-surface border border-admin-line rounded text-xs text-admin-ink font-medium"
-            title="Switch Map Tile Theme"
+            title="Map tile theme"
           >
             <option value="osm">OpenStreetMap</option>
-            <option value="voyager">Navigation (Voyager) -- needs CARTO API key</option>
-            <option value="light">Clean Positron -- needs CARTO API key</option>
+            <option value="voyager">Navigation (Voyager) -- needs CARTO key</option>
+            <option value="light">Clean Positron -- needs CARTO key</option>
           </select>
 
           <button
-            onClick={() => setShowCongestionZone(!showCongestionZone)}
+            onClick={() => setShowCongestionZone(v => !v)}
             className={`shrink-0 px-2.5 py-1.5 rounded border text-xs font-medium transition ${
               showCongestionZone ? "bg-admin-brand-soft border-admin-brand/30 text-admin-brand" : "bg-admin-surface border-admin-line text-admin-muted"
             }`}
-            title="Toggle London Congestion Charge zone boundary"
+            title="Toggle London Congestion Charge zone"
           >
             Congestion Zone
           </button>
 
           <button
-            onClick={() => setIsFullscreen(!isFullscreen)}
+            onClick={() => setIsFullscreen(v => !v)}
             className="shrink-0 p-1.5 rounded border border-admin-line bg-admin-surface hover:bg-admin-surface-2 text-admin-ink-2 transition"
-            title={isFullscreen ? "Exit Fullscreen" : "Fullscreen Map View"}
+            title={isFullscreen ? "Exit fullscreen" : "Fullscreen"}
           >
             {isFullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
           </button>
         </div>
       </div>
 
-      {/* 2. REAL INTERACTIVE LEAFLET MAP + TELEMETRY SIDECAR */}
-      <div className={`grid grid-cols-1 lg:grid-cols-12 ${isFullscreen ? "flex-1 min-h-0" : "min-h-[500px]"}`}>
-        <div className="lg:col-span-8 relative bg-admin-surface border-b lg:border-b-0 lg:border-r border-admin-line overflow-hidden">
-          <div className="absolute top-3 right-3 z-[400] flex flex-col gap-1.5 bg-white/95 backdrop-blur-xs p-1 rounded border border-admin-line shadow-card">
-            <button onClick={() => mapInstanceRef.current?.zoomIn()} className="p-1.5 rounded hover:bg-admin-surface text-admin-ink transition" title="Zoom In">
-              <ZoomIn className="w-4 h-4" />
-            </button>
-            <button onClick={() => mapInstanceRef.current?.zoomOut()} className="p-1.5 rounded hover:bg-admin-surface text-admin-ink transition" title="Zoom Out">
-              <ZoomOut className="w-4 h-4" />
-            </button>
-            <button onClick={handleFitAllFleet} className="p-1.5 rounded hover:bg-admin-surface text-admin-ink transition" title="Fit All Active Vans">
-              <RotateCcw className="w-4 h-4" />
-            </button>
-          </div>
+      {/* map */}
+      <div className={`relative bg-admin-surface ${isFullscreen ? "flex-1 min-h-0" : "h-[560px]"}`}>
+        <div ref={mapContainerRef} className="absolute inset-0 w-full h-full" />
 
-          {vehicles.length === 0 && (
-            <div className="absolute inset-0 z-[300] flex items-center justify-center bg-white/80 backdrop-blur-xs">
-              <div className="text-center px-6">
-                <WifiOff className="w-8 h-8 text-admin-muted mx-auto mb-2 opacity-50" />
-                <p className="text-label font-semibold text-fg">No vehicle positions available</p>
-                <p className="text-[11px] text-admin-muted mt-1">Waiting for GPSLive telemetry...</p>
-              </div>
-            </div>
-          )}
-
-          <div ref={mapContainerRef} className="w-full h-full min-h-[500px]" />
+        {/* zoom controls */}
+        <div className="absolute top-3 right-3 z-[500] flex flex-col gap-1.5 bg-white/95 backdrop-blur-xs p-1 rounded border border-admin-line shadow-card">
+          <button onClick={() => mapInstanceRef.current?.zoomIn()} className="p-1.5 rounded hover:bg-admin-surface text-admin-ink transition" title="Zoom in">
+            <ZoomIn className="w-4 h-4" />
+          </button>
+          <button onClick={() => mapInstanceRef.current?.zoomOut()} className="p-1.5 rounded hover:bg-admin-surface text-admin-ink transition" title="Zoom out">
+            <ZoomOut className="w-4 h-4" />
+          </button>
+          <button onClick={fitAll} className="p-1.5 rounded hover:bg-admin-surface text-admin-ink transition" title="Fit fleet + zone">
+            <RotateCcw className="w-4 h-4" />
+          </button>
         </div>
 
-        {/* 3. REAL-TIME FLEET TELEMETRY SIDECAR */}
-        <div className="lg:col-span-4 bg-white p-5 flex flex-col justify-between overflow-y-auto">
-          {activeSelected ? (
-            <div className="space-y-4">
-              <div className="flex items-start justify-between pb-3 border-b border-admin-line">
-                <div className="flex items-center gap-3">
-                  <div className={`w-10 h-10 rounded font-mono font-bold text-sm flex items-center justify-center border shadow-card ${
-                    activeSelected.matched ? "bg-admin-brand-soft text-admin-brand border-admin-brand/20" : "bg-admin-surface text-admin-muted border-admin-line"
-                  }`}>
-                    {shortBadge(activeSelected)}
-                  </div>
-                  <div>
-                    <h4 className="text-btn text-admin-ink leading-tight">
-                      {activeSelected.matched ? activeSelected.driverName : (activeSelected.plateNumber || activeSelected.name)}
-                    </h4>
-                    <span className="text-xs font-mono text-admin-muted">
-                      {activeSelected.matched ? activeSelected.plateNumber : "Unlinked device"}
-                    </span>
-                  </div>
-                </div>
-                <button
-                  onClick={() => handleFocusVehicle(activeSelected)}
-                  className="px-2.5 py-1 rounded bg-admin-brand-soft text-admin-brand hover:bg-admin-brand/20 text-xs font-medium transition flex items-center gap-1"
-                  title="Center map on this vehicle"
-                >
-                  <Compass className="w-3.5 h-3.5" />
-                  <span>Track</span>
-                </button>
+        {/* collapsed: hamburger */}
+        {!drawerOpen && (
+          <button
+            onClick={() => setDrawerOpen(true)}
+            className="absolute top-3 left-3 z-[500] flex items-center gap-2 px-3 h-10 rounded-lg bg-white shadow-card border border-admin-line text-admin-ink text-xs font-semibold hover:bg-admin-surface transition"
+            title="Show vehicle list"
+          >
+            <PanelLeftOpen className="w-4 h-4" />
+            {vehicles.length} vans
+          </button>
+        )}
+
+        {/* expanded: vehicle list drawer */}
+        {drawerOpen && (
+          <div className="absolute top-3 left-3 bottom-3 z-[500] w-[320px] max-w-[calc(100%-24px)] flex flex-col rounded-lg bg-white shadow-pop border border-admin-line overflow-hidden">
+            <div className="flex items-center justify-between gap-2 px-3 h-11 border-b border-admin-line shrink-0">
+              <span className="text-xs font-bold text-admin-ink">Vehicles ({visibleVehicles.length})</span>
+              <button
+                onClick={() => setDrawerOpen(false)}
+                className="p-1 rounded hover:bg-admin-surface text-admin-muted hover:text-admin-ink transition"
+                title="Collapse list"
+              >
+                <PanelLeftClose className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="px-2.5 py-2 border-b border-admin-line shrink-0">
+              <div className="relative">
+                <Search className="w-3.5 h-3.5 text-admin-muted absolute left-2.5 top-1/2 -translate-y-1/2" />
+                <input
+                  value={search}
+                  onChange={e => setSearch(e.target.value)}
+                  placeholder="Search plate or driver..."
+                  className="w-full h-8 pl-8 pr-2 rounded bg-admin-surface border border-admin-line text-[12px] text-admin-ink placeholder:text-admin-muted outline-none focus:border-admin-brand"
+                />
               </div>
+            </div>
 
-              {!activeSelected.matched && (
-                <div className="p-2.5 bg-amber-50 border border-amber-200 rounded text-[11px] text-amber-700 leading-relaxed">
-                  Not linked to a driver yet. On the <span className="font-semibold">Drivers</span> page, set the
-                  driver's van registration to{" "}
-                  <span className="font-mono font-semibold">{activeSelected.plateNumber || activeSelected.name}</span>{" "}
-                  so their moves show here.
-                </div>
+            <div className="flex-1 overflow-y-auto">
+              {visibleVehicles.length === 0 && (
+                <p className="p-4 text-center text-[11px] text-admin-muted">No vehicles match.</p>
               )}
-
-              <div className="grid grid-cols-2 gap-2 text-xs">
-                <div className="p-3 bg-admin-surface rounded border border-admin-line flex flex-col justify-between">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[11px] text-admin-muted block">Live Speed</span>
-                    {!activeSelected.isStale && <Activity className="w-3.5 h-3.5 text-admin-brand animate-pulse" />}
-                  </div>
-                  <span className="text-lg font-bold font-mono text-admin-ink mt-1">
-                    {activeSelected.isStale ? "—" : activeSelected.speedMph}
-                    {!activeSelected.isStale && <span className="text-xs font-normal text-admin-muted"> mph</span>}
-                  </span>
-                  <span className={`text-[10px] font-medium ${activeSelected.isStale ? "text-admin-status-red" : "text-admin-status-green"}`}>
-                    {activeSelected.isStale ? "Signal lost" : "GPS Live"}
-                  </span>
-                </div>
-
-                <div className="p-3 bg-admin-surface rounded border border-admin-line">
-                  <span className="text-[11px] text-admin-muted block mb-1">Last Report</span>
-                  <span className="font-semibold text-admin-ink text-xs block">{relativeTime(activeSelected.lastUpdate)}</span>
-                  <span className="text-[10px] text-admin-muted block mt-0.5 font-mono">{activeSelected.lastUpdate} UTC</span>
-                </div>
-              </div>
-
-              {/* GPS jamming is security-critical -- surface it above everything else,
-                  not buried in the regular health grid. (No crash banner: GPSLive's
-                  "crash" field reads "1" on every device at all times regardless of
-                  what's actually happening, so it's a hardware-capability flag, not a
-                  real event indicator -- showing it as an alert would just be a
-                  permanent false alarm.) */}
-              {activeSelected.jammingDetected && (
-                <div className="p-2.5 bg-admin-status-red-bg border border-admin-status-red/30 rounded">
-                  <div className="flex items-center gap-1.5 text-[11px] font-semibold text-admin-status-red">
-                    <ShieldAlert className="w-3.5 h-3.5 shrink-0" /> GPS jamming detected -- possible tampering
-                  </div>
-                </div>
-              )}
-
-              {/* Vehicle health & safety -- straight from the device's own sensors
-                  (Teltonika hardware, per the "protocol" field GPSLive reports). */}
-              <div className="grid grid-cols-2 gap-2 text-xs">
-                <div className="p-3 bg-admin-surface rounded border border-admin-line flex items-center gap-2">
-                  <Zap className={`w-4 h-4 shrink-0 ${activeSelected.ignitionOn ? "text-admin-status-green" : "text-admin-muted"}`} />
-                  <div>
-                    <span className="text-[11px] text-admin-muted block">Ignition</span>
-                    <span className="font-semibold text-admin-ink text-xs">
-                      {activeSelected.ignitionOn === null ? "—" : activeSelected.ignitionOn ? "On" : "Off"}
-                    </span>
-                  </div>
-                </div>
-                <div className="p-3 bg-admin-surface rounded border border-admin-line flex items-center gap-2">
-                  <BatteryMedium className="w-4 h-4 shrink-0 text-admin-muted" />
-                  <div>
-                    <span className="text-[11px] text-admin-muted block">Battery</span>
-                    <span className="font-semibold text-admin-ink text-xs">
-                      {activeSelected.batteryVoltage === null ? "—" : `${activeSelected.batteryVoltage}V`}
-                    </span>
-                  </div>
-                </div>
-                <div className="p-3 bg-admin-surface rounded border border-admin-line flex items-center gap-2">
-                  <Signal className="w-4 h-4 shrink-0 text-admin-muted" />
-                  <div>
-                    <span className="text-[11px] text-admin-muted block">GPS / GSM Signal</span>
-                    <span className="font-semibold text-admin-ink text-xs">
-                      {activeSelected.gpsSignalLevel ?? "—"} / {activeSelected.gsmSignalLevel ?? "—"}
-                    </span>
-                  </div>
-                </div>
-                <div className="p-3 bg-admin-surface rounded border border-admin-line flex items-center gap-2">
-                  <Gauge className="w-4 h-4 shrink-0 text-admin-muted" />
-                  <div>
-                    <span className="text-[11px] text-admin-muted block">Odometer</span>
-                    <span className="font-semibold text-admin-ink text-xs">
-                      {activeSelected.odometerMiles === null ? "—" : `${activeSelected.odometerMiles.toLocaleString()} mi`}
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-              {activeSelected.ecoDrivingEvent && (
-                <div className="p-2.5 bg-amber-50 border border-amber-200 rounded flex items-center justify-between text-[11px]">
-                  <span className="text-amber-700 font-medium">
-                    Last driving event: {activeSelected.ecoDrivingEvent === "hbrake" ? "harsh braking" : activeSelected.ecoDrivingEvent === "hcorner" ? "harsh cornering" : activeSelected.ecoDrivingEvent}
-                  </span>
-                  {activeSelected.ecoDrivingScore !== null && (
-                    <span className="font-mono font-bold text-amber-700">{activeSelected.ecoDrivingScore}</span>
-                  )}
-                </div>
-              )}
-
-              {/* Current job, if this driver has one IN_PROGRESS right now -- real data
-                  cross-referenced from the Sheets-backed jobs list, not fabricated. */}
-              {activeSelected.currentJob ? (
-                <div className="p-3 bg-admin-surface rounded border border-admin-line space-y-2.5 text-xs">
-                  <span className="text-[11px] font-medium text-admin-muted">Current Job</span>
-                  <div className="space-y-2 font-mono text-[11px]">
-                    <div className="flex items-start gap-2">
-                      <span className="w-4 h-4 rounded-pill bg-admin-status-green-bg text-admin-status-green flex items-center justify-center text-[9px] font-bold flex-shrink-0 mt-0.5">A</span>
-                      <div className="overflow-hidden">
-                        <span className="text-admin-muted text-[10px] block font-sans">Pickup</span>
-                        <span className="text-admin-ink truncate block" title={activeSelected.currentJob.pickup}>{activeSelected.currentJob.pickup}</span>
-                      </div>
-                    </div>
-                    <div className="flex items-start gap-2">
-                      <span className="w-4 h-4 rounded-pill bg-admin-brand-soft text-admin-brand flex items-center justify-center text-[9px] font-bold flex-shrink-0 mt-0.5">B</span>
-                      <div className="overflow-hidden">
-                        <span className="text-admin-muted text-[10px] block font-sans">Dropoff</span>
-                        <span className="text-admin-ink truncate block" title={activeSelected.currentJob.dropoff}>{activeSelected.currentJob.dropoff}</span>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="pt-1 flex items-center justify-between border-t border-admin-line">
-                    <span className="font-mono font-semibold text-admin-brand">{activeSelected.currentJob.jobId}</span>
-                    <span className="text-admin-ink font-medium">{activeSelected.currentJob.customerName}</span>
-                  </div>
-                </div>
-              ) : (
-                <div className="p-3 bg-admin-surface rounded border border-admin-line text-center text-[11px] text-admin-muted">
-                  No active job assigned right now
-                </div>
-              )}
-
-              <div className="flex items-center gap-2 pt-1">
-                {onSelectJob && activeSelected.currentJob && (
+              {visibleVehicles.map(v => {
+                const isSel = selectedId === v.imei;
+                const color = STATE_COLOR[vehState(v)];
+                return (
                   <button
-                    onClick={() => onSelectJob(activeSelected.currentJob!.jobId)}
-                    className="flex-1 h-8 rounded bg-admin-brand text-white text-xs font-medium hover:bg-admin-brand-dark transition flex items-center justify-center gap-1.5"
+                    key={v.imei}
+                    onClick={() => focusVehicle(v)}
+                    className={`w-full text-left px-3 py-2.5 border-b border-admin-line/70 transition ${
+                      isSel ? "bg-admin-brand-soft" : "hover:bg-admin-surface"
+                    }`}
                   >
-                    <Eye className="w-3.5 h-3.5" />
-                    <span>Inspect Move</span>
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono text-[12.5px] font-bold text-admin-ink truncate">
+                        {v.plateNumber || v.name}
+                        {v.matched && <span className="text-admin-muted font-medium"> · {v.driverInitials}</span>}
+                      </span>
+                      <span className="ml-auto flex items-center gap-1.5 shrink-0">
+                        <span className="text-[11px] font-mono text-admin-muted">{v.speedMph} mph</span>
+                        <span className="w-2.5 h-2.5 rounded-full" style={{ background: color }} />
+                      </span>
+                    </div>
+                    <div className="mt-0.5 text-[11px] text-admin-muted">
+                      Driver: {v.matched ? v.driverName : "No driver"}
+                    </div>
+                    <div className="text-[11px] text-admin-muted">
+                      {v.isMoving ? "Moving" : `${v.isStale ? "Parked" : "Stopped"} · ${stoppedFor(v.lastUpdate)}`}
+                      {" · "}
+                      {relativeTime(v.lastUpdate)}
+                    </div>
+                    <div className="mt-0.5 text-[11px] text-admin-ink-2 truncate">
+                      {addrRef.current[v.imei] || `${v.lat.toFixed(4)}, ${v.lng.toFixed(4)}`}
+                    </div>
                   </button>
-                )}
-                <button
-                  onClick={() => handleCopyCoords(activeSelected)}
-                  className="h-8 px-3 rounded border border-admin-line bg-admin-surface hover:bg-admin-surface-2 text-xs font-medium text-admin-ink-2 transition flex items-center gap-1"
-                  title="Copy coordinates"
-                >
-                  {copiedText ? <Check className="w-3.5 h-3.5 text-admin-status-green" /> : <Copy className="w-3.5 h-3.5" />}
-                  <span>Copy Coords</span>
-                </button>
-              </div>
+                );
+              })}
             </div>
-          ) : (
-            <div className="flex flex-col items-center justify-center h-full text-center py-10 text-admin-muted">
-              <Truck className="w-10 h-10 text-admin-muted mb-3 opacity-40" />
-              <h4 className="text-btn text-admin-ink">No vehicles to show</h4>
-              <p className="text-[11px] text-admin-muted mt-1 max-w-[200px]">
-                {vehicles.length === 0
-                  ? "Waiting for the first GPSLive position update."
-                  : "Try a different filter above."}
-              </p>
-            </div>
-          )}
+          </div>
+        )}
 
-          {vehicles.length > 0 && (
-            <div className="pt-3 mt-3 border-t border-admin-line">
-              <span className="text-[11px] font-medium text-admin-muted block mb-2">
-                Fleet ({vehicles.length}) &bull; Click to track
-              </span>
-              <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
-                {vehicles.map(veh => {
-                  const isSelected = activeSelected?.imei === veh.imei;
-                  return (
-                    <button
-                      key={veh.imei}
-                      onClick={() => handleFocusVehicle(veh)}
-                      className={`px-2 py-1 rounded text-xs font-mono font-medium transition flex items-center gap-1.5 flex-shrink-0 ${
-                        isSelected ? "bg-admin-brand text-white shadow-card" : "bg-admin-surface border border-admin-line text-admin-ink-2 hover:bg-admin-surface-2"
-                      } ${veh.isStale ? "opacity-55" : ""}`}
-                    >
-                      <span>{shortBadge(veh)}</span>
-                      <span className="text-[10px] opacity-75">{veh.isStale ? "parked" : `${veh.speedMph}mph`}</span>
-                    </button>
-                  );
-                })}
-              </div>
+        {/* no data */}
+        {vehicles.length === 0 && (
+          <div className="absolute inset-0 z-[400] flex items-center justify-center bg-white/80 backdrop-blur-xs">
+            <div className="text-center px-6">
+              <WifiOff className="w-8 h-8 text-admin-muted mx-auto mb-2 opacity-50" />
+              <p className="text-label font-semibold text-fg">No vehicle positions available</p>
+              <p className="text-[11px] text-admin-muted mt-1">Waiting for GPSLive telemetry...</p>
             </div>
-          )}
-        </div>
+          </div>
+        )}
       </div>
     </div>
   );
