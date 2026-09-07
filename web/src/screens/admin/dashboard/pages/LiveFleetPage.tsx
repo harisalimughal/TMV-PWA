@@ -92,8 +92,12 @@ export function LiveFleetPage({ onSelectSection }: Props) {
         }}
       />
 
-      {/* 3. Congestion Zone Detections */}
-      <CongestionZonePanel rows={congestionData?.rows || []} isLoading={congestionLoading} />
+      {/* 3. Congestion Zone Detections — only rendered once there's at least one
+          detection to show, so it isn't an empty box under the map the rest of the
+          time. It reappears automatically on the first hit (30s poll). */}
+      {!congestionLoading && (congestionData?.rows?.length ?? 0) > 0 && (
+        <CongestionZonePanel rows={congestionData!.rows} isLoading={false} />
+      )}
     </div>
   );
 }
