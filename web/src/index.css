@@ -104,8 +104,16 @@ textarea {
 .pb-dock { padding-bottom: calc(env(safe-area-inset-bottom) + 12px); }
 /* Bottom spacer inside a scroll area so the last item clears the sticky dock. */
 .scroll-pb-dock { padding-bottom: calc(var(--dock-height) + env(safe-area-inset-bottom)); }
-/* Bottom spacer inside a tab screen's scroll area so content clears the mobile tab bar. */
-.scroll-pb-nav { padding-bottom: calc(var(--bottom-nav-height) + env(safe-area-inset-bottom) + 12px); }
+/* Bottom spacer inside a tab screen's scroll area so content clears the mobile tab bar.
+   Prefers the tab bar's real measured height (--bottom-nav-h, published by <BottomNav>,
+   already includes its blur bar + safe-area padding); the token formula is the fallback
+   for the frame before that effect runs. The extra 16px is breathing room under the
+   last row. */
+.scroll-pb-nav {
+  padding-bottom: calc(
+    var(--bottom-nav-h, calc(var(--bottom-nav-height) + env(safe-area-inset-bottom))) + 16px
+  );
+}
 @media (min-width: 1024px) { .scroll-pb-nav { padding-bottom: 32px; } }
 
 /* Keyboard-safe viewport height. 100dvh accounts for the mobile keyboard and address
