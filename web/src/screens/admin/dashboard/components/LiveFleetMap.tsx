@@ -286,6 +286,7 @@ export function LiveFleetMap({ jobs, onSelectJob }: Props) {
 
   const movingCount = vehicles.filter(v => v.isMoving).length;
   const parkedCount = vehicles.filter(v => v.isStale).length;
+  const unlinkedCount = vehicles.filter(v => !v.matched).length;
   const idleCount = vehicles.length - movingCount - parkedCount;
 
   // ---- popup HTML ---------------------------------------------------------
@@ -521,9 +522,16 @@ export function LiveFleetMap({ jobs, onSelectJob }: Props) {
           </span>
           <h3 className="text-btn text-admin-ink whitespace-nowrap">Live Fleet GPS</h3>
         </div>
-        <div className="hidden sm:flex items-center gap-1.5 text-xs text-admin-muted font-mono shrink-0">
-          <Radio className="w-3.5 h-3.5 text-admin-brand animate-pulse" />
-          <span>{movingCount} in transit &bull; {vehicles.length} tracked</span>
+        <div className="hidden sm:flex items-center gap-2 text-xs font-mono shrink-0">
+          <span className="flex items-center gap-1.5 text-admin-muted">
+            <Radio className="w-3.5 h-3.5 text-admin-brand animate-pulse" />
+            {movingCount} in transit &bull; {vehicles.length} tracked
+          </span>
+          {unlinkedCount > 0 && (
+            <span className="rounded-full bg-amber-100 border border-amber-200 px-2 py-0.5 font-medium text-amber-700">
+              {unlinkedCount} unlinked
+            </span>
+          )}
         </div>
 
         <div className="flex items-center gap-2 flex-wrap sm:ml-auto">
