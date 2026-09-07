@@ -399,8 +399,8 @@ export function LiveFleetMap({ jobs, onSelectJob }: Props) {
               }
             </div>
           </div>`,
-        iconSize: [90, 54],
-        iconAnchor: [45, showArrow ? 30 : 27]
+        iconSize: [150, 60],
+        iconAnchor: [75, showArrow ? 36 : 45]
       });
 
       const marker = L.marker([veh.lat, veh.lng], { icon })
@@ -480,9 +480,9 @@ export function LiveFleetMap({ jobs, onSelectJob }: Props) {
         .congestion-zone-label::before { display: none; }
         .vfm-marker-wrap { background: none !important; border: none !important; }
         .vfm-marker { position: relative; display: flex; flex-direction: column; align-items: center; cursor: pointer; }
-        .vfm-plate { margin-bottom: 3px; padding: 3px 9px; border-radius: 7px; color: #fff;
-          font-family: 'IBM Plex Mono', monospace; font-size: 12px; font-weight: 700; letter-spacing: .02em;
-          white-space: nowrap; box-shadow: 0 2px 8px rgba(16,24,40,.35); }
+        .vfm-plate { margin-bottom: 4px; padding: 4px 11px; border-radius: 8px; color: #fff;
+          font-family: 'IBM Plex Mono', monospace; font-size: 14.5px; font-weight: 700; letter-spacing: .02em;
+          white-space: nowrap; box-shadow: 0 2px 8px rgba(16,24,40,.4); }
         .vfm-glyph { line-height: 0; transition: transform .4s ease; }
         .vfm-popup .leaflet-popup-content-wrapper { border-radius: 12px; box-shadow: 0 12px 34px -10px rgba(16,24,40,.35); }
         .vfm-popup .leaflet-popup-content { margin: 0; width: 270px !important; }
@@ -605,7 +605,7 @@ export function LiveFleetMap({ jobs, onSelectJob }: Props) {
         </div>
 
         {/* marker legend */}
-        <div className="absolute bottom-3 right-3 z-[500] flex flex-wrap items-center gap-x-3 gap-y-1 max-w-[calc(100%-24px)] bg-white/95 backdrop-blur-xs px-2.5 py-1.5 rounded border border-admin-line shadow-card text-[10px] font-medium text-admin-ink-2">
+        <div className="absolute top-3 left-1/2 -translate-x-1/2 z-[500] flex flex-wrap items-center justify-center gap-x-3 gap-y-1 max-w-[calc(100%-24px)] bg-white/95 backdrop-blur-xs px-2.5 py-1.5 rounded border border-admin-line shadow-card text-[10px] font-medium text-admin-ink-2">
           {(
             [
               ["Moving", STATE_COLOR.moving],
