@@ -98,12 +98,26 @@ export function DriversPage() {
         </span>
       </div>
 
-      {isError && <ApiErrorState message={(error as Error)?.message} onRetry={() => refetch()} />}
+      {isLoading && (
+        <div className="h-64 bg-white rounded-module border border-admin-line animate-pulse flex items-center justify-center">
+          <span className="text-admin-muted font-medium">Loading drivers...</span>
+        </div>
+      )}
+
+      {!isLoading && isError && (
+        <ApiErrorState message={(error as Error)?.message} onRetry={() => refetch()} />
+      )}
+
+      {!isLoading && !isError && roster.length === 0 && (
+        <div className="h-64 bg-white rounded-module border border-admin-line flex items-center justify-center">
+          <span className="text-admin-muted font-medium">No drivers to show.</span>
+        </div>
+      )}
 
       {/* DRIVER CARDS GRID */}
-      {!isError && (
+      {!isLoading && !isError && roster.length > 0 && (
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 items-stretch">
-        {!isLoading && roster.map((driver) => (
+        {roster.map((driver) => (
           <div
             key={driver.initials}
             className="bg-white rounded-module shadow-[0_4px_20px_rgb(0,0,0,0.03)] border border-admin-line p-6 flex flex-col justify-between hover:-translate-y-0.5 hover:shadow-md transition-all cursor-pointer relative group"

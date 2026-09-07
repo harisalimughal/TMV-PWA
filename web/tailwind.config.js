@@ -13,9 +13,14 @@ export default {
       colors: {
         /* ---- semantic system (new) ------------------------------------- */
         bg: c("--bg"),
+        bg2: c("--bg-2"),
+        bar: c("--bar"),
+        "hero-from": c("--hero-from"),
+        "hero-to": c("--hero-to"),
         surface: {
           DEFAULT: c("--surface"),
-          sunken: c("--surface-sunken")
+          sunken: c("--surface-sunken"),
+          raised: c("--surface-raised")
         },
         line: {
           DEFAULT: c("--line"),
@@ -110,20 +115,20 @@ export default {
          * CANONICAL TYPE SCALE — named by role, not by size. Each entry ships
          * its line-height, weight and tracking, so one class sets the whole
          * treatment and hierarchy stays consistent across every screen.
-         * Weights are fractional on purpose: Inter is a variable font.
+         * Weights are integer axis stops: Hanken Grotesk is a variable font.
          * ───────────────────────────────────────────────────────────────── */
-        /** Completion headline, a standalone hero number (a price, a time). */
-        display: ["27px", { lineHeight: "32px", letterSpacing: "-0.021em", fontWeight: "680" }],
+        /** Completion headline / the screen greeting (a standalone hero line). */
+        display: ["27px", { lineHeight: "32px", letterSpacing: "-0.025em", fontWeight: "800" }],
         /** The one title per screen: page title, workflow step title. */
-        title: ["21px", { lineHeight: "27px", letterSpacing: "-0.018em", fontWeight: "680" }],
-        /** A heading *inside* a screen — groups a set of fields or cards. */
-        heading: ["16px", { lineHeight: "21px", letterSpacing: "-0.012em", fontWeight: "640" }],
+        title: ["24px", { lineHeight: "29px", letterSpacing: "-0.02em", fontWeight: "800" }],
+        /** A heading *inside* a screen — a section label, a card title. */
+        heading: ["15px", { lineHeight: "20px", letterSpacing: "-0.01em", fontWeight: "700" }],
         /** Card title, and the primary line of a list row. */
-        card: ["14.5px", { lineHeight: "19px", letterSpacing: "-0.008em", fontWeight: "620" }],
+        card: ["15.5px", { lineHeight: "20px", letterSpacing: "-0.008em", fontWeight: "700" }],
         /** Small ALL-CAPS section marker (PICKUP / DELIVER). Pair with uppercase. */
-        eyebrow: ["11px", { lineHeight: "14px", letterSpacing: "0.055em", fontWeight: "620" }],
+        eyebrow: ["11px", { lineHeight: "14px", letterSpacing: "0.02em", fontWeight: "620" }],
         /** Descriptive / paragraph copy. */
-        body: ["14px", { lineHeight: "20px", letterSpacing: "-0.005em", fontWeight: "440" }],
+        body: ["13.5px", { lineHeight: "19px", letterSpacing: "-0.005em", fontWeight: "440" }],
         /** Field labels, and the secondary line of a list row. */
         label: ["13px", { lineHeight: "17px", letterSpacing: "-0.003em", fontWeight: "560" }],
         /** Helper text under an input; the quiet explanation. */

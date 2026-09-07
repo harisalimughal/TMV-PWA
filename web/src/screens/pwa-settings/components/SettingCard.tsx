@@ -27,17 +27,17 @@ export function SettingCard({
 }: SettingCardProps) {
   return (
     <Card elevation="xs" flush className={cx("overflow-hidden", className)}>
-      <div className="flex items-start gap-3 p-4">
+      <div className="flex items-start gap-3.5 p-4">
         <span
-          className="grid size-9 shrink-0 place-items-center rounded-card border border-line bg-surface-sunken text-fg-muted [&_svg]:size-[18px]"
+          className="grid size-[42px] shrink-0 place-items-center rounded-[12px] bg-surface-sunken text-fg-muted [&_svg]:size-[20px]"
           aria-hidden
         >
           {icon}
         </span>
         <div className="min-w-0 flex-1">
-          <h2 className="text-card text-fg">{title}</h2>
+          <h2 className="text-[15px] font-bold text-fg">{title}</h2>
           {description && (
-            <p className="mt-0.5 text-helper text-fg-subtle">{description}</p>
+            <p className="mt-1 text-[13px] leading-relaxed text-fg-muted">{description}</p>
           )}
         </div>
         {headerAside && <div className="shrink-0">{headerAside}</div>}

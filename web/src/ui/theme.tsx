@@ -17,8 +17,8 @@ export type ThemePreference = "light" | "dark" | "system";
 export type ResolvedTheme = "light" | "dark";
 
 const STORAGE_KEY = "tmv-theme";
-const META_LIGHT = "#FFFFFF";
-const META_DARK = "#0D0F13";
+const META_LIGHT = "#F4F5F7";
+const META_DARK = "#0D0F12";
 const MQ = "(prefers-color-scheme: dark)";
 
 interface ThemeContextValue {

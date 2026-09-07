@@ -25,7 +25,7 @@ export function VanScreen({ driver }: VanScreenProps) {
   const online = useOnline();
 
   return (
-    <AppShell banner={<OfflineBanner />} contentWidth="content">
+    <AppShell banner={<OfflineBanner />} contentWidth="content" topInset={false}>
       <div className="flex flex-col gap-7 px-4 pt-5 pb-8 scroll-pb-nav">
         <header className="flex flex-col gap-4">
           <div className="flex items-start gap-3">

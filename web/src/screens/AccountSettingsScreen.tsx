@@ -14,56 +14,65 @@ interface AccountSettingsScreenProps {
   onBack?: () => void;
 }
 
+function initials(driver: DriverProfile): string {
+  if (driver.initials) return driver.initials.slice(0, 2).toUpperCase();
+  const parts = (driver.fullName || "").trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return "?";
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+}
+
 /**
  * Profile & account — a structured list. Name and email are read-only because the
  * production API exposes no driver-facing profile-update endpoint.
  */
-export function AccountSettingsScreen({
-  driver,
-  onLogout,
-  onBack
-}: AccountSettingsScreenProps) {
+export function AccountSettingsScreen({ driver, onLogout, onBack }: AccountSettingsScreenProps) {
   return (
-    <AppShell
-      header={
-        <div className="flex items-center gap-2.5">
+    <AppShell topInset={false}>
+      <div className="scroll-pb-nav">
+        <div className="flex items-center gap-2.5 px-5 pb-1 pt-5">
           {onBack && (
             <IconButton aria-label="Back to jobs" icon={<ArrowLeft />} onClick={onBack} className="-ml-1.5 text-fg" />
           )}
-          <span className="text-heading text-fg">Settings</span>
-        </div>
-      }
-    >
-      <div className="px-4 pb-4 pt-6 scroll-pb-nav">
-        <div className="border-t border-line pt-4">
-          <p className="text-heading text-fg">{driver.fullName}</p>
-          <p className="text-label font-normal text-fg-muted">Driver</p>
+          <h1 className="text-title text-fg">Settings</h1>
         </div>
 
-        <h2 className="pb-2 pt-7 text-card text-fg">Personal details</h2>
-        <InfoRow label="Name" value={driver.fullName} />
-        <InfoRow label="Email" value={driver.email} />
-        <p className="pt-3 text-helper text-fg-subtle">
+        <div className="flex items-center gap-3.5 px-5 pb-[18px] pt-3">
+          <span className="grid size-[52px] shrink-0 place-items-center rounded-card bg-brand text-[17px] font-bold text-brand-fg">
+            {initials(driver)}
+          </span>
+          <div className="min-w-0">
+            <h3 className="text-[17px] font-bold text-fg">{driver.fullName}</h3>
+            <p className="mt-0.5 text-[13.5px] text-fg-muted">Driver · The Man Van</p>
+          </div>
+        </div>
+
+        <GroupLabel>Personal details</GroupLabel>
+        <Field k="Name" v={driver.fullName} />
+        <Field k="Email" v={<span className="select-text">{driver.email}</span>} />
+        <p className="px-5 pb-1 pt-3 text-[12.5px] leading-relaxed text-fg-subtle">
           Your name and email come from your The Man Van account. Contact operations to change either.
         </p>
 
-        <h2 className="pb-3 pt-7 text-card text-fg">Appearance</h2>
-        <ThemeToggle />
-        <p className="pt-2.5 text-helper text-fg-subtle">
+        <GroupLabel>Appearance</GroupLabel>
+        <div className="px-5 pt-1.5">
+          <ThemeToggle />
+        </div>
+        <p className="px-5 pb-1 pt-2.5 text-[12.5px] leading-relaxed text-fg-subtle">
           System follows your device setting.
         </p>
 
-        <h2 className="pb-2 pt-7 text-card text-fg">App</h2>
-        <div className="flex flex-col gap-4">
+        <GroupLabel>App</GroupLabel>
+        <div className="flex flex-col gap-2.5 px-5 pt-1.5">
           <InstallAppCard />
           <NotificationsCard />
         </div>
 
-        <h2 className="pb-2 pt-7 text-card text-fg">Account</h2>
+        <GroupLabel>Account</GroupLabel>
         <button
           type="button"
           onClick={onLogout}
-          className="flex w-full items-center justify-between border-y border-line py-3.5 text-left text-body font-medium text-danger transition-colors hover:bg-danger-subtle"
+          className="flex w-full items-center justify-between border-t border-line px-5 py-4 text-left text-[14.5px] font-semibold text-danger transition-colors active:bg-danger-subtle"
         >
           Sign out
           <ChevronRight className="size-4" aria-hidden />
@@ -73,11 +82,17 @@ export function AccountSettingsScreen({
   );
 }
 
-function InfoRow({ label, value }: { label: string; value: string }) {
+function GroupLabel({ children }: { children: React.ReactNode }) {
   return (
-    <div className="flex items-center justify-between gap-3 border-b border-line py-3.5 first:border-t">
-      <span className="text-label font-normal text-fg-muted">{label}</span>
-      <span className="min-w-0 truncate text-body font-medium text-fg">{value}</span>
+    <p className="px-5 pb-1 pt-6 text-[12px] font-bold tracking-[0.03em] text-fg-subtle">{children}</p>
+  );
+}
+
+function Field({ k, v }: { k: string; v: React.ReactNode }) {
+  return (
+    <div className="flex items-center justify-between gap-3.5 border-t border-line px-5 py-[15px]">
+      <span className="text-[14.5px] text-fg-muted">{k}</span>
+      <span className="min-w-0 truncate text-right text-[14.5px] font-semibold text-fg">{v}</span>
     </div>
   );
 }

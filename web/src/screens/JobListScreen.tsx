@@ -6,7 +6,9 @@ import { PullToRefresh } from "../app/PullToRefresh";
 import { AppShell } from "../app/AppShell";
 import { OfflineBanner } from "../app/OfflineBanner";
 import {
+  AlertStrip,
   DatePickerSheet,
+  FeaturedJobCard,
   JobFilterBar,
   MobileHeader,
   ScheduleRow,
@@ -73,7 +75,6 @@ export function JobListScreen({ driver, onOpenJob, onOpenProfile }: JobListScree
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [jobsList, setJobsList] = useState<JobsListState>({ today: [], past: [], next: [] });
-  const [refreshing, setRefreshing] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const stored = useRef(readStored());
@@ -85,7 +86,6 @@ export function JobListScreen({ driver, onOpenJob, onOpenProfile }: JobListScree
 
   const load = useCallback(async (mode: "initial" | "refresh") => {
     if (mode === "initial") setLoading(true);
-    else setRefreshing(true);
     setError(null);
     try {
       const result = await fetchJobsList();
@@ -100,7 +100,6 @@ export function JobListScreen({ driver, onOpenJob, onOpenProfile }: JobListScree
       setError((err as ApiError)?.message || "Couldn't load your jobs.");
     } finally {
       setLoading(false);
-      setRefreshing(false);
     }
   }, []);
 
@@ -160,24 +159,28 @@ export function JobListScreen({ driver, onOpenJob, onOpenProfile }: JobListScree
 
   return (
     <>
-      <AppShell banner={<OfflineBanner />} contentWidth="content" contentRef={scrollRef}>
-        {/* Greeting — scrolls away with the page. */}
-        <div className="px-4 pt-4">
+      <AppShell banner={<OfflineBanner />} contentWidth="content" contentRef={scrollRef} topInset={false}>
+        {/* Greeting — scrolls away with the page. Pull down to refresh. */}
+        <div className="px-4 pt-5">
           <MobileHeader
             driver={driver}
-            onOpenProfile={onOpenProfile}
-            onRefresh={() => load("refresh")}
-            refreshing={refreshing}
             jobCount={loading || error ? undefined : filtered.counts.today}
             className="mb-4"
           />
         </div>
 
+        {/* The one operational fact that outranks everything: unfinished earlier jobs. */}
+        {showFilterBar && filtered.counts.previous > 0 && (
+          <div className="px-4 pb-1 pt-1">
+            <AlertStrip count={filtered.counts.previous} onClick={() => setFilter("previous")} />
+          </div>
+        )}
+
         {/* Date filters — the primary Jobs navigation. Sits directly in AppShell's
          *  scroll flow (not inside PullToRefresh, whose overflow context would stop
          *  `position: sticky` working) so it pins to the top as the list scrolls. */}
         {showFilterBar && (
-          <div className="sticky top-0 z-20 border-b border-line bg-bg/90 px-4 py-2.5 backdrop-blur-md supports-[backdrop-filter]:bg-bg/70">
+          <div className="sticky top-0 z-20 bg-bg px-4 pb-1 pt-2">
             <JobFilterBar
               value={filter}
               onChange={setFilter}
@@ -291,17 +294,22 @@ function FilterView({
         />
       );
     }
+    const [next, ...rest] = filtered.today;
     return (
-      <ScheduleSection title="Today" meta={jobsLabel(filtered.today.length)}>
-        {filtered.today.map(job => (
-          <ScheduleRow
-            key={job.jobId}
-            job={job}
-            bucket="today"
-            onOpen={() => onOpenJob(job.jobId)}
-          />
-        ))}
-      </ScheduleSection>
+      <div className="flex flex-col gap-5">
+        <div className="flex items-baseline justify-between px-1">
+          <h2 className="text-heading text-fg">Up next</h2>
+          <span className="font-mono text-[12.5px] text-fg-subtle">1 of {filtered.today.length}</span>
+        </div>
+        <FeaturedJobCard job={next} onOpen={() => onOpenJob(next.jobId)} />
+        {rest.length > 0 && (
+          <ScheduleSection title="Later today" meta={jobsLabel(rest.length)} className="-mx-4">
+            {rest.map((job, i) => (
+              <ScheduleRow key={job.jobId} job={job} bucket="today" index={i} onOpen={() => onOpenJob(job.jobId)} />
+            ))}
+          </ScheduleSection>
+        )}
+      </div>
     );
   }
 
@@ -317,12 +325,18 @@ function FilterView({
       );
     }
     return (
-      <ScheduleSection title="Needs finishing" tone="attention" meta={jobsLabel(filtered.previous.length)}>
-        {filtered.previous.map(job => (
+      <ScheduleSection
+        title="Needs finishing"
+        tone="attention"
+        meta={jobsLabel(filtered.previous.length)}
+        className="-mx-4"
+      >
+        {filtered.previous.map((job, i) => (
           <ScheduleRow
             key={job.jobId}
             job={job}
             bucket="past"
+            index={i}
             onOpen={() => onOpenJob(job.jobId)}
           />
         ))}
@@ -344,12 +358,13 @@ function FilterView({
     return (
       <>
         {filtered.upcomingGroups.map(group => (
-          <ScheduleSection key={group.key} title={group.label} meta={jobsLabel(group.jobs.length)}>
-            {group.jobs.map(job => (
+          <ScheduleSection key={group.key} title={group.label} meta={jobsLabel(group.jobs.length)} className="-mx-4">
+            {group.jobs.map((job, i) => (
               <ScheduleRow
                 key={job.jobId}
                 job={job}
                 bucket="next"
+                index={i}
                 onOpen={() => onOpenJob(job.jobId)}
               />
             ))}
@@ -391,12 +406,14 @@ function FilterView({
     <ScheduleSection
       title={formatDateKeyShort(customDate)}
       meta={jobsLabel(filtered.custom.length)}
+      className="-mx-4"
     >
-      {filtered.custom.map(job => (
+      {filtered.custom.map((job, i) => (
         <ScheduleRow
           key={job.jobId}
           job={job}
           bucket={bucketForKey(customDate)}
+          index={i}
           onOpen={() => onOpenJob(job.jobId)}
         />
       ))}

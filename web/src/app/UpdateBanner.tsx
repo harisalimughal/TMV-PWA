@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
 import { DownloadCloud, X } from "lucide-react";
-import { Button } from "../ui";
 import { useServiceWorkerUpdate } from "../screens/pwa-settings/hooks/useServiceWorkerUpdate";
 
 const DISMISS_KEY = "tmv-pwa:update-banner-dismissed";
@@ -73,24 +72,24 @@ export function UpdateBanner() {
           "calc(env(safe-area-inset-bottom) + var(--bottom-nav-height, 0px) + 12px)",
       }}
     >
-      <div className="pointer-events-auto flex w-full max-w-sm items-center gap-3 rounded-card bg-fg px-3.5 py-2.5 text-bg shadow-md">
-        <DownloadCloud className="size-[18px] shrink-0" aria-hidden />
-        <span className="flex-1 text-[13px] font-medium leading-snug">
+      <div className="pointer-events-auto flex w-full max-w-sm items-center gap-3 rounded-card border border-line-strong bg-surface py-2.5 pl-4 pr-2.5 text-fg shadow-md">
+        <DownloadCloud className="size-[18px] shrink-0 text-fg-muted" aria-hidden />
+        <span className="flex-1 text-[13.5px] font-medium leading-snug">
           A new version of TMV BOT is available.
         </span>
-        <Button
-          variant="secondary"
-          size="sm"
-          loading={updating}
+        <button
+          type="button"
+          disabled={updating}
           onClick={() => void applyUpdate()}
+          className="h-10 shrink-0 rounded-[11px] bg-fg px-4 text-[13.5px] font-bold text-bg transition-transform duration-fast active:scale-[0.93] disabled:opacity-60"
         >
           Refresh
-        </Button>
+        </button>
         <button
           type="button"
           onClick={dismiss}
           aria-label="Dismiss"
-          className="-mr-1 shrink-0 p-1 opacity-70 transition-opacity hover:opacity-100"
+          className="grid size-9 shrink-0 place-items-center rounded-[10px] text-fg-muted transition-transform duration-fast active:scale-[0.93]"
         >
           <X className="size-4" />
         </button>

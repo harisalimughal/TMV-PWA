@@ -31,7 +31,7 @@ export function StorageHomeScreen({ onOpenScenario }: StorageHomeScreenProps) {
     ) : null;
 
   return (
-    <AppShell banner={<OfflineBanner />} contentWidth="content">
+    <AppShell banner={<OfflineBanner />} contentWidth="content" topInset={false}>
       <div className="px-4 pb-4 pt-5 scroll-pb-nav">
         <header className="flex items-start justify-between gap-3">
           <div className="min-w-0">

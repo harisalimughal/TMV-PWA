@@ -2,14 +2,18 @@
    `rgb(var(--token))` values they define are available to every generated utility. */
 @import "./styles/tokens.css";
 
-/* Inter — the application typeface. `wght.css` is the weight axis only (no optical
-   size, no italics — the UI uses neither), split into unicode-range subsets so a
-   browser rendering English only ever fetches the ~50 kB latin file. Self-hosted:
-   Vite fingerprints the woff2 and the service worker precaches it, so the font is
-   present offline and there is no third-party request. `font-display: swap` (set by
-   the package) pairs with the metric-matched "Inter Fallback" face in tokens.css to
-   keep the swap from shifting layout. */
-@import "@fontsource-variable/inter/wght.css";
+/* Hanken Grotesk — the application typeface (human content: names, streets, copy).
+   `wght.css` is the weight axis only (no italics — the UI uses none), split into
+   unicode-range subsets so an English-only browser fetches just the latin file.
+   IBM Plex Mono carries the dispatch-board data — times, postcodes, prices, counts —
+   at 400/500/600 (see `.mono` in this file and `var(--font-mono)`). Both self-hosted:
+   Vite fingerprints the woff2 and the service worker precaches them, so there is no
+   third-party request and they are present offline. `font-display: swap` is set by
+   the packages. */
+@import "@fontsource-variable/hanken-grotesk/wght.css";
+@import "@fontsource/ibm-plex-mono/400.css";
+@import "@fontsource/ibm-plex-mono/500.css";
+@import "@fontsource/ibm-plex-mono/600.css";
 
 /* Leaflet's stylesheet is NOT imported here any more. It used to be, which meant 45kB
    of map CSS shipped to every driver's phone for a map only /admin ever renders. It's
@@ -41,12 +45,12 @@ body {
   /* Never let the browser fake a bold/italic — with a variable font every weight is
      real, and a synthesised one looks muddy. */
   font-synthesis: none;
-  letter-spacing: -0.006em; /* Inter reads a touch tight at UI sizes; a hair negative */
+  letter-spacing: -0.005em; /* Hanken Grotesk reads a touch tight at UI sizes; a hair negative */
   /* Tabular numerals everywhere — this is an operations tool: times, distances,
-     prices and job numbers should align in columns. "cv05" gives Inter a lowercase
-     l with a tail so it can't be confused with a capital I or a 1 on a job sheet. */
+     prices and job numbers should align in columns. IBM Plex Mono (var(--font-mono))
+     carries the actual dispatch-board figures. */
   font-variant-numeric: tabular-nums;
-  font-feature-settings: "tnum" 1, "cv05" 1;
+  font-feature-settings: "tnum" 1;
 }
 
 /* Small section eyebrow — used sparingly, e.g. "PICKUP" / "DELIVER" on a route. */
@@ -146,6 +150,16 @@ textarea {
   animation: screen-enter var(--dur-slow) var(--ease-out) both;
 }
 
+/* Staggered list-row entry — a slightly deeper rise + fade than screen-enter, so a
+   freshly loaded schedule cascades in. Call sites set `animation-delay` per row. */
+@keyframes row-in {
+  from { opacity: 0; transform: translateY(9px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.row-stagger {
+  animation: row-in 0.34s var(--ease-out) both;
+}
+
 /* Ease the page backdrop + primary text over on a theme switch — the dominant
    surface transitions, everything else snaps (so interactions never feel slow). */
 body {
@@ -165,7 +179,8 @@ body {
 
 /* Skeleton shimmer for loading placeholders (replaces bare spinners on list screens,
    which give no sense of what's coming). Themed via tokens: a translucent-ink base
-   block with a surface-coloured sheen sweeping across it. */
+   block with a faint brand-tinted sheen sweeping across it — the same accent the rest
+   of the UI reserves for "something is happening". */
 .skeleton {
   position: relative;
   overflow: hidden;
@@ -176,7 +191,14 @@ body {
   position: absolute;
   inset: 0;
   transform: translateX(-100%);
-  background: linear-gradient(90deg, transparent, rgb(var(--surface) / 0.6), transparent);
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgb(var(--surface) / 0.55) 40%,
+    rgb(var(--brand) / 0.12) 50%,
+    rgb(var(--surface) / 0.55) 60%,
+    transparent
+  );
   animation: shimmer 1.6s infinite;
 }
 

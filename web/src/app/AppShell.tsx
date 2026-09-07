@@ -24,6 +24,10 @@ export interface AppShellProps {
   contentRef?: React.Ref<HTMLDivElement>;
   /** Extra classes on the content region (padding is applied by the caller). */
   contentClassName?: string;
+  /** Whether a headerless shell should reserve the top safe-area inset itself.
+   *  `false` for tab screens — <AppLayout>'s persistent top bar already clears the
+   *  notch, so the screen must not pad for it a second time. */
+  topInset?: boolean;
   children: React.ReactNode;
 }
 
@@ -34,6 +38,7 @@ export function AppShell({
   contentWidth = "app",
   contentRef,
   contentClassName,
+  topInset = true,
   children
 }: AppShellProps) {
   const widthCls = contentWidth === "content" ? "max-w-content" : "max-w-app";
@@ -41,7 +46,7 @@ export function AppShell({
     <div
       className={cx(
         "flex h-full min-h-0 flex-col overflow-hidden bg-bg text-fg pl-safe pr-safe",
-        header == null && "pt-safe"
+        header == null && topInset && "pt-safe"
       )}
     >
       {header != null && <AppBar>{header}</AppBar>}
@@ -61,11 +66,11 @@ export function AppShell({
   );
 }
 
-/** Top bar shell. Compact, a hairline under it, no shadow. */
+/** Top bar shell. A blurred translucent bar, a hairline under it, no shadow. */
 export function AppBar({ children }: { children: React.ReactNode }) {
   return (
-    <header className="shrink-0 border-b border-line bg-surface pt-safe">
-      <div className="flex min-h-[54px] items-center gap-2 px-4">{children}</div>
+    <header className="shrink-0 border-b border-line bg-bar/80 backdrop-blur-xl backdrop-saturate-150 pt-safe">
+      <div className="flex min-h-[60px] items-center gap-2 px-[18px]">{children}</div>
     </header>
   );
 }

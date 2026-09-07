@@ -6,13 +6,13 @@ export interface JobRouteProps {
   dropoff: string;
   /** `light` for a normal row, `onDark` for the featured blue block. */
   tone?: "light" | "onDark";
-  /** `full` shows PICKUP / DELIVER labels; `compact` omits them. */
+  /** `full` shows Pickup / Drop-off labels + a drawn rail; `compact` omits them. */
   density?: "full" | "compact";
   className?: string;
 }
 
-/** Split an address into a first line + the remainder, so the road name reads
- *  strong and the town/postcode sit under it. */
+/** Split an address into a first line + the remainder. On a route we treat the
+ *  trailing fragment as the postcode / area line and set it in the mono face. */
 function splitAddress(addr: string): [string, string] {
   const parts = addr.split(",").map(s => s.trim()).filter(Boolean);
   if (parts.length <= 1) return [addr, ""];
@@ -20,47 +20,67 @@ function splitAddress(addr: string): [string, string] {
 }
 
 /**
- * The route, as a signature element: a circle at the origin, a square at the
- * destination, a rule between them. Addresses are stacked over two lines — never
- * an inline "A → B" string.
+ * The route, as a signature element: a ringed dot at the pickup, a drawn gradient
+ * line, a square at the drop-off. Each stop is a label, a street line and a mono
+ * postcode line — never an inline "A → B" string.
  */
 export function JobRoute({ pickup, dropoff, tone = "light", density = "full", className }: JobRouteProps) {
   const onDark = tone === "onDark";
-  const label = onDark ? "text-white/70" : "text-fg-subtle";
+  const label = onDark ? "text-white/60" : "text-fg-subtle";
   const road = onDark ? "text-white" : "text-fg";
-  const town = onDark ? "text-white/70" : "text-fg-muted";
-  const rule = onDark ? "bg-white/40" : "bg-line-strong";
-  const marker = onDark ? "border-white" : "border-fg";
+  const pc = onDark ? "text-white/70" : "text-fg-muted";
 
-  const [pRoad, pTown] = splitAddress(pickup || "Pickup TBC");
-  const [dRoad, dTown] = splitAddress(dropoff || "Delivery TBC");
+  const [pRoad, pPc] = splitAddress(pickup || "Pickup TBC");
+  const [dRoad, dPc] = splitAddress(dropoff || "Delivery TBC");
 
   return (
-    <div className={cx("grid grid-cols-[10px_1fr] gap-x-3", className)}>
-      {/* origin — circle */}
-      <span className="mt-[3px] flex justify-center">
-        <span className={cx("size-2.5 rounded-pill border-2 bg-transparent", marker)} aria-hidden />
-      </span>
-      <div className="min-w-0 pb-2.5">
-        {density === "full" && <p className={cx("op-label", label)}>Pickup</p>}
-        <p className={cx("text-label font-semibold [overflow-wrap:anywhere]", road)}>{pRoad}</p>
-        {pTown && <p className={cx("text-helper [overflow-wrap:anywhere]", town)}>{pTown}</p>}
+    <div className={cx("grid grid-cols-[22px_1fr] gap-x-3.5", className)}>
+      {/* pickup rail */}
+      <div className="flex flex-col items-center">
+        <span
+          className={cx(
+            "size-3.5 rounded-full border-[2.5px] bg-bg2",
+            onDark ? "border-white" : "border-brand"
+          )}
+          aria-hidden
+        />
+        <span
+          className={cx(
+            "my-[3px] w-0.5 flex-1",
+            onDark ? "bg-white/40" : "bg-gradient-to-b from-brand to-fg-subtle"
+          )}
+          style={{ minHeight: 26 }}
+          aria-hidden
+        />
+      </div>
+      <div className="min-w-0 pb-5">
+        {density === "full" && (
+          <p className={cx("text-[11px] font-semibold tracking-[0.02em]", label)}>Pickup</p>
+        )}
+        <p className={cx("mt-[3px] text-[15.5px] font-semibold leading-tight [overflow-wrap:anywhere]", road)}>
+          {pRoad}
+        </p>
+        {pPc && <p className={cx("mt-0.5 font-mono text-[14px] font-semibold", pc)}>{pPc}</p>}
       </div>
 
-      {/* rule */}
-      <span className="flex justify-center">
-        <span className={cx("my-0.5 w-px flex-1", rule)} aria-hidden />
-      </span>
-      <span aria-hidden />
-
-      {/* destination — square */}
-      <span className="mt-[3px] flex justify-center">
-        <span className={cx("size-2.5 border-2", marker, onDark ? "bg-white" : "bg-fg")} aria-hidden />
-      </span>
-      <div className="min-w-0 pt-2">
-        {density === "full" && <p className={cx("op-label", label)}>Deliver</p>}
-        <p className={cx("text-label font-semibold [overflow-wrap:anywhere]", road)}>{dRoad}</p>
-        {dTown && <p className={cx("text-helper [overflow-wrap:anywhere]", town)}>{dTown}</p>}
+      {/* drop-off rail */}
+      <div className="flex flex-col items-center">
+        <span
+          className={cx(
+            "size-3.5 rounded-[4px] border-[2.5px] bg-bg2",
+            onDark ? "border-white/70" : "border-fg-muted"
+          )}
+          aria-hidden
+        />
+      </div>
+      <div className="min-w-0">
+        {density === "full" && (
+          <p className={cx("text-[11px] font-semibold tracking-[0.02em]", label)}>Drop-off</p>
+        )}
+        <p className={cx("mt-[3px] text-[15.5px] font-semibold leading-tight [overflow-wrap:anywhere]", road)}>
+          {dRoad}
+        </p>
+        {dPc && <p className={cx("mt-0.5 font-mono text-[14px] font-semibold", pc)}>{dPc}</p>}
       </div>
     </div>
   );

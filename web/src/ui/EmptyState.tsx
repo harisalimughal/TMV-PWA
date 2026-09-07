@@ -25,18 +25,20 @@ export function EmptyState({
   return (
     <div
       className={cx(
-        "flex flex-col items-center text-center px-6 py-10 rounded-card border border-dashed border-line",
+        "flex flex-col items-center text-center px-6 py-12 rounded-[20px] border border-dashed border-line-strong",
         className
       )}
     >
       {icon && (
-        <div className="mb-3 flex size-11 items-center justify-center rounded-card bg-surface-sunken text-fg-subtle [&_svg]:size-5">
-          {icon}
+        <div className="relative mb-4 grid size-16 place-items-center">
+          <span className="absolute inset-0 rounded-full bg-brand-subtle" aria-hidden />
+          <span className="absolute inset-[6px] rounded-full bg-brand/10" aria-hidden />
+          <span className="relative text-brand [&_svg]:size-7 [&_svg]:stroke-[1.75]">{icon}</span>
         </div>
       )}
-      <p className="text-heading text-fg">{title}</p>
+      <p className="text-[16px] font-bold text-fg">{title}</p>
       {description && (
-        <p className="mt-1 max-w-[40ch] text-body text-fg-muted">{description}</p>
+        <p className="mt-1.5 max-w-[40ch] text-body text-fg-muted">{description}</p>
       )}
       {(action || secondaryAction) && (
         <div className="mt-4 flex flex-col items-center gap-2">

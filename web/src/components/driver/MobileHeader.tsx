@@ -1,9 +1,6 @@
 import React from "react";
-import { RefreshCw } from "lucide-react";
-import { Avatar, cx } from "../../ui";
 import type { DriverProfile } from "../../api/auth";
-import { ThemeToggleButton } from "./ThemeToggle";
-import { NotificationBell } from "./NotificationBell";
+import { useCountUp } from "../../lib/useCountUp";
 
 const LONDON = "Europe/London";
 
@@ -22,75 +19,49 @@ function firstName(full: string): string {
 
 function dateLabel(): string {
   return new Intl.DateTimeFormat("en-GB", {
-    weekday: "long",
+    weekday: "short",
     day: "numeric",
-    month: "long",
+    month: "short",
     timeZone: LONDON
   }).format(new Date());
 }
 
 export interface MobileHeaderProps {
   driver: DriverProfile;
-  onOpenProfile: () => void;
-  onRefresh: () => void;
-  refreshing?: boolean;
   jobCount?: number;
   className?: string;
 }
 
 /**
- * The Home header: a compact wordmark row, then the greeting, the date and
- * today's job count. Black text, generous, no heavy rules.
+ * The Home greeting: the salutation and a mono date / job-count line. The The Man
+ * Van lockup and icon cluster live in the persistent <AppTopBar>; refreshing is by
+ * pull-down on the list. This is just the in-content greeting — the design's
+ * `.head` block.
  */
-export function MobileHeader({
-  driver,
-  onOpenProfile,
-  onRefresh,
-  refreshing = false,
-  jobCount,
-  className
-}: MobileHeaderProps) {
+export function MobileHeader({ driver, jobCount, className }: MobileHeaderProps) {
+  const rolled = useCountUp(jobCount ?? 0);
   return (
     <div className={className}>
-      <div className="flex items-center justify-between gap-3">
-        <span className="text-label font-semibold text-fg">The Man Van</span>
-        <div className="flex items-center gap-1">
-          <ThemeToggleButton />
-          <NotificationBell />
-          <button
-            type="button"
-            aria-label="Refresh jobs"
-            onClick={onRefresh}
-            disabled={refreshing}
-            className="grid size-9 place-items-center rounded-lg text-fg-subtle transition-colors hover:bg-surface-sunken hover:text-fg disabled:opacity-50"
-          >
-            <RefreshCw className={cx("size-[17px]", refreshing && "animate-spin")} />
-          </button>
-          <button
-            type="button"
-            onClick={onOpenProfile}
-            aria-label="Profile"
-            className="rounded-full transition-transform active:scale-95 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
-          >
-            <Avatar name={driver.fullName || driver.initials} size="md" />
-          </button>
-        </div>
-      </div>
-
-      <div className="mt-5">
-        <h1 className="text-title text-fg">
-          {greeting()}, {firstName(driver.fullName)}
-        </h1>
-        <p className="mt-1 text-body text-fg-muted">
-          {dateLabel()}
-          {jobCount !== undefined && (
-            <>
-              <span className="mx-1.5 text-fg-subtle">·</span>
-              {jobCount === 0 ? "no jobs today" : `${jobCount} job${jobCount === 1 ? "" : "s"} today`}
-            </>
-          )}
-        </p>
-      </div>
+      <h1 className="text-display text-fg">
+        {greeting()}, {firstName(driver.fullName)}
+      </h1>
+      <p className="mt-1.5 flex items-center gap-2 text-[13px] text-fg-muted">
+        <span className="font-mono text-[12.5px] text-fg">{dateLabel()}</span>
+        {jobCount !== undefined && (
+          <>
+            <span className="size-[3px] rounded-full bg-fg-subtle" aria-hidden />
+            <span>
+              {jobCount === 0 ? (
+                "no jobs today"
+              ) : (
+                <>
+                  <span className="font-mono tabular-nums text-fg">{rolled}</span> job{jobCount === 1 ? "" : "s"} today
+                </>
+              )}
+            </span>
+          </>
+        )}
+      </p>
     </div>
   );
 }

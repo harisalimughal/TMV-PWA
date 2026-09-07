@@ -48,10 +48,10 @@ export function DesktopSidebar({ active, onSelect, driver, onLogout }: DesktopSi
                   aria-current={isActive ? "page" : undefined}
                   onClick={() => onSelect(item.id)}
                   className={cx(
-                    "relative flex w-full items-center gap-2.5 rounded-md px-3 py-2 text-label transition-colors",
+                    "relative flex w-full items-center gap-2.5 rounded-card px-3 py-2 text-label transition-colors",
                     "focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-brand",
                     isActive
-                      ? "bg-brand-subtle font-semibold text-brand-subtle-fg"
+                      ? "bg-surface-raised font-semibold text-fg"
                       : "text-fg-muted hover:bg-surface-sunken hover:text-fg"
                   )}
                 >
