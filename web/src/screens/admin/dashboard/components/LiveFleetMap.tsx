@@ -62,7 +62,15 @@ interface FleetVehicle {
   ecoDrivingScore: number | null;
 }
 
-type FilterId = "ALL" | "MOVING" | "IDLE" | "OFFLINE";
+type FilterId = "ALL" | "MOVING" | "IDLE";
+
+/** A never-blank short label for a van: the matched driver's initials, otherwise the
+ *  first two alphanumerics of its plate / device name. Keeps "??" off every surface. */
+function shortBadge(v: { matched: boolean; driverInitials: string; plateNumber: string; name: string }): string {
+  if (v.matched && v.driverInitials) return v.driverInitials;
+  const src = (v.plateNumber || v.name || "").replace(/[^A-Za-z0-9]/g, "");
+  return src.slice(0, 2).toUpperCase() || "—";
+}
 
 /** A device stops reporting for various real reasons (parked in a basement, ignition
  * off long enough to sleep, SIM issue) -- 10 minutes without an update means "don't
@@ -129,7 +137,7 @@ export function LiveFleetMap({ jobs, onSelectJob }: Props) {
         imei: v.imei,
         name: v.name,
         plateNumber: v.plateNumber,
-        driverInitials: v.driverInitials || "??",
+        driverInitials: v.driverInitials || "",
         driverName: v.driverName || v.plateNumber || v.name || "Unidentified vehicle",
         matched: !!v.driverInitials,
         lat: v.lat,
@@ -222,13 +230,16 @@ export function LiveFleetMap({ jobs, onSelectJob }: Props) {
     });
   }, [zonesData, showCongestionZone]);
 
-  // Filtered vehicles
+  // Offline / stale devices are hidden from the map entirely -- their last position is
+  // untrustworthy and they just clutter the view. Same as GPSLive's own live map.
+  const onlineVehicles = useMemo(() => vehicles.filter(v => !v.isStale), [vehicles]);
+
+  // Filtered vehicles (always a subset of the online set).
   const visibleVehicles = useMemo(() => {
-    if (activeFilter === "ALL") return vehicles;
-    if (activeFilter === "MOVING") return vehicles.filter(v => v.isMoving);
-    if (activeFilter === "OFFLINE") return vehicles.filter(v => v.isStale);
-    return vehicles.filter(v => !v.isStale && !v.isMoving); // IDLE
-  }, [vehicles, activeFilter]);
+    if (activeFilter === "MOVING") return onlineVehicles.filter(v => v.isMoving);
+    if (activeFilter === "IDLE") return onlineVehicles.filter(v => !v.isMoving);
+    return onlineVehicles;
+  }, [onlineVehicles, activeFilter]);
 
   const activeSelected = useMemo(() => {
     if (!selectedId) return visibleVehicles[0] || null;
@@ -255,42 +266,36 @@ export function LiveFleetMap({ jobs, onSelectJob }: Props) {
       // "matched" only controls the small round badge, which shows the driver's
       // initials once matched or a plate fragment otherwise (never a dead-end "??").
       const identifier = veh.plateNumber || veh.name || "Unmatched";
-      const plateLabel = veh.matched ? `${identifier} - ${veh.driverInitials}` : identifier;
-      const badgeText = veh.matched ? veh.driverInitials : identifier.replace(/[^A-Z0-9]/gi, "").slice(0, 2) || "??";
+      const plateLabel = veh.matched ? `${identifier} · ${veh.driverInitials}` : identifier;
+      const badgeText = shortBadge(veh);
 
       const customIcon = L.divIcon({
         className: "van-marker-container",
         html: `
           <div style="position: relative; display: flex; flex-direction: column; align-items: center; cursor: pointer;">
             <div style="
-              margin-bottom: 3px; padding: 1px 6px; background: rgba(16, 24, 40, 0.85);
-              border-radius: 4px; color: #ffffff; font-family: 'IBM Plex Mono', monospace;
-              font-size: 9px; font-weight: 600; white-space: nowrap;
+              margin-bottom: 4px; padding: 3px 9px; background: ${isSelected ? "#1B75BC" : "rgba(16, 24, 40, 0.9)"};
+              border-radius: 7px; color: #ffffff; font-family: 'IBM Plex Mono', monospace;
+              font-size: 12px; font-weight: 700; letter-spacing: 0.02em; white-space: nowrap;
+              box-shadow: 0 2px 8px rgba(16,24,40,0.35);
             ">
               ${plateLabel}
             </div>
-            ${veh.isMoving ? `<div class="animate-pulse-beacon" style="position: absolute; top: 17px; left: -4px; width: 36px; height: 36px; border-radius: 999px; background: ${pinColor}; opacity: 0.35;"></div>` : ""}
+            ${veh.isMoving ? `<div class="animate-pulse-beacon" style="position: absolute; top: 22px; left: -4px; width: 36px; height: 36px; border-radius: 999px; background: ${pinColor}; opacity: 0.35;"></div>` : ""}
             <div style="
-              width: 28px; height: 28px; border-radius: 999px; background: ${bgPill};
+              width: 30px; height: 30px; border-radius: 999px; background: ${bgPill};
               border: 2px solid ${pinColor}; box-shadow: 0 4px 12px rgba(16,24,40,0.25);
               display: flex; align-items: center; justify-content: center;
-              font-family: 'IBM Plex Mono', monospace; font-weight: 700; font-size: 10px;
-              color: ${textColor}; z-index: 10; opacity: ${veh.isStale ? 0.6 : 1};
+              font-family: 'IBM Plex Mono', monospace; font-weight: 700; font-size: 11px;
+              color: ${textColor}; z-index: 10;
             ">
               ${badgeText}
             </div>
             <div style="margin-top: -3px; width: 0; height: 0; border-left: 5px solid transparent; border-right: 5px solid transparent; border-top: 6px solid ${pinColor};"></div>
-            <div style="
-              margin-top: 2px; padding: 1px 5px; background: rgba(16, 24, 40, 0.85);
-              border-radius: 4px; color: #ffffff; font-family: 'IBM Plex Mono', monospace;
-              font-size: 8px; font-weight: 600; white-space: nowrap;
-            ">
-              ${veh.isStale ? "Offline" : veh.speedMph > 0 ? `${veh.speedMph} mph` : "Idle"}
-            </div>
           </div>
         `,
-        iconSize: [40, 64],
-        iconAnchor: [20, 50]
+        iconSize: [40, 56],
+        iconAnchor: [20, 44]
       });
 
       const marker = L.marker([veh.lat, veh.lng], { icon: customIcon }).addTo(map);
@@ -324,9 +329,9 @@ export function LiveFleetMap({ jobs, onSelectJob }: Props) {
     setTimeout(() => setCopiedText(false), 2000);
   };
 
-  const movingCount = vehicles.filter(v => v.isMoving).length;
-  const offlineCount = vehicles.filter(v => v.isStale).length;
-  const idleCount = vehicles.filter(v => !v.isStale && !v.isMoving).length;
+  const movingCount = onlineVehicles.filter(v => v.isMoving).length;
+  const idleCount = onlineVehicles.length - movingCount;
+  const offlineCount = vehicles.length - onlineVehicles.length;
 
   return (
     <div
@@ -362,17 +367,19 @@ export function LiveFleetMap({ jobs, onSelectJob }: Props) {
         </div>
         <div className="hidden sm:flex items-center gap-1.5 text-xs text-admin-muted font-mono shrink-0">
           <Radio className="w-3.5 h-3.5 text-admin-brand animate-pulse" />
-          <span>{movingCount} in transit &bull; {vehicles.length} tracked</span>
+          <span>
+            {movingCount} in transit &bull; {onlineVehicles.length} live
+            {offlineCount > 0 && <span className="opacity-60"> &bull; {offlineCount} offline</span>}
+          </span>
         </div>
 
         <div className="flex items-center gap-2 flex-wrap sm:ml-auto">
           <div className="flex items-center p-0.5 bg-admin-surface rounded border border-admin-line text-xs font-medium shrink-0">
             {(
               [
-                { id: "ALL", label: `All (${vehicles.length})` },
+                { id: "ALL", label: `All (${onlineVehicles.length})` },
                 { id: "MOVING", label: `Moving (${movingCount})` },
-                { id: "IDLE", label: `Idle (${idleCount})` },
-                { id: "OFFLINE", label: `Offline (${offlineCount})` }
+                { id: "IDLE", label: `Idle (${idleCount})` }
               ] as const
             ).map(tab => (
               <button
@@ -433,12 +440,18 @@ export function LiveFleetMap({ jobs, onSelectJob }: Props) {
             </button>
           </div>
 
-          {vehicles.length === 0 && (
+          {onlineVehicles.length === 0 && (
             <div className="absolute inset-0 z-[300] flex items-center justify-center bg-white/80 backdrop-blur-xs">
               <div className="text-center px-6">
                 <WifiOff className="w-8 h-8 text-admin-muted mx-auto mb-2 opacity-50" />
-                <p className="text-label font-semibold text-fg">No vehicle positions available</p>
-                <p className="text-[11px] text-admin-muted mt-1">Waiting for GPSLive telemetry...</p>
+                <p className="text-label font-semibold text-fg">
+                  {vehicles.length === 0 ? "No vehicle positions available" : "No vans reporting right now"}
+                </p>
+                <p className="text-[11px] text-admin-muted mt-1">
+                  {vehicles.length === 0
+                    ? "Waiting for GPSLive telemetry..."
+                    : `${vehicles.length} device${vehicles.length === 1 ? "" : "s"} on the account, all currently offline.`}
+                </p>
               </div>
             </div>
           )}
@@ -455,11 +468,15 @@ export function LiveFleetMap({ jobs, onSelectJob }: Props) {
                   <div className={`w-10 h-10 rounded font-mono font-bold text-sm flex items-center justify-center border shadow-card ${
                     activeSelected.matched ? "bg-admin-brand-soft text-admin-brand border-admin-brand/20" : "bg-admin-surface text-admin-muted border-admin-line"
                   }`}>
-                    {activeSelected.driverInitials}
+                    {shortBadge(activeSelected)}
                   </div>
                   <div>
-                    <h4 className="text-btn text-admin-ink leading-tight">{activeSelected.driverName}</h4>
-                    <span className="text-xs font-mono text-admin-muted">{activeSelected.plateNumber}</span>
+                    <h4 className="text-btn text-admin-ink leading-tight">
+                      {activeSelected.matched ? activeSelected.driverName : (activeSelected.plateNumber || activeSelected.name)}
+                    </h4>
+                    <span className="text-xs font-mono text-admin-muted">
+                      {activeSelected.matched ? activeSelected.plateNumber : "Unlinked device"}
+                    </span>
                   </div>
                 </div>
                 <button
@@ -473,8 +490,11 @@ export function LiveFleetMap({ jobs, onSelectJob }: Props) {
               </div>
 
               {!activeSelected.matched && (
-                <div className="p-2.5 bg-amber-50 border border-amber-200 rounded text-[11px] text-amber-700">
-                  This plate/device name didn't match any driver in the Drivers sheet.
+                <div className="p-2.5 bg-amber-50 border border-amber-200 rounded text-[11px] text-amber-700 leading-relaxed">
+                  Not linked to a driver yet. On the <span className="font-semibold">Drivers</span> page, set the
+                  driver's van registration to{" "}
+                  <span className="font-mono font-semibold">{activeSelected.plateNumber || activeSelected.name}</span>{" "}
+                  so their moves show here.
                 </div>
               )}
 
@@ -625,18 +645,18 @@ export function LiveFleetMap({ jobs, onSelectJob }: Props) {
               <p className="text-[11px] text-admin-muted mt-1 max-w-[200px]">
                 {vehicles.length === 0
                   ? "Waiting for the first GPSLive position update."
-                  : "Try a different filter above."}
+                  : "No vans are live right now."}
               </p>
             </div>
           )}
 
-          {vehicles.length > 0 && (
+          {onlineVehicles.length > 0 && (
             <div className="pt-3 mt-3 border-t border-admin-line">
               <span className="text-[11px] font-medium text-admin-muted block mb-2">
-                Fleet ({vehicles.length}) &bull; Click to track
+                Live vans ({onlineVehicles.length}) &bull; Click to track
               </span>
               <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
-                {vehicles.map(veh => {
+                {onlineVehicles.map(veh => {
                   const isSelected = activeSelected?.imei === veh.imei;
                   return (
                     <button
@@ -644,10 +664,10 @@ export function LiveFleetMap({ jobs, onSelectJob }: Props) {
                       onClick={() => handleFocusVehicle(veh)}
                       className={`px-2 py-1 rounded text-xs font-mono font-medium transition flex items-center gap-1.5 flex-shrink-0 ${
                         isSelected ? "bg-admin-brand text-white shadow-card" : "bg-admin-surface border border-admin-line text-admin-ink-2 hover:bg-admin-surface-2"
-                      } ${veh.isStale ? "opacity-50" : ""}`}
+                      }`}
                     >
-                      <span>{veh.driverInitials}</span>
-                      <span className="text-[10px] opacity-75">{veh.isStale ? "offline" : `${veh.speedMph}mph`}</span>
+                      <span>{shortBadge(veh)}</span>
+                      <span className="text-[10px] opacity-75">{`${veh.speedMph}mph`}</span>
                     </button>
                   );
                 })}
