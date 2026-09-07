@@ -576,6 +576,23 @@ export function LiveFleetMap({ jobs, onSelectJob }: Props) {
           </button>
         </div>
 
+        {/* marker legend */}
+        <div className="absolute bottom-3 right-3 z-[500] flex flex-wrap items-center gap-x-3 gap-y-1 max-w-[calc(100%-24px)] bg-white/95 backdrop-blur-xs px-2.5 py-1.5 rounded border border-admin-line shadow-card text-[10px] font-medium text-admin-ink-2">
+          {(
+            [
+              ["Moving", STATE_COLOR.moving],
+              ["Stopped", STATE_COLOR.idle],
+              ["Parked", STATE_COLOR.parked],
+              ["Selected", STATE_COLOR.selected]
+            ] as const
+          ).map(([label, color]) => (
+            <span key={label} className="flex items-center gap-1.5">
+              <span className="w-2.5 h-2.5 rounded-full border border-white shadow-[0_0_0_1px_rgba(16,24,40,0.15)]" style={{ background: color }} />
+              {label}
+            </span>
+          ))}
+        </div>
+
         {/* collapsed: hamburger */}
         {!drawerOpen && (
           <button
