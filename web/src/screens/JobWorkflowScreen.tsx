@@ -682,36 +682,6 @@ function StepBody({
 
     case "WAITING_LOADED_PHOTO":
       return (
-        <div className="flex flex-col gap-4">
-          <PhotoUploader
-            key={state}
-            label="Van Loaded Photo (pick up point)"
-            hint="Up to 2 - show how the load is stacked and secured."
-            maxPhotos={2}
-            submitting={busy}
-            progress={uploadProgress}
-            error={error}
-            onFilesChange={files => {
-              formState.photos = files;
-              tick();
-            }}
-          />
-
-          <div className="grid grid-cols-2 gap-3">
-            <IssueChoiceCard
-              icon={<Car aria-hidden />}
-              title="Parking Liability"
-              description="Restricted bay, red route, or anywhere a PCN could land."
-              onClick={() => onOpenScenario("parking")}
-            />
-            <IssueChoiceCard
-              icon={<FileWarning aria-hidden />}
-              title="Liability Issues"
-              description="Damage, unprotected items, or an overloaded van."
-              onClick={() => onOpenScenario("liability")}
-            />
-          </div>
-        </div>
         <PhotoUploader
           key={state}
           label="Van Loaded Photo (pick up point)"
