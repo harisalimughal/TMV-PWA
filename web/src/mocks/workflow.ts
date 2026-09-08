@@ -58,6 +58,7 @@ export function nextState(
       return trigger === "scenario" ? "WAITING_LOADED_PHOTO" : current;
     case "WAITING_LOADED_PHOTO":
       return trigger === "evidence" ? "WAITING_EXTRA_CHARGES" : current;
+      return trigger === "evidence" ? "WAITING_EMPTY_VAN_ISSUES_CHECK" : current;
     case "IN_PROGRESS":
       return trigger === "FINISH_MOVE" ? "WAITING_EMPTY_VAN_ISSUES_CHECK" : current;
     case "WAITING_EMPTY_VAN_ISSUES_CHECK":

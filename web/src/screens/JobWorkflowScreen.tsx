@@ -712,6 +712,19 @@ function StepBody({
             />
           </div>
         </div>
+        <PhotoUploader
+          key={state}
+          label="Van Loaded Photo (pick up point)"
+          hint="Up to 2 - show how the load is stacked and secured."
+          maxPhotos={2}
+          submitting={busy}
+          progress={uploadProgress}
+          error={error}
+          onFilesChange={files => {
+            formState.photos = files;
+            tick();
+          }}
+        />
       );
 
     case "WAITING_EMPTY_VAN_PHOTO":
