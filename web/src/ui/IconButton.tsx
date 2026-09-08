@@ -23,8 +23,8 @@ const VARIANTS: Record<IconButtonVariant, string> = {
 };
 
 const SIZES: Record<IconButtonSize, string> = {
-  sm: "h-8 w-8 [&_svg]:size-4",
-  md: "h-10 w-10 [&_svg]:size-[18px]"
+  sm: "h-9 w-9 [&_svg]:size-[18px]",
+  md: "h-11 w-11 [&_svg]:size-5"
 };
 
 export const IconButton = React.forwardRef<HTMLButtonElement, IconButtonProps>(function IconButton(

@@ -57,7 +57,7 @@ export function nextState(
     case "WAITING_ARRIVAL_ISSUES_CHOICE":
       return trigger === "scenario" ? "WAITING_LOADED_PHOTO" : current;
     case "WAITING_LOADED_PHOTO":
-      return trigger === "evidence" ? "IN_PROGRESS" : current;
+      return trigger === "evidence" ? "WAITING_EXTRA_CHARGES" : current;
     case "IN_PROGRESS":
       return trigger === "FINISH_MOVE" ? "WAITING_EMPTY_VAN_ISSUES_CHECK" : current;
     case "WAITING_EMPTY_VAN_ISSUES_CHECK":
@@ -90,19 +90,39 @@ export function nextState(
   }
 }
 
-/** Predecessor for GO_BACK. WAITING_TOTAL_CHARGES steps back over WAITING_OVERTIME
- *  only when overtime is part of this job's workflow — otherwise it returns to the
- *  Extra charges step, matching the forward path. */
+/** Predecessor for GO_BACK, mirroring the backend workflow engine. */
 function prevState(current: string, job: Job): string {
   switch (current) {
+    case "WAITING_ARRIVAL_PHOTO":
+      return "READY";
+    case "WAITING_ARRIVAL_ISSUES_CHECK":
+      return "WAITING_ARRIVAL_PHOTO";
+    case "WAITING_ARRIVAL_ISSUES_CHOICE":
+      return "WAITING_ARRIVAL_ISSUES_CHECK";
+    case "WAITING_LOADED_PHOTO":
+      return "WAITING_ARRIVAL_ISSUES_CHECK";
+    case "IN_PROGRESS":
+      return "WAITING_LOADED_PHOTO";
+    case "WAITING_EMPTY_VAN_ISSUES_CHECK":
+      return "WAITING_LOADED_PHOTO";
+    case "WAITING_EMPTY_VAN_ISSUES_CHOICE":
+      return "WAITING_EMPTY_VAN_ISSUES_CHECK";
+    case "WAITING_EXTRA_CHARGES":
+      return "WAITING_LOADED_PHOTO";
     case "WAITING_OVERTIME":
       return "WAITING_EXTRA_CHARGES";
     case "WAITING_TOTAL_CHARGES":
       return overtimeApplies(job.extraCharges) ? "WAITING_OVERTIME" : "WAITING_EXTRA_CHARGES";
     case "WAITING_PAYMENT":
       return "WAITING_TOTAL_CHARGES";
-    case "WAITING_EXTRA_CHARGES":
-      return "WAITING_EMPTY_VAN_ISSUES_CHECK";
+    case "WAITING_EMPTY_VAN_PHOTO":
+      return "WAITING_PAYMENT";
+    case "WAITING_CLIENT_CONFIRMATION":
+      return "WAITING_EMPTY_VAN_PHOTO";
+    case "WAITING_REVIEW_CHECK":
+      return "WAITING_CLIENT_CONFIRMATION";
+    case "WAITING_REVIEW_SEND":
+      return "WAITING_REVIEW_CHECK";
     default:
       return current;
   }

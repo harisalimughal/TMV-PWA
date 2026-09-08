@@ -23,7 +23,7 @@ export interface StepMeta {
   order: number;
 }
 
-export const TOTAL_STEPS = 13;
+export const TOTAL_STEPS = 11;
 
 export const STEPS: Record<string, StepMeta> = {
   READY: {
@@ -32,13 +32,13 @@ export const STEPS: Record<string, StepMeta> = {
     order: 1
   },
   WAITING_ARRIVAL_PHOTO: {
-    label: "Arrival photo",
-    hint: "Photograph the property or load as you found it, before anything is moved.",
+    label: "Arrival Photos (pick up point)",
+    hint: "Take up to 2 photos of the property or load as you found it at the pickup point.",
     order: 2
   },
   WAITING_ARRIVAL_ISSUES_CHECK: {
-    label: "Any issues on arrival?",
-    hint: "Parking restrictions, existing damage, anything that needs recording before you load.",
+    label: "Any issues at pickup point?",
+    hint: "Choose a report if needed, or continue with no issues.",
     order: 3
   },
   WAITING_ARRIVAL_ISSUES_CHOICE: {
@@ -47,8 +47,8 @@ export const STEPS: Record<string, StepMeta> = {
     order: 3
   },
   WAITING_LOADED_PHOTO: {
-    label: "Van loaded photo",
-    hint: "Show how the load is stacked and secured before you set off.",
+    label: "Van Loaded Photo (pick up point)",
+    hint: "Show how the load is stacked and secured. Add a liability report first if anything needs sign-off.",
     order: 4
   },
   IN_PROGRESS: {
@@ -57,8 +57,8 @@ export const STEPS: Record<string, StepMeta> = {
     order: 5
   },
   WAITING_EMPTY_VAN_ISSUES_CHECK: {
-    label: "Any issues to report?",
-    hint: "Damage, overloading, or anything the customer needs to sign off on.",
+    label: "Any issues at drop-off point?",
+    hint: "Choose a report if needed, or continue with no issues.",
     order: 6
   },
   WAITING_EMPTY_VAN_ISSUES_CHOICE: {
@@ -69,42 +69,42 @@ export const STEPS: Record<string, StepMeta> = {
   WAITING_EXTRA_CHARGES: {
     label: "Extra charges",
     hint: "Select everything that applies. Pick “No Extras Time” if there were none.",
-    order: 7
+    order: 5
   },
   WAITING_OVERTIME: {
     label: "Overtime",
     hint: "Minutes worked beyond the booked window, and who was working them.",
-    order: 8
+    order: 6
   },
   WAITING_TOTAL_CHARGES: {
     label: "Total charges",
     hint: "The final amount for this job, including any extras and overtime.",
-    order: 9
+    order: 7
   },
   WAITING_PAYMENT: {
     label: "Payment method",
     hint: "How the customer is paying.",
-    order: 10
+    order: 8
   },
   WAITING_EMPTY_VAN_PHOTO: {
-    label: "Empty van photo",
-    hint: "Show the van empty, so there's proof nothing was left behind.",
-    order: 11
+    label: "Empty van photo (drop-off point)",
+    hint: "Show the van empty at the drop-off — proof nothing was left behind.",
+    order: 9
   },
   WAITING_CLIENT_CONFIRMATION: {
     label: "Customer sign-off",
     hint: "Hand your phone to the customer to review and sign.",
-    order: 12
+    order: 10
   },
   WAITING_REVIEW_CHECK: {
     label: "Ask for a review?",
     hint: "Only if the customer is happy to leave one.",
-    order: 13
+    order: 11
   },
   WAITING_REVIEW_SEND: {
     label: "Send review email",
     hint: "This finishes the job.",
-    order: 13
+    order: 11
   },
   COMPLETED: { label: "Job complete", order: TOTAL_STEPS }
 };

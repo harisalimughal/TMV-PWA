@@ -12,6 +12,16 @@ export function mapsUrl(address: string): string {
   return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`;
 }
 
+/** Turn-by-turn directions from one address to another, opened in Google Maps
+ *  (Android / browser) or Apple Maps (iOS offers the hand-off). Origin and
+ *  destination land pre-filled so the driver just taps Start. */
+export function directionsUrl(origin: string, destination: string): string {
+  const params = new URLSearchParams({ api: "1", travelmode: "driving" });
+  if (origin) params.set("origin", origin);
+  if (destination) params.set("destination", destination);
+  return `https://www.google.com/maps/dir/?${params.toString()}`;
+}
+
 export function telUrl(phone: string): string {
   return `tel:${phone.replace(/[^\d+]/g, "")}`;
 }

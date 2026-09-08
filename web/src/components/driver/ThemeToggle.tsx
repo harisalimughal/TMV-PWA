@@ -43,13 +43,13 @@ export function ThemeToggle({ className }: { className?: string }) {
             tabIndex={active ? 0 : -1}
             onClick={() => setPreference(opt.value)}
             className={cx(
-              "flex min-h-[38px] flex-1 items-center justify-center gap-1.5 rounded-[10px] text-[13.5px] font-semibold",
+              "flex min-h-[44px] flex-1 items-center justify-center gap-1.5 rounded-[10px] text-label",
               "transition-[background,color,transform] duration-fast active:scale-[0.95]",
               "focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-brand",
               active ? "bg-surface-raised text-fg" : "text-fg-muted"
             )}
           >
-            <Icon className="size-[15px]" />
+            <Icon className="size-[18px] shrink-0" />
             {opt.label}
           </button>
         );
@@ -76,16 +76,16 @@ export function ThemeToggleButton({ className }: { className?: string }) {
         className
       )}
     >
-      <span className="relative block size-[19px]">
+      <span className="relative block size-[22px]">
         <Sun
           className={cx(
-            "absolute inset-0 size-[19px] transition-all duration-[240ms] ease-out motion-reduce:transition-none",
+            "absolute inset-0 size-[22px] transition-all duration-[240ms] ease-out motion-reduce:transition-none",
             resolved === "dark" ? "rotate-0 scale-100 opacity-100" : "-rotate-90 scale-0 opacity-0"
           )}
         />
         <Moon
           className={cx(
-            "absolute inset-0 size-[19px] transition-all duration-[240ms] ease-out motion-reduce:transition-none",
+            "absolute inset-0 size-[22px] transition-all duration-[240ms] ease-out motion-reduce:transition-none",
             resolved === "dark" ? "rotate-90 scale-0 opacity-0" : "rotate-0 scale-100 opacity-100"
           )}
         />

@@ -11,7 +11,7 @@ export interface InputProps extends Omit<React.InputHTMLAttributes<HTMLInputElem
 
 const FIELD_BASE =
   "flex items-center gap-2 rounded-control border bg-surface transition duration-fast ease-out " +
-  "min-h-[44px] px-3 " +
+  "min-h-[var(--control-h-md)] px-3 " +
   "focus-within:border-brand focus-within:shadow-[var(--ring)]";
 
 export const Input = React.forwardRef<HTMLInputElement, InputProps>(function Input(
@@ -27,7 +27,7 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(function Inp
         className
       )}
     >
-      {prefix && <span className="shrink-0 text-fg-subtle [&_svg]:size-[18px]">{prefix}</span>}
+      {prefix && <span className="shrink-0 text-fg-subtle [&_svg]:size-5">{prefix}</span>}
       <input
         ref={ref}
         disabled={disabled}
@@ -37,7 +37,7 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(function Inp
         )}
         {...rest}
       />
-      {suffix && <span className="shrink-0 text-fg-subtle [&_svg]:size-[18px]">{suffix}</span>}
+      {suffix && <span className="shrink-0 text-fg-subtle [&_svg]:size-5">{suffix}</span>}
     </div>
   );
 });

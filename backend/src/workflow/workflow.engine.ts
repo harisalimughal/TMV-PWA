@@ -365,8 +365,9 @@ export async function handleAction(
 
     case "GO_BACK": {
       const from = job.currentState;
-      const target = BACK_TARGET[from as WorkflowState];
-      if (!target) throw new ValidationError("There's no previous step to go back to here.");
+      const backTarget = BACK_TARGET[from as WorkflowState];
+      if (!backTarget) throw new ValidationError("There's no previous step to go back to here.");
+      const target = typeof backTarget === "function" ? backTarget(job) : backTarget;
       job.currentState = target;
       return saveJob(job, driver, action, from);
     }
@@ -383,15 +384,28 @@ export async function handleAction(
   }
 }
 
-/** BACK button targets for the data-entry steps -- lets a driver who mis-typed
- *  something return and redo it. Total Charges' predecessor is ambiguous (Overtime
- *  only runs if extra time was claimed), so it always goes back to Extra Charges, the
- *  fixed branch point, rather than trying to reconstruct which path was actually taken. */
-const BACK_TARGET: Partial<Record<WorkflowState, WorkflowState>> = {
-  [WorkflowState.WAITING_EXTRA_CHARGES]: WorkflowState.WAITING_EMPTY_VAN_ISSUES_CHECK,
+/** BACK button targets for the active workflow steps. The header back arrow should
+ *  behave like a wizard control inside a job, not jump the driver back to the jobs
+ *  list. */
+const BACK_TARGET: Partial<Record<WorkflowState, WorkflowState | ((job: Job) => WorkflowState)>> = {
+  [WorkflowState.WAITING_ARRIVAL_PHOTO]: WorkflowState.READY,
+  [WorkflowState.WAITING_ARRIVAL_ISSUES_CHECK]: WorkflowState.WAITING_ARRIVAL_PHOTO,
+  [WorkflowState.WAITING_ARRIVAL_ISSUES_CHOICE]: WorkflowState.WAITING_ARRIVAL_ISSUES_CHECK,
+  [WorkflowState.WAITING_LOADED_PHOTO]: WorkflowState.WAITING_ARRIVAL_ISSUES_CHECK,
+  [WorkflowState.IN_PROGRESS]: WorkflowState.WAITING_LOADED_PHOTO,
+  [WorkflowState.WAITING_EMPTY_VAN_ISSUES_CHECK]: WorkflowState.WAITING_LOADED_PHOTO,
+  [WorkflowState.WAITING_EMPTY_VAN_ISSUES_CHOICE]: WorkflowState.WAITING_EMPTY_VAN_ISSUES_CHECK,
+  [WorkflowState.WAITING_EXTRA_CHARGES]: WorkflowState.WAITING_LOADED_PHOTO,
   [WorkflowState.WAITING_OVERTIME]: WorkflowState.WAITING_EXTRA_CHARGES,
-  [WorkflowState.WAITING_TOTAL_CHARGES]: WorkflowState.WAITING_EXTRA_CHARGES,
-  [WorkflowState.WAITING_PAYMENT]: WorkflowState.WAITING_TOTAL_CHARGES
+  [WorkflowState.WAITING_TOTAL_CHARGES]: job =>
+    job.extraCharges?.includes(ExtraChargeType.EXTRA_TIME)
+      ? WorkflowState.WAITING_OVERTIME
+      : WorkflowState.WAITING_EXTRA_CHARGES,
+  [WorkflowState.WAITING_PAYMENT]: WorkflowState.WAITING_TOTAL_CHARGES,
+  [WorkflowState.WAITING_EMPTY_VAN_PHOTO]: WorkflowState.WAITING_PAYMENT,
+  [WorkflowState.WAITING_CLIENT_CONFIRMATION]: WorkflowState.WAITING_EMPTY_VAN_PHOTO,
+  [WorkflowState.WAITING_REVIEW_CHECK]: WorkflowState.WAITING_CLIENT_CONFIRMATION,
+  [WorkflowState.WAITING_REVIEW_SEND]: WorkflowState.WAITING_REVIEW_CHECK
 };
 
 export class SignatureAlreadyCapturedError extends Error {

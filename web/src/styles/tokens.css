@@ -119,16 +119,16 @@
    * One set of control heights, used by buttons, inputs, choice rows and taps.
    * `md` is the 44px WCAG 2.5.5 floor; `lg` is the comfortable one-handed size
    * for a driver standing next to a van, sometimes in gloves. */
-  --control-h-sm: 36px;
-  --control-h-md: 44px;
-  --control-h-lg: 52px;
+  --control-h-sm: 40px;
+  --control-h-md: 48px;
+  --control-h-lg: 56px;
   --tap-target: 44px;
 
   /* ---- layout ------------------------------------------------------------- */
-  --dock-height: 76px;
+  --dock-height: 80px;
   --app-max-width: 520px;    /* centred column for a flow screen */
   --content-max-width: 760px; /* centred column for the jobs workspace on desktop */
-  --bottom-nav-height: 60px;  /* mobile tab bar, before safe-area */
+  --bottom-nav-height: 72px;  /* mobile tab bar, before safe-area */
   --sidebar-width: 244px;     /* desktop nav rail */
 }
 

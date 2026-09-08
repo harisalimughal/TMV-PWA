@@ -6,6 +6,7 @@
  * the caller falls through to the real network.
  */
 import type { ActivityEntry, EvidenceSummary, Job } from "../api/jobs";
+import { DAMAGE_CATEGORIES } from "../scenarioSpec";
 import { DEFAULT_CONFIRMATION_TEXT, seedStore, type MockStore } from "./fixtures";
 import { applyTrigger, type WorkflowTrigger } from "./workflow";
 
@@ -101,6 +102,22 @@ function parse(bodyText?: string): any {
   }
 }
 
+function parseCategories(raw: string | undefined): string[] {
+  if (raw) {
+    try {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        const categories = parsed.map(item => String(item).trim()).filter(Boolean);
+        if (categories.length > 0) return Array.from(new Set(categories));
+      }
+    } catch {
+      const categories = raw.split(/\r?\n/).map(item => item.trim()).filter(Boolean);
+      if (categories.length > 0) return Array.from(new Set(categories));
+    }
+  }
+  return DAMAGE_CATEGORIES;
+}
+
 /**
  * @param method  upper-case HTTP method
  * @param path    pathname only, e.g. "/api/jobs/10231" (no origin, no query)
@@ -143,6 +160,26 @@ export function handle(method: string, path: string, bodyText?: string): MockRes
     store.loggedOut = true;
     return ok({ ok: true });
   }
+  if (path === "/api/admin/settings" && method === "GET") {
+    return ok({
+      settings: [
+        {
+          key: "LIABILITY_DAMAGE_CATEGORIES",
+          label: "Liability Damage Categories",
+          type: "textarea",
+          fallback: JSON.stringify(DAMAGE_CATEGORIES),
+          hint: "JSON array used by the driver Liability Report category picker.",
+          value: store.settings.LIABILITY_DAMAGE_CATEGORIES ?? ""
+        }
+      ]
+    });
+  }
+  if (path === "/api/admin/settings" && method === "POST") {
+    const { key, value } = parse(bodyText);
+    if (key !== "LIABILITY_DAMAGE_CATEGORIES") return err(400, "VALIDATION_FAILED", "Unknown setting key.");
+    store.settings.LIABILITY_DAMAGE_CATEGORIES = String(value ?? "");
+    return ok({ ok: true });
+  }
 
   // ---- jobs ------------------------------------------------------------------
   if (path === "/api/jobs/list" && method === "GET") {
@@ -152,6 +189,9 @@ export function handle(method: string, path: string, bodyText?: string): MockRes
       past: bucketJobs(store.buckets.past),
       next: bucketJobs(store.buckets.next)
     });
+  }
+  if (path === "/api/jobs/liability-categories" && method === "GET") {
+    return ok({ categories: parseCategories(store.settings.LIABILITY_DAMAGE_CATEGORIES) });
   }
 
   const jobMatch = path.match(/^\/api\/jobs\/([^/]+)(\/[^?]*)?$/);

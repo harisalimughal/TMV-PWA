@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { AlertTriangle, Check, CloudOff, Search, X } from "lucide-react";
-import { submitScenario, type ApiError } from "../api/jobs";
+import { fetchLiabilityDamageCategories, submitScenario, type ApiError } from "../api/jobs";
 import { MULTISELECT_DELIMITER, SCENARIOS, type ScenarioFieldSpec, type ScenarioKey } from "../scenarioSpec";
 import { PhotoPicker } from "../components/PhotoPicker";
 import { SignatureField } from "../components/SignatureField";
@@ -30,6 +30,10 @@ interface ScenarioFormScreenProps {
   /** Present only for job-scoped scenarios (Parking Liability / Liability Report). */
   jobId?: string;
   scenario: ScenarioKey;
+  /** Booking context for job-scoped scenarios. Lets Parking Liability offer the
+   *  job's pickup / drop-off as ready-made address choices and pre-fill the
+   *  customer's name instead of asking the driver to retype what we already know. */
+  job?: { customerName?: string; pickup?: string; dropoff?: string };
   /** For a standalone storage form, resolves with a summary for the completion
    *  screen. For a job-scoped scenario it resolves with nothing. */
   onDone: (result?: { summary: StorageSummary }) => void;
@@ -58,6 +62,10 @@ function groupFields(fields: ScenarioFieldSpec[]): Array<{ title: string; fields
   return groups;
 }
 
+function scenarioOptions(spec: { fields: ScenarioFieldSpec[] }): string[] {
+  return spec.fields.find(field => field.name === "damage_categories")?.options ?? [];
+}
+
 function todayInLondon(): string {
   return new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/London" }).format(new Date());
 }
@@ -71,17 +79,63 @@ function isValidPhone(value: string): boolean {
   return digits.length >= 7 && digits.length <= 15;
 }
 
-export function ScenarioFormScreen({ jobId, scenario, onDone, onCancel }: ScenarioFormScreenProps) {
-  const spec = SCENARIOS[scenario];
+export function ScenarioFormScreen({ jobId, scenario, job, onDone, onCancel }: ScenarioFormScreenProps) {
+  const baseSpec = SCENARIOS[scenario];
+  const [liabilityCategories, setLiabilityCategories] = useState(() => scenarioOptions(SCENARIOS.liability));
+  const spec = useMemo(() => {
+    if (scenario !== "liability") return baseSpec;
+    return {
+      ...baseSpec,
+      fields: baseSpec.fields.map(field =>
+        field.name === "damage_categories" ? { ...field, options: liabilityCategories } : field
+      )
+    };
+  }, [baseSpec, liabilityCategories, scenario]);
   const needsSignature = Boolean(spec.signatureText) || scenario === "parking";
   const storageKind: "checkin" | "checkout" | null =
     !jobId && (scenario === "checkin" || scenario === "checkout") ? scenario : null;
   const fieldGroups = useMemo(() => groupFields(spec.fields), [spec.fields]);
 
+  useEffect(() => {
+    if (scenario !== "liability") return;
+    let cancelled = false;
+    setLiabilityCategories(scenarioOptions(SCENARIOS.liability));
+    fetchLiabilityDamageCategories()
+      .then(categories => {
+        if (!cancelled && categories.length > 0) setLiabilityCategories(categories);
+      })
+      .catch(() => {
+        if (!cancelled) setLiabilityCategories(scenarioOptions(SCENARIOS.liability));
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [scenario]);
+
+  /** The booking's pickup / drop-off, offered as address choices on Parking
+   *  Liability so the driver picks rather than retypes. Empty when neither is
+   *  known — the address field then falls back to a plain text input. */
+  const addressChoices = useMemo(() => {
+    const choices: Array<{ label: string; value: string }> = [];
+    const pickup = job?.pickup?.trim();
+    const dropoff = job?.dropoff?.trim();
+    if (pickup) choices.push({ label: `Pickup — ${pickup}`, value: pickup });
+    if (dropoff) choices.push({ label: `Drop-off — ${dropoff}`, value: dropoff });
+    return choices;
+  }, [job?.pickup, job?.dropoff]);
+
   const [fields, setFields] = useState<Record<string, string>>(() => {
     const initial: Record<string, string> = {};
     for (const field of spec.fields) {
       if (field.type === "date") initial[field.name] = todayInLondon();
+    }
+    // Pre-fill what the booking already tells us for job-scoped scenarios.
+    const customerName = job?.customerName?.trim();
+    if (customerName && spec.fields.some(f => f.name === "client_name")) {
+      initial.client_name = customerName;
+    }
+    if (addressChoices.length > 0 && spec.fields.some(f => f.name === "address")) {
+      initial.address = addressChoices[0].value;
     }
     return initial;
   });
@@ -343,6 +397,7 @@ export function ScenarioFormScreen({ jobId, scenario, onDone, onCancel }: Scenar
                       field={field}
                       value={fields[field.name] ?? ""}
                       onChange={value => setField(field.name, value)}
+                      addressChoices={field.name === "address" ? addressChoices : undefined}
                     />
                   </div>
                 ))}
@@ -374,17 +429,14 @@ export function ScenarioFormScreen({ jobId, scenario, onDone, onCancel }: Scenar
                   sectionRefs.current.signature = node;
                 }}
               >
-                {conditionalNotice ? (
-                  <NoticeCard title={conditionalNotice.title} text={conditionalNotice.text} />
-                ) : (
-                  spec.signatureText && (
-                    <div className="rounded-card border border-line bg-surface px-4 py-4">
-                      <p className="mb-2 text-eyebrow uppercase text-fg-subtle">
-                        Please read before signing
-                      </p>
-                      <p className="text-body text-fg">{spec.signatureText}</p>
-                    </div>
-                  )
+                {conditionalNotice && <NoticeCard title={conditionalNotice.title} text={conditionalNotice.text} />}
+                {spec.signatureText && (
+                  <div className="rounded-card border border-line bg-surface px-4 py-4">
+                    <p className="mb-2 text-eyebrow uppercase text-fg-subtle">
+                      Please read before signing
+                    </p>
+                    <p className="text-body text-fg">{spec.signatureText}</p>
+                  </div>
                 )}
                 <SignatureField
                   signed={hasSignature}
@@ -397,7 +449,10 @@ export function ScenarioFormScreen({ jobId, scenario, onDone, onCancel }: Scenar
             </Section>
           )}
 
-          {checklistItems.length > 0 && (
+          {/* Parking Liability and the Liability Report skip the "Final check"
+              summary — a blocked submit already names the first missing thing and
+              jumps to it, and those two forms are short enough not to need the recap. */}
+          {checklistItems.length > 0 && scenario !== "parking" && scenario !== "liability" && (
             <Section title="Final check">
               <RequirementChecklist items={checklistItems} />
             </Section>
@@ -456,12 +511,32 @@ function NoticeCard({ title, text }: { title?: string; text: string }) {
 function FieldRow({
   field,
   value,
-  onChange
+  onChange,
+  addressChoices
 }: {
   field: ScenarioFieldSpec;
   value: string;
   onChange: (value: string) => void;
+  /** When set (Parking Liability's address field, booking known), the driver
+   *  picks the booking's pickup / drop-off rather than typing an address. */
+  addressChoices?: Array<{ label: string; value: string }>;
 }) {
+  if (addressChoices && addressChoices.length > 0) {
+    return (
+      <Field label={field.label} required={field.required}>
+        {p => (
+          <Select {...p} placeholder="Pick the address" value={value} onChange={e => onChange(e.target.value)}>
+            {addressChoices.map(choice => (
+              <option key={choice.value} value={choice.value}>
+                {choice.label}
+              </option>
+            ))}
+          </Select>
+        )}
+      </Field>
+    );
+  }
+
   if (field.type === "yesno") {
     return <PresenceSelector field={field} value={value} onChange={onChange} />;
   }

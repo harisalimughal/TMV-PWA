@@ -74,7 +74,7 @@ export function BottomNav({ active, onSelect }: BottomNavProps) {
               onSelect(tab.id);
             }}
             className={cx(
-              "relative flex min-h-[50px] flex-1 flex-col items-center justify-center gap-1 rounded-card",
+              "relative flex min-h-[56px] flex-1 flex-col items-center justify-center gap-1 rounded-card",
               "transition-transform duration-fast active:scale-90",
               "focus-visible:outline-2 focus-visible:-outline-offset-4 focus-visible:outline-brand",
               isActive ? "text-brand" : "text-fg-subtle"
@@ -84,9 +84,9 @@ export function BottomNav({ active, onSelect }: BottomNavProps) {
               {isActive && (
                 <span className="absolute -inset-x-2.5 -inset-y-[7px] rounded-[12px] bg-brand-subtle" aria-hidden />
               )}
-              <Icon className="relative size-[22px]" />
+              <Icon className="relative size-6" />
             </span>
-            <span className={cx("text-[11px]", isActive ? "font-semibold" : "font-medium")}>{tab.label}</span>
+            <span className={cx("text-meta", isActive ? "font-semibold" : "font-medium")}>{tab.label}</span>
           </button>
         );
       })}

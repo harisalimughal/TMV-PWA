@@ -39,27 +39,27 @@ export function AppTopBar({ driver, onOpenProfile, className }: AppTopBarProps) 
         className
       )}
     >
-      <div className="flex min-h-[60px] items-center justify-between gap-3 px-[18px]">
-        <div className="flex items-center gap-2.5">
+      <div className="flex min-h-[64px] items-center justify-between gap-2 px-3 min-[375px]:px-[18px]">
+        <div className="flex min-w-0 items-center gap-2.5">
           <span
             className="grid size-[34px] shrink-0 place-items-center rounded-[11px] bg-brand text-brand-fg"
             aria-hidden
           >
             <Truck className="size-5" strokeWidth={2} />
           </span>
-          <div className="leading-none">
-            <div className="text-[15.5px] font-bold tracking-[-0.01em] text-fg">The Man Van</div>
-            <div className="mt-[3px] text-[11px] tracking-[0.02em] text-fg-subtle">Driver</div>
+          <div className="min-w-0 leading-none">
+            <div className="text-[17px] font-bold tracking-normal text-fg">The Man Van</div>
+            <div className="mt-[3px] text-eyebrow text-fg-subtle">Driver</div>
           </div>
         </div>
-        <div className="flex items-center gap-0.5">
+        <div className="flex shrink-0 items-center gap-0.5">
           <ThemeToggleButton />
           <NotificationBell />
           <button
             type="button"
             onClick={onOpenProfile}
             aria-label="Settings"
-            className="ml-1 grid size-[34px] shrink-0 place-items-center rounded-pill border border-line-strong bg-surface-raised text-[12px] font-bold uppercase text-fg-muted transition-transform duration-fast active:scale-95 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
+            className="ml-1 grid size-11 shrink-0 place-items-center rounded-pill border border-line-strong bg-surface-raised text-meta font-bold uppercase text-fg-muted transition-transform duration-fast active:scale-95 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
           >
             {initials(driver)}
           </button>

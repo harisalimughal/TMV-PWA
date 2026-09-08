@@ -1,6 +1,7 @@
 import { env } from "../config/env";
 import { JOB_COMPLETION_EMAIL_TEMPLATE, JOB_STARTED_MESSAGE_TEMPLATE, REVIEW_REQUEST_EMAIL_TEMPLATE } from "../notifications/message";
 import { DEFAULT_CUSTOMER_CONFIRMATION_TEXT } from "../workflow/workflow.engine";
+import { DAMAGE_CATEGORIES } from "../workflow/scenario.spec";
 
 export interface SettingFieldSpec {
   key: string;
@@ -82,6 +83,13 @@ export const SETTINGS_SPEC: SettingFieldSpec[] = [
     fallback: "60",
     hint: "Ported from the classic dashboard's Settings tab for parity -- tmv-pwa doesn't run the scheduled " +
       "client-reminder job this configured, so changing it currently has no effect."
+  },
+  {
+    key: "LIABILITY_DAMAGE_CATEGORIES",
+    label: "Liability Damage Categories",
+    type: "textarea",
+    fallback: JSON.stringify(DAMAGE_CATEGORIES),
+    hint: "JSON array used by the driver Liability Report category picker."
   }
 ];
 

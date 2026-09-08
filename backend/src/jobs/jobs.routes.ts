@@ -10,11 +10,12 @@ import {
   submitDrawnSignature, suggestedTotal
 } from "../workflow/workflow.engine";
 import { submitScenario } from "./scenario.service";
-import { SCENARIOS, ScenarioKey } from "../workflow/scenario.spec";
+import { DAMAGE_CATEGORIES, SCENARIOS, ScenarioKey } from "../workflow/scenario.spec";
 import { ValidationError } from "../workflow/validation.engine";
 import { listActivityForJob } from "../db/activity.repo";
 import { readEvidenceSummary } from "../db/evidence.repo";
 import { listScenarioSubmissionsForJob } from "../db/scenario.repo";
+import { getSetting } from "../db/settings.repo";
 import { log } from "../utils/logger";
 
 const upload = multer({
@@ -42,6 +43,20 @@ const scenarioUpload = multer({
     cb(null, true);
   }
 });
+
+function parseLiabilityCategories(raw: string): string[] {
+  try {
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed)) {
+      const categories = parsed.map(item => String(item).trim()).filter(Boolean);
+      if (categories.length > 0) return Array.from(new Set(categories));
+    }
+  } catch {
+    // Fall through to newline parsing for hand-edited settings values.
+  }
+  const fromLines = raw.split(/\r?\n/).map(item => item.trim()).filter(Boolean);
+  return fromLines.length > 0 ? Array.from(new Set(fromLines)) : DAMAGE_CATEGORIES;
+}
 
 function errorResponse(res: Response, error: unknown): void {
   if (error instanceof ValidationError) {
@@ -93,6 +108,17 @@ export function jobsRoutes(): Router {
         driver: { fullName: driver.fullName, initials: driver.initials },
         today, past, next
       });
+    } catch (error) {
+      errorResponse(res, error);
+    }
+  });
+
+  router.get("/liability-categories", async (_req: Request, res: Response) => {
+    try {
+      const categories = parseLiabilityCategories(
+        await getSetting("LIABILITY_DAMAGE_CATEGORIES", JSON.stringify(DAMAGE_CATEGORIES))
+      );
+      res.status(200).json({ categories });
     } catch (error) {
       errorResponse(res, error);
     }

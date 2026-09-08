@@ -26,9 +26,23 @@ function iso(daysFromNow: number, hour: number, minute = 0): string {
   return d.toISOString();
 }
 
+/** The verbatim Calendar event title ops type for a booking, in the shape
+ *  backend/src/jobs/booking.service.ts parses: "<crew> Men - £<price> - <HH:mm> /
+ *  <Y|N> - <initials>". The tag is always "Y" here: the backend never syncs an
+ *  unconfirmed ("/ N") or untagged event into a Job (see parseCalendarEvent), so
+ *  every job the app ever sees is confirmed. The card drops the "/ …" tag anyway. */
+function mockRawTitle(job: Pick<Job, "crewSize" | "basePrice" | "bookedStart">): string {
+  const time = new Date(job.bookedStart).toLocaleTimeString("en-GB", {
+    hour: "2-digit",
+    minute: "2-digit",
+    timeZone: "Europe/London"
+  });
+  return `${job.crewSize} Men - £${job.basePrice} - ${time} / Y - ${mockDriver.initials}`;
+}
+
 export function makeJob(over: Partial<Job> & { jobId: string }): Job {
   const nowIso = new Date().toISOString();
-  return {
+  const job: Job = {
     calendarEventId: `cal_${over.jobId}`,
     driverInitials: mockDriver.initials,
     customerName: "Sample Customer",
@@ -62,6 +76,7 @@ export function makeJob(over: Partial<Job> & { jobId: string }): Job {
     updatedAt: nowIso,
     ...over
   };
+  return { ...job, rawTitle: over.rawTitle ?? mockRawTitle(job) };
 }
 
 export interface MockStore {
@@ -70,6 +85,7 @@ export interface MockStore {
   jobs: Record<string, Job>;
   buckets: { today: string[]; past: string[]; next: string[] };
   activity: Record<string, ActivityEntry[]>;
+  settings: Record<string, string>;
 }
 
 /** Fresh store — call to reset dev state (e.g. on HMR of this module). */
@@ -169,6 +185,7 @@ export function seedStore(): MockStore {
     driver: mockDriver,
     jobs: byId,
     buckets: { today: ["10231", "10232"], past: ["10228"], next: ["10238", "10240", "10245"] },
-    activity: {}
+    activity: {},
+    settings: {}
   };
 }

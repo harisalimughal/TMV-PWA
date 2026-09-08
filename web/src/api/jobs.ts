@@ -12,6 +12,10 @@ export interface Job {
   customerPhone: string;
   pickup: string;
   dropoff: string;
+  /** Verbatim Calendar event title this job was synced from, e.g.
+   *  "2 Men - £170 - 16:00". Empty on jobs synced before the backend started
+   *  storing it, until their next resync. */
+  rawTitle?: string;
   /** Booking-form extras parsed from the Calendar description (see
    *  backend/src/jobs/booking.service.ts). Informational; may be empty on older jobs. */
   floorFrom?: string;
@@ -95,6 +99,11 @@ export function fetchJobDetail(jobId: string): Promise<{
   confirmationText: string;
 }> {
   return request(`/api/jobs/${encodeURIComponent(jobId)}`);
+}
+
+export async function fetchLiabilityDamageCategories(): Promise<string[]> {
+  const body = await request<{ categories: string[] }>("/api/jobs/liability-categories");
+  return body.categories;
 }
 
 export function startJob(jobId: string): Promise<JobUpdateResult> {

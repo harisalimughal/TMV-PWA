@@ -72,7 +72,7 @@ export function JobFilterBar({
 
   const btn = (on: boolean, warn = false) =>
     cx(
-      "relative z-10 flex min-h-[38px] flex-1 items-center justify-center gap-1.5 rounded-[10px] px-1 text-[13.5px] font-semibold whitespace-nowrap",
+      "relative z-10 flex min-h-[44px] flex-1 items-center justify-center gap-1.5 rounded-[10px] px-1 text-[13.5px] font-semibold whitespace-nowrap",
       "transition-[color,transform] duration-fast active:scale-[0.95]",
       "focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-brand",
       on ? (warn ? "text-warning" : "text-fg") : "text-fg-muted"
@@ -127,7 +127,7 @@ export function JobFilterBar({
       </button>
 
       {customDate ? (
-        <div ref={setRef("custom")} className="relative z-10 flex min-h-[38px] flex-1 items-center">
+        <div ref={setRef("custom")} className="relative z-10 flex min-h-[44px] flex-1 items-center">
           <button
             type="button"
             role="tab"

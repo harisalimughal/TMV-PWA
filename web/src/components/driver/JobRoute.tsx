@@ -1,4 +1,5 @@
 import React from "react";
+import { CircleDot, MapPin } from "lucide-react";
 import { cx } from "../../ui";
 
 export interface JobRouteProps {
@@ -20,9 +21,9 @@ function splitAddress(addr: string): [string, string] {
 }
 
 /**
- * The route, as a signature element: a ringed dot at the pickup, a drawn gradient
- * line, a square at the drop-off. Each stop is a label, a street line and a mono
- * postcode line — never an inline "A → B" string.
+ * The route, as a signature element: an origin dot at the pickup, a drawn gradient
+ * line, a location pin at the drop-off. Each stop is a label, a street line and a
+ * mono postcode line — never an inline "A → B" string.
  */
 export function JobRoute({ pickup, dropoff, tone = "light", density = "full", className }: JobRouteProps) {
   const onDark = tone === "onDark";
@@ -34,14 +35,12 @@ export function JobRoute({ pickup, dropoff, tone = "light", density = "full", cl
   const [dRoad, dPc] = splitAddress(dropoff || "Delivery TBC");
 
   return (
-    <div className={cx("grid grid-cols-[22px_1fr] gap-x-3.5", className)}>
+    <div className={cx("grid grid-cols-[24px_minmax(0,1fr)] gap-x-3.5", className)}>
       {/* pickup rail */}
       <div className="flex flex-col items-center">
-        <span
-          className={cx(
-            "size-3.5 rounded-full border-[2.5px] bg-bg2",
-            onDark ? "border-white" : "border-brand"
-          )}
+        <CircleDot
+          className={cx("size-[21px] shrink-0", onDark ? "text-white" : "text-brand")}
+          strokeWidth={2.5}
           aria-hidden
         />
         <span
@@ -49,38 +48,39 @@ export function JobRoute({ pickup, dropoff, tone = "light", density = "full", cl
             "my-[3px] w-0.5 flex-1",
             onDark ? "bg-white/40" : "bg-gradient-to-b from-brand to-fg-subtle"
           )}
-          style={{ minHeight: 26 }}
+          style={{ minHeight: 24 }}
           aria-hidden
         />
       </div>
       <div className="min-w-0 pb-5">
         {density === "full" && (
-          <p className={cx("text-[11px] font-semibold tracking-[0.02em]", label)}>Pickup</p>
+          <p className={cx("text-eyebrow", label)}>Pickup</p>
         )}
-        <p className={cx("mt-[3px] text-[15.5px] font-semibold leading-tight [overflow-wrap:anywhere]", road)}>
+        <p className={cx("mt-[3px] text-card font-semibold [overflow-wrap:anywhere]", road)}>
           {pRoad}
         </p>
-        {pPc && <p className={cx("mt-0.5 font-mono text-[14px] font-semibold", pc)}>{pPc}</p>}
+        {pPc && <p className={cx("mt-0.5 font-mono text-body font-semibold [overflow-wrap:anywhere]", pc)}>{pPc}</p>}
       </div>
 
       {/* drop-off rail */}
       <div className="flex flex-col items-center">
-        <span
+        <MapPin
           className={cx(
-            "size-3.5 rounded-[4px] border-[2.5px] bg-bg2",
-            onDark ? "border-white/70" : "border-fg-muted"
+            "size-[23px] shrink-0 -translate-y-0.5",
+            onDark ? "text-white fill-white/25" : "text-brand fill-brand/15"
           )}
+          strokeWidth={2.5}
           aria-hidden
         />
       </div>
       <div className="min-w-0">
         {density === "full" && (
-          <p className={cx("text-[11px] font-semibold tracking-[0.02em]", label)}>Drop-off</p>
+          <p className={cx("text-eyebrow", label)}>Drop-off</p>
         )}
-        <p className={cx("mt-[3px] text-[15.5px] font-semibold leading-tight [overflow-wrap:anywhere]", road)}>
+        <p className={cx("mt-[3px] text-card font-semibold [overflow-wrap:anywhere]", road)}>
           {dRoad}
         </p>
-        {dPc && <p className={cx("mt-0.5 font-mono text-[14px] font-semibold", pc)}>{dPc}</p>}
+        {dPc && <p className={cx("mt-0.5 font-mono text-body font-semibold [overflow-wrap:anywhere]", pc)}>{dPc}</p>}
       </div>
     </div>
   );

@@ -21,7 +21,7 @@ export const Select = React.forwardRef<HTMLSelectElement, SelectProps>(function 
     <div
       className={cx(
         "relative flex items-center rounded-control border bg-surface transition duration-fast ease-out",
-        "min-h-[44px] focus-within:border-brand focus-within:shadow-[var(--ring)]",
+        "min-h-[var(--control-h-md)] focus-within:border-brand focus-within:shadow-[var(--ring)]",
         invalid ? "border-danger-line" : "border-line",
         disabled && "opacity-60 bg-surface-sunken",
         className
@@ -32,7 +32,7 @@ export const Select = React.forwardRef<HTMLSelectElement, SelectProps>(function 
         disabled={disabled}
         value={value}
         className={cx(
-          "peer w-full appearance-none bg-transparent pl-3 pr-9 text-[16px] text-fg",
+          "peer min-h-[var(--control-h-md)] min-w-0 w-full appearance-none bg-transparent pl-3 pr-9 text-[16px] text-fg",
           "outline-none disabled:cursor-not-allowed",
           value === "" || value === undefined ? "text-fg-subtle" : "text-fg"
         )}
@@ -46,7 +46,7 @@ export const Select = React.forwardRef<HTMLSelectElement, SelectProps>(function 
         {children}
       </select>
       <ChevronDown
-        className="pointer-events-none absolute right-3 size-[18px] text-fg-subtle"
+        className="pointer-events-none absolute right-3 size-5 text-fg-subtle"
         aria-hidden="true"
       />
     </div>

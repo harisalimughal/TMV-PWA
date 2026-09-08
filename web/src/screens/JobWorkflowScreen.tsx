@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { AlertTriangle, Car, CheckCircle2, ChevronLeft, FileWarning, PenLine } from "lucide-react";
+import { AlertTriangle, Car, Check, CheckCircle2, FileWarning, MapPin, PenLine } from "lucide-react";
 import {
   fetchJobDetail,
   type JobUpdateResult,
@@ -30,7 +30,6 @@ import { ScenarioFormScreen } from "./ScenarioFormScreen";
 import { useOnline } from "../lib/net";
 import type { ScenarioKey } from "../scenarioSpec";
 import {
-  BACK_ELIGIBLE,
   CONGESTION_CHARGE,
   EXTRA_CHARGE_OPTIONS,
   NO_EXTRAS,
@@ -122,7 +121,7 @@ export function JobWorkflowScreen({ jobId, onBack }: JobWorkflowScreenProps) {
   // screen -- and with it BOTH the StepBody (the inputs) and the StepDock (the submit
   // button, which reads `formState` to decide whether it's still blocked). Without
   // this the docked button stayed frozen at whatever it was on first render: take the
-  // arrival photo and "Send photo" never woke up.
+  // arrival photo and the dock action never woke up.
   const [, setFormVersion] = useState(0);
   const bumpForm = useCallback(() => setFormVersion(v => v + 1), []);
 
@@ -202,6 +201,33 @@ export function JobWorkflowScreen({ jobId, onBack }: JobWorkflowScreenProps) {
     [online, toast]
   );
 
+  const openIssueScenarioFromCheck = useCallback(
+    async (scenario: IssueScenario) => {
+      if (!job) return;
+      const ok = await run(() => sendAction(job.jobId, "ISSUES_YES"));
+      if (ok) openFirstIssueScenario(scenario);
+    },
+    [job, openFirstIssueScenario, run]
+  );
+
+  const cancelScenario = useCallback(() => {
+    if (!job || !openScenario) {
+      setOpenScenario(null);
+      return;
+    }
+
+    const issueChoiceState =
+      job.currentState === "WAITING_ARRIVAL_ISSUES_CHOICE" ||
+      job.currentState === "WAITING_EMPTY_VAN_ISSUES_CHOICE";
+
+    setOpenScenario(null);
+    if (isIssueScenario(openScenario) && issueChoiceState) {
+      setIssueCompletion(null);
+      setCompletedIssueScenarios([]);
+      void run(() => sendAction(job.jobId, "GO_BACK"));
+    }
+  }, [job, openScenario, run]);
+
   // Belt-and-braces skip: if the workflow ever lands on the Overtime step for a job
   // that never picked "Extra time / Charges" (e.g. a backend that still emits the
   // state), step straight past it without recording any overtime. The dev mock
@@ -265,7 +291,8 @@ export function JobWorkflowScreen({ jobId, onBack }: JobWorkflowScreenProps) {
       <ScenarioFormScreen
         jobId={job.jobId}
         scenario={openScenario}
-        onCancel={() => setOpenScenario(null)}
+        job={{ customerName: job.customerName, pickup: job.pickup, dropoff: job.dropoff }}
+        onCancel={cancelScenario}
         onDone={() => {
           if (isIssueScenario(openScenario)) {
             const completed = completedIssueScenarios.includes(openScenario)
@@ -302,7 +329,12 @@ export function JobWorkflowScreen({ jobId, onBack }: JobWorkflowScreenProps) {
   const state = job.currentState;
   const step = STEPS[state] ?? { label: state, order: 1 };
   const complete = state === "COMPLETED";
-  const routeExpanded = state === "READY" || state === "WAITING_ARRIVAL_PHOTO";
+  const routeExpanded = state === "READY";
+  const pickupOnly =
+    state === "WAITING_ARRIVAL_PHOTO" ||
+    state === "WAITING_ARRIVAL_ISSUES_CHECK" ||
+    state === "WAITING_ARRIVAL_ISSUES_CHOICE" ||
+    state === "WAITING_LOADED_PHOTO";
 
   // Does this job's workflow include the Overtime step? While the driver is still on
   // the Extra charges step their live checkbox selection is the freshest signal;
@@ -312,6 +344,14 @@ export function JobWorkflowScreen({ jobId, onBack }: JobWorkflowScreenProps) {
       ? overtimeApplies(formState.extraCharges)
       : overtimeApplies(job.extraCharges);
   const progress = workflowProgress(state, { overtime });
+  const canGoBackStep = state !== "READY" && state !== "COMPLETED";
+  const handleWorkflowBack = () => {
+    if (canGoBackStep) {
+      void run(() => sendAction(job.jobId, "GO_BACK"));
+      return;
+    }
+    onBack();
+  };
 
   return (
     <>
@@ -322,7 +362,8 @@ export function JobWorkflowScreen({ jobId, onBack }: JobWorkflowScreenProps) {
             customerName={job.customerName}
             jobId={job.jobId}
             phone={job.customerPhone || undefined}
-            onBack={onBack}
+            onBack={handleWorkflowBack}
+            backLabel={canGoBackStep ? "Previous step" : "Back to jobs"}
             status={job.status === "IN_PROGRESS" ? <JobStatusChip job={job} /> : undefined}
           />
         }
@@ -373,7 +414,11 @@ export function JobWorkflowScreen({ jobId, onBack }: JobWorkflowScreenProps) {
                 </Alert>
               )}
 
-              <RouteCard pickup={job.pickup} dropoff={job.dropoff} collapsible={!routeExpanded} />
+              {pickupOnly ? (
+                <PickupAddress address={job.pickup} />
+              ) : (
+                <RouteCard pickup={job.pickup} dropoff={job.dropoff} collapsible={!routeExpanded} />
+              )}
 
               {error && <Alert tone="danger">{error}</Alert>}
 
@@ -385,19 +430,13 @@ export function JobWorkflowScreen({ jobId, onBack }: JobWorkflowScreenProps) {
                 error={error}
                 suggestedTotal={suggestedTotal}
                 onOpenScenario={openFirstIssueScenario}
+                onReportIssue={openIssueScenarioFromCheck}
+                onAction={(action, input, message) => {
+                  void run(() => sendAction(job.jobId, action, input), message);
+                }}
                 onFormChange={bumpForm}
               />
 
-              {BACK_ELIGIBLE.has(state) && (
-                <button
-                  onClick={() => run(() => sendAction(job.jobId, "GO_BACK"))}
-                  disabled={busy}
-                  className="-ml-2 flex items-center gap-1 self-start rounded-control px-2 py-2 text-label font-medium text-fg-muted transition-colors hover:bg-surface-sunken disabled:opacity-40"
-                >
-                  <ChevronLeft className="size-4" aria-hidden />
-                  Go back a step
-                </button>
-              )}
             </>
 
             <div className="scroll-pb-dock" aria-hidden />
@@ -582,6 +621,8 @@ function StepBody({
   error,
   suggestedTotal,
   onOpenScenario,
+  onReportIssue,
+  onAction,
   onFormChange
 }: {
   job: Job;
@@ -591,6 +632,8 @@ function StepBody({
   error: string | null;
   suggestedTotal: number;
   onOpenScenario: (scenario: ScenarioKey) => void;
+  onReportIssue: (scenario: IssueScenario) => void;
+  onAction: (action: string, input?: Record<string, string[]>, message?: string) => void;
   onFormChange: () => void;
 }) {
   // Re-renders the whole workflow screen -- not just this subtree -- so the docked
@@ -624,9 +667,9 @@ function StepBody({
       return (
         <PhotoUploader
           key={state}
-          label="Arrival photo"
-          hint="The property and the load as you found them."
-          maxPhotos={1}
+          label="Arrival Photos (pick up point)"
+          hint="Up to 2 - show the property and load as you found them."
+          maxPhotos={2}
           submitting={busy}
           progress={uploadProgress}
           error={error}
@@ -639,41 +682,123 @@ function StepBody({
 
     case "WAITING_LOADED_PHOTO":
       return (
-        <PhotoUploader
-          key={state}
-          label="Van loaded photos"
-          hint="Up to 2 — show how the load is stacked and secured."
-          maxPhotos={2}
-          submitting={busy}
-          progress={uploadProgress}
-          error={error}
-          onFilesChange={files => {
-            formState.photos = files;
-            tick();
-          }}
-        />
+        <div className="flex flex-col gap-4">
+          <PhotoUploader
+            key={state}
+            label="Van Loaded Photo (pick up point)"
+            hint="Up to 2 - show how the load is stacked and secured."
+            maxPhotos={2}
+            submitting={busy}
+            progress={uploadProgress}
+            error={error}
+            onFilesChange={files => {
+              formState.photos = files;
+              tick();
+            }}
+          />
+
+          <div className="grid grid-cols-2 gap-3">
+            <IssueChoiceCard
+              icon={<Car aria-hidden />}
+              title="Parking Liability"
+              description="Restricted bay, red route, or anywhere a PCN could land."
+              onClick={() => onOpenScenario("parking")}
+            />
+            <IssueChoiceCard
+              icon={<FileWarning aria-hidden />}
+              title="Liability Issues"
+              description="Damage, unprotected items, or an overloaded van."
+              onClick={() => onOpenScenario("liability")}
+            />
+          </div>
+        </div>
       );
 
     case "WAITING_EMPTY_VAN_PHOTO":
       return (
-        <PhotoUploader
-          key={state}
-          label="Empty van photo"
-          hint="Proof nothing was left behind."
-          maxPhotos={1}
-          submitting={busy}
-          progress={uploadProgress}
-          error={error}
-          onFilesChange={files => {
-            formState.photos = files;
-            tick();
-          }}
-        />
+        <div className="flex flex-col gap-4">
+          {job.dropoff && (
+            <div className="flex items-start gap-3 px-4 py-3 rounded-card bg-surface border border-line">
+              <MapPin className="w-4 h-4 mt-0.5 shrink-0 text-fg-subtle" aria-hidden />
+              <div>
+                <p className="text-eyebrow text-fg-subtle mb-0.5">Drop-off address</p>
+                <p className="text-label text-fg">{job.dropoff}</p>
+              </div>
+            </div>
+          )}
+          <PhotoUploader
+            key={state}
+            label="Empty Van Photo (Drop Off Point)"
+            hint="Show the van empty at the drop-off — proof nothing was left behind."
+            maxPhotos={1}
+            submitting={busy}
+            progress={uploadProgress}
+            error={error}
+            onFilesChange={files => {
+              formState.photos = files;
+              tick();
+            }}
+          />
+        </div>
       );
 
     case "WAITING_ARRIVAL_ISSUES_CHECK":
+      return (
+        <div className="flex flex-col gap-3">
+          <IssueChoiceCard
+            icon={<Car aria-hidden />}
+            title="Parking Liability"
+            description="Restricted bay, red route, or anywhere a PCN could land. The customer accepts the charge."
+            onClick={() => onReportIssue("parking")}
+          />
+          <IssueChoiceCard
+            icon={<FileWarning aria-hidden />}
+            title="Liability Report"
+            description="Existing damage, item condition, access risk, or anything that needs evidence."
+            onClick={() => onReportIssue("liability")}
+          />
+          <Button
+            fullWidth
+            size="lg"
+            variant="success"
+            loading={busy}
+            iconLeft={<Check aria-hidden />}
+            onClick={() => onAction("ISSUES_NONE")}
+            className="mt-1"
+          >
+            No Issues
+          </Button>
+        </div>
+      );
+
     case "WAITING_EMPTY_VAN_ISSUES_CHECK":
-      return null; // the decision lives in the dock
+      return (
+        <div className="flex flex-col gap-3">
+          <IssueChoiceCard
+            icon={<Car aria-hidden />}
+            title="Parking Liability"
+            description="Restricted bay, red route, or anywhere a PCN could land. The customer accepts the charge."
+            onClick={() => onReportIssue("parking")}
+          />
+          <IssueChoiceCard
+            icon={<FileWarning aria-hidden />}
+            title="Liability Report"
+            description="Damage, unprotected items, or anything that needs evidence at the drop-off."
+            onClick={() => onReportIssue("liability")}
+          />
+          <Button
+            fullWidth
+            size="lg"
+            variant="success"
+            loading={busy}
+            iconLeft={<Check aria-hidden />}
+            onClick={() => onAction("ISSUES_NONE")}
+            className="mt-1"
+          >
+            No Issues
+          </Button>
+        </div>
+      );
 
     case "WAITING_ARRIVAL_ISSUES_CHOICE":
     case "WAITING_EMPTY_VAN_ISSUES_CHOICE":
@@ -1005,6 +1130,14 @@ function InProgressCard({ job }: { job: Job }) {
   );
 }
 
+function PickupAddress({ address }: { address: string }) {
+  return (
+    <div className="rounded-lg border border-line bg-surface px-4 py-3 shadow-xs">
+      <p className="text-card font-semibold text-fg [overflow-wrap:anywhere]">{address || "Pickup TBC"}</p>
+    </div>
+  );
+}
+
 /* ------------------------------------------------------------------- step dock ---- */
 
 interface StepDockProps {
@@ -1078,26 +1211,18 @@ function StepDock({
           >
             {busy
               ? uploadProgress !== null
-                ? `Sending ${Math.round(uploadProgress * 100)}%`
-                : "Sending…"
-              : formState.photos.length > 1
-                ? `Send ${formState.photos.length} photos`
-                : "Send photo"}
+                ? `Continuing ${Math.round(uploadProgress * 100)}%`
+                : "Continuing..."
+              : "Continue"}
           </Button>
         </BottomActionBar>
       );
 
     case "WAITING_ARRIVAL_ISSUES_CHECK":
+      return null;
+
     case "WAITING_EMPTY_VAN_ISSUES_CHECK":
-      return (
-        <BottomActionBar>
-          <IssueDecision
-            busy={busy}
-            onNone={() => onAction("ISSUES_NONE")}
-            onYes={() => onAction("ISSUES_YES")}
-          />
-        </BottomActionBar>
-      );
+      return null;
 
     case "IN_PROGRESS":
       return (

@@ -10,11 +10,11 @@
 import React, { useState, useEffect } from "react";
 import {
   LayoutDashboard, Navigation, Truck, CheckSquare, LogIn, LogOut, AlertCircle, ShieldAlert,
-  Users, Banknote, History, FileSpreadsheet, RefreshCw,
+  Users, Banknote, AlertTriangle, History, FileSpreadsheet, Settings, Smartphone, RefreshCw,
   ChevronLeft, ChevronRight, Search, Command, MessageSquare, Bell, Menu, X
 } from "lucide-react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { triggerDatasetRefresh } from "./api";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { fetchExceptions, triggerDatasetRefresh } from "./api";
 import { CommandPalette } from "./components/CommandPalette";
 import { ShortcutsModal } from "./components/ShortcutsModal";
 import { formatLondonTimeOnly } from "./utils/date";
@@ -27,23 +27,29 @@ interface Props {
   children: React.ReactNode;
 }
 
-interface NavSectionItem {
+interface NavItem {
   id?: string;
   label: string;
-  icon?: any;
-  type?: "header";
+  icon?: React.ComponentType<{ className?: string }>;
   isLive?: boolean;
+  hasBadge?: boolean;
   desc?: string;
 }
+
+interface NavHeader {
+  type: "header";
+  label: string;
+}
+
+type NavSectionItem = NavItem | NavHeader;
 
 const NAV_CONFIG: NavSectionItem[] = [
   { type: "header", label: "Operations" },
   { id: "overview", label: "Overview", icon: LayoutDashboard, desc: "Executive KPI telemetry, revenue velocity and operational health" },
   { id: "livefleet", label: "Live Fleet", icon: Navigation, isLive: true, desc: "Real-time GPS vehicle positions and driver telemetry" },
-  { id: "alerts", label: "Alerts", icon: ShieldAlert, desc: "GPSLive's fleet alert feed, including congestion zone crossings" },
   { id: "jobs", label: "Jobs", icon: Truck, desc: "Operational moves joined across Jobs, Drivers, Workflow and Evidence" },
-  { id: "van", label: "Van", icon: Truck, desc: "Driver mileage, fuel and service records" },
   { id: "finished", label: "Finished Jobs", icon: CheckSquare, desc: "Completed moves audit with verified evidence and sign-off records" },
+  { id: "notifications", label: "Notifications & Push", icon: Bell, desc: "Automated communication audit across Email, SMS and Web Push channels" },
   { type: "header", label: "Scenarios" },
   { id: "checkin", label: "Check In", icon: LogIn, desc: "Storage facility entry logs and client container check-ins" },
   { id: "checkout", label: "Check Out", icon: LogOut, desc: "Storage retrieval and client drop-off confirmation records" },
@@ -52,10 +58,12 @@ const NAV_CONFIG: NavSectionItem[] = [
   { type: "header", label: "Management" },
   { id: "drivers", label: "Drivers", icon: Users, desc: "Driver scorecards, revenue handled and punctuality metrics" },
   { id: "pricing", label: "Pricing Settings", icon: Banknote, desc: "Configure crew rates, packing service pricing, and overtime rules" },
+  { id: "pwasettings", label: "PWA & Push Settings", icon: Smartphone, desc: "Device push notifications, PWA installation and background sync" },
+  { id: "exceptions", label: "Exceptions", icon: AlertTriangle, hasBadge: true, desc: "Operational exceptions and quality control alerts" },
   { id: "activity", label: "Activity Log", icon: History, desc: "Chronological audit records directly from the activity log" },
   { id: "reports", label: "Reports", icon: FileSpreadsheet, desc: "Downloadable operational datasets and certified export files" },
   { id: "messaging", label: "Messaging Content", icon: MessageSquare, desc: "Manage automated customer and driver communication templates" },
-  { id: "notifications", label: "Notifications & Web Push", icon: Bell, desc: "Automated communication audit across Email, SMS and Web Push channels" }
+  { id: "settings", label: "Settings", icon: Settings, desc: "Read-only system rules, rates, caching invariants and database mapping" }
 ];
 
 export function Layout({ activeSection, onSelectSection, onLogout, children }: Props) {
@@ -73,7 +81,6 @@ export function Layout({ activeSection, onSelectSection, onLogout, children }: P
   const effectiveCollapsed = collapsed && !isMobile;
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
-  const [lastSyncTime, setLastSyncTime] = useState(formatLondonTimeOnly(new Date().toISOString()));
   const [londonClock, setLondonClock] = useState(formatLondonTimeOnly(new Date().toISOString()));
   const queryClient = useQueryClient();
 
@@ -83,8 +90,6 @@ export function Layout({ activeSection, onSelectSection, onLogout, children }: P
   }, []);
 
   // Mobile nav drawer: Escape closes it, and the page behind it stops scrolling.
-  // Neither was handled before, so the drawer trapped nothing and the content behind
-  // it scrolled under the user's finger.
   useEffect(() => {
     if (!mobileNavOpen) return;
     const onKey = (e: KeyboardEvent) => {
@@ -99,10 +104,15 @@ export function Layout({ activeSection, onSelectSection, onLogout, children }: P
     };
   }, [mobileNavOpen]);
 
+  const { data: exData } = useQuery({
+    queryKey: ["exceptions_badge"],
+    queryFn: () => fetchExceptions(undefined, undefined, undefined, true),
+    refetchInterval: 30000
+  });
+
   const refreshMutation = useMutation({
     mutationFn: triggerDatasetRefresh,
     onSuccess: () => {
-      setLastSyncTime(formatLondonTimeOnly(new Date().toISOString()));
       queryClient.invalidateQueries();
     }
   });
@@ -110,8 +120,6 @@ export function Layout({ activeSection, onSelectSection, onLogout, children }: P
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement | null;
-      // Typing anywhere -- including a <select> or a contentEditable cell -- must never
-      // trigger a navigation shortcut. The old guard only covered INPUT and TEXTAREA.
       if (
         target &&
         (["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName) || target.isContentEditable)
@@ -119,12 +127,6 @@ export function Layout({ activeSection, onSelectSection, onLogout, children }: P
         return;
       }
 
-      // Cmd/Ctrl+K opens the palette. Everything below is a BARE letter, so any other
-      // modifier combination must fall through to the browser untouched.
-      //
-      // This was the bug: the modifier check only guarded the "k" branch, so Cmd+R fell
-      // into the "r" branch, got preventDefault()ed, and hijacked the browser's own
-      // reload. Refreshing the dashboard with Cmd+R silently did the wrong thing.
       if (e.metaKey || e.ctrlKey) {
         if (e.key.toLowerCase() === "k") {
           e.preventDefault();
@@ -134,8 +136,6 @@ export function Layout({ activeSection, onSelectSection, onLogout, children }: P
       }
       if (e.altKey) return;
 
-      // Don't fire navigation shortcuts while a modal/palette owns the screen -- the
-      // driver of that surface should get the keystroke, not the page behind it.
       if (paletteOpen || shortcutsOpen) return;
 
       switch (e.key.toLowerCase()) {
@@ -156,6 +156,9 @@ export function Layout({ activeSection, onSelectSection, onLogout, children }: P
         case "d":
           onSelectSection("drivers");
           break;
+        case "e":
+          onSelectSection("exceptions");
+          break;
         default:
           break;
       }
@@ -164,7 +167,10 @@ export function Layout({ activeSection, onSelectSection, onLogout, children }: P
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [onSelectSection, refreshMutation, paletteOpen, shortcutsOpen]);
 
-  const currentNav = NAV_CONFIG.find(n => n.id === activeSection) || NAV_CONFIG[1];
+  const rawBadgeCount = exData?.activeBadgeCount ?? exData?.total ?? 0;
+  const exceptionsBadgeLabel = rawBadgeCount > 999 ? "999+" : rawBadgeCount > 99 ? "99+" : rawBadgeCount > 0 ? String(rawBadgeCount) : null;
+
+  const currentNav = NAV_CONFIG.find(n => (n as NavItem).id === activeSection) as NavItem || NAV_CONFIG[1] as NavItem;
 
   return (
     <div className="flex min-h-screen bg-admin-bg text-admin-ink selection:bg-admin-brand-soft selection:text-admin-brand font-sans antialiased">
@@ -210,7 +216,7 @@ export function Layout({ activeSection, onSelectSection, onLogout, children }: P
 
           <nav className="px-4 pb-4 space-y-1 overflow-y-auto flex-1">
             {NAV_CONFIG.map((item, idx) => {
-              if (item.type === "header") {
+              if ((item as NavHeader).type === "header") {
                 if (effectiveCollapsed) return <div key={idx} className="my-4 border-t border-admin-line" />;
                 return (
                   <div key={idx} className="pt-6 pb-2 px-3 text-eyebrow text-fg-subtle">
@@ -219,31 +225,41 @@ export function Layout({ activeSection, onSelectSection, onLogout, children }: P
                 );
               }
 
-              const Icon = item.icon!;
-              const isActive = activeSection === item.id;
+              const navItem = item as NavItem;
+              const Icon = navItem.icon!;
+              const isActive = activeSection === navItem.id;
 
               return (
                 <button
-                  key={item.id}
-                  onClick={() => { onSelectSection(item.id!); setMobileNavOpen(false); }}
+                  key={navItem.id}
+                  onClick={() => { onSelectSection(navItem.id!); setMobileNavOpen(false); }}
                   className={`w-full h-11 flex items-center gap-3 px-4 rounded-card text-[14px] font-medium transition group relative ${
                     isActive ? "text-admin-ink font-semibold bg-white shadow-primary" : "text-admin-muted hover:bg-white/50 hover:text-admin-ink"
                   }`}
-                  title={effectiveCollapsed ? item.label : undefined}
+                  title={effectiveCollapsed ? navItem.label : undefined}
                 >
                   <Icon className={`w-4 h-4 flex-shrink-0 transition-transform ${isActive ? "text-admin-brand scale-105" : "text-admin-muted group-hover:text-admin-ink-2"}`} />
 
-                  {!effectiveCollapsed && <span className="truncate">{item.label}</span>}
+                  {!effectiveCollapsed && <span className="truncate">{navItem.label}</span>}
 
-                  {!effectiveCollapsed && item.isLive && (
+                  {!effectiveCollapsed && navItem.isLive && (
                     <span className="ml-auto flex items-center gap-1 px-1.5 py-0.5 rounded-pill bg-admin-status-green-bg text-admin-status-green text-[9px] font-mono font-bold">
                       <span className="w-1.5 h-1.5 rounded-full bg-admin-status-green animate-ping" />
                       LIVE
                     </span>
                   )}
 
-                  {effectiveCollapsed && item.isLive && (
+                  {!effectiveCollapsed && navItem.hasBadge && exceptionsBadgeLabel && (
+                    <span className="ml-auto flex items-center justify-center px-1.5 min-w-[20px] h-5 rounded-full bg-admin-status-red text-white text-[11px] font-bold">
+                      {exceptionsBadgeLabel}
+                    </span>
+                  )}
+
+                  {effectiveCollapsed && navItem.isLive && (
                     <span className="w-2 h-2 rounded-full bg-admin-status-green absolute right-2 ring-2 ring-white" />
+                  )}
+                  {effectiveCollapsed && navItem.hasBadge && exceptionsBadgeLabel && (
+                    <span className="w-2 h-2 rounded-full bg-admin-status-red absolute right-2 ring-2 ring-white" />
                   )}
                 </button>
               );
@@ -278,10 +294,7 @@ export function Layout({ activeSection, onSelectSection, onLogout, children }: P
       </aside>
 
       <div className="flex-1 flex flex-col min-w-0">
-        {/* One bar: page title on the left, the utility cluster on the right. The
-            old separate "Search anything" strip above this was pure vertical cost on
-            every tab -- its controls moved here. */}
-        <header className="shrink-0 bg-white border-b border-admin-line px-4 md:px-8 py-3 flex items-center justify-between gap-3">
+        <header className="h-[56px] bg-white border-b border-admin-line px-4 md:px-6 flex items-center justify-between sticky top-0 z-20">
           <div className="flex items-center gap-3 min-w-0">
             <button
               onClick={() => setMobileNavOpen(true)}
@@ -293,7 +306,7 @@ export function Layout({ activeSection, onSelectSection, onLogout, children }: P
               <Menu className="w-5 h-5" />
             </button>
             <div className="text-admin-brand shrink-0">
-              <currentNav.icon className="w-5 h-5 md:w-6 md:h-6" />
+              {currentNav.icon && <currentNav.icon className="w-5 h-5 md:w-6 md:h-6" />}
             </div>
             <h1 className="text-[17px] md:text-title text-fg tracking-tight truncate">{currentNav.label}</h1>
           </div>
@@ -338,6 +351,16 @@ export function Layout({ activeSection, onSelectSection, onLogout, children }: P
         </header>
 
         <div className="flex-1 overflow-y-auto flex flex-col">
+          <div className="bg-white border-b border-admin-line px-4 md:px-8 py-4 md:py-5 flex items-center justify-between shrink-0">
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="text-admin-brand shrink-0">
+                {currentNav.icon && <currentNav.icon className="w-5 h-5 md:w-6 md:h-6" />}
+              </div>
+              <h1 className="text-[17px] md:text-title text-fg tracking-tight truncate">{currentNav.label}</h1>
+            </div>
+            <div className="flex items-center gap-3" />
+          </div>
+
           <main className="flex-1 p-4 md:p-8">{children}</main>
         </div>
       </div>

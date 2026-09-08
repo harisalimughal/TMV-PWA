@@ -9,10 +9,7 @@ import { Button } from "../../../../ui";
  * handleSaveAll()'s only comment was "In a real app, API call goes here". Nothing was
  * ever actually persisted. This keeps the same card layout and sticky "unsaved
  * changes" save bar, but saves for real through tmv-pwa's own /api/admin/settings
- * (Mongo) -- see backend/src/admin/settings-spec.ts for the exact key list. Used for
- * both the "Pricing Settings" and "Settings" nav entries (the source's two separate
- * pages covered the same ground -- rates here, Sheets-schema/caching trivia there that
- * doesn't apply to a Sheets-free backend).
+ * (Mongo) -- see backend/src/admin/settings-spec.ts for the exact key list.
  */
 export function PricingSettingsPage() {
   const [loading, setLoading] = useState(true);
@@ -39,9 +36,7 @@ export function PricingSettingsPage() {
     }
   }
 
-  useEffect(() => {
-    load();
-  }, []);
+  useEffect(() => { load(); }, []);
 
   function setValue(key: string, value: string) {
     setValues(prev => ({ ...prev, [key]: value }));
@@ -77,7 +72,7 @@ export function PricingSettingsPage() {
       label: `Crew Rate — ${crewSize} Man (£)`,
       type: "number",
       fallback: byKey("CREW_RATE_3_MAN")?.fallback ?? "65",
-      hint: "Custom crew-size rate. Used when the driver records this crew size during overtime.",
+      hint: "Custom crew-size rate.",
       value: ""
     };
   }
@@ -88,13 +83,11 @@ export function PricingSettingsPage() {
       setError("Enter a crew size between 4 and 12.");
       return;
     }
-
     const key = crewRateKey(crewSize);
     if (byKey(key)) {
       setError(`${crewSize}-man crew rate already exists.`);
       return;
     }
-
     setError(null);
     setSettings(prev => [...prev, customCrewSpec(crewSize)].sort(byCrewRate));
     setValues(prev => ({ ...prev, [key]: newCrewRate }));
@@ -115,6 +108,21 @@ export function PricingSettingsPage() {
 
   return (
     <div className="space-y-6 max-w-[1440px] mx-auto pb-24">
+      <div className="bg-white p-6 rounded-module border border-admin-line shadow-sm flex items-start justify-between">
+        <div>
+          <h2 className="text-title text-fg mb-1">Pricing Settings</h2>
+          <p className="text-[14px] text-admin-muted max-w-3xl">
+            Configure crew rates, packing service pricing, and overtime rules. Changes apply to all new jobs
+            immediately — no developer or redeployment required.
+          </p>
+        </div>
+        {dirty.size > 0 && (
+          <div className="flex items-center gap-2 px-3 py-1.5 bg-admin-status-amber-bg text-amber-700 rounded-card border border-amber-200 text-[13px] font-semibold shrink-0">
+            <AlertTriangle className="w-4 h-4" /> Unsaved changes
+          </div>
+        )}
+      </div>
+
       {error && (
         <div className="flex items-center gap-2 text-[13px] text-admin-status-red bg-admin-status-red-bg border border-[#FECACA] rounded-card px-4 py-3">
           <AlertTriangle className="w-4 h-4 shrink-0" />
@@ -227,9 +235,7 @@ export function PricingSettingsPage() {
               {dirty.size} unsaved change{dirty.size > 1 ? "s" : ""}
             </span>
             <div className="flex items-center gap-2">
-              <Button variant="ghost" onClick={handleDiscard} disabled={saving}>
-                Discard
-              </Button>
+              <Button variant="ghost" onClick={handleDiscard} disabled={saving}>Discard</Button>
               <Button onClick={handleSaveAll} loading={saving} iconLeft={<Save />}>
                 {saving ? "Saving…" : "Save configuration"}
               </Button>
@@ -254,8 +260,7 @@ function isCrewRate(setting: EditableSetting): boolean {
 }
 
 function byCrewRate(a: EditableSetting, b: EditableSetting): number {
-  const crewDiff = crewSizeFromKey(a.key) - crewSizeFromKey(b.key);
-  return crewDiff || a.key.localeCompare(b.key);
+  return crewSizeFromKey(a.key) - crewSizeFromKey(b.key) || a.key.localeCompare(b.key);
 }
 
 function SettingsCard({ icon, title, children }: { icon: React.ReactNode; title: string; children: React.ReactNode }) {

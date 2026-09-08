@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from "react";
-import { Navigation, Phone, Users } from "lucide-react";
+import { ArrowRight, Phone, Users } from "lucide-react";
 import { cx } from "../../ui";
 import { haptics } from "../../lib/haptics";
-import { mapsUrl, telUrl } from "../../lib/links";
+import { telUrl } from "../../lib/links";
 import type { Job } from "../../api/jobs";
 import { JobRoute } from "./JobRoute";
 import { jobStatusMeta } from "./JobStatusChip";
@@ -53,13 +53,19 @@ export interface FeaturedJobCardProps {
 
 /**
  * The next / active job — the one hero of the screen. A gradient panel with the
- * booked time set large in the mono face, a status pill, the customer, a drawn
- * pickup→drop-off route, and the two actions a driver takes first: navigate, call.
- * The whole card is a tap target that opens the job; the actions stop propagation.
+ * Calendar booking title set large in the mono face (e.g. "2 Men - £170 - 16:00"),
+ * a status pill, the customer, a drawn pickup→drop-off route, and the two actions a
+ * driver takes first: open the job, call. The whole card is a tap target that opens
+ * the job; the actions stop propagation.
  */
 export function FeaturedJobCard({ job, onOpen }: FeaturedJobCardProps) {
   const meta = jobStatusMeta(job);
   const { time, day } = when(job.bookedStart);
+  // The Calendar event title carries the crew / price / time the way ops wrote it.
+  // Ops also tack on a "/ N - SD" paid-flag + driver-initials tag the driver doesn't
+  // need, so show only what's before the slash. Fall back to the booked time on
+  // older jobs that never stored a title.
+  const heading = job.rawTitle?.split("/")[0].replace(/[\s-]+$/, "").trim() || time;
 
   // Keep the "starts in …" chip fresh without a heavy timer — a minute tick is plenty.
   const [nowMs, setNowMs] = useState(() => Date.now());
@@ -91,15 +97,17 @@ export function FeaturedJobCard({ job, onOpen }: FeaturedJobCardProps) {
         "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
       )}
     >
-      <div className="flex items-start justify-between gap-3">
+      <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
-          <div className="font-mono text-[34px] font-semibold leading-none tracking-[-0.03em] text-fg">{time}</div>
+          <div className="font-mono text-[22px] font-semibold leading-tight tracking-normal text-fg break-words">
+            {heading}
+          </div>
           <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1">
-            {day && <span className="font-mono text-[12px] text-fg-muted">{day}</span>}
+            {day && <span className="font-mono text-meta text-fg-muted">{day}</span>}
             {eta && (
               <span
                 className={cx(
-                  "inline-flex items-center rounded-pill px-2 py-0.5 font-mono text-[11px] font-semibold",
+                  "inline-flex items-center rounded-pill px-2 py-0.5 font-mono text-meta font-semibold",
                   eta.urgent ? "bg-warning-subtle text-warning" : "bg-surface-sunken text-fg-muted"
                 )}
               >
@@ -110,7 +118,7 @@ export function FeaturedJobCard({ job, onOpen }: FeaturedJobCardProps) {
         </div>
         <span
           className={cx(
-            "inline-flex shrink-0 items-center gap-1.5 rounded-pill px-3 py-1.5 text-[12.5px] font-bold",
+            "inline-flex shrink-0 items-center gap-1.5 rounded-pill px-3 py-1.5 text-helper font-bold",
             PILL[meta.signal] || PILL.upcoming
           )}
         >
@@ -119,15 +127,15 @@ export function FeaturedJobCard({ job, onOpen }: FeaturedJobCardProps) {
         </span>
       </div>
 
-      <div className="mt-4 text-[19px] font-bold tracking-[-0.01em] text-fg">
+      <div className="mt-4 text-[21px] font-bold tracking-normal text-fg [overflow-wrap:anywhere]">
         {job.customerName || "Unnamed customer"}
       </div>
 
       <JobRoute pickup={job.pickup} dropoff={job.dropoff} density="full" className="mt-4" />
 
       <div className="mt-[18px] flex items-center gap-3 border-t border-line pt-4">
-        <span className="inline-flex items-center gap-1.5 text-[13px] text-fg-muted">
-          <Users className="size-[15px] text-fg-subtle" aria-hidden />
+        <span className="inline-flex items-center gap-1.5 text-body text-fg-muted">
+          <Users className="size-[18px] text-fg-subtle" aria-hidden />
           {job.crewSize || "?"} crew
         </span>
         {job.basePrice > 0 && (
@@ -138,24 +146,25 @@ export function FeaturedJobCard({ job, onOpen }: FeaturedJobCardProps) {
       </div>
 
       <div className="mt-4 flex gap-2.5">
-        <a
-          href={mapsUrl(job.dropoff || job.pickup || "")}
-          target="_blank"
-          rel="noopener noreferrer"
-          onClick={e => e.stopPropagation()}
-          className="inline-flex min-h-[50px] flex-1 items-center justify-center gap-2 rounded-card bg-brand text-[15px] font-bold text-brand-fg transition-transform duration-fast active:scale-[0.97]"
+        <button
+          type="button"
+          onClick={e => {
+            e.stopPropagation();
+            open();
+          }}
+          className="inline-flex min-h-[56px] flex-1 items-center justify-center gap-2 rounded-card bg-brand text-[16px] font-bold text-brand-fg transition-transform duration-fast active:scale-[0.97]"
         >
-          <Navigation className="size-[18px]" aria-hidden />
-          Navigate
-        </a>
+          View Job
+          <ArrowRight className="size-[22px]" aria-hidden />
+        </button>
         {job.customerPhone && (
           <a
             href={telUrl(job.customerPhone)}
             onClick={e => e.stopPropagation()}
             aria-label="Call customer"
-            className="grid min-h-[50px] w-[50px] place-items-center rounded-card border border-line-strong bg-surface-sunken text-fg transition-transform duration-fast active:scale-[0.97]"
+            className="grid min-h-[56px] w-[56px] shrink-0 place-items-center rounded-card border border-line-strong bg-surface-sunken text-fg transition-transform duration-fast active:scale-[0.97]"
           >
-            <Phone className="size-[18px]" aria-hidden />
+            <Phone className="size-[22px]" aria-hidden />
           </a>
         )}
       </div>

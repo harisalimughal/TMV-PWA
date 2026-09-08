@@ -118,25 +118,25 @@ export default {
          * Weights are integer axis stops: Hanken Grotesk is a variable font.
          * ───────────────────────────────────────────────────────────────── */
         /** Completion headline / the screen greeting (a standalone hero line). */
-        display: ["27px", { lineHeight: "32px", letterSpacing: "-0.025em", fontWeight: "800" }],
+        display: ["29px", { lineHeight: "35px", letterSpacing: "0", fontWeight: "800" }],
         /** The one title per screen: page title, workflow step title. */
-        title: ["24px", { lineHeight: "29px", letterSpacing: "-0.02em", fontWeight: "800" }],
+        title: ["26px", { lineHeight: "32px", letterSpacing: "0", fontWeight: "800" }],
         /** A heading *inside* a screen — a section label, a card title. */
-        heading: ["15px", { lineHeight: "20px", letterSpacing: "-0.01em", fontWeight: "700" }],
+        heading: ["17px", { lineHeight: "23px", letterSpacing: "0", fontWeight: "700" }],
         /** Card title, and the primary line of a list row. */
-        card: ["15.5px", { lineHeight: "20px", letterSpacing: "-0.008em", fontWeight: "700" }],
+        card: ["17px", { lineHeight: "23px", letterSpacing: "0", fontWeight: "700" }],
         /** Small ALL-CAPS section marker (PICKUP / DELIVER). Pair with uppercase. */
-        eyebrow: ["11px", { lineHeight: "14px", letterSpacing: "0.02em", fontWeight: "620" }],
+        eyebrow: ["12px", { lineHeight: "16px", letterSpacing: "0", fontWeight: "620" }],
         /** Descriptive / paragraph copy. */
-        body: ["13.5px", { lineHeight: "19px", letterSpacing: "-0.005em", fontWeight: "440" }],
+        body: ["15px", { lineHeight: "22px", letterSpacing: "0", fontWeight: "440" }],
         /** Field labels, and the secondary line of a list row. */
-        label: ["13px", { lineHeight: "17px", letterSpacing: "-0.003em", fontWeight: "560" }],
+        label: ["14.5px", { lineHeight: "20px", letterSpacing: "0", fontWeight: "560" }],
         /** Helper text under an input; the quiet explanation. */
-        helper: ["12.5px", { lineHeight: "17px", letterSpacing: "0", fontWeight: "440" }],
+        helper: ["14px", { lineHeight: "20px", letterSpacing: "0", fontWeight: "440" }],
         /** Timestamps, counts, chip text — the smallest readable size. */
-        meta: ["12px", { lineHeight: "15px", letterSpacing: "0.002em", fontWeight: "500" }],
+        meta: ["13px", { lineHeight: "18px", letterSpacing: "0", fontWeight: "500" }],
         /** Shared button-label baseline (the Button component's md size). */
-        button: ["14px", { lineHeight: "16px", letterSpacing: "-0.003em", fontWeight: "620" }],
+        button: ["15.5px", { lineHeight: "20px", letterSpacing: "0", fontWeight: "620" }],
 
         /* ---- aliases — keep un-migrated (admin) screens resolving ---------- */
         hero: ["30px", { lineHeight: "36px", letterSpacing: "-0.02em", fontWeight: "700" }],

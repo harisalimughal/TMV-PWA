@@ -50,7 +50,7 @@ export type ButtonProps = ButtonAsButton | ButtonAsLink;
  * between variants. Heights are the shared control tokens (md = the 44px WCAG floor).*/
 const BASE =
   "relative inline-flex items-center justify-center gap-2 select-none whitespace-nowrap " +
-  "font-semibold leading-none tracking-[-0.005em] rounded-control border transition " +
+  "font-semibold leading-none tracking-normal rounded-control border transition " +
   "duration-fast ease-out outline-none " +
   "focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:ring-offset-bg " +
   "active:scale-[0.98] motion-reduce:active:scale-100 motion-reduce:transition-none " +
@@ -80,9 +80,9 @@ const VARIANTS: Record<ButtonVariant, string> = {
 /* Heights map to --control-h-*; padding and label size scale with them. Icons are
  * sized here so a button's icon is always proportional to its label. */
 const SIZES: Record<ButtonSize, string> = {
-  sm: "h-control-sm px-3 text-[13px] [&_svg]:size-4",
-  md: "h-control px-4 text-[14px] [&_svg]:size-[18px]",
-  lg: "h-control-lg px-5 text-[15px] [&_svg]:size-5"
+  sm: "h-control-sm px-3 text-label [&_svg]:size-[18px]",
+  md: "h-control px-4 text-button [&_svg]:size-5",
+  lg: "h-control-lg px-5 text-[16px] [&_svg]:size-[22px]"
 };
 
 export const Button = React.forwardRef<HTMLButtonElement | HTMLAnchorElement, ButtonProps>(

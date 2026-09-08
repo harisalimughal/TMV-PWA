@@ -1,7 +1,7 @@
 import React, { useState } from "react";
-import { ChevronDown, Navigation } from "lucide-react";
+import { ArrowRight, ChevronDown, Navigation } from "lucide-react";
 import { cx } from "../../ui";
-import { mapsUrl } from "../../lib/links";
+import { directionsUrl } from "../../lib/links";
 import { JobRoute } from "./JobRoute";
 
 export interface RouteCardProps {
@@ -46,24 +46,46 @@ export function RouteCard({ pickup, dropoff, collapsible = false, className }: R
   return (
     <div className={cx("rounded-lg border border-line bg-surface p-4 shadow-xs", className)}>
       <JobRoute pickup={pickup} dropoff={dropoff} density="full" />
-      <div className="mt-3 flex gap-4 border-t border-line pt-3">
-        {pickup && <MapLink label="Pickup" address={pickup} />}
-        {dropoff && <MapLink label="Delivery" address={dropoff} />}
+
+      {/* Pickup ──── Navigate ────▶ Delivery: the two ends keep their own map links,
+          with one long arrow between them broken by a Navigate button that opens
+          maps directions with both ends pre-filled. */}
+      <div className="mt-3 flex items-center gap-2 border-t border-line pt-3">
+        <RouteEndLabel label="Pickup" />
+
+        <div className="flex flex-1 items-center gap-1">
+          <span className="h-0.5 flex-1 rounded-full bg-brand" aria-hidden />
+          <a
+            href={directionsUrl(pickup, dropoff)}
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label="Navigate from pickup to delivery"
+            className={cx(
+              "inline-flex shrink-0 items-center gap-1.5 rounded-pill bg-brand px-2.5 py-1 text-meta font-bold text-brand-fg",
+              "transition-transform duration-fast active:scale-95",
+              "focus-visible:outline-2 focus-visible:outline-brand focus-visible:outline-offset-2"
+            )}
+          >
+            <Navigation className="size-3.5" aria-hidden />
+            Navigate
+          </a>
+          <span className="h-0.5 flex-1 rounded-full bg-brand" aria-hidden />
+          <ArrowRight className="-ml-2.5 size-7 shrink-0 stroke-[2.5] text-brand" aria-hidden />
+        </div>
+
+        <RouteEndLabel label="Delivery" />
       </div>
     </div>
   );
 }
 
-function MapLink({ label, address }: { label: string; address: string }) {
+/** A plain blue end-label ("Pickup" / "Delivery") — not a link; the one tappable
+ *  action on this row is the Navigate button in the middle. */
+function RouteEndLabel({ label }: { label: string }) {
   return (
-    <a
-      href={mapsUrl(address)}
-      target="_blank"
-      rel="noopener noreferrer"
-      className="inline-flex items-center gap-1.5 text-meta font-medium text-brand hover:text-brand-hover"
-    >
+    <span className="inline-flex shrink-0 items-center gap-1.5 text-meta font-semibold text-brand">
       <Navigation className="size-3.5" aria-hidden />
       {label}
-    </a>
+    </span>
   );
 }

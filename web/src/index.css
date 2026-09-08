@@ -45,7 +45,7 @@ body {
   /* Never let the browser fake a bold/italic — with a variable font every weight is
      real, and a synthesised one looks muddy. */
   font-synthesis: none;
-  letter-spacing: -0.005em; /* Hanken Grotesk reads a touch tight at UI sizes; a hair negative */
+  letter-spacing: 0;
   /* Tabular numerals everywhere — this is an operations tool: times, distances,
      prices and job numbers should align in columns. IBM Plex Mono (var(--font-mono))
      carries the actual dispatch-board figures. */
@@ -55,9 +55,9 @@ body {
 
 /* Small section eyebrow — used sparingly, e.g. "PICKUP" / "DELIVER" on a route. */
 .op-label {
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
-  letter-spacing: 0.06em;
+  letter-spacing: 0;
   text-transform: uppercase;
   color: rgb(var(--fg-subtle));
 }
