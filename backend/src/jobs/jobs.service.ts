@@ -303,6 +303,16 @@ export async function startJob(jobId: string, identifier: string): Promise<Job> 
     if (job.status === JobStatus.COMPLETED) throw new ValidationError("This job is already completed.");
 
     if (job.status === JobStatus.IN_PROGRESS) {
+      // A job walked back to READY (the header back-arrow on the arrival-photo step
+      // maps GO_BACK to READY) keeps status IN_PROGRESS. Without this it dead-ends:
+      // Start sees IN_PROGRESS and returns the job unchanged, still on READY. Nudge
+      // it forward again -- but not through the SMS / congestion-zone side effects,
+      // which already ran on the first start.
+      if (job.currentState === WorkflowState.READY) {
+        const from = job.currentState;
+        job.currentState = WorkflowState.WAITING_ARRIVAL_PHOTO;
+        return saveJob(job, driver, "START_JOB", from, "re-advanced from READY (already in progress)");
+      }
       log.info("start job ignored; already started", { job_id: job.jobId, state: job.currentState });
       return job;
     }
