@@ -6,7 +6,10 @@ import { DAMAGE_CATEGORIES } from "../workflow/scenario.spec";
 export interface SettingFieldSpec {
   key: string;
   label: string;
-  type: "text" | "textarea" | "number";
+  /** "password" renders masked with a reveal toggle -- used for API keys/tokens the
+   *  admin can rotate from the API Settings page, so they don't sit as plaintext on
+   *  screen by default. */
+  type: "text" | "textarea" | "number" | "password";
   fallback: string;
   hint?: string;
 }
@@ -90,6 +93,44 @@ export const SETTINGS_SPEC: SettingFieldSpec[] = [
     type: "textarea",
     fallback: JSON.stringify(DAMAGE_CATEGORIES),
     hint: "JSON array used by the driver Liability Report category picker."
+  },
+  /**
+   * Live-overridable integration credentials -- surfaced on the admin API Settings
+   * page. Saving one here takes effect immediately (every call site resolves it via
+   * getSetting() at request time, see config/live-settings.ts), no redeploy or VPS
+   * access needed. The .env.production value on the server stays the fallback: if
+   * nothing is ever saved here, behaviour is unchanged from today.
+   */
+  {
+    key: "FIRETEXT_API_KEY",
+    label: "Firetext API Key",
+    type: "password",
+    fallback: env.firetextApiKey,
+    hint: "firetext.co.uk API key for the customer \"your move has started\" SMS. Blank disables SMS sending."
+  },
+  {
+    key: "FIRETEXT_SENDER_ID",
+    label: "Firetext Sender ID",
+    type: "text",
+    fallback: env.firetextSenderId,
+    hint: "Shown as the text's \"from\". 3-11 alphanumeric characters (e.g. TheManVan), or a full international " +
+      "number -- not a UK 07... mobile number, which Firetext rejects."
+  },
+  {
+    key: "GPS_API",
+    label: "GPSLive API Key",
+    type: "password",
+    fallback: env.gpsApiKey,
+    hint: "gpslive.app API key for Live Fleet tracking, congestion/tunnel zone detection and the Alerts feed."
+  },
+  {
+    key: "TMV_GPSLIVE_WEBHOOK_TOKEN",
+    label: "GPSLive Webhook Token",
+    type: "password",
+    fallback: env.gpsLiveWebhookToken,
+    hint: "The random path segment in the webhook URL registered on GPSLive (Settings > Webhooks): " +
+      "/api/webhooks/gpslive/<this value>. Changing it invalidates the URL already configured there -- " +
+      "update GPSLive's webhook to match, or zone-crossing pushes stop arriving."
   }
 ];
 

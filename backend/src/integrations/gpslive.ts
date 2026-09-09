@@ -1,4 +1,5 @@
 import { env } from "../config/env";
+import { getGpsApiKey } from "../config/live-settings";
 import { withRetry, withTimeout } from "../utils/retry";
 
 /**
@@ -132,7 +133,8 @@ export function findDeviceForDriver(
  * show that explicitly.
  */
 export async function fetchGpsLiveDevices(): Promise<GpsLiveDevice[]> {
-  if (!env.gpsApiKey) return [];
+  const apiKey = await getGpsApiKey();
+  if (!apiKey) return [];
 
   const response = await withTimeout(
     "GPSLive devices.list",
@@ -140,7 +142,7 @@ export async function fetchGpsLiveDevices(): Promise<GpsLiveDevice[]> {
       "gpslive.devices.list",
       () =>
         fetch("https://api.gpslive.app/v1/devices/list", {
-          headers: { Authorization: `Bearer ${env.gpsApiKey}` }
+          headers: { Authorization: `Bearer ${apiKey}` }
         }),
       "idempotent"
     ),
@@ -182,7 +184,8 @@ export async function fetchGpsLiveAlertsForDevice(
   dateTo: string,
   search = ""
 ): Promise<GpsLiveAlertEvent[]> {
-  if (!env.gpsApiKey) return [];
+  const apiKey = await getGpsApiKey();
+  if (!apiKey) return [];
 
   const response = await withTimeout(
     "GPSLive alerts.custom",
@@ -192,7 +195,7 @@ export async function fetchGpsLiveAlertsForDevice(
         fetch("https://api.gpslive.app/v1/alerts/custom", {
           method: "POST",
           headers: {
-            Authorization: `Bearer ${env.gpsApiKey}`,
+            Authorization: `Bearer ${apiKey}`,
             "Content-Type": "application/json"
           },
           body: JSON.stringify({ dateFrom, dateTo, imeis: [imei], search, limit: 20 })
@@ -218,7 +221,8 @@ export async function fetchGpsLiveAlertsForDevice(
  * device or a time range. Same shape as fetchGpsLiveAlertsForDevice's rows.
  */
 export async function fetchGpsLiveNotifications(): Promise<GpsLiveAlertEvent[]> {
-  if (!env.gpsApiKey) return [];
+  const apiKey = await getGpsApiKey();
+  if (!apiKey) return [];
 
   const response = await withTimeout(
     "GPSLive alerts.notifications",
@@ -226,7 +230,7 @@ export async function fetchGpsLiveNotifications(): Promise<GpsLiveAlertEvent[]> 
       "gpslive.alerts.notifications",
       () =>
         fetch("https://api.gpslive.app/v1/alerts/notifications", {
-          headers: { Authorization: `Bearer ${env.gpsApiKey}` }
+          headers: { Authorization: `Bearer ${apiKey}` }
         }),
       "idempotent"
     ),
@@ -252,7 +256,8 @@ export interface GpsLiveZone {
 }
 
 export async function fetchGpsLiveZones(): Promise<GpsLiveZone[]> {
-  if (!env.gpsApiKey) return [];
+  const apiKey = await getGpsApiKey();
+  if (!apiKey) return [];
 
   const response = await withTimeout(
     "GPSLive places.zones",
@@ -260,7 +265,7 @@ export async function fetchGpsLiveZones(): Promise<GpsLiveZone[]> {
       "gpslive.places.zones",
       () =>
         fetch("https://api.gpslive.app/v1/places/zones", {
-          headers: { Authorization: `Bearer ${env.gpsApiKey}` }
+          headers: { Authorization: `Bearer ${apiKey}` }
         }),
       "idempotent"
     ),

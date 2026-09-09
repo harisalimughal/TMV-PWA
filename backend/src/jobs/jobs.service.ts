@@ -1,5 +1,6 @@
 import { DateTime } from "luxon";
 import { env } from "../config/env";
+import { getFiretextApiKey } from "../config/live-settings";
 import { getDriverProfile } from "../auth/driver-account.service";
 import { getJob, listJobs, upsertJob } from "../db/jobs.repo";
 import { appendActivity } from "../db/activity.repo";
@@ -249,6 +250,11 @@ export async function saveJob(
   return job;
 }
 
+/** Marker so the shared .catch() below in sendJobStartedSmsIfAny can tell "Firetext
+ *  has no key set right now" (expected, logs as SKIPPED) apart from a real send
+ *  failure (logs as FAILED). */
+class FiretextNotConfiguredError extends Error {}
+
 function sendJobStartedSmsIfAny(job: Job, driver: DriverProfile): void {
   const actor = driver.email || driver.chatUserName;
   if (!job.customerPhone) {
@@ -260,17 +266,12 @@ function sendJobStartedSmsIfAny(job: Job, driver: DriverProfile): void {
     }).catch(err => log.warn("job started SMS skip audit failed", { job_id: job.jobId, error: String(err) }));
     return;
   }
-  if (!env.firetextApiKey || !env.firetextSenderId) {
-    appendActivity({
-      jobId: job.jobId,
-      driver: actor,
-      action: "CLIENT_JOB_STARTED_SMS_SKIPPED",
-      detail: "Firetext is not configured"
-    }).catch(err => log.warn("job started SMS skip audit failed", { job_id: job.jobId, error: String(err) }));
-    return;
-  }
 
-  getSetting("JOB_STARTED_MESSAGE_TEXT", JOB_STARTED_MESSAGE_TEMPLATE)
+  getFiretextApiKey()
+    .then(apiKey => {
+      if (!apiKey) throw new FiretextNotConfiguredError("Firetext is not configured");
+      return getSetting("JOB_STARTED_MESSAGE_TEXT", JOB_STARTED_MESSAGE_TEMPLATE);
+    })
     .then(template => sendJobStartedSms(job, template, driver))
     .then(() => appendActivity({
       jobId: job.jobId,
@@ -279,12 +280,13 @@ function sendJobStartedSmsIfAny(job: Job, driver: DriverProfile): void {
       detail: job.customerPhone
     }))
     .catch(err => {
+      const skipped = err instanceof FiretextNotConfiguredError;
       const message = err instanceof Error ? err.message : String(err);
-      log.warn("job started SMS failed (non-fatal)", { job_id: job.jobId, error: message });
+      if (!skipped) log.warn("job started SMS failed (non-fatal)", { job_id: job.jobId, error: message });
       return appendActivity({
         jobId: job.jobId,
         driver: actor,
-        action: "CLIENT_JOB_STARTED_SMS_FAILED",
+        action: skipped ? "CLIENT_JOB_STARTED_SMS_SKIPPED" : "CLIENT_JOB_STARTED_SMS_FAILED",
         detail: message
       });
     })

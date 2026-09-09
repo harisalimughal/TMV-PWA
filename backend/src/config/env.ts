@@ -31,10 +31,15 @@ function boolEnv(name: string, fallback: boolean): boolean {
   return ["1", "true", "yes", "on"].includes(raw.toLowerCase());
 }
 
-function senderIdEnv(name: string, fallback: string): string {
-  const raw = process.env[name]?.trim() || fallback;
-  const sender = raw.replace(/[^A-Za-z0-9]/g, "").slice(0, 11);
+/** Firetext sender ID rule: 3-11 alphanumeric characters, no spaces. Exported so
+ *  config/live-settings.ts can apply the same rule to an admin-saved override. */
+export function sanitizeSenderId(raw: string, fallback: string): string {
+  const sender = (raw || fallback).replace(/[^A-Za-z0-9]/g, "").slice(0, 11);
   return sender || fallback;
+}
+
+function senderIdEnv(name: string, fallback: string): string {
+  return sanitizeSenderId(process.env[name]?.trim() || fallback, fallback);
 }
 
 export const env = {
