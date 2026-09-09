@@ -351,16 +351,6 @@ export function Layout({ activeSection, onSelectSection, onLogout, children }: P
         </header>
 
         <div className="flex-1 overflow-y-auto flex flex-col">
-          <div className="bg-white border-b border-admin-line px-4 md:px-8 py-4 md:py-5 flex items-center justify-between shrink-0">
-            <div className="flex items-center gap-3 min-w-0">
-              <div className="text-admin-brand shrink-0">
-                {currentNav.icon && <currentNav.icon className="w-5 h-5 md:w-6 md:h-6" />}
-              </div>
-              <h1 className="text-[17px] md:text-title text-fg tracking-tight truncate">{currentNav.label}</h1>
-            </div>
-            <div className="flex items-center gap-3" />
-          </div>
-
           <main className="flex-1 p-4 md:p-8">{children}</main>
         </div>
       </div>

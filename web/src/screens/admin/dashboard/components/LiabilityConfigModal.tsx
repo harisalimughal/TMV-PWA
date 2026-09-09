@@ -131,6 +131,22 @@ export function LiabilityConfigModal({ isOpen, onClose }: Props) {
                 </div>
               )}
 
+              <div className="flex flex-col gap-2 border-b border-admin-line pb-4 sm:flex-row">
+                <input
+                  type="text"
+                  value={newCategory}
+                  onChange={event => setNewCategory(event.target.value)}
+                  onKeyDown={event => {
+                    if (event.key === "Enter") addCategory();
+                  }}
+                  className="h-11 min-w-0 flex-1 rounded-control border border-admin-line bg-white px-3 text-[14px] text-admin-ink shadow-sm outline-none transition focus:border-admin-brand"
+                  placeholder="New category"
+                />
+                <Button variant="secondary" onClick={addCategory} iconLeft={<Plus />} className="shrink-0">
+                  Add category
+                </Button>
+              </div>
+
               <div className="space-y-2">
                 {categories.map((category, index) => (
                   <div key={index} className="flex items-center gap-2">
@@ -151,22 +167,6 @@ export function LiabilityConfigModal({ isOpen, onClose }: Props) {
                     </button>
                   </div>
                 ))}
-              </div>
-
-              <div className="flex flex-col gap-2 border-t border-admin-line pt-4 sm:flex-row">
-                <input
-                  type="text"
-                  value={newCategory}
-                  onChange={event => setNewCategory(event.target.value)}
-                  onKeyDown={event => {
-                    if (event.key === "Enter") addCategory();
-                  }}
-                  className="h-11 min-w-0 flex-1 rounded-control border border-admin-line bg-white px-3 text-[14px] text-admin-ink shadow-sm outline-none transition focus:border-admin-brand"
-                  placeholder="New category"
-                />
-                <Button variant="secondary" onClick={addCategory} iconLeft={<Plus />} className="shrink-0">
-                  Add category
-                </Button>
               </div>
             </div>
           )}
