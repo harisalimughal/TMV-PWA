@@ -10,7 +10,7 @@
 import React, { useState, useEffect } from "react";
 import {
   LayoutDashboard, Navigation, Truck, CheckSquare, LogIn, LogOut, AlertCircle, ShieldAlert,
-  Users, Banknote, History, FileSpreadsheet, RefreshCw,
+  Users, Banknote, History, FileSpreadsheet, RefreshCw, KeyRound,
   ChevronLeft, ChevronRight, Search, Command, MessageSquare, Bell, Menu, X
 } from "lucide-react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
@@ -46,7 +46,9 @@ const NAV_CONFIG: NavSectionItem[] = [
   { type: "header", label: "Operations" },
   { id: "overview", label: "Overview", icon: LayoutDashboard, desc: "Executive KPI telemetry, revenue velocity and operational health" },
   { id: "livefleet", label: "Live Fleet", icon: Navigation, isLive: true, desc: "Real-time GPS vehicle positions and driver telemetry" },
+  { id: "alerts", label: "Alerts", icon: ShieldAlert, desc: "GPSLive's fleet alert feed, including congestion zone crossings" },
   { id: "jobs", label: "Jobs", icon: Truck, desc: "Operational moves joined across Jobs, Drivers, Workflow and Evidence" },
+  { id: "van", label: "Van", icon: Truck, desc: "Driver mileage, fuel and service records" },
   { id: "finished", label: "Finished Jobs", icon: CheckSquare, desc: "Completed moves audit with verified evidence and sign-off records" },
   { id: "notifications", label: "Notifications & Push", icon: Bell, desc: "Automated communication audit across Email, SMS and Web Push channels" },
   { type: "header", label: "Scenarios" },
@@ -57,6 +59,7 @@ const NAV_CONFIG: NavSectionItem[] = [
   { type: "header", label: "Management" },
   { id: "drivers", label: "Drivers", icon: Users, desc: "Driver scorecards, revenue handled and punctuality metrics" },
   { id: "pricing", label: "Pricing Settings", icon: Banknote, desc: "Configure crew rates, packing service pricing, and overtime rules" },
+  { id: "api", label: "API", icon: KeyRound, desc: "Firetext and GPSLive credentials -- changes apply immediately, no redeploy" },
   { id: "activity", label: "Activity Log", icon: History, desc: "Chronological audit records directly from the activity log" },
   { id: "reports", label: "Reports", icon: FileSpreadsheet, desc: "Downloadable operational datasets and certified export files" },
   { id: "messaging", label: "Messaging Content", icon: MessageSquare, desc: "Manage automated customer and driver communication templates" }
