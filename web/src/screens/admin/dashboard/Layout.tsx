@@ -10,11 +10,11 @@
 import React, { useState, useEffect } from "react";
 import {
   LayoutDashboard, Navigation, Truck, CheckSquare, LogIn, LogOut, AlertCircle, ShieldAlert,
-  Users, Banknote, AlertTriangle, History, FileSpreadsheet, Settings, Smartphone, RefreshCw,
+  Users, Banknote, History, FileSpreadsheet, RefreshCw,
   ChevronLeft, ChevronRight, Search, Command, MessageSquare, Bell, Menu, X
 } from "lucide-react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { fetchExceptions, triggerDatasetRefresh } from "./api";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { triggerDatasetRefresh } from "./api";
 import { CommandPalette } from "./components/CommandPalette";
 import { ShortcutsModal } from "./components/ShortcutsModal";
 import { formatLondonTimeOnly } from "./utils/date";
@@ -32,7 +32,6 @@ interface NavItem {
   label: string;
   icon?: React.ComponentType<{ className?: string }>;
   isLive?: boolean;
-  hasBadge?: boolean;
   desc?: string;
 }
 
@@ -58,12 +57,9 @@ const NAV_CONFIG: NavSectionItem[] = [
   { type: "header", label: "Management" },
   { id: "drivers", label: "Drivers", icon: Users, desc: "Driver scorecards, revenue handled and punctuality metrics" },
   { id: "pricing", label: "Pricing Settings", icon: Banknote, desc: "Configure crew rates, packing service pricing, and overtime rules" },
-  { id: "pwasettings", label: "PWA & Push Settings", icon: Smartphone, desc: "Device push notifications, PWA installation and background sync" },
-  { id: "exceptions", label: "Exceptions", icon: AlertTriangle, hasBadge: true, desc: "Operational exceptions and quality control alerts" },
   { id: "activity", label: "Activity Log", icon: History, desc: "Chronological audit records directly from the activity log" },
   { id: "reports", label: "Reports", icon: FileSpreadsheet, desc: "Downloadable operational datasets and certified export files" },
-  { id: "messaging", label: "Messaging Content", icon: MessageSquare, desc: "Manage automated customer and driver communication templates" },
-  { id: "settings", label: "Settings", icon: Settings, desc: "Read-only system rules, rates, caching invariants and database mapping" }
+  { id: "messaging", label: "Messaging Content", icon: MessageSquare, desc: "Manage automated customer and driver communication templates" }
 ];
 
 export function Layout({ activeSection, onSelectSection, onLogout, children }: Props) {
@@ -103,12 +99,6 @@ export function Layout({ activeSection, onSelectSection, onLogout, children }: P
       document.body.style.overflow = previousOverflow;
     };
   }, [mobileNavOpen]);
-
-  const { data: exData } = useQuery({
-    queryKey: ["exceptions_badge"],
-    queryFn: () => fetchExceptions(undefined, undefined, undefined, true),
-    refetchInterval: 30000
-  });
 
   const refreshMutation = useMutation({
     mutationFn: triggerDatasetRefresh,
@@ -156,9 +146,6 @@ export function Layout({ activeSection, onSelectSection, onLogout, children }: P
         case "d":
           onSelectSection("drivers");
           break;
-        case "e":
-          onSelectSection("exceptions");
-          break;
         default:
           break;
       }
@@ -166,9 +153,6 @@ export function Layout({ activeSection, onSelectSection, onLogout, children }: P
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [onSelectSection, refreshMutation, paletteOpen, shortcutsOpen]);
-
-  const rawBadgeCount = exData?.activeBadgeCount ?? exData?.total ?? 0;
-  const exceptionsBadgeLabel = rawBadgeCount > 999 ? "999+" : rawBadgeCount > 99 ? "99+" : rawBadgeCount > 0 ? String(rawBadgeCount) : null;
 
   const currentNav = NAV_CONFIG.find(n => (n as NavItem).id === activeSection) as NavItem || NAV_CONFIG[1] as NavItem;
 
@@ -249,17 +233,8 @@ export function Layout({ activeSection, onSelectSection, onLogout, children }: P
                     </span>
                   )}
 
-                  {!effectiveCollapsed && navItem.hasBadge && exceptionsBadgeLabel && (
-                    <span className="ml-auto flex items-center justify-center px-1.5 min-w-[20px] h-5 rounded-full bg-admin-status-red text-white text-[11px] font-bold">
-                      {exceptionsBadgeLabel}
-                    </span>
-                  )}
-
                   {effectiveCollapsed && navItem.isLive && (
                     <span className="w-2 h-2 rounded-full bg-admin-status-green absolute right-2 ring-2 ring-white" />
-                  )}
-                  {effectiveCollapsed && navItem.hasBadge && exceptionsBadgeLabel && (
-                    <span className="w-2 h-2 rounded-full bg-admin-status-red absolute right-2 ring-2 ring-white" />
                   )}
                 </button>
               );
