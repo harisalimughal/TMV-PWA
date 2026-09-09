@@ -1,9 +1,9 @@
 import crypto from "node:crypto";
 import { Request, Response, Router } from "express";
-import { env } from "../config/env";
+import { getGpsLiveWebhookToken } from "../config/live-settings";
 import { listDriverProfiles } from "../auth/driver-account.service";
 import { listJobs } from "../db/jobs.repo";
-import { flagCongestionZoneEntry } from "../jobs/congestion-zone.service";
+import { flagCongestionZoneEntry, flagTunnelZoneEntry } from "../jobs/congestion-zone.service";
 import { buildDriverMatchIndex, guessPlateFromDeviceName, matchDriverByPlateAndName } from "./gpslive";
 import { JobStatus } from "../jobs/job.types";
 import { log } from "../utils/logger";
@@ -12,10 +12,12 @@ import { log } from "../utils/logger";
  * One event from GPSLive's account-level Webhooks feature (Settings > Webhooks,
  * "Alerts" type). That feature forwards every alert on the account, not just the
  * ones we care about -- the client's existing "CHARGES - ALERTS" rule (type "Zone In
- * or Out") also covers a separate Tunnels zone we deliberately ignore below, plus
- * Crash Detection/Engine Idle/Ignition On/Moving alerts from other rules entirely.
- * Undocumented beyond what a live payload showed us; treat every field as possibly
- * absent.
+ * or Out") covers both the Congestion Charge zone and a separate "Tunnels-Black-
+ * Silver"/Dartford Crossing tunnel zone, both handled below (different job field,
+ * different push copy, same idempotent-per-job flagging); everything else -- Crash
+ * Detection/Engine Idle/Ignition On/Moving alerts from other rules entirely -- is
+ * ignored. Undocumented beyond what a live payload showed us; treat every field as
+ * possibly absent.
  */
 interface GpsLiveWebhookEvent {
   event_id?: string;
@@ -43,7 +45,8 @@ export function gpsLiveWebhookRoutes(): Router {
   const router = Router();
 
   router.post("/:token", async (req: Request, res: Response) => {
-    if (!env.gpsLiveWebhookToken || !tokenMatches(String(req.params.token), env.gpsLiveWebhookToken)) {
+    const expectedToken = await getGpsLiveWebhookToken();
+    if (!expectedToken || !tokenMatches(String(req.params.token), expectedToken)) {
       res.status(404).end();
       return;
     }
@@ -52,9 +55,11 @@ export function gpsLiveWebhookRoutes(): Router {
 
     try {
       // event_desc's zone name also covers a separate "Tunnels-Black-Silver" zone
-      // under the same alert rule, which this substring check deliberately excludes
-      // -- that's a different charge (tunnel toll, not congestion).
-      if (event.type !== "zone_in" || !event.event_desc?.includes("Congestion")) {
+      // under the same alert rule -- handled identically to Congestion below, just a
+      // different job field/push copy and a different Extra Charges suggestion.
+      const isCongestion = event.event_desc?.includes("Congestion");
+      const isTunnel = event.event_desc?.includes("Tunnel");
+      if (event.type !== "zone_in" || (!isCongestion && !isTunnel)) {
         res.status(200).json({ ok: true, ignored: true });
         return;
       }
@@ -103,22 +108,31 @@ export function gpsLiveWebhookRoutes(): Router {
         return;
       }
 
-      if (activeJob.congestionZoneEnteredAt) {
+      const zone = isCongestion ? "congestion" : "tunnel";
+      const alreadyFlagged = isCongestion ? activeJob.congestionZoneEnteredAt : activeJob.tunnelZoneEnteredAt;
+      if (alreadyFlagged) {
         // Already notified for this job -- GPSLive fires "Zone In" on every pass
         // through the zone (and retries failed deliveries), not just the first.
         res.status(200).json({ ok: true, alreadyFlagged: true });
         return;
       }
 
-      await flagCongestionZoneEntry(activeJob.jobId, driverInitials, {
-        title: "Entered Central London",
-        body: "Congestion charge may apply -- add it on the Extra Charges step."
-      });
+      if (isCongestion) {
+        await flagCongestionZoneEntry(activeJob.jobId, driverInitials, {
+          title: "Entered Central London",
+          body: "Congestion charge may apply -- add it on the Extra Charges step."
+        });
+      } else {
+        await flagTunnelZoneEntry(activeJob.jobId, driverInitials, {
+          title: "Entered a tunnel toll zone",
+          body: "Tunnel charge may apply -- add it on the Extra Charges step."
+        });
+      }
 
-      log.info("congestion zone entry detected via webhook", {
+      log.info(`${zone} zone entry detected via webhook`, {
         job_id: activeJob.jobId, driver: driverInitials, event_id: event.event_id, matched_by: matchedBy
       });
-      res.status(200).json({ ok: true, flagged: true });
+      res.status(200).json({ ok: true, flagged: true, zone });
     } catch (error) {
       log.error("gpslive congestion webhook failed", error);
       res.status(500).json({ error: { code: "WEBHOOK_PROCESSING_FAILED" } });

@@ -51,6 +51,9 @@ export interface Job {
    *  Congestion Charge zone (GPSLive geofence webhook) -- drives the extra-charges
    *  suggestion banner. Unset if never detected. */
   congestionZoneEnteredAt?: string;
+  /** Same as congestionZoneEnteredAt but for a tunnel toll zone (Dartford Crossing /
+   *  Tunnels-Black-Silver) -- drives the Extra Charges "Tunnel Charges" suggestion. */
+  tunnelZoneEnteredAt?: string;
   signatureUrl: string;
   status: "READY" | "IN_PROGRESS" | "COMPLETED" | "CANCELLED";
   currentState: string;

@@ -10,7 +10,7 @@ import {
 } from "../../integrations/gpslive";
 import { listDriverProfiles } from "../../auth/driver-account.service";
 import { jobsCollection } from "../../db/mongo";
-import { ExtraChargeType } from "../../jobs/job.types";
+import { ExtraChargeType, Job } from "../../jobs/job.types";
 import { log } from "../../utils/logger";
 
 export interface LiveFleetVehicle {
@@ -135,31 +135,38 @@ export interface CongestionDetectionRow {
    *  -- surfaced mainly so a wrong/missing value is visible here rather than only
    *  discoverable by reading the job doc directly. */
   gpsliveImei: string | null;
+  /** Which zone this row is for -- the same panel covers both. */
+  zone: "congestion" | "tunnel";
 }
 
 /**
  * Every job GPSLive (or the job-start check, see jobs/congestion-zone.service.ts)
- * has flagged as having entered the Congestion Charge zone -- lets ops see whether
- * the driver actually added the charge on the extra-charges step or not, which
- * congestionZoneEnteredAt alone doesn't answer.
+ * has flagged as having entered the Congestion Charge zone or the tunnel-toll zone --
+ * lets ops see whether the driver actually added the matching charge on the
+ * extra-charges step or not, which *ZoneEnteredAt alone doesn't answer.
  */
-async function getCongestionDetections(): Promise<CongestionDetectionRow[]> {
+async function getZoneDetections(): Promise<CongestionDetectionRow[]> {
   const col = await jobsCollection();
-  const [jobs, drivers] = await Promise.all([
+  const [congestionJobs, tunnelJobs, drivers] = await Promise.all([
     col
       .find({ congestionZoneEnteredAt: { $exists: true, $ne: "" } } as any)
       .sort({ congestionZoneEnteredAt: -1 })
       .limit(100)
       .toArray(),
+    col
+      .find({ tunnelZoneEnteredAt: { $exists: true, $ne: "" } } as any)
+      .sort({ tunnelZoneEnteredAt: -1 })
+      .limit(100)
+      .toArray(),
     listDriverProfiles().catch(error => {
-      log.warn("congestion detections: driver lookup unavailable", { error: String(error) });
+      log.warn("zone detections: driver lookup unavailable", { error: String(error) });
       return [];
     })
   ]);
 
   const driverByInitials = new Map(drivers.map(d => [d.initials, d]));
 
-  return jobs.map(job => {
+  const toRow = (job: Job, zone: "congestion" | "tunnel"): CongestionDetectionRow => {
     const driver = driverByInitials.get(job.driverInitials);
     return {
       jobId: job.jobId,
@@ -167,12 +174,20 @@ async function getCongestionDetections(): Promise<CongestionDetectionRow[]> {
       driverInitials: job.driverInitials || "",
       driverName: driver?.fullName ?? null,
       vanRegistration: driver?.vanRegistration ?? null,
-      detectedAt: job.congestionZoneEnteredAt!,
+      detectedAt: (zone === "congestion" ? job.congestionZoneEnteredAt : job.tunnelZoneEnteredAt)!,
       jobStatus: job.status,
-      chargeAdded: (job.extraCharges || []).includes(ExtraChargeType.CONGESTION),
-      gpsliveImei: job.gpsliveImei || null
+      chargeAdded: (job.extraCharges || []).includes(
+        zone === "congestion" ? ExtraChargeType.CONGESTION : ExtraChargeType.TUNNEL
+      ),
+      gpsliveImei: job.gpsliveImei || null,
+      zone
     };
-  });
+  };
+
+  return [
+    ...congestionJobs.map(job => toRow(job, "congestion")),
+    ...tunnelJobs.map(job => toRow(job, "tunnel"))
+  ].sort((a, b) => b.detectedAt.localeCompare(a.detectedAt));
 }
 
 export function dashboardFleetRoutes(): Router {
@@ -200,11 +215,11 @@ export function dashboardFleetRoutes(): Router {
 
   router.get("/congestion", async (_req: Request, res: Response) => {
     try {
-      const rows = await getCongestionDetections();
+      const rows = await getZoneDetections();
       return res.status(200).json({ rows });
     } catch (error) {
-      log.error("congestion detections lookup failed", error);
-      return res.status(502).json({ error: { code: "CONGESTION_LOOKUP_FAILED", message: "Failed to fetch congestion zone detections." } });
+      log.error("zone detections lookup failed", error);
+      return res.status(502).json({ error: { code: "CONGESTION_LOOKUP_FAILED", message: "Failed to fetch congestion/tunnel zone detections." } });
     }
   });
 

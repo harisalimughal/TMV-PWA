@@ -266,7 +266,7 @@ export async function deleteDriver(email: string): Promise<{ ok: true }> {
 export interface EditableSetting {
   key: string;
   label: string;
-  type: "text" | "textarea" | "number";
+  type: "text" | "textarea" | "number" | "password";
   fallback: string;
   hint?: string;
   value: string;
@@ -337,6 +337,8 @@ export interface CongestionDetectionRow {
   jobStatus: string;
   chargeAdded: boolean;
   gpsliveImei: string | null;
+  /** Which zone this row is for -- the same panel/endpoint covers both. */
+  zone: "congestion" | "tunnel";
 }
 
 export async function fetchCongestionDetections(): Promise<{ rows: CongestionDetectionRow[] }> {

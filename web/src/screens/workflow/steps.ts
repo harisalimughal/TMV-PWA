@@ -127,9 +127,13 @@ export const EXTRA_TIME_CHARGE = "Extra time / Charges";
  *  suggests on the Extra Charges step. */
 export const CONGESTION_CHARGE = "London Congestion charge";
 
+/** Same as CONGESTION_CHARGE but for a GPSLive tunnel-toll-zone detection (see
+ *  Job.tunnelZoneEnteredAt) -- Dartford Crossing / Tunnels-Black-Silver. */
+export const TUNNEL_CHARGE = "Tunnel Charges";
+
 export const EXTRA_CHARGE_OPTIONS = [
   CONGESTION_CHARGE,
-  "Tunnel Charges",
+  TUNNEL_CHARGE,
   EXTRA_TIME_CHARGE,
   "No Extras Time"
 ];

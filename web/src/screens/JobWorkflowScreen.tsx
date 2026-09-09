@@ -36,6 +36,7 @@ import {
   overtimeApplies,
   PAYMENT_METHODS,
   STEPS,
+  TUNNEL_CHARGE,
   workflowProgress
 } from "./workflow/steps";
 
@@ -840,6 +841,11 @@ function StepBody({
           {job.congestionZoneEnteredAt && (
             <Alert tone="info" title="Central London detected">
               This job passed through the Congestion Charge zone — consider adding "{CONGESTION_CHARGE}" below.
+            </Alert>
+          )}
+          {job.tunnelZoneEnteredAt && (
+            <Alert tone="info" title="Tunnel toll zone detected">
+              This job passed through a tunnel toll zone — consider adding "{TUNNEL_CHARGE}" below.
             </Alert>
           )}
           <ChoiceGroup legend="Extra charges" hint="Select every one that applies.">

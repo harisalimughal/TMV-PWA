@@ -36,9 +36,9 @@ export function LiveFleetPage({ onSelectSection }: Props) {
         }}
       />
 
-      {/* 3. Congestion Zone Detections — only rendered once there's at least one
-          detection to show, so it isn't an empty box under the map the rest of the
-          time. It reappears automatically on the first hit (30s poll). */}
+      {/* 3. Zone Detections (Congestion + Tunnel) — only rendered once there's at
+          least one detection to show, so it isn't an empty box under the map the
+          rest of the time. It reappears automatically on the first hit (30s poll). */}
       {!congestionLoading && (congestionData?.rows?.length ?? 0) > 0 && (
         <CongestionZonePanel rows={congestionData!.rows} isLoading={false} />
       )}
@@ -47,9 +47,9 @@ export function LiveFleetPage({ onSelectSection }: Props) {
 }
 
 /** Every job GPSLive (or the job-start check) has flagged as having entered the
- *  Congestion Charge zone -- congestionZoneEnteredAt alone doesn't say whether the
- *  driver actually added the charge on the extra-charges step, so this cross-checks
- *  extraCharges too. */
+ *  Congestion Charge zone or the tunnel-toll zone -- *ZoneEnteredAt alone doesn't say
+ *  whether the driver actually added the matching charge on the extra-charges step,
+ *  so this cross-checks extraCharges too. */
 function CongestionZonePanel({
   rows,
   isLoading
@@ -60,9 +60,10 @@ function CongestionZonePanel({
   return (
     <div className="bg-white rounded-module shadow-sm border border-admin-line overflow-hidden">
       <div className="px-4 py-3 border-b border-admin-line bg-admin-surface/60">
-        <h3 className="text-[14px] font-bold text-admin-ink">Congestion Zone Detections</h3>
+        <h3 className="text-[14px] font-bold text-admin-ink">Zone Detections</h3>
         <p className="text-xs text-admin-muted mt-0.5">
-          Jobs whose van was detected inside London's Congestion Charge zone (GPSLive geofence)
+          Jobs whose van was detected inside London's Congestion Charge zone or a tunnel toll zone
+          (Dartford Crossing / Tunnels-Black-Silver) via GPSLive geofences
         </p>
       </div>
 
@@ -71,7 +72,7 @@ function CongestionZonePanel({
       )}
 
       {!isLoading && rows.length === 0 && (
-        <div className="p-8 text-center text-admin-muted text-[13px]">No congestion zone detections yet.</div>
+        <div className="p-8 text-center text-admin-muted text-[13px]">No zone detections yet.</div>
       )}
 
       {!isLoading && rows.length > 0 && (
@@ -79,6 +80,7 @@ function CongestionZonePanel({
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="border-b border-admin-line bg-admin-surface/60 text-eyebrow text-fg-subtle">
+                <th className="py-3 px-4 font-bold">Zone</th>
                 <th className="py-3 px-4 font-bold">Job ID</th>
                 <th className="py-3 px-4 font-bold">Customer</th>
                 <th className="py-3 px-4 font-bold">Driver</th>
@@ -86,15 +88,26 @@ function CongestionZonePanel({
                 <th className="py-3 px-4 font-bold">Pinned Device</th>
                 <th className="py-3 px-4 font-bold">Detected (UK)</th>
                 <th className="py-3 px-4 font-bold">Job Status</th>
-                <th className="py-3 px-4 font-bold">Congestion Charge</th>
+                <th className="py-3 px-4 font-bold">Charge</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-admin-line">
               {rows.map(row => {
                 const driverInit = row.driverInitials || "UN";
                 return (
-                  <tr key={row.jobId} className="hover:bg-admin-surface/40 transition">
-                    <td className="px-4 py-3 text-[13px] font-mono font-medium text-admin-ink">{row.jobId}</td>
+                  <tr key={`${row.zone}-${row.jobId}`} className="hover:bg-admin-surface/40 transition">
+                    <td className="px-4 py-3">
+                      <span
+                        className={`px-2 py-1 rounded-full text-[11px] font-bold uppercase tracking-wider ${
+                          row.zone === "congestion"
+                            ? "bg-info-subtle text-info"
+                            : "bg-violet-100 text-violet-700"
+                        }`}
+                      >
+                        {row.zone === "congestion" ? "Congestion" : "Tunnel"}
+                      </span>
+                    </td>
+                    <td className="px-4 text-[13px] font-mono font-medium text-admin-ink">{row.jobId}</td>
                     <td className="px-4 text-[14px] text-admin-ink font-medium">
                       <span className="truncate max-w-[150px] inline-block">{row.customerName || "—"}</span>
                     </td>

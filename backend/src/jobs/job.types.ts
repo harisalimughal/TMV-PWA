@@ -95,6 +95,10 @@ export interface Job {
    *  leaving and re-entering the zone doesn't notify again); unset if never detected,
    *  or if GPSLive tracking isn't wired up for this van. */
   congestionZoneEnteredAt?: string;
+  /** Same as congestionZoneEnteredAt but for the Dartford Crossing / "Tunnels-Black-
+   *  Silver" tunnel toll zone -- drives the "Entered a tunnel toll zone" driver push
+   *  and the Extra Charges "Tunnel Charges" suggestion banner. */
+  tunnelZoneEnteredAt?: string;
   /** The GPSLive device IMEI resolved for this job's driver at the moment the job
    *  started (see jobs/congestion-zone.service.ts's checkCongestionZoneAtJobStart) --
    *  pinned once and never re-resolved, so a driver's van assignment changing later
