@@ -99,7 +99,7 @@ export function FeaturedJobCard({ job, onOpen }: FeaturedJobCardProps) {
     >
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
-          <div className="font-mono text-[22px] font-semibold leading-tight tracking-normal text-fg break-words">
+          <div className="font-mono text-[22px] font-bold leading-tight tracking-normal text-fg break-words">
             {heading}
           </div>
           <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1">
@@ -127,7 +127,7 @@ export function FeaturedJobCard({ job, onOpen }: FeaturedJobCardProps) {
         </span>
       </div>
 
-      <div className="mt-4 text-[21px] font-bold tracking-normal text-fg [overflow-wrap:anywhere]">
+      <div className="mt-4 text-[19px] font-semibold tracking-normal text-fg [overflow-wrap:anywhere]">
         {job.customerName || "Unnamed customer"}
       </div>
 

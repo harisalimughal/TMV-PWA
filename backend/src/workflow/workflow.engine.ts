@@ -395,7 +395,7 @@ const BACK_TARGET: Partial<Record<WorkflowState, WorkflowState | ((job: Job) => 
   [WorkflowState.IN_PROGRESS]: WorkflowState.WAITING_LOADED_PHOTO,
   [WorkflowState.WAITING_EMPTY_VAN_ISSUES_CHECK]: WorkflowState.WAITING_LOADED_PHOTO,
   [WorkflowState.WAITING_EMPTY_VAN_ISSUES_CHOICE]: WorkflowState.WAITING_EMPTY_VAN_ISSUES_CHECK,
-  [WorkflowState.WAITING_EXTRA_CHARGES]: WorkflowState.WAITING_LOADED_PHOTO,
+  // Extra Charges is reached from the drop-off issues check, so Back returns there.
   [WorkflowState.WAITING_EXTRA_CHARGES]: WorkflowState.WAITING_EMPTY_VAN_ISSUES_CHECK,
   [WorkflowState.WAITING_OVERTIME]: WorkflowState.WAITING_EXTRA_CHARGES,
   [WorkflowState.WAITING_TOTAL_CHARGES]: job =>

@@ -23,7 +23,7 @@ export interface StepMeta {
   order: number;
 }
 
-export const TOTAL_STEPS = 11;
+export const TOTAL_STEPS = 12;
 
 export const STEPS: Record<string, StepMeta> = {
   READY: {
@@ -54,57 +54,57 @@ export const STEPS: Record<string, StepMeta> = {
   IN_PROGRESS: {
     label: "Move in progress",
     hint: "Finish the move when everything is unloaded at the drop-off address.",
-    order: 5
+    order: 4
   },
   WAITING_EMPTY_VAN_ISSUES_CHECK: {
     label: "Any issues at drop-off point?",
     hint: "Choose a report if needed, or continue with no issues.",
-    order: 6
+    order: 5
   },
   WAITING_EMPTY_VAN_ISSUES_CHOICE: {
     label: "Record the issue",
     hint: "Pick the form that matches what happened.",
-    order: 6
+    order: 5
   },
   WAITING_EXTRA_CHARGES: {
     label: "Extra charges",
     hint: "Select everything that applies. Pick “No Extras Time” if there were none.",
-    order: 5
+    order: 6
   },
   WAITING_OVERTIME: {
     label: "Overtime",
     hint: "Minutes worked beyond the booked window, and who was working them.",
-    order: 6
+    order: 7
   },
   WAITING_TOTAL_CHARGES: {
     label: "Total charges",
     hint: "The final amount for this job, including any extras and overtime.",
-    order: 7
+    order: 8
   },
   WAITING_PAYMENT: {
     label: "Payment method",
     hint: "How the customer is paying.",
-    order: 8
+    order: 9
   },
   WAITING_EMPTY_VAN_PHOTO: {
     label: "Empty van photo (drop-off point)",
     hint: "Show the van empty at the drop-off — proof nothing was left behind.",
-    order: 9
+    order: 10
   },
   WAITING_CLIENT_CONFIRMATION: {
     label: "Customer sign-off",
     hint: "Hand your phone to the customer to review and sign.",
-    order: 10
+    order: 11
   },
   WAITING_REVIEW_CHECK: {
     label: "Ask for a review?",
     hint: "Only if the customer is happy to leave one.",
-    order: 11
+    order: 12
   },
   WAITING_REVIEW_SEND: {
     label: "Send review email",
     hint: "This finishes the job.",
-    order: 11
+    order: 12
   },
   COMPLETED: { label: "Job complete", order: TOTAL_STEPS }
 };

@@ -57,7 +57,7 @@ export function nextState(
     case "WAITING_ARRIVAL_ISSUES_CHOICE":
       return trigger === "scenario" ? "WAITING_LOADED_PHOTO" : current;
     case "WAITING_LOADED_PHOTO":
-      return trigger === "evidence" ? "WAITING_EXTRA_CHARGES" : current;
+      // After the van-loaded photo: "Any issues at drop-off point?" before Extra Charges.
       return trigger === "evidence" ? "WAITING_EMPTY_VAN_ISSUES_CHECK" : current;
     case "IN_PROGRESS":
       return trigger === "FINISH_MOVE" ? "WAITING_EMPTY_VAN_ISSUES_CHECK" : current;
@@ -109,7 +109,7 @@ function prevState(current: string, job: Job): string {
     case "WAITING_EMPTY_VAN_ISSUES_CHOICE":
       return "WAITING_EMPTY_VAN_ISSUES_CHECK";
     case "WAITING_EXTRA_CHARGES":
-      return "WAITING_LOADED_PHOTO";
+      return "WAITING_EMPTY_VAN_ISSUES_CHECK";
     case "WAITING_OVERTIME":
       return "WAITING_EXTRA_CHARGES";
     case "WAITING_TOTAL_CHARGES":

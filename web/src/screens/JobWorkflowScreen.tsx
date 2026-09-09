@@ -335,6 +335,21 @@ export function JobWorkflowScreen({ jobId, onBack }: JobWorkflowScreenProps) {
     state === "WAITING_ARRIVAL_ISSUES_CHECK" ||
     state === "WAITING_ARRIVAL_ISSUES_CHOICE" ||
     state === "WAITING_LOADED_PHOTO";
+  // The drop-off issues check happens at the delivery address, so it shows just that
+  // address rather than the full pickup -> drop-off route.
+  const dropoffOnly =
+    state === "WAITING_EMPTY_VAN_ISSUES_CHECK" || state === "WAITING_EMPTY_VAN_ISSUES_CHOICE";
+  // Once the move is done the route is no longer useful reference — the money and
+  // sign-off steps don't carry it at all.
+  const routeHidden =
+    state === "WAITING_EXTRA_CHARGES" ||
+    state === "WAITING_OVERTIME" ||
+    state === "WAITING_TOTAL_CHARGES" ||
+    state === "WAITING_PAYMENT" ||
+    state === "WAITING_EMPTY_VAN_PHOTO" ||
+    state === "WAITING_CLIENT_CONFIRMATION" ||
+    state === "WAITING_REVIEW_CHECK" ||
+    state === "WAITING_REVIEW_SEND";
 
   // Does this job's workflow include the Overtime step? While the driver is still on
   // the Extra charges step their live checkbox selection is the freshest signal;
@@ -416,7 +431,9 @@ export function JobWorkflowScreen({ jobId, onBack }: JobWorkflowScreenProps) {
 
               {pickupOnly ? (
                 <PickupAddress address={job.pickup} />
-              ) : (
+              ) : dropoffOnly ? (
+                <DropoffAddress address={job.dropoff} />
+              ) : routeHidden ? null : (
                 <RouteCard pickup={job.pickup} dropoff={job.dropoff} collapsible={!routeExpanded} />
               )}
 
@@ -682,19 +699,31 @@ function StepBody({
 
     case "WAITING_LOADED_PHOTO":
       return (
-        <PhotoUploader
-          key={state}
-          label="Van Loaded Photo (pick up point)"
-          hint="Up to 2 - show how the load is stacked and secured."
-          maxPhotos={2}
-          submitting={busy}
-          progress={uploadProgress}
-          error={error}
-          onFilesChange={files => {
-            formState.photos = files;
-            tick();
-          }}
-        />
+        <div className="flex flex-col gap-4">
+          <PhotoUploader
+            key={state}
+            label="Van Loaded Photo (pick up point)"
+            hint="Up to 2 - show how the load is stacked and secured."
+            maxPhotos={2}
+            submitting={busy}
+            progress={uploadProgress}
+            error={error}
+            onFilesChange={files => {
+              formState.photos = files;
+              tick();
+            }}
+          />
+
+          <Button
+            fullWidth
+            size="lg"
+            variant="secondary"
+            iconLeft={<FileWarning aria-hidden />}
+            onClick={() => onOpenScenario("liability")}
+          >
+            Other liability issues ?
+          </Button>
+        </div>
       );
 
     case "WAITING_EMPTY_VAN_PHOTO":
@@ -1114,9 +1143,24 @@ function InProgressCard({ job }: { job: Job }) {
 }
 
 function PickupAddress({ address }: { address: string }) {
+  return <StopAddress label="Pickup address" address={address} fallback="Pickup TBC" />;
+}
+
+function DropoffAddress({ address }: { address: string }) {
+  return <StopAddress label="Drop-off address" address={address} fallback="Delivery TBC" />;
+}
+
+/** A single route stop shown on its own — a pin, a heading, and the address. Used
+ *  wherever a step concerns just one end of the job (arrival steps -> pickup,
+ *  drop-off issue steps -> delivery) rather than the whole route. */
+function StopAddress({ label, address, fallback }: { label: string; address: string; fallback: string }) {
   return (
-    <div className="rounded-lg border border-line bg-surface px-4 py-3 shadow-xs">
-      <p className="text-card font-semibold text-fg [overflow-wrap:anywhere]">{address || "Pickup TBC"}</p>
+    <div className="flex items-start gap-3 rounded-lg border border-line bg-surface px-4 py-3 shadow-xs">
+      <MapPin className="mt-0.5 size-4 shrink-0 text-fg-subtle" aria-hidden />
+      <div className="min-w-0">
+        <p className="text-eyebrow text-fg-subtle">{label}</p>
+        <p className="mt-0.5 text-card font-semibold text-fg [overflow-wrap:anywhere]">{address || fallback}</p>
+      </div>
     </div>
   );
 }
