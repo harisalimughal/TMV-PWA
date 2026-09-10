@@ -1,5 +1,5 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
-import { AlertTriangle, Check, CloudOff, Search, X } from "lucide-react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { AlertTriangle, Camera, Check, CloudOff, Search, X } from "lucide-react";
 import { fetchLiabilityDamageCategories, submitScenario, type ApiError } from "../api/jobs";
 import { MULTISELECT_DELIMITER, SCENARIOS, type ScenarioFieldSpec, type ScenarioKey } from "../scenarioSpec";
 import { PhotoPicker } from "../components/PhotoPicker";
@@ -31,9 +31,18 @@ interface ScenarioFormScreenProps {
   jobId?: string;
   scenario: ScenarioKey;
   /** Booking context for job-scoped scenarios. Lets Parking Liability offer the
-   *  job's pickup / drop-off as ready-made address choices and pre-fill the
+   *  job's pickup / stop-by / drop-off as ready-made address choices and pre-fill the
    *  customer's name instead of asking the driver to retype what we already know. */
-  job?: { customerName?: string; pickup?: string; dropoff?: string };
+  job?: { customerName?: string; pickup?: string; stopBy?: string; dropoff?: string };
+  /**
+   * Which checkpoint of the move this report is being filed from — inferred from the
+   * workflow step that opened the form, not asked of the driver. Defaults Parking
+   * Liability's address choice, and for every job-scoped scenario is recorded on the
+   * submission as `reported_at` (even for Liability Report, which has no address field
+   * of its own) so admin can see where in the move it was reported, including a
+   * stop-by / waypoint address.
+   */
+  reportedAt?: { label: "Pickup" | "Stop-by" | "Drop-off"; address?: string };
   /** For a standalone storage form, resolves with a summary for the completion
    *  screen. For a job-scoped scenario it resolves with nothing. */
   onDone: (result?: { summary: StorageSummary }) => void;
@@ -79,7 +88,14 @@ function isValidPhone(value: string): boolean {
   return digits.length >= 7 && digits.length <= 15;
 }
 
-export function ScenarioFormScreen({ jobId, scenario, job, onDone, onCancel }: ScenarioFormScreenProps) {
+export function ScenarioFormScreen({
+  jobId,
+  scenario,
+  job,
+  reportedAt,
+  onDone,
+  onCancel
+}: ScenarioFormScreenProps) {
   const baseSpec = SCENARIOS[scenario];
   const [liabilityCategories, setLiabilityCategories] = useState(() => scenarioOptions(SCENARIOS.liability));
   const spec = useMemo(() => {
@@ -112,17 +128,19 @@ export function ScenarioFormScreen({ jobId, scenario, job, onDone, onCancel }: S
     };
   }, [scenario]);
 
-  /** The booking's pickup / drop-off, offered as address choices on Parking
-   *  Liability so the driver picks rather than retypes. Empty when neither is
-   *  known — the address field then falls back to a plain text input. */
+  /** The booking's pickup / stop-by / drop-off, offered as address choices on Parking
+   *  Liability so the driver picks rather than retypes. Empty when none are known —
+   *  the address field then falls back to a plain text input. */
   const addressChoices = useMemo(() => {
     const choices: Array<{ label: string; value: string }> = [];
     const pickup = job?.pickup?.trim();
+    const stopBy = job?.stopBy?.trim();
     const dropoff = job?.dropoff?.trim();
     if (pickup) choices.push({ label: `Pickup — ${pickup}`, value: pickup });
+    if (stopBy) choices.push({ label: `Stop-by — ${stopBy}`, value: stopBy });
     if (dropoff) choices.push({ label: `Drop-off — ${dropoff}`, value: dropoff });
     return choices;
-  }, [job?.pickup, job?.dropoff]);
+  }, [job?.pickup, job?.stopBy, job?.dropoff]);
 
   const [fields, setFields] = useState<Record<string, string>>(() => {
     const initial: Record<string, string> = {};
@@ -135,11 +153,22 @@ export function ScenarioFormScreen({ jobId, scenario, job, onDone, onCancel }: S
       initial.client_name = customerName;
     }
     if (addressChoices.length > 0 && spec.fields.some(f => f.name === "address")) {
-      initial.address = addressChoices[0].value;
+      // Default to the address of the checkpoint the driver is actually reporting
+      // from (e.g. the stop-by address, if that's where they are), not just pickup.
+      const preferred = reportedAt?.address?.trim();
+      const match = preferred ? addressChoices.find(choice => choice.value === preferred) : undefined;
+      initial.address = (match ?? addressChoices[0]).value;
     }
     return initial;
   });
   const [photos, setPhotos] = useState<File[]>([]);
+  // Job-scoped scenarios (Parking Liability / Liability Report) dock the camera next
+  // to Submit — the built-in "Take photo" button is hidden and triggered from here.
+  const dockCapture = Boolean(jobId);
+  const openCameraRef = useRef<(() => void) | null>(null);
+  const registerCapture = useCallback((open: (() => void) | null) => {
+    openCameraRef.current = open;
+  }, []);
   const [signatureBlob, setSignatureBlob] = useState<Blob | null>(null);
   const [signaturePreviewUrl, setSignaturePreviewUrl] = useState<string | null>(null);
   const [signatureModalOpen, setSignatureModalOpen] = useState(false);
@@ -270,7 +299,18 @@ export function ScenarioFormScreen({ jobId, scenario, job, onDone, onCancel }: S
         throw new Error("Couldn't read the signature. Open the signature pad and try again.");
       }
 
-      const result = await submitScenario(scenario, fields, photos, signatureBlob ?? null, {
+      // Where the report was actually filed from — carried on every job-scoped
+      // submission (parking AND liability, which has no address field of its own) so
+      // admin can see it, including a stop-by / waypoint address. Not a form field the
+      // driver fills in; it's inferred from the workflow step that opened this form.
+      const submissionFields = reportedAt
+        ? {
+            ...fields,
+            reported_at: reportedAt.address ? `${reportedAt.label} — ${reportedAt.address}` : reportedAt.label
+          }
+        : fields;
+
+      const result = await submitScenario(scenario, submissionFields, photos, signatureBlob ?? null, {
         jobId,
         label: jobId ? `${spec.title} — Job ${jobId}` : spec.title,
         onProgress: setProgress
@@ -359,17 +399,42 @@ export function ScenarioFormScreen({ jobId, scenario, job, onDone, onCancel }: S
             }
             noteTone="warning"
           >
-            <Button
-              size="lg"
-              fullWidth
-              loading={submitting}
-              blockedReason={problems[0]?.message}
-              onBlocked={jumpToProblem}
-              onClick={() => void handleSubmit()}
-              iconLeft={!online ? <CloudOff /> : undefined}
-            >
-              {submitting ? busySubmitLabel : idleSubmitLabel}
-            </Button>
+            {dockCapture ? (
+              <div className="grid grid-cols-2 gap-3">
+                <Button
+                  size="lg"
+                  className="!rounded-[10px]"
+                  iconLeft={<Camera aria-hidden />}
+                  disabled={submitting || photos.length >= spec.photoMax}
+                  onClick={() => openCameraRef.current?.()}
+                >
+                  {photos.length === 0 ? "Take photo" : "Take another"}
+                </Button>
+                <Button
+                  size="lg"
+                  className="!rounded-[10px]"
+                  loading={submitting}
+                  blockedReason={problems[0]?.message}
+                  onBlocked={jumpToProblem}
+                  onClick={() => void handleSubmit()}
+                  iconLeft={!online ? <CloudOff /> : undefined}
+                >
+                  {submitting ? busySubmitLabel : idleSubmitLabel}
+                </Button>
+              </div>
+            ) : (
+              <Button
+                size="lg"
+                fullWidth
+                loading={submitting}
+                blockedReason={problems[0]?.message}
+                onBlocked={jumpToProblem}
+                onClick={() => void handleSubmit()}
+                iconLeft={!online ? <CloudOff /> : undefined}
+              >
+                {submitting ? busySubmitLabel : idleSubmitLabel}
+              </Button>
+            )}
           </BottomActionBar>
         }
       >
@@ -417,6 +482,7 @@ export function ScenarioFormScreen({ jobId, scenario, job, onDone, onCancel }: S
                 min={spec.photoMin}
                 max={spec.photoMax}
                 onChange={setPhotos}
+                registerCapture={dockCapture ? registerCapture : undefined}
               />
             </div>
           </Section>

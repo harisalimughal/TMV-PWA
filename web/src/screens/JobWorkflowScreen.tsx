@@ -1,7 +1,18 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { AlertTriangle, Car, Check, CheckCircle2, FileWarning, MapPin, PenLine } from "lucide-react";
 import {
+  AlertTriangle,
+  ArrowRight,
+  Camera,
+  Car,
+  Check,
+  FileWarning,
+  MapPin,
+  PenLine
+} from "lucide-react";
+import {
+  deleteEvidence,
   fetchJobDetail,
+  type EvidenceItem,
   type JobUpdateResult,
   sendAction,
   startJob,
@@ -15,19 +26,20 @@ import { SignatureModal } from "../components/SignatureModal";
 import { Choice, ChoiceGroup } from "../components/ui/Choice";
 import { useToast } from "../components/ui/Toast";
 import { AppShell } from "../app/AppShell";
-import { Alert, BottomActionBar, Button, cx, Field, Input, PageHeader, Skeleton, Textarea } from "../ui";
+import { Alert, BottomActionBar, Button, cx, Field, Input, PageHeader, Select, Skeleton, Textarea } from "../ui";
 import {
   CompletionSummary,
   IssueChoiceCard,
   IssueDecision,
+  bigActionButtonClass,
   JobHeader,
   JobProgress,
-  JobStatusChip,
   RouteCard,
   WarningNotice
 } from "../components/driver";
 import { ScenarioFormScreen } from "./ScenarioFormScreen";
 import { useOnline } from "../lib/net";
+import { haptics } from "../lib/haptics";
 import type { ScenarioKey } from "../scenarioSpec";
 import {
   CONGESTION_CHARGE,
@@ -46,14 +58,22 @@ interface JobWorkflowScreenProps {
 }
 
 const LONDON = "Europe/London";
+
+/** Steps whose heading block reads left-aligned rather than the default centered --
+ *  the everyday data-entry steps, not the big "you've reached a checkpoint" moments. */
+const LEFT_ALIGNED_STEPS = new Set(["WAITING_PAYMENT", "WAITING_EMPTY_VAN_PHOTO"]);
+
+/** Steps whose hint line reads as an urgent red flag rather than quiet grey helper
+ *  text -- both are "pay attention, this affects the money" moments. */
+const RED_HINT_STEPS = new Set(["WAITING_OVERTIME", "WAITING_EMPTY_VAN_PHOTO"]);
+
+/** The near-final "you're basically done" moment — a bigger heading than every
+ *  other step's, to read as the celebratory beat it is. */
+const LARGE_TITLE_STEPS = new Set(["WAITING_REVIEW_CHECK"]);
+
 const ISSUE_SCENARIOS = ["parking", "liability"] as const;
 
 type IssueScenario = (typeof ISSUE_SCENARIOS)[number];
-
-const ISSUE_SCENARIO_LABELS: Record<IssueScenario, string> = {
-  parking: "Parking Liability",
-  liability: "Liability Report"
-};
 
 function isIssueScenario(scenario: ScenarioKey): scenario is IssueScenario {
   return (ISSUE_SCENARIOS as readonly ScenarioKey[]).includes(scenario);
@@ -90,17 +110,11 @@ function formatBookedDay(bookedStart: string): string {
   }
 }
 
-/** Pre-selects the job's booked crew size, but the driver can change it -- the crew
- *  actually working the overtime can differ from what was booked. */
-function defaultOvertimeCrewSize(job: Job): string {
-  const crewSize = Number(job.crewSize);
-  return Number.isInteger(crewSize) && crewSize > 0 ? String(crewSize) : "2";
-}
-
 export function JobWorkflowScreen({ jobId, onBack }: JobWorkflowScreenProps) {
   const [loading, setLoading] = useState(true);
   const [job, setJob] = useState<Job | null>(null);
   const [suggestedTotal, setSuggestedTotal] = useState(0);
+  const [evidenceItems, setEvidenceItems] = useState<EvidenceItem[]>([]);
   const [confirmationText, setConfirmationText] = useState(DEFAULT_CUSTOMER_CONFIRMATION_TEXT);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -133,6 +147,7 @@ export function JobWorkflowScreen({ jobId, onBack }: JobWorkflowScreenProps) {
       const result = await fetchJobDetail(jobId);
       setJob(result.job);
       setSuggestedTotal(result.suggestedTotal);
+      setEvidenceItems(result.evidenceItems ?? []);
       if (result.confirmationText) setConfirmationText(result.confirmationText);
     } catch (err) {
       setError((err as ApiError)?.message || "Couldn't load this job.");
@@ -185,6 +200,7 @@ export function JobWorkflowScreen({ jobId, onBack }: JobWorkflowScreenProps) {
         const result = await action();
         setJob(result.job);
         if (typeof result.suggestedTotal === "number") setSuggestedTotal(result.suggestedTotal);
+        if (result.evidenceItems) setEvidenceItems(result.evidenceItems);
         if (successMessage) toast.success(successMessage);
         // A new step means new content: put the driver at the top of it rather than
         // wherever the previous step happened to be scrolled to.
@@ -219,6 +235,7 @@ export function JobWorkflowScreen({ jobId, onBack }: JobWorkflowScreenProps) {
 
     const issueChoiceState =
       job.currentState === "WAITING_ARRIVAL_ISSUES_CHOICE" ||
+      job.currentState === "WAITING_STOP_BY_ISSUES_CHOICE" ||
       job.currentState === "WAITING_EMPTY_VAN_ISSUES_CHOICE";
 
     setOpenScenario(null);
@@ -292,7 +309,8 @@ export function JobWorkflowScreen({ jobId, onBack }: JobWorkflowScreenProps) {
       <ScenarioFormScreen
         jobId={job.jobId}
         scenario={openScenario}
-        job={{ customerName: job.customerName, pickup: job.pickup, dropoff: job.dropoff }}
+        job={{ customerName: job.customerName, pickup: job.pickup, stopBy: job.stopBy, dropoff: job.dropoff }}
+        reportedAt={reportedAtForState(job.currentState, job)}
         onCancel={cancelScenario}
         onDone={() => {
           if (isIssueScenario(openScenario)) {
@@ -330,12 +348,38 @@ export function JobWorkflowScreen({ jobId, onBack }: JobWorkflowScreenProps) {
   const state = job.currentState;
   const step = STEPS[state] ?? { label: state, order: 1 };
   const complete = state === "COMPLETED";
+
+  // Photos already uploaded for the photo step being shown — surfaced so a driver who
+  // stepped back to it sees them and can delete any before continuing.
+  const stepEvidenceType = evidenceTypeForState(state);
+  const stepRemotePhotos = stepEvidenceType
+    ? evidenceItems
+        .filter(item => item.evidenceType === stepEvidenceType)
+        .map(item => ({ id: item.evidenceId, url: item.url }))
+    : [];
+
+  const removeRemotePhoto = (evidenceId: string) => {
+    if (!online) {
+      toast.error("You're offline — reconnect to delete this photo.");
+      return;
+    }
+    setBusy(true);
+    deleteEvidence(job.jobId, evidenceId)
+      .then(res => setEvidenceItems(res.evidenceItems))
+      .catch((err: ApiError) => toast.error(err?.message || "Couldn't delete that photo."))
+      .finally(() => setBusy(false));
+  };
+
+  const hasStop = Boolean(job.stopBy && job.stopBy.trim());
   const routeExpanded = state === "READY";
   const pickupOnly =
     state === "WAITING_ARRIVAL_PHOTO" ||
     state === "WAITING_ARRIVAL_ISSUES_CHECK" ||
     state === "WAITING_ARRIVAL_ISSUES_CHOICE" ||
     state === "WAITING_LOADED_PHOTO";
+  // The stop-by issues check happens at the stop-by address — show just that.
+  const stopByOnly =
+    state === "WAITING_STOP_BY_ISSUES_CHECK" || state === "WAITING_STOP_BY_ISSUES_CHOICE";
   // The drop-off issues check happens at the delivery address, so it shows just that
   // address rather than the full pickup -> drop-off route.
   const dropoffOnly =
@@ -359,7 +403,7 @@ export function JobWorkflowScreen({ jobId, onBack }: JobWorkflowScreenProps) {
     state === "WAITING_EXTRA_CHARGES"
       ? overtimeApplies(formState.extraCharges)
       : overtimeApplies(job.extraCharges);
-  const progress = workflowProgress(state, { overtime });
+  const progress = workflowProgress(state, { overtime, hasStop });
   const canGoBackStep = state !== "READY" && state !== "COMPLETED";
   const handleWorkflowBack = () => {
     if (canGoBackStep) {
@@ -380,21 +424,29 @@ export function JobWorkflowScreen({ jobId, onBack }: JobWorkflowScreenProps) {
             phone={job.customerPhone || undefined}
             onBack={handleWorkflowBack}
             backLabel={canGoBackStep ? "Previous step" : "Back to jobs"}
-            status={job.status === "IN_PROGRESS" ? <JobStatusChip job={job} /> : undefined}
           />
         }
         dock={
           <StepDock
             state={state}
             overtime={overtime}
+            invoice={isInvoiceJob(job)}
             busy={busy}
             online={online}
             uploadProgress={uploadProgress}
+            photoRemoteCount={stepRemotePhotos.length}
             onStart={() => run(() => startJob(job.jobId), "Job started")}
             onAction={(action, input, message) => run(() => sendAction(job.jobId, action, input), message)}
-            onUploadPhotos={files =>
-              run(() => uploadEvidencePhotos(job.jobId, files, setUploadProgress), "Photos uploaded")
-            }
+            onUploadPhotos={async files => {
+              const submittedAt = job.currentState;
+              const ok = await run(
+                () => uploadEvidencePhotos(job.jobId, files, setUploadProgress),
+                "Photos uploaded"
+              );
+              // Once the server has them, drop the local staging for that step so a
+              // later trip back doesn't re-submit the same files.
+              if (ok) delete formState.photosByStep[submittedAt];
+            }}
             onOpenSignature={() => setSignatureOpen(true)}
             onBackHome={onBack}
             onBlocked={reason => toast.error(reason)}
@@ -411,9 +463,20 @@ export function JobWorkflowScreen({ jobId, onBack }: JobWorkflowScreenProps) {
             <JobProgress current={progress.current} total={progress.total} />
 
             <>
-              <div>
-                <h1 className="text-title text-fg">{step.label}</h1>
-                {step.hint && <p className="mt-1.5 text-body text-fg-muted">{step.hint}</p>}
+              <div className={LEFT_ALIGNED_STEPS.has(state) ? "text-left" : "text-center"}>
+                <h1 className={cx(LARGE_TITLE_STEPS.has(state) ? "text-display" : "text-title", "text-fg")}>
+                  {step.label}
+                </h1>
+                {step.hint && (
+                  <p
+                    className={cx(
+                      "mt-1.5 text-body",
+                      RED_HINT_STEPS.has(state) ? "font-semibold text-danger" : "text-fg-muted"
+                    )}
+                  >
+                    {step.hint}
+                  </p>
+                )}
               </div>
 
               {isNotToday(job.bookedStart) && (
@@ -432,10 +495,17 @@ export function JobWorkflowScreen({ jobId, onBack }: JobWorkflowScreenProps) {
 
               {pickupOnly ? (
                 <PickupAddress address={job.pickup} />
+              ) : stopByOnly ? (
+                <StopByAddress address={job.stopBy ?? ""} />
               ) : dropoffOnly ? (
                 <DropoffAddress address={job.dropoff} />
               ) : routeHidden ? null : (
-                <RouteCard pickup={job.pickup} dropoff={job.dropoff} collapsible={!routeExpanded} />
+                <RouteCard
+                  pickup={job.pickup}
+                  dropoff={job.dropoff}
+                  stop={job.stopBy}
+                  collapsible={!routeExpanded}
+                />
               )}
 
               {error && <Alert tone="danger">{error}</Alert>}
@@ -447,11 +517,11 @@ export function JobWorkflowScreen({ jobId, onBack }: JobWorkflowScreenProps) {
                 uploadProgress={uploadProgress}
                 error={error}
                 suggestedTotal={suggestedTotal}
+                confirmationText={confirmationText}
+                remotePhotos={stepRemotePhotos}
+                onRemoveRemotePhoto={removeRemotePhoto}
                 onOpenScenario={openFirstIssueScenario}
                 onReportIssue={openIssueScenarioFromCheck}
-                onAction={(action, input, message) => {
-                  void run(() => sendAction(job.jobId, action, input), message);
-                }}
                 onFormChange={bumpForm}
               />
 
@@ -507,7 +577,6 @@ function IssueCompletionScreen({
           jobId={job.jobId}
           phone={job.customerPhone || undefined}
           onBack={onBack}
-          status={job.status === "IN_PROGRESS" ? <JobStatusChip job={job} /> : undefined}
         />
       }
       dock={
@@ -525,21 +594,53 @@ function IssueCompletionScreen({
         </BottomActionBar>
       }
     >
-      <div className="flex min-h-[calc(100dvh-12rem)] flex-col justify-center px-4 py-8">
-        <span className="grid size-11 place-items-center rounded-full border border-success-line bg-success-subtle text-success-signal">
-          <CheckCircle2 className="size-[22px] stroke-[2.5]" aria-hidden />
-        </span>
-        <h1 className="mt-4 text-title text-fg">{ISSUE_SCENARIO_LABELS[completion.last]} saved</h1>
-        <p className="mt-1.5 text-body text-fg-muted">
-          The report and signature are saved against this job.
+      <div className="flex min-h-[calc(100dvh-12rem)] flex-col items-center justify-center px-6 py-8 text-center">
+        <div className="relative grid place-items-center">
+          <span className="issueDoneRing absolute size-24 rounded-full bg-success-subtle" aria-hidden />
+          <span className="issueDonePop relative grid size-24 place-items-center rounded-full border-4 border-success-line bg-success-subtle text-success-signal">
+            <svg
+              viewBox="0 0 24 24"
+              className="size-12"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth={3}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden
+            >
+              <path className="issueDoneCheck" d="M4 12.5l5 5 11-11" />
+            </svg>
+          </span>
+        </div>
+
+        <h1 className="mt-7 text-title text-fg">
+          Liability form has been successfully saved. Good job! 👍
+        </h1>
+        <p className="mt-2 max-w-sm text-body text-fg-muted">
+          This confirms that it has been completed and recorded. The report and signature are saved
+          against this job.
         </p>
         {canReportOther && (
-          <p className="mt-4 text-body text-fg-muted">
-            If there is another issue, use Other liabilities before continuing.
+          <p className="mt-4 max-w-sm text-body text-fg-muted">
+            If there is another issue, use Other liability Issues before continuing.
           </p>
         )}
         <div className="scroll-pb-dock" aria-hidden />
       </div>
+
+      <style>{`
+        .issueDonePop { animation: issueDonePop 520ms cubic-bezier(0.22, 1.2, 0.36, 1) both; }
+        .issueDoneRing { animation: issueDoneRing 900ms ease-out forwards; }
+        .issueDoneCheck { stroke-dasharray: 30; stroke-dashoffset: 30; animation: issueDoneCheck 460ms 250ms ease-out forwards; }
+        @keyframes issueDonePop { 0% { transform: scale(0.5); opacity: 0; } 60% { transform: scale(1.08); } 100% { transform: scale(1); opacity: 1; } }
+        @keyframes issueDoneRing { 0% { transform: scale(0.6); opacity: 0.55; } 100% { transform: scale(1.9); opacity: 0; } }
+        @keyframes issueDoneCheck { to { stroke-dashoffset: 0; } }
+        @media (prefers-reduced-motion: reduce) {
+          .issueDonePop, .issueDoneRing, .issueDoneCheck { animation: none; }
+          .issueDoneCheck { stroke-dashoffset: 0; }
+          .issueDoneRing { display: none; }
+        }
+      `}</style>
     </AppShell>
   );
 }
@@ -559,18 +660,21 @@ function IssueCompletionScreen({
 const formState: {
   extraCharges: string[];
   overtimeMinutes: string;
-  overtimeCrew: string;
   payment: string[];
   photos: File[];
+  /** Photos staged for each photo step, kept by workflow state so stepping away and
+   *  back (GO_BACK / forward) restores exactly what the driver had taken and not yet
+   *  submitted. `photos` above always mirrors the current step's entry. */
+  photosByStep: Record<string, File[]>;
   totalChargesCorrect: "" | "yes" | "no";
   totalChargesAmount: string;
   totalChargesNote: string;
 } = {
   extraCharges: [],
   overtimeMinutes: "",
-  overtimeCrew: "2",
   payment: [],
   photos: [],
+  photosByStep: {},
   totalChargesCorrect: "",
   totalChargesAmount: "",
   totalChargesNote: ""
@@ -579,13 +683,95 @@ const formState: {
 function resetFormState() {
   formState.extraCharges = [];
   formState.overtimeMinutes = "";
-  formState.overtimeCrew = "2";
   formState.payment = [];
   formState.photos = [];
+  formState.photosByStep = {};
   formState.totalChargesCorrect = "";
   formState.totalChargesAmount = "";
   formState.totalChargesNote = "";
 }
+
+/** Same sibling-sharing trick as `formState`: the photo steps render the uploader in
+ *  <StepBody> but their "Take photo" button lives in <StepDock>. The uploader parks a
+ *  camera-open trigger here; the dock button calls it. Cleared when the uploader
+ *  unmounts (step change). */
+const photoCapture: { open: (() => void) | null } = { open: null };
+
+/** Max photos the current photo step accepts — the dock uses it to stop offering
+ *  "Take photo" once the step is full. */
+function photoMaxFor(state: string): number {
+  return state === "WAITING_EMPTY_VAN_PHOTO" ? 1 : 2;
+}
+
+/** The server evidence type a photo step's photos belong to (so a driver stepping
+ *  back to it sees the ones already uploaded). Null for non-photo steps. */
+function evidenceTypeForState(state: string): string | null {
+  switch (state) {
+    case "WAITING_ARRIVAL_PHOTO":
+      return "Arrival";
+    case "WAITING_LOADED_PHOTO":
+      return "VanLoaded";
+    case "WAITING_EMPTY_VAN_PHOTO":
+      return "EmptyVan";
+    default:
+      return null;
+  }
+}
+
+/** Which checkpoint of the move a Parking Liability / Liability Report is being filed
+ *  from, given the workflow state the moment the form opens — so the submission (and
+ *  Parking Liability's address default) reflects where the driver actually is,
+ *  including a stop-by / waypoint address, without asking them to say so themselves. */
+function reportedAtForState(
+  state: string,
+  job: Pick<Job, "pickup" | "stopBy" | "dropoff">
+): { label: "Pickup" | "Stop-by" | "Drop-off"; address?: string } | undefined {
+  switch (state) {
+    case "WAITING_ARRIVAL_ISSUES_CHOICE":
+    case "WAITING_LOADED_PHOTO":
+      return { label: "Pickup", address: job.pickup };
+    case "WAITING_STOP_BY_ISSUES_CHOICE":
+      return { label: "Stop-by", address: job.stopBy };
+    case "WAITING_EMPTY_VAN_ISSUES_CHOICE":
+      return { label: "Drop-off", address: job.dropoff };
+    default:
+      return undefined;
+  }
+}
+
+/**
+ * Whether this job is billed by invoice rather than collected on the day — signalled
+ * by an "INV" tag after the "/" in the Calendar event title (the title's usual shape
+ * is "<crew> Men - £<price> - <HH:mm> / <Y|N> - <initials>"; ops writes "INV" there
+ * instead for an invoice job). The driver still logs extra charges and overtime as
+ * normal — only the "confirm this total with the customer" step and cash/card
+ * collection are skipped, since there's nothing to collect on site.
+ *
+ * NOTE: this reads the free-text Calendar title because there's no dedicated
+ * invoice flag on the Job yet. If ops's actual "/ ... INV" wording turns out to
+ * differ from this, loosen/tighten the regex to match it exactly.
+ */
+function isInvoiceJob(job: Job): boolean {
+  return /\/[^/]*\bINV\b/i.test(job.rawTitle ?? "");
+}
+
+/** "Extra time / Charges, London Congestion charge · 90 min overtime (£67.50)" —
+ *  what the driver logged on Extra charges / Overtime, recapped instead of a grand
+ *  total on invoice jobs (nothing to collect on site, but the extras still matter for
+ *  the invoice). Reads straight off `job` since both steps' SUBMIT_* actions have
+ *  already saved to it by the time Total Charges / Payment are reached. */
+function extrasSummary(job: Job): string {
+  const parts = (job.extraCharges ?? []).filter(charge => charge !== NO_EXTRAS);
+  const pieces = [...parts];
+  if (job.overtimeMinutes > 0) {
+    const charge = job.overtimeCharge > 0 ? ` (£${job.overtimeCharge.toFixed(2)})` : "";
+    pieces.push(`${job.overtimeMinutes} min overtime${charge}`);
+  }
+  return pieces.length > 0 ? pieces.join(" · ") : "No extra charges added.";
+}
+
+/** 2h, 2.5h, 3h … 10h — the Overtime step's "longer than 90 minutes" dropdown. */
+const OVERTIME_HOUR_OPTIONS = Array.from({ length: 17 }, (_, i) => 2 + i * 0.5);
 
 function overtimeBlockedReason(offlineReason?: string): string | undefined {
   if (offlineReason) return offlineReason;
@@ -596,15 +782,6 @@ function overtimeBlockedReason(offlineReason?: string): string | undefined {
   const minutes = Number(formState.overtimeMinutes);
   if (!Number.isFinite(minutes) || minutes < 0) {
     return "Overtime must be a number of minutes.";
-  }
-
-  if (formState.overtimeCrew.trim() === "") {
-    return "Enter the crew size for the overtime.";
-  }
-
-  const crewSize = Number(formState.overtimeCrew);
-  if (!Number.isInteger(crewSize) || crewSize < 1 || crewSize > 12) {
-    return "Crew size must be between 1 and 12.";
   }
 
   return undefined;
@@ -638,9 +815,11 @@ function StepBody({
   uploadProgress,
   error,
   suggestedTotal,
+  confirmationText,
+  remotePhotos,
+  onRemoveRemotePhoto,
   onOpenScenario,
   onReportIssue,
-  onAction,
   onFormChange
 }: {
   job: Job;
@@ -649,14 +828,24 @@ function StepBody({
   uploadProgress: number | null;
   error: string | null;
   suggestedTotal: number;
+  /** The agreement the customer signs -- shown on WAITING_CLIENT_CONFIRMATION ahead
+   *  of opening the signature pad, not just inside it. */
+  confirmationText: string;
+  /** Photos already uploaded for the current photo step (empty for other steps). */
+  remotePhotos: Array<{ id: string; url: string }>;
+  onRemoveRemotePhoto: (evidenceId: string) => void;
   onOpenScenario: (scenario: ScenarioKey) => void;
   onReportIssue: (scenario: IssueScenario) => void;
-  onAction: (action: string, input?: Record<string, string[]>, message?: string) => void;
   onFormChange: () => void;
 }) {
   // Re-renders the whole workflow screen -- not just this subtree -- so the docked
   // submit button sees the same `formState` change the inputs just made.
   const tick = onFormChange;
+
+  // Stable across renders so <PhotoPicker>'s register effect doesn't re-run each tick.
+  const registerPhotoCapture = useCallback((open: (() => void) | null) => {
+    photoCapture.open = open;
+  }, []);
 
   // Reset shared form state whenever the step changes, so values never leak from one
   // step to the next. Steps the driver can navigate back into (Extra charges,
@@ -667,9 +856,12 @@ function StepBody({
     formState.extraCharges = state === "WAITING_EXTRA_CHARGES" ? [...(job.extraCharges ?? [])] : [];
     formState.overtimeMinutes =
       state === "WAITING_OVERTIME" && job.overtimeMinutes ? String(job.overtimeMinutes) : "";
-    formState.overtimeCrew = defaultOvertimeCrewSize(job);
-    formState.payment = [];
-    formState.photos = [];
+    // Invoice jobs (see isInvoiceJob) skip collecting payment on site -- Invoice is
+    // pre-selected so the driver doesn't have to tap it themselves.
+    formState.payment = state === "WAITING_PAYMENT" && isInvoiceJob(job) ? ["Invoice"] : [];
+    // Photos are kept per step (see photosByStep) so returning to a photo step
+    // restores what was taken there; only the mirror for the current step is set here.
+    formState.photos = formState.photosByStep[state] ?? [];
     formState.totalChargesCorrect = "";
     formState.totalChargesAmount = state === "WAITING_TOTAL_CHARGES" ? suggestedTotal.toFixed(2) : "";
     formState.totalChargesNote = "";
@@ -685,14 +877,18 @@ function StepBody({
       return (
         <PhotoUploader
           key={state}
-          label="Arrival Photos (pick up point)"
-          hint="Up to 2 - show the property and load as you found them."
+          label="Proof of arrival pictures"
           maxPhotos={2}
           submitting={busy}
           progress={uploadProgress}
           error={error}
+          registerCapture={registerPhotoCapture}
+          initialFiles={formState.photosByStep[state] ?? []}
+          remoteFiles={remotePhotos}
+          onRemoveRemote={onRemoveRemotePhoto}
           onFilesChange={files => {
             formState.photos = files;
+            formState.photosByStep[state] = files;
             tick();
           }}
         />
@@ -709,8 +905,13 @@ function StepBody({
             submitting={busy}
             progress={uploadProgress}
             error={error}
+            registerCapture={registerPhotoCapture}
+            initialFiles={formState.photosByStep[state] ?? []}
+            remoteFiles={remotePhotos}
+            onRemoveRemote={onRemoveRemotePhoto}
             onFilesChange={files => {
               formState.photos = files;
+              formState.photosByStep[state] = files;
               tick();
             }}
           />
@@ -730,25 +931,23 @@ function StepBody({
     case "WAITING_EMPTY_VAN_PHOTO":
       return (
         <div className="flex flex-col gap-4">
-          {job.dropoff && (
-            <div className="flex items-start gap-3 px-4 py-3 rounded-card bg-surface border border-line">
-              <MapPin className="w-4 h-4 mt-0.5 shrink-0 text-fg-subtle" aria-hidden />
-              <div>
-                <p className="text-eyebrow text-fg-subtle mb-0.5">Drop-off address</p>
-                <p className="text-label text-fg">{job.dropoff}</p>
-              </div>
-            </div>
-          )}
+          {job.dropoff && <DropoffAddress address={job.dropoff} />}
           <PhotoUploader
             key={state}
             label="Empty Van Photo (Drop Off Point)"
-            hint="Show the van empty at the drop-off — proof nothing was left behind."
+            labelHidden
+            hint="Please show that the van is completely empty, clean and organised. Make sure everything is clear and ready for the next customer and job. ✅"
             maxPhotos={1}
             submitting={busy}
             progress={uploadProgress}
             error={error}
+            registerCapture={registerPhotoCapture}
+            initialFiles={formState.photosByStep[state] ?? []}
+            remoteFiles={remotePhotos}
+            onRemoveRemote={onRemoveRemotePhoto}
             onFilesChange={files => {
               formState.photos = files;
+              formState.photosByStep[state] = files;
               tick();
             }}
           />
@@ -770,17 +969,24 @@ function StepBody({
             description="Existing damage, item condition, access risk, or anything that needs evidence."
             onClick={() => onReportIssue("liability")}
           />
-          <Button
-            fullWidth
-            size="lg"
-            variant="success"
-            loading={busy}
-            iconLeft={<Check aria-hidden />}
-            onClick={() => onAction("ISSUES_NONE")}
-            className="mt-1"
-          >
-            No Issues
-          </Button>
+        </div>
+      );
+
+    case "WAITING_STOP_BY_ISSUES_CHECK":
+      return (
+        <div className="flex flex-col gap-3">
+          <IssueChoiceCard
+            icon={<Car aria-hidden />}
+            title="Parking Liability"
+            description="Restricted bay, red route, or anywhere a PCN could land. The customer accepts the charge."
+            onClick={() => onReportIssue("parking")}
+          />
+          <IssueChoiceCard
+            icon={<FileWarning aria-hidden />}
+            title="Liability Report"
+            description="Damage, unprotected items, or anything that needs evidence at the stop-by address."
+            onClick={() => onReportIssue("liability")}
+          />
         </div>
       );
 
@@ -799,21 +1005,11 @@ function StepBody({
             description="Damage, unprotected items, or anything that needs evidence at the drop-off."
             onClick={() => onReportIssue("liability")}
           />
-          <Button
-            fullWidth
-            size="lg"
-            variant="success"
-            loading={busy}
-            iconLeft={<Check aria-hidden />}
-            onClick={() => onAction("ISSUES_NONE")}
-            className="mt-1"
-          >
-            No Issues
-          </Button>
         </div>
       );
 
     case "WAITING_ARRIVAL_ISSUES_CHOICE":
+    case "WAITING_STOP_BY_ISSUES_CHOICE":
     case "WAITING_EMPTY_VAN_ISSUES_CHOICE":
       return (
         <div className="flex flex-col gap-3">
@@ -873,79 +1069,88 @@ function StepBody({
         </div>
       );
 
-    case "WAITING_OVERTIME":
+    case "WAITING_OVERTIME": {
       // Overtime only exists when "Extra time / Charges" was picked. If we're here
       // without it, the screen is mid auto-skip — render nothing rather than flash
       // the form.
       if (!overtimeApplies(job.extraCharges)) return null;
+
+      // The hours dropdown mirrors formState.overtimeMinutes when it's a >=2h, on-the-
+      // half-hour value (i.e. it was set by the dropdown, or matches one of its
+      // options) -- otherwise (0-90 min, set by a chip) it shows its placeholder.
+      const overtimeMinutesNum = Number(formState.overtimeMinutes);
+      const dropdownValue =
+        Number.isFinite(overtimeMinutesNum) && overtimeMinutesNum >= 120 && overtimeMinutesNum % 30 === 0
+          ? String(overtimeMinutesNum)
+          : "";
+
       return (
         <div className="flex flex-col gap-5">
-          <label className="flex flex-col gap-1.5">
+          <div className="flex flex-col gap-2.5">
             <span className="pl-0.5 text-label text-fg-muted">Overtime minutes</span>
-            <input
-              type="number"
-              inputMode="numeric"
-              min={0}
-              step={5}
-              value={formState.overtimeMinutes}
+
+            {/* Quick-pick chips: overtime is almost always a round number, and typing
+                on a numeric keypad next to a van is slower than one tap. A fixed
+                3-column grid keeps them a consistent, generous size, always 3 to a
+                row, rather than wrapping at whatever width the labels happen to be. */}
+            <div className="grid grid-cols-3 gap-2.5">
+              {["0", "15", "30", "45", "60", "90"].map(value => (
+                <button
+                  key={value}
+                  onClick={() => {
+                    formState.overtimeMinutes = value;
+                    tick();
+                  }}
+                  className={cx(
+                    "min-h-tap rounded-pill border text-button transition-colors",
+                    formState.overtimeMinutes === value
+                      ? "border-brand bg-brand text-brand-fg"
+                      : "border-line bg-surface text-fg-muted hover:bg-surface-sunken"
+                  )}
+                >
+                  {value === "0" ? "None" : `${value} min`}
+                </button>
+              ))}
+            </div>
+
+            {/* Longer than 90 minutes: pick the nearest half hour instead of typing. */}
+            <Select
+              value={dropdownValue}
+              placeholder="Longer? Pick the hours"
+              className="min-h-control-lg text-[16px]"
               onChange={e => {
                 formState.overtimeMinutes = e.target.value;
                 tick();
               }}
-              placeholder="0"
-              className="min-h-control-lg w-full rounded-card border border-line bg-surface px-4 py-3 text-[16px] text-fg outline-none transition focus:border-brand focus:ring-2 focus:ring-brand/25"
-            />
-            <span className="pl-0.5 text-helper text-fg-subtle">
-              Enter 0 if the job finished inside the booked window.
-            </span>
-          </label>
-
-          {/* Quick-pick chips: overtime is almost always a round number, and typing on
-              a numeric keypad next to a van is slower than one tap. */}
-          <div className="flex flex-wrap gap-2">
-            {["0", "15", "30", "45", "60", "90"].map(value => (
-              <button
-                key={value}
-                onClick={() => {
-                  formState.overtimeMinutes = value;
-                  tick();
-                }}
-                className={cx(
-                  "min-h-tap rounded-pill border px-4 text-button transition-colors",
-                  formState.overtimeMinutes === value
-                    ? "border-brand bg-brand text-brand-fg"
-                    : "border-line bg-surface text-fg-muted hover:bg-surface-sunken"
-                )}
-              >
-                {value === "0" ? "None" : `${value} min`}
-              </button>
-            ))}
+            >
+              {OVERTIME_HOUR_OPTIONS.map(hours => (
+                <option key={hours} value={Math.round(hours * 60)}>
+                  {hours} hours
+                </option>
+              ))}
+            </Select>
           </div>
-
-          <label className="flex flex-col gap-1.5">
-            <span className="pl-0.5 text-label text-fg-muted">Crew working the overtime</span>
-            <input
-              type="number"
-              inputMode="numeric"
-              min={1}
-              max={12}
-              step={1}
-              value={formState.overtimeCrew}
-              onChange={e => {
-                formState.overtimeCrew = e.target.value;
-                tick();
-              }}
-              placeholder="2"
-              className="min-h-control-lg w-full rounded-card border border-line bg-surface px-4 py-3 text-[16px] text-fg outline-none transition focus:border-brand focus:ring-2 focus:ring-brand/25"
-            />
-            <span className="pl-0.5 text-helper text-fg-subtle">
-              Use the number of people who actually worked the overtime.
-            </span>
-          </label>
         </div>
       );
+    }
 
     case "WAITING_TOTAL_CHARGES":
+      if (isInvoiceJob(job)) {
+        return (
+          <div className="flex flex-col gap-4">
+            <div className="rounded-card border border-brand-line bg-brand-subtle px-4 py-3.5">
+              <p className="text-eyebrow uppercase text-brand-subtle-fg">Payment by Invoice</p>
+              <p className="mt-1 text-body text-fg-muted">
+                This job is billed by invoice — there's no total to confirm with the customer on site.
+              </p>
+            </div>
+            <div className="rounded-card border border-line bg-surface px-4 py-3.5">
+              <p className="text-eyebrow uppercase text-fg-subtle">Extra charges</p>
+              <p className="mt-1 text-card text-fg">{extrasSummary(job)}</p>
+            </div>
+          </div>
+        );
+      }
       return (
         <div className="flex flex-col gap-4">
           <div className="rounded-card border border-brand-line bg-brand-subtle px-4 py-3.5">
@@ -1016,38 +1221,58 @@ function StepBody({
 
     case "WAITING_PAYMENT":
       return (
-        <ChoiceGroup legend="How is the customer paying?">
-          {PAYMENT_METHODS.map(option => (
-            <Choice
-              key={option}
-              type="checkbox"
-              label={option}
-              selected={formState.payment.includes(option)}
-              onToggle={() => {
-                formState.payment = formState.payment.includes(option)
-                  ? formState.payment.filter(value => value !== option)
-                  : [...formState.payment, option];
-                tick();
-              }}
-            />
-          ))}
-        </ChoiceGroup>
+        <div className="flex flex-col gap-4">
+          <ChoiceGroup>
+            {PAYMENT_METHODS.map(option => (
+              <Choice
+                key={option}
+                type="checkbox"
+                label={option}
+                selected={formState.payment.includes(option)}
+                onToggle={() => {
+                  formState.payment = formState.payment.includes(option)
+                    ? formState.payment.filter(value => value !== option)
+                    : [...formState.payment, option];
+                  tick();
+                }}
+              />
+            ))}
+          </ChoiceGroup>
+          {/* Invoice jobs: Invoice is pre-selected (see the reset effect above) but
+              the driver can still see/change it here; the extras recap is a reminder
+              of what's actually going on the invoice. */}
+          {isInvoiceJob(job) && (
+            <p className="text-helper text-fg-subtle">
+              <span className="font-semibold text-fg-muted">Extra charges: </span>
+              {extrasSummary(job)}
+            </p>
+          )}
+        </div>
       );
 
     case "WAITING_CLIENT_CONFIRMATION":
       return (
-        <div className="flex flex-col items-center gap-2.5 rounded-card border border-line bg-surface px-4 py-6 text-center">
+        <div className="flex flex-col items-center gap-3 rounded-card border border-line bg-surface px-4 py-6">
           <span className="grid size-11 place-items-center rounded-pill bg-brand-subtle text-brand">
             <PenLine className="size-5" aria-hidden />
           </span>
           <p className="text-heading text-fg">Hand your phone to the customer</p>
-          <p className="max-w-xs text-body text-fg-muted">
-            They'll read the confirmation and sign to accept the completed move.
-          </p>
+          {/* The actual agreement they're signing -- shown up front here too, not
+              just inside the signature pad, so they can read it before the driver
+              even opens it. */}
+          <p className="w-full whitespace-pre-wrap text-left text-body text-fg-muted">{confirmationText}</p>
         </div>
       );
 
     case "WAITING_REVIEW_CHECK":
+      return (
+        <div className="rounded-card border border-line bg-surface px-4 py-6 text-center">
+          <p className="text-body text-fg">
+            🎉 Congratulations! You've successfully completed another job. Great work! 💪🎊
+          </p>
+        </div>
+      );
+
     case "WAITING_REVIEW_SEND":
       return null; // dock only
 
@@ -1066,62 +1291,52 @@ function StepBody({
   }
 }
 
+/** Placeholder for a detail the backend hasn't sent. The row/label always shows so
+ *  the driver knows the field exists and simply has no value yet. */
+const NO_VALUE = "—";
+
 function DetailRow({ label, value }: { label: string; value?: string }) {
-  if (!value) return null;
   return (
     <div className="flex items-start justify-between gap-3">
       <span className="text-body text-fg-muted">{label}</span>
-      <span className="max-w-[62%] text-right text-card text-fg">{value}</span>
+      <span className="max-w-[62%] text-right text-card text-fg">{value?.trim() || NO_VALUE}</span>
     </div>
   );
 }
 
 function ReadyCard({ job }: { job: Job }) {
   const floors =
-    job.floorFrom || job.floorTo
-      ? `${job.floorFrom || "—"} → ${job.floorTo || "—"}`
-      : undefined;
+    job.floorFrom || job.floorTo ? `${job.floorFrom || NO_VALUE} → ${job.floorTo || NO_VALUE}` : "";
   return (
     <div className="flex flex-col gap-3 rounded-card border border-line bg-surface px-4 py-4">
       <div className="flex items-center justify-between gap-3">
-        <span className="text-body text-fg-muted">Booked price</span>
+        <span className="text-body text-fg-muted">Remaining balance</span>
         <span className="text-heading font-bold tabular-nums text-fg">£{(job.basePrice ?? 0).toFixed(2)}</span>
       </div>
       <div className="h-px bg-line" />
       <div className="flex items-center justify-between gap-3">
         <span className="text-body text-fg-muted">Crew</span>
-        <span className="text-card text-fg">{job.crewSize || "?"}</span>
+        <span className="text-card text-fg">{job.crewSize || NO_VALUE}</span>
       </div>
+      {/* Van / Hire time / Floors come from the Calendar booking. Every row is shown
+          even when empty (dashed) so a missing value is obvious rather than silent. */}
       <DetailRow label="Van" value={job.vanSize} />
       <DetailRow label="Hire time" value={job.hireDurationText} />
       <DetailRow label="Floors" value={floors} />
+      {/* Overtime rate is a global Pricing Settings value (admin panel), not per-job —
+          it should always be present; dashes here mean the backend didn't send it. */}
       <DetailRow label="Overtime rate" value={job.extraChargeText} />
 
-      {job.extraRequest && (
-        <>
-          <div className="h-px bg-line" />
-          <div>
-            <span className="text-body text-fg-muted">Extra request</span>
-            <p className="mt-1 whitespace-pre-wrap text-card text-fg">{job.extraRequest}</p>
-          </div>
-        </>
-      )}
-      {job.inventory && (
-        <>
-          <div className="h-px bg-line" />
-          <div>
-            <span className="text-body text-fg-muted">What's moving</span>
-            <p className="mt-1 whitespace-pre-wrap text-card text-fg">{job.inventory}</p>
-          </div>
-        </>
-      )}
-
-      {job.paidOnline && (
-        <div className="flex items-center gap-2 rounded-control bg-success-subtle px-3 py-2.5 text-label font-medium text-success">
-          <CheckCircle2 className="size-4 shrink-0" aria-hidden />
-          Already paid online — don't collect payment on site.
-        </div>
-      )}
+      <div className="h-px bg-line" />
+      <div>
+        <span className="text-body text-fg-muted">Extra request</span>
+        <p className="mt-1 whitespace-pre-wrap text-card text-fg">{job.extraRequest?.trim() || NO_VALUE}</p>
+      </div>
+      <div className="h-px bg-line" />
+      <div>
+        <span className="text-body text-fg-muted">What's moving</span>
+        <p className="mt-1 whitespace-pre-wrap text-card text-fg">{job.inventory?.trim() || NO_VALUE}</p>
+      </div>
     </div>
   );
 }
@@ -1156,6 +1371,10 @@ function DropoffAddress({ address }: { address: string }) {
   return <StopAddress label="Drop-off address" address={address} fallback="Delivery TBC" />;
 }
 
+function StopByAddress({ address }: { address: string }) {
+  return <StopAddress label="Stop-by address" address={address} fallback="Stop-by address TBC" />;
+}
+
 /** A single route stop shown on its own — a pin, a heading, and the address. Used
  *  wherever a step concerns just one end of the job (arrival steps -> pickup,
  *  drop-off issue steps -> delivery) rather than the whole route. */
@@ -1177,9 +1396,14 @@ interface StepDockProps {
   state: string;
   /** Whether the Overtime step is part of this job's workflow. */
   overtime: boolean;
+  /** Billed by invoice (see isInvoiceJob) — Total charges skips the confirm-with-
+   *  customer step since there's nothing to show/collect on site. */
+  invoice: boolean;
   busy: boolean;
   online: boolean;
   uploadProgress: number | null;
+  /** Photos already uploaded for the current photo step — count toward the step max. */
+  photoRemoteCount: number;
   onStart: () => void;
   onAction: (action: string, input?: Record<string, string[]>, message?: string) => void;
   onUploadPhotos: (files: File[]) => void;
@@ -1200,9 +1424,11 @@ interface StepDockProps {
 function StepDock({
   state,
   overtime,
+  invoice,
   busy,
   online,
   uploadProgress,
+  photoRemoteCount,
   onStart,
   onAction,
   onUploadPhotos,
@@ -1216,46 +1442,88 @@ function StepDock({
     case "READY":
       return (
         <BottomActionBar>
-          <Button
-            fullWidth
-            size="lg"
-            loading={busy}
-            blockedReason={offlineReason}
-            onBlocked={onBlocked}
-            onClick={onStart}
+          <button
+            type="button"
+            disabled={busy}
+            aria-busy={busy || undefined}
+            onClick={() => {
+              if (offlineReason) {
+                haptics.warn();
+                onBlocked(offlineReason);
+                return;
+              }
+              haptics.tap();
+              onStart();
+            }}
+            className={bigActionButtonClass}
           >
-            {busy ? "Starting…" : "Start job"}
-          </Button>
+            {busy ? "Starting…" : "I'm on my way"}
+            {!busy && <ArrowRight className="size-[22px]" aria-hidden />}
+          </button>
         </BottomActionBar>
       );
 
     case "WAITING_ARRIVAL_PHOTO":
     case "WAITING_LOADED_PHOTO":
-    case "WAITING_EMPTY_VAN_PHOTO":
+    case "WAITING_EMPTY_VAN_PHOTO": {
+      // Local (just taken) + remote (already uploaded) photos both count toward the step.
+      const photoTotal = formState.photos.length + photoRemoteCount;
+      const photosFull = photoTotal >= photoMaxFor(state);
+      return (
+        <BottomActionBar>
+          {/* Two equal, same-style buttons side by side: open the camera (left) +
+              submit (right). */}
+          <div className="grid grid-cols-2 gap-3">
+            <Button
+              size="lg"
+              className="!rounded-[10px]"
+              iconLeft={<Camera aria-hidden />}
+              disabled={busy || photosFull}
+              onClick={() => photoCapture.open?.()}
+            >
+              {photoTotal === 0 ? "Take photo" : "Take another"}
+            </Button>
+            <Button
+              size="lg"
+              className="!rounded-[10px]"
+              loading={busy}
+              blockedReason={
+                offlineReason ?? (photoTotal === 0 ? "Take a photo first." : undefined)
+              }
+              onBlocked={onBlocked}
+              onClick={() => onUploadPhotos(formState.photos)}
+            >
+              {busy
+                ? uploadProgress !== null
+                  ? `Continuing ${Math.round(uploadProgress * 100)}%`
+                  : "Continuing..."
+                : "Continue"}
+            </Button>
+          </div>
+        </BottomActionBar>
+      );
+    }
+
+    case "WAITING_ARRIVAL_ISSUES_CHECK":
+    case "WAITING_STOP_BY_ISSUES_CHECK":
+    case "WAITING_EMPTY_VAN_ISSUES_CHECK":
       return (
         <BottomActionBar>
           <Button
             fullWidth
             size="lg"
+            variant="success"
+            className="!rounded-[10px]"
             loading={busy}
-            blockedReason={offlineReason ?? (formState.photos.length === 0 ? "Take a photo first." : undefined)}
+            blockedReason={offlineReason}
             onBlocked={onBlocked}
-            onClick={() => onUploadPhotos(formState.photos)}
+            iconLeft={<Check aria-hidden />}
+            onClick={() => onAction("ISSUES_NONE")}
           >
-            {busy
-              ? uploadProgress !== null
-                ? `Continuing ${Math.round(uploadProgress * 100)}%`
-                : "Continuing..."
-              : "Continue"}
+            No Issues
           </Button>
         </BottomActionBar>
       );
-
-    case "WAITING_ARRIVAL_ISSUES_CHECK":
-      return null;
-
-    case "WAITING_EMPTY_VAN_ISSUES_CHECK":
-      return null;
 
     case "IN_PROGRESS":
       return (
@@ -1307,10 +1575,7 @@ function StepDock({
             blockedReason={overtimeBlockedReason(offlineReason)}
             onBlocked={onBlocked}
             onClick={() =>
-              onAction("SUBMIT_OVERTIME", {
-                overtime_minutes: [formState.overtimeMinutes],
-                overtime_crew_size: [formState.overtimeCrew]
-              })
+              onAction("SUBMIT_OVERTIME", { overtime_minutes: [formState.overtimeMinutes] })
             }
           >
             Continue
@@ -1325,9 +1590,11 @@ function StepDock({
             fullWidth
             size="lg"
             loading={busy}
-            blockedReason={totalChargesBlockedReason(offlineReason)}
+            // Invoice jobs have nothing to confirm -- there's no "is this correct?"
+            // choice shown, so Continue is only ever blocked by being offline.
+            blockedReason={invoice ? offlineReason : totalChargesBlockedReason(offlineReason)}
             onBlocked={onBlocked}
-            onClick={() => onAction("SUBMIT_TOTAL_CHARGES", totalChargesInput())}
+            onClick={() => onAction("SUBMIT_TOTAL_CHARGES", invoice ? undefined : totalChargesInput())}
           >
             Continue
           </Button>
@@ -1400,6 +1667,7 @@ function StepDock({
 // Fallback shown until the job detail response's confirmationText loads. Reads the
 // same Settings key the admin dashboard already edits.
 const DEFAULT_CUSTOMER_CONFIRMATION_TEXT =
-  "By signing below, you confirm that you have inspected the van, that it is empty, that all items have been " +
-  "delivered, and that no items have been left behind. You also confirm that the removal service has been " +
-  "completed to your satisfaction.";
+  "I confirm that the moving service has been completed and all my belongings have been unloaded. " +
+  "I have checked the van and confirm that nothing has been left behind. By signing, I agree that the job " +
+  "is complete and the team is released to leave. Any request to return after sign-off will be subject to " +
+  "availability and additional charges.";

@@ -1,50 +1,54 @@
-import React, { useEffect, useState } from "react";
-import { ArrowRight, Phone, Users } from "lucide-react";
+import React from "react";
+import { ArrowRight, Users } from "lucide-react";
 import { cx } from "../../ui";
 import { haptics } from "../../lib/haptics";
 import { telUrl } from "../../lib/links";
 import type { Job } from "../../api/jobs";
 import { JobRoute } from "./JobRoute";
-import { jobStatusMeta } from "./JobStatusChip";
-
-function gbp(v: number): string {
-  return `£${(v ?? 0).toFixed(0)}`;
-}
+import { StatusIndicator } from "./JobStatusChip";
+import { bigActionButtonClass } from "./bigActionButton";
 
 const LONDON = "Europe/London";
 
-function when(iso: string): { time: string; day: string } {
+/** British month abbreviations, upper-case — "SEPT" not "SEP". */
+const MONTHS = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEPT", "OCT", "NOV", "DEC"];
+
+function hhmm(iso: string): string {
   const d = iso ? new Date(iso) : null;
-  if (!d || Number.isNaN(d.getTime())) return { time: "--:--", day: "" };
-  return {
-    time: d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", timeZone: LONDON }),
-    day: d.toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short", timeZone: LONDON })
-  };
+  if (!d || Number.isNaN(d.getTime())) return "--:--";
+  return d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", timeZone: LONDON });
 }
 
-/** A quiet "starts in …" chip: how long until (or since) the booked start. Returns
- *  null when the job is running, done/cancelled, or too far out / long past to matter. */
-function countdown(job: Job, nowMs: number): { text: string; urgent: boolean } | null {
-  if (job.status !== "READY") return null;
-  const start = new Date(job.bookedStart).getTime();
-  if (Number.isNaN(start)) return null;
-  const mins = Math.round((start - nowMs) / 60000);
-  if (mins > 8 * 60 || mins < -180) return null;
-  if (mins <= 0) return { text: mins > -2 ? "due now" : `${-mins}m late`, urgent: true };
-  if (mins < 60) return { text: `in ${mins}m`, urgent: mins <= 15 };
-  const h = Math.floor(mins / 60);
-  const m = mins % 60;
-  return { text: m ? `in ${h}h ${m}m` : `in ${h}h`, urgent: false };
+/** The booked window straight off the Calendar event — start–end, in London time. */
+function timeRange(job: Job): string {
+  const start = hhmm(job.bookedStart);
+  const end = hhmm(job.bookedFinish);
+  return end === "--:--" ? start : `${start}–${end}`;
 }
 
-/** Map the shared job signal onto one of the three board pill tints. */
-const PILL: Record<string, string> = {
-  active: "bg-brand-subtle text-brand-subtle-fg",
-  upcoming: "bg-brand-subtle text-brand-subtle-fg",
-  attention: "bg-warning-subtle text-warning",
-  done: "bg-success-subtle text-success",
-  cancelled: "bg-danger-subtle text-danger"
-};
+/** "WED 9 SEPT" from the booked start, in London time. */
+function dateChip(iso: string): string {
+  const d = iso ? new Date(iso) : null;
+  if (!d || Number.isNaN(d.getTime())) return "";
+  const p = new Intl.DateTimeFormat("en-GB", {
+    weekday: "short",
+    day: "numeric",
+    month: "numeric",
+    timeZone: LONDON
+  }).formatToParts(d);
+  const weekday = p.find(x => x.type === "weekday")?.value ?? "";
+  const day = p.find(x => x.type === "day")?.value ?? "";
+  const monthIdx = Number(p.find(x => x.type === "month")?.value ?? "0") - 1;
+  const month = MONTHS[monthIdx] ?? "";
+  return `${weekday} ${day} ${month}`.toUpperCase();
+}
+
+/** "2 men 210£" — crew and booked price, the way the board reads it. */
+function crewPrice(job: Job): string {
+  const n = job.crewSize || 0;
+  const crew = `${n || "?"} ${n === 1 ? "man" : "men"}`;
+  return job.basePrice > 0 ? `${crew} ${Math.round(job.basePrice)}£` : crew;
+}
 
 export interface FeaturedJobCardProps {
   job: Job;
@@ -52,28 +56,14 @@ export interface FeaturedJobCardProps {
 }
 
 /**
- * The next / active job — the one hero of the screen. A gradient panel with the
- * Calendar booking title set large in the mono face (e.g. "2 Men - £170 - 16:00"),
- * a status pill, the customer, a drawn pickup→drop-off route, and the two actions a
- * driver takes first: open the job, call. The whole card is a tap target that opens
- * the job; the actions stop propagation.
+ * The next / active job — the one hero of the screen. A crew/price pill and the
+ * Calendar booking window (start–end, red) sit in a small header card, then the
+ * status, the drawn pickup→drop-off route, the customer with a tap-to-call number,
+ * the crew size and van, and a full-width View Job button. The whole card is a tap
+ * target that opens the job; the inner actions stop propagation.
  */
 export function FeaturedJobCard({ job, onOpen }: FeaturedJobCardProps) {
-  const meta = jobStatusMeta(job);
-  const { time, day } = when(job.bookedStart);
-  // The Calendar event title carries the crew / price / time the way ops wrote it.
-  // Ops also tack on a "/ N - SD" paid-flag + driver-initials tag the driver doesn't
-  // need, so show only what's before the slash. Fall back to the booked time on
-  // older jobs that never stored a title.
-  const heading = job.rawTitle?.split("/")[0].replace(/[\s-]+$/, "").trim() || time;
-
-  // Keep the "starts in …" chip fresh without a heavy timer — a minute tick is plenty.
-  const [nowMs, setNowMs] = useState(() => Date.now());
-  useEffect(() => {
-    const id = setInterval(() => setNowMs(Date.now()), 60000);
-    return () => clearInterval(id);
-  }, []);
-  const eta = countdown(job, nowMs);
+  const day = dateChip(job.bookedStart);
 
   function open() {
     haptics.tap();
@@ -92,82 +82,77 @@ export function FeaturedJobCard({ job, onOpen }: FeaturedJobCardProps) {
         }
       }}
       className={cx(
-        "block w-full rounded-panel border border-line-strong bg-gradient-to-b from-hero-from to-hero-to p-5 text-left shadow-md",
+        "block w-full rounded-panel border border-line-strong bg-surface p-4 text-left",
+        "shadow-[0_1px_3px_rgb(15_23_42/0.08),0_12px_28px_-10px_rgb(15_23_42/0.22)]",
         "transition-transform duration-fast active:scale-[0.99]",
         "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
       )}
     >
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0">
-          <div className="font-mono text-[22px] font-bold leading-tight tracking-normal text-fg break-words">
-            {heading}
-          </div>
-          <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1">
-            {day && <span className="font-mono text-meta text-fg-muted">{day}</span>}
-            {eta && (
-              <span
-                className={cx(
-                  "inline-flex items-center rounded-pill px-2 py-0.5 font-mono text-meta font-semibold",
-                  eta.urgent ? "bg-warning-subtle text-warning" : "bg-surface-sunken text-fg-muted"
-                )}
-              >
-                {eta.text}
-              </span>
-            )}
-          </div>
+      {/* Booking window header */}
+      <div className="rounded-card border border-line/40 bg-surface px-4 py-3 text-center shadow-[0_2px_12px_-2px_rgb(15_23_42/0.12)]">
+        <div className="flex flex-wrap items-center justify-center gap-x-2.5 gap-y-1">
+          <span className="inline-flex items-center rounded-none bg-success-subtle px-2.5 py-1 text-helper font-bold text-success">
+            {crewPrice(job)}
+          </span>
+          <span className="text-fg-subtle" aria-hidden>
+            &ndash;
+          </span>
+          <span className="font-mono text-[17px] font-bold tracking-[-0.01em] text-danger">
+            {timeRange(job)}
+          </span>
         </div>
-        <span
-          className={cx(
-            "inline-flex shrink-0 items-center gap-1.5 rounded-pill px-3 py-1.5 text-helper font-bold",
-            PILL[meta.signal] || PILL.upcoming
-          )}
-        >
-          <span className="size-[7px] rounded-full bg-current" aria-hidden />
-          {meta.label}
-        </span>
+        {day && (
+          <div className="mt-2 inline-flex items-center rounded-none bg-surface-sunken px-2.5 py-0.5 font-mono text-meta font-semibold text-fg-muted">
+            {day}
+          </div>
+        )}
       </div>
 
-      <div className="mt-4 text-[19px] font-semibold tracking-normal text-fg [overflow-wrap:anywhere]">
+      <div className="mt-4">
+        <StatusIndicator job={job} />
+      </div>
+
+      <JobRoute pickup={job.pickup} dropoff={job.dropoff} stop={job.stopBy} density="full" className="mt-4" />
+
+      {/* Indented to line up with the address text in <JobRoute> above (24px rail
+          column + 14px gap-x-3.5). */}
+      <div className="mt-3 pl-[38px] text-[17px] font-semibold text-fg [overflow-wrap:anywhere]">
         {job.customerName || "Unnamed customer"}
+        {job.customerPhone && (
+          <>
+            {"  "}
+            <a
+              href={telUrl(job.customerPhone)}
+              onClick={e => e.stopPropagation()}
+              className="font-mono text-[15px] font-semibold text-brand"
+            >
+              {job.customerPhone}
+            </a>
+          </>
+        )}
       </div>
-
-      <JobRoute pickup={job.pickup} dropoff={job.dropoff} density="full" className="mt-4" />
 
       <div className="mt-[18px] flex items-center gap-3 border-t border-line pt-4">
         <span className="inline-flex items-center gap-1.5 text-body text-fg-muted">
           <Users className="size-[18px] text-fg-subtle" aria-hidden />
           {job.crewSize || "?"} crew
         </span>
-        {job.basePrice > 0 && (
-          <span className="ml-auto font-mono text-[22px] font-bold tracking-[-0.02em] text-fg">
-            {gbp(job.basePrice)}
-          </span>
+        {job.vanSize && (
+          <span className="ml-auto text-body font-semibold text-fg">{job.vanSize}</span>
         )}
       </div>
 
-      <div className="mt-4 flex gap-2.5">
-        <button
-          type="button"
-          onClick={e => {
-            e.stopPropagation();
-            open();
-          }}
-          className="inline-flex min-h-[56px] flex-1 items-center justify-center gap-2 rounded-card bg-brand text-[16px] font-bold text-brand-fg transition-transform duration-fast active:scale-[0.97]"
-        >
-          View Job
-          <ArrowRight className="size-[22px]" aria-hidden />
-        </button>
-        {job.customerPhone && (
-          <a
-            href={telUrl(job.customerPhone)}
-            onClick={e => e.stopPropagation()}
-            aria-label="Call customer"
-            className="grid min-h-[56px] w-[56px] shrink-0 place-items-center rounded-card border border-line-strong bg-surface-sunken text-fg transition-transform duration-fast active:scale-[0.97]"
-          >
-            <Phone className="size-[22px]" aria-hidden />
-          </a>
-        )}
-      </div>
+      <button
+        type="button"
+        onClick={e => {
+          e.stopPropagation();
+          open();
+        }}
+        className={cx(bigActionButtonClass, "-mx-2 mt-5")}
+      >
+        View Job
+        <ArrowRight className="size-[22px]" aria-hidden />
+      </button>
     </div>
   );
 }

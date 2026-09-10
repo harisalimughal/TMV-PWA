@@ -29,8 +29,10 @@ export type { ProfileMenuProps } from "./ProfileMenu";
 export { FeaturedJobCard } from "./FeaturedJobCard";
 export type { FeaturedJobCardProps } from "./FeaturedJobCard";
 
+export { bigActionButtonClass } from "./bigActionButton";
+
 export { JobFilterBar } from "./JobFilterBar";
-export type { JobFilterBarProps } from "./JobFilterBar";
+export type { JobFilterBarProps, HomeFilter } from "./JobFilterBar";
 
 export { AlertStrip } from "./AlertStrip";
 export type { AlertStripProps } from "./AlertStrip";

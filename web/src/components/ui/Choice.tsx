@@ -62,16 +62,20 @@ export function ChoiceGroup({
   hint,
   children
 }: {
-  legend: string;
+  /** Omit when the screen's own step heading already says what this group is for --
+   *  avoids a redundant second heading stacked right above the choices. */
+  legend?: string;
   hint?: string;
   children: React.ReactNode;
 }) {
   return (
     <fieldset className="border-0 p-0 m-0 min-w-0">
-      <legend className="mb-2 pl-0.5 text-label text-fg-muted">
-        {legend}
-        {hint && <span className="block font-normal text-fg-subtle mt-0.5">{hint}</span>}
-      </legend>
+      {legend && (
+        <legend className="mb-2 pl-0.5 text-label text-fg-muted">
+          {legend}
+          {hint && <span className="block font-normal text-fg-subtle mt-0.5">{hint}</span>}
+        </legend>
+      )}
       <div className="flex flex-col gap-2.5">{children}</div>
     </fieldset>
   );

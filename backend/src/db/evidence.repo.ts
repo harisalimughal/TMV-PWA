@@ -12,6 +12,11 @@ export async function updateEvidence(record: EvidenceRecord): Promise<void> {
   await col.replaceOne({ _id: record.evidenceId } as any, { _id: record.evidenceId, ...record } as any, { upsert: true });
 }
 
+export async function deleteEvidence(evidenceId: string): Promise<void> {
+  const col = await evidenceCollection();
+  await col.deleteOne({ _id: evidenceId } as any);
+}
+
 export async function getEvidence(evidenceId: string): Promise<EvidenceRecord | null> {
   const col = await evidenceCollection();
   const doc = await col.findOne({ _id: evidenceId } as any);

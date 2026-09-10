@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { AlertTriangle } from "lucide-react";
-import { PhotoPicker } from "./PhotoPicker";
+import { PhotoPicker, type RemotePhoto } from "./PhotoPicker";
 
 export interface PhotoUploaderProps {
   label: string;
@@ -19,6 +19,20 @@ export interface PhotoUploaderProps {
    * that button's state honest.
    */
   onFilesChange?: (files: File[]) => void;
+  /**
+   * When set, the built-in "Take photo" button is hidden and the caller is handed a
+   * camera-open trigger instead — used when the capture button lives in the dock.
+   */
+  registerCapture?: (open: (() => void) | null) => void;
+  /** Photos to pre-populate with (kept by the parent so a step's photos survive
+   *  navigating away and back). */
+  initialFiles?: File[];
+  /** Photos already on the server for this step. */
+  remoteFiles?: RemotePhoto[];
+  onRemoveRemote?: (id: string) => void;
+  /** Hides the section's own "label" heading (count still shows) -- for a screen
+   *  whose step title already says what the photo is for. */
+  labelHidden?: boolean;
 }
 
 /**
@@ -36,16 +50,21 @@ export function PhotoUploader({
   submitting = false,
   progress = null,
   error = null,
-  onFilesChange
+  onFilesChange,
+  registerCapture,
+  initialFiles,
+  remoteFiles,
+  onRemoveRemote,
+  labelHidden
 }: PhotoUploaderProps) {
-  const [files, setFiles] = useState<File[]>([]);
+  const [files, setFiles] = useState<File[]>(initialFiles ?? []);
 
   function handleChange(next: File[]) {
     setFiles(next);
     onFilesChange?.(next);
   }
 
-  const remaining = Math.max(0, minPhotos - files.length);
+  const remaining = Math.max(0, minPhotos - files.length - (remoteFiles?.length ?? 0));
 
   return (
     <div className="flex flex-col gap-4">
@@ -55,6 +74,11 @@ export function PhotoUploader({
         min={minPhotos}
         max={maxPhotos}
         onChange={handleChange}
+        registerCapture={registerCapture}
+        initialFiles={initialFiles}
+        remoteFiles={remoteFiles}
+        onRemoveRemote={onRemoveRemote}
+        labelHidden={labelHidden}
         autoAcceptCapture
       />
 

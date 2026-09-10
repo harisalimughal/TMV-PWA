@@ -23,7 +23,7 @@ export interface StepMeta {
   order: number;
 }
 
-export const TOTAL_STEPS = 12;
+export const TOTAL_STEPS = 13;
 
 export const STEPS: Record<string, StepMeta> = {
   READY: {
@@ -32,12 +32,12 @@ export const STEPS: Record<string, StepMeta> = {
     order: 1
   },
   WAITING_ARRIVAL_PHOTO: {
-    label: "Arrival Photos (pick up point)",
+    label: "Proof of arrival",
     hint: "Take up to 2 photos of the property or load as you found it at the pickup point.",
     order: 2
   },
   WAITING_ARRIVAL_ISSUES_CHECK: {
-    label: "Any issues at pickup point?",
+    label: "Great! We're at the pick-up point now — any issue to report?",
     hint: "Choose a report if needed, or continue with no issues.",
     order: 3
   },
@@ -56,58 +56,73 @@ export const STEPS: Record<string, StepMeta> = {
     hint: "Finish the move when everything is unloaded at the drop-off address.",
     order: 4
   },
-  WAITING_EMPTY_VAN_ISSUES_CHECK: {
-    label: "Any issues at drop-off point?",
+  // Only reached for jobs that carry a mid-route stop (job.stopBy). Sits between the
+  // van-loaded photo and the drop-off issues check.
+  WAITING_STOP_BY_ISSUES_CHECK: {
+    label: "Nice! We're at the stop-by point now — any issue to report ?",
     hint: "Choose a report if needed, or continue with no issues.",
     order: 5
+  },
+  WAITING_STOP_BY_ISSUES_CHOICE: {
+    label: "Record the issue",
+    hint: "Pick the form that matches what happened at the stop-by address.",
+    order: 5
+  },
+  WAITING_EMPTY_VAN_ISSUES_CHECK: {
+    label: "Well done, you're almost finished! We're at the drop-off point now — any issues to report?",
+    hint: "Choose a report if needed, or continue with no issues.",
+    order: 6
   },
   WAITING_EMPTY_VAN_ISSUES_CHOICE: {
     label: "Record the issue",
     hint: "Pick the form that matches what happened.",
-    order: 5
+    order: 6
   },
   WAITING_EXTRA_CHARGES: {
     label: "Extra charges",
     hint: "Select everything that applies. Pick “No Extras Time” if there were none.",
-    order: 6
+    order: 7
   },
   WAITING_OVERTIME: {
-    label: "Overtime",
-    hint: "Minutes worked beyond the booked window, and who was working them.",
-    order: 7
+    label: "Extra Time Needed and Paid",
+    hint: "Minutes worked beyond the booked window",
+    order: 8
   },
   WAITING_TOTAL_CHARGES: {
     label: "Total charges",
     hint: "The final amount for this job, including any extras and overtime.",
-    order: 8
+    order: 9
   },
   WAITING_PAYMENT: {
-    label: "Payment method",
-    hint: "How the customer is paying.",
-    order: 9
+    label: "How customer Paid ?",
+    order: 10
   },
   WAITING_EMPTY_VAN_PHOTO: {
     label: "Empty van photo (drop-off point)",
     hint: "Show the van empty at the drop-off — proof nothing was left behind.",
-    order: 10
+    order: 11
   },
   WAITING_CLIENT_CONFIRMATION: {
     label: "Customer sign-off",
     hint: "Hand your phone to the customer to review and sign.",
-    order: 11
+    order: 12
   },
   WAITING_REVIEW_CHECK: {
-    label: "Ask for a review?",
+    label: "Ask for a review ?",
     hint: "Only if the customer is happy to leave one.",
-    order: 12
+    order: 13
   },
   WAITING_REVIEW_SEND: {
     label: "Send review email",
     hint: "This finishes the job.",
-    order: 12
+    order: 13
   },
   COMPLETED: { label: "Job complete", order: TOTAL_STEPS }
 };
+
+/** Position of the conditional stop-by issues step — used to collapse its slot for
+ *  jobs without a mid-route stop, the same way Overtime's slot collapses. */
+export const STOP_BY_ORDER = 5;
 
 /** Steps a driver can safely reverse out of -- all pure data-entry, nothing that has
  *  already been sent to the customer or stamped as a time. */
@@ -148,16 +163,21 @@ export function overtimeApplies(extraCharges: readonly string[] | undefined | nu
 }
 
 /**
- * Displayed "Step N of M" for a given state, collapsing the Overtime slot when it
- * doesn't apply: without overtime the workflow is one step shorter and every step
- * after Extra charges shifts down by one.
+ * Displayed "Step N of M" for a given state. Two slots are conditional and collapse
+ * when they don't apply, each shifting every later step down by one:
+ *  - the stop-by issues check (only for jobs with a mid-route stop), and
+ *  - Overtime (only when "Extra time / Charges" was selected).
  */
 export function workflowProgress(
   state: string,
-  opts: { overtime: boolean }
+  opts: { overtime: boolean; hasStop?: boolean }
 ): { current: number; total: number } {
-  const total = opts.overtime ? TOTAL_STEPS : TOTAL_STEPS - 1;
+  let total = TOTAL_STEPS;
+  if (!opts.hasStop) total -= 1;
+  if (!opts.overtime) total -= 1;
+
   let current = STEPS[state]?.order ?? 1;
+  if (!opts.hasStop && current > STOP_BY_ORDER) current -= 1;
   if (!opts.overtime && current > STEPS.WAITING_OVERTIME.order) current -= 1;
   return { current: Math.min(current, total), total };
 }

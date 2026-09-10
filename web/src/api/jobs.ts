@@ -12,6 +12,12 @@ export interface Job {
   customerPhone: string;
   pickup: string;
   dropoff: string;
+  /** Optional mid-route stop ("stop by" / waypoint) parsed from the Calendar event.
+   *  When present it sits between pickup and drop-off on the route and is added as a
+   *  waypoint to the Navigate link. NOT YET POPULATED BY THE BACKEND — only the dev
+   *  mock sets it today (see src/mocks/fixtures.ts). Safe to read anywhere: absent
+   *  or "" means a plain two-stop job. */
+  stopBy?: string;
   /** Verbatim Calendar event title this job was synced from, e.g.
    *  "2 Men - £170 - 16:00". Empty on jobs synced before the backend started
    *  storing it, until their next resync. */
@@ -78,9 +84,21 @@ export interface EvidenceSummary {
   hasSignature: boolean;
 }
 
+/** One photo already uploaded for a job — shown when the driver steps back to a
+ *  photo step, with the option to delete it. */
+export interface EvidenceItem {
+  evidenceId: string;
+  /** "Arrival" | "VanLoaded" | "EmptyVan" | scenario types. */
+  evidenceType: string;
+  url: string;
+}
+
 export interface JobUpdateResult {
   job: Job;
   suggestedTotal?: number;
+  /** Present on responses that can change the photo set (evidence upload/delete,
+   *  workflow actions incl. GO_BACK). */
+  evidenceItems?: EvidenceItem[];
 }
 
 /** The "Your jobs" listing -- every one of the driver's jobs, bucketed into
@@ -98,10 +116,18 @@ export function fetchJobDetail(jobId: string): Promise<{
   job: Job;
   activity: ActivityEntry[];
   evidence: EvidenceSummary;
+  evidenceItems: EvidenceItem[];
   suggestedTotal: number;
   confirmationText: string;
 }> {
   return request(`/api/jobs/${encodeURIComponent(jobId)}`);
+}
+
+/** Removes one already-uploaded photo. Returns the job's remaining photo set. */
+export function deleteEvidence(jobId: string, evidenceId: string): Promise<{ evidenceItems: EvidenceItem[] }> {
+  return request(`/api/jobs/${encodeURIComponent(jobId)}/evidence/${encodeURIComponent(evidenceId)}`, {
+    method: "DELETE"
+  });
 }
 
 export async function fetchLiabilityDamageCategories(): Promise<string[]> {

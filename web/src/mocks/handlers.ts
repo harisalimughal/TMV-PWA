@@ -7,7 +7,7 @@
  */
 import type { ActivityEntry, EvidenceSummary, Job } from "../api/jobs";
 import { DAMAGE_CATEGORIES } from "../scenarioSpec";
-import { DEFAULT_CONFIRMATION_TEXT, seedStore, type MockStore } from "./fixtures";
+import { DEFAULT_CONFIRMATION_TEXT, makeEvidenceItem, seedStore, type MockStore } from "./fixtures";
 import { applyTrigger, type WorkflowTrigger } from "./workflow";
 
 let store: MockStore = seedStore();
@@ -34,6 +34,7 @@ const HAPPY_ORDER = [
   "WAITING_ARRIVAL_ISSUES_CHECK",
   "WAITING_LOADED_PHOTO",
   "IN_PROGRESS",
+  "WAITING_STOP_BY_ISSUES_CHECK",
   "WAITING_EMPTY_VAN_ISSUES_CHECK",
   "WAITING_EXTRA_CHARGES",
   "WAITING_OVERTIME",
@@ -90,7 +91,30 @@ function transition(jobId: string, trigger: WorkflowTrigger, input?: Record<stri
   const updated = applyTrigger(job, trigger, input ?? {});
   store.jobs[jobId] = updated;
   if (updated.currentState !== fromState) logActivity(updated, trigger, fromState);
-  return ok({ job: updated, suggestedTotal: suggestedTotal(updated) });
+  return ok({
+    job: updated,
+    suggestedTotal: suggestedTotal(updated),
+    evidenceItems: store.evidence[jobId] ?? []
+  });
+}
+
+const PHOTO_STATE_TYPE: Record<string, string> = {
+  WAITING_ARRIVAL_PHOTO: "Arrival",
+  WAITING_LOADED_PHOTO: "VanLoaded",
+  WAITING_EMPTY_VAN_PHOTO: "EmptyVan"
+};
+
+/** Mock photo upload: stash one synthetic photo for the step's type (up to its max)
+ *  before advancing, so a later step-back shows something real to delete. */
+function recordMockEvidence(jobId: string): void {
+  const job = store.jobs[jobId];
+  const type = job && PHOTO_STATE_TYPE[job.currentState];
+  if (!type) return;
+  const max = job.currentState === "WAITING_EMPTY_VAN_PHOTO" ? 1 : 2;
+  const items = store.evidence[jobId] ?? (store.evidence[jobId] = []);
+  if (items.filter(i => i.evidenceType === type).length < max) {
+    items.push(makeEvidenceItem(type));
+  }
 }
 
 function parse(bodyText?: string): any {
@@ -206,12 +230,22 @@ export function handle(method: string, path: string, bodyText?: string): MockRes
         job,
         activity: store.activity[jobId] ?? [],
         evidence: evidenceFor(job),
+        evidenceItems: store.evidence[jobId] ?? [],
         suggestedTotal: suggestedTotal(job),
         confirmationText: DEFAULT_CONFIRMATION_TEXT
       });
     }
     if (sub === "/start" && method === "POST") return transition(jobId, "start");
-    if (sub === "/evidence" && method === "POST") return transition(jobId, "evidence");
+    if (sub === "/evidence" && method === "POST") {
+      recordMockEvidence(jobId);
+      return transition(jobId, "evidence");
+    }
+    const evidenceDelete = sub.match(/^\/evidence\/([^/]+)$/);
+    if (evidenceDelete && method === "DELETE") {
+      const id = decodeURIComponent(evidenceDelete[1]);
+      store.evidence[jobId] = (store.evidence[jobId] ?? []).filter(item => item.evidenceId !== id);
+      return ok({ evidenceItems: store.evidence[jobId] });
+    }
     if (sub === "/signature" && method === "POST") return transition(jobId, "signature");
     if (sub === "/actions" && method === "POST") {
       const { action, input } = parse(bodyText);

@@ -16,6 +16,31 @@ export interface PhotoPickerProps {
   allowUpload?: boolean;
   /** Accept camera captures immediately instead of showing Retake / Use photo. */
   autoAcceptCapture?: boolean;
+  /**
+   * When provided, the built-in "Take photo" button is NOT rendered; instead this is
+   * called with a function that opens the camera (and with `null` on unmount). Lets a
+   * caller drive capture from elsewhere — e.g. a button in the screen's sticky dock.
+   */
+  registerCapture?: (open: (() => void) | null) => void;
+  /**
+   * Photos to start with — used to re-hydrate the picker when the workflow returns to
+   * a photo step the driver had already added photos to (they're kept in memory by
+   * the parent, keyed per step, so navigating back and forward doesn't lose them).
+   */
+  initialFiles?: File[];
+  /** Photos already uploaded to the server for this step, shown alongside newly
+   *  captured ones. Deleting one calls `onRemoveRemote` with its id. */
+  remoteFiles?: RemotePhoto[];
+  onRemoveRemote?: (id: string) => void;
+  /** Hides the `label` heading (the count still shows) -- for a screen whose own
+   *  step title already says what the photo is for, so this section doesn't repeat
+   *  it. `label` is still used for alt text and the camera modal's title either way. */
+  labelHidden?: boolean;
+}
+
+export interface RemotePhoto {
+  id: string;
+  url: string;
 }
 
 interface Preview {
@@ -40,12 +65,27 @@ export function PhotoPicker({
   onChange,
   hint,
   allowUpload = false,
-  autoAcceptCapture = false
+  autoAcceptCapture = false,
+  registerCapture,
+  initialFiles,
+  remoteFiles,
+  onRemoveRemote,
+  labelHidden = false
 }: PhotoPickerProps) {
-  const [previews, setPreviews] = useState<Preview[]>([]);
+  const [previews, setPreviews] = useState<Preview[]>(() =>
+    (initialFiles ?? []).map(file => ({ file, url: URL.createObjectURL(file) }))
+  );
   const [processing, setProcessing] = useState(false);
   const [cameraOpen, setCameraOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  // Hand a camera-open trigger to the caller (e.g. a docked "Take photo" button),
+  // and take it back on unmount / step change.
+  useEffect(() => {
+    if (!registerCapture) return;
+    registerCapture(() => setCameraOpen(true));
+    return () => registerCapture(null);
+  }, [registerCapture]);
 
   // Revoke every URL this component ever created, on unmount.
   const urlsRef = useRef<string[]>([]);
@@ -84,16 +124,20 @@ export function PhotoPicker({
     onChange(next.map(p => p.file));
   }
 
-  const full = max > 1 && previews.length >= max;
+  const remote = remoteFiles ?? [];
+  const total = remote.length + previews.length;
+  // Keep the pre-existing behaviour for callers without server photos (max===1 stays
+  // replaceable); when server photos are in play, "full" is a hard total cap.
+  const full = remote.length > 0 ? total >= max : max > 1 && previews.length >= max;
   const totalBytes = previews.reduce((sum, p) => sum + p.file.size, 0);
-  const met = previews.length >= min;
-  const captureLabel = previews.length === 0 ? "Take photo" : "Take another";
+  const met = total >= min;
+  const captureLabel = total === 0 ? "Take photo" : "Take another";
 
   return (
     <section className="flex flex-col gap-3">
       <div className="flex items-baseline justify-between gap-3">
         <div className="min-w-0">
-          <h3 className="text-heading text-fg">{label}</h3>
+          {!labelHidden && <h3 className="text-heading text-fg">{label}</h3>}
           {hint && <p className="mt-0.5 text-helper text-fg-muted">{hint}</p>}
         </div>
         <span
@@ -102,13 +146,31 @@ export function PhotoPicker({
             met ? "text-success" : "text-fg-subtle",
           )}
         >
-          {previews.length}
+          {total}
           {max > 1 ? ` / ${max}` : min > 0 ? " / 1" : ""}
         </span>
       </div>
 
-      {previews.length > 0 && (
+      {(remote.length > 0 || previews.length > 0) && (
         <ul className="m-0 grid list-none grid-cols-3 gap-2.5 p-0">
+          {remote.map((photo, index) => (
+            <li
+              key={photo.id}
+              className="relative aspect-square animate-in zoom-in-95 overflow-hidden rounded-card border border-line bg-surface-sunken"
+            >
+              <img src={photo.url} alt={`${label}, photo ${index + 1}`} className="h-full w-full object-cover" />
+              {onRemoveRemote && (
+                <button
+                  type="button"
+                  onClick={() => onRemoveRemote(photo.id)}
+                  className="absolute right-1.5 top-1.5 flex size-8 items-center justify-center rounded-pill bg-black/65 text-white backdrop-blur-sm transition-transform active:scale-90"
+                  aria-label={`Remove photo ${index + 1}`}
+                >
+                  <X className="size-4" aria-hidden />
+                </button>
+              )}
+            </li>
+          ))}
           {previews.map((preview, index) => (
             <li
               key={preview.url}
@@ -169,7 +231,7 @@ export function PhotoPicker({
         </div>
       )}
 
-      {!full && !allowUpload && (
+      {!full && !allowUpload && !registerCapture && (
         <button
           type="button"
           onClick={() => setCameraOpen(true)}

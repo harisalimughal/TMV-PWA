@@ -6,6 +6,7 @@ import { getJobForDriver, getJobsGroupedForDriver, getNextJobForDriver, getTomor
 import { uploadEvidenceImage } from "../storage/cloudinary";
 import { looksLikeImage } from "./evidence.service";
 import {
+  deleteEvidenceForDriver,
   EvidenceFailedError, EvidencePendingError, getConfirmationText, handleAction, handlePhotoStep,
   submitDrawnSignature, suggestedTotal
 } from "../workflow/workflow.engine";
@@ -13,7 +14,8 @@ import { submitScenario } from "./scenario.service";
 import { DAMAGE_CATEGORIES, SCENARIOS, ScenarioKey } from "../workflow/scenario.spec";
 import { ValidationError } from "../workflow/validation.engine";
 import { listActivityForJob } from "../db/activity.repo";
-import { readEvidenceSummary } from "../db/evidence.repo";
+import { listEvidenceForJob, readEvidenceSummary } from "../db/evidence.repo";
+import { EvidenceStatus } from "./job.types";
 import { listScenarioSubmissionsForJob } from "../db/scenario.repo";
 import { getSetting } from "../db/settings.repo";
 import { log } from "../utils/logger";
@@ -83,6 +85,19 @@ function errorResponse(res: Response, error: unknown): void {
   res.status(500).json({ error: { code: "INTERNAL_ERROR", message: "Something went wrong. Please try again." } });
 }
 
+/** The driver-visible list of photos already uploaded for a job — id, which step it
+ *  belongs to, and its URL — so the app can show them when a driver steps back to a
+ *  photo step, and offer to delete any. COMPLETED only (a half-processed upload isn't
+ *  something the driver can act on). */
+async function evidenceItemsFor(
+  jobId: string
+): Promise<Array<{ evidenceId: string; evidenceType: string; url: string }>> {
+  const records = await listEvidenceForJob(jobId);
+  return records
+    .filter(r => r.status === EvidenceStatus.COMPLETED && r.cloudinaryUrl)
+    .map(r => ({ evidenceId: r.evidenceId, evidenceType: r.evidenceType, url: r.cloudinaryUrl }));
+}
+
 export function jobsRoutes(): Router {
   const router = Router();
   router.use(requireDriverAuth);
@@ -136,12 +151,20 @@ export function jobsRoutes(): Router {
   router.get("/:jobId", async (req: Request, res: Response) => {
     try {
       const { job } = await getJobForDriver(String(req.params.jobId), req.driverEmail!);
-      const [activity, evidence, confirmationText] = await Promise.all([
+      const [activity, evidence, evidenceItems, confirmationText] = await Promise.all([
         listActivityForJob(job.jobId),
         readEvidenceSummary(job.jobId),
+        evidenceItemsFor(job.jobId),
         getConfirmationText()
       ]);
-      res.status(200).json({ job, activity, evidence, suggestedTotal: await suggestedTotal(job), confirmationText });
+      res.status(200).json({
+        job,
+        activity,
+        evidence,
+        evidenceItems,
+        suggestedTotal: await suggestedTotal(job),
+        confirmationText
+      });
     } catch (error) {
       errorResponse(res, error);
     }
@@ -168,7 +191,19 @@ export function jobsRoutes(): Router {
         fileName: file.originalname || "photo.jpg"
       }));
       const job = await handlePhotoStep(String(req.params.jobId), req.driverEmail!, photos);
-      res.status(200).json({ job });
+      res.status(200).json({ job, evidenceItems: await evidenceItemsFor(job.jobId) });
+    } catch (error) {
+      errorResponse(res, error);
+    }
+  });
+
+  // Remove one already-uploaded evidence photo (driver tapped ✕ on it after stepping
+  // back to that photo step). Deletes the record and its Cloudinary asset.
+  router.delete("/:jobId/evidence/:evidenceId", async (req: Request, res: Response) => {
+    try {
+      const jobId = String(req.params.jobId);
+      await deleteEvidenceForDriver(jobId, req.driverEmail!, String(req.params.evidenceId));
+      res.status(200).json({ evidenceItems: await evidenceItemsFor(jobId) });
     } catch (error) {
       errorResponse(res, error);
     }
@@ -201,7 +236,11 @@ export function jobsRoutes(): Router {
       const action = String(req.body?.action ?? "");
       const input = (req.body?.input ?? {}) as Record<string, string[]>;
       const job = await handleAction(action, String(req.params.jobId), req.driverEmail!, input);
-      res.status(200).json({ job, suggestedTotal: await suggestedTotal(job) });
+      res.status(200).json({
+        job,
+        suggestedTotal: await suggestedTotal(job),
+        evidenceItems: await evidenceItemsFor(job.jobId)
+      });
     } catch (error) {
       errorResponse(res, error);
     }

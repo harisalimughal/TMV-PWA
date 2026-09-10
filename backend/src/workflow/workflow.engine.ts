@@ -1,6 +1,7 @@
 import { env } from "../config/env";
 import { getJob } from "../db/jobs.repo";
-import { readEvidenceSummary } from "../db/evidence.repo";
+import { deleteEvidence, getEvidence, readEvidenceSummary } from "../db/evidence.repo";
+import { destroyEvidenceImage } from "../storage/cloudinary";
 import { appendActivity } from "../db/activity.repo";
 import { getSetting } from "../db/settings.repo";
 import { EvidenceType, ExtraChargeType, Job, PaymentMethod } from "../jobs/job.types";
@@ -18,7 +19,7 @@ import { JOB_COMPLETION_EMAIL_TEMPLATE, REVIEW_REQUEST_EMAIL_TEMPLATE } from "..
 import { sendPushToAdmins } from "../push/push.service";
 
 export const DEFAULT_CUSTOMER_CONFIRMATION_TEXT =
-  "By signing below, you confirm that you have inspected the van, that it is empty, that all items have been delivered, and that no items have been left behind. You also confirm that the removal service has been completed to your satisfaction.";
+  "I confirm that the moving service has been completed and all my belongings have been unloaded. I have checked the van and confirm that nothing has been left behind. By signing, I agree that the job is complete and the team is released to leave. Any request to return after sign-off will be subject to availability and additional charges.";
 
 /** Admin-editable via the /admin Settings screen (see admin/settings-spec.ts) --
  * falls back to the default above until overridden. */
@@ -93,7 +94,6 @@ export async function handlePhotoStep(
   if (!PHOTO_STATES.has(state)) {
     throw new ValidationError("A photo is not expected at the current workflow step.");
   }
-  if (!photos.length) throw new ValidationError("Please attach at least one image.");
   if (state === WorkflowState.WAITING_LOADED_PHOTO && photos.length > 2) {
     throw new ValidationError("Proof Of Van Loaded accepts 1 or 2 photos at this step.");
   }
@@ -101,8 +101,19 @@ export async function handlePhotoStep(
   const evidenceType = PHOTO_FOLDER[state];
   const actor = driver.email || driver.chatUserName;
 
-  for (const photo of photos) {
-    await uploadEvidence(job, actor, evidenceType, photo.buffer, photo.contentType, photo.fileName);
+  if (photos.length === 0) {
+    // No new photo attached. Only valid when the driver has stepped back into a photo
+    // step that already has enough uploaded photos and just wants to move forward
+    // again (they may have deleted one and kept the rest). Otherwise, ask for one.
+    const { completed } = await readEvidenceSummary(jobId);
+    const minimum = REQUIRED_EVIDENCE.find(r => r.type === evidenceType)?.minimum ?? 1;
+    if ((completed[evidenceType] ?? 0) < minimum) {
+      throw new ValidationError("Please attach at least one image.");
+    }
+  } else {
+    for (const photo of photos) {
+      await uploadEvidence(job, actor, evidenceType, photo.buffer, photo.contentType, photo.fileName);
+    }
   }
 
   const from = job.currentState;
@@ -116,6 +127,32 @@ export async function handlePhotoStep(
   if (evidenceType === "EmptyVan" && !job.actualFinish) job.actualFinish = now;
 
   return saveJob(job, driver, `PHOTO_${evidenceType.toUpperCase()}_RECEIVED`, from, `${photos.length} file(s)`);
+}
+
+/**
+ * Removes one already-uploaded evidence photo — the driver tapped the ✕ on a photo
+ * they'd taken earlier (typically after stepping back to that photo step). Deletes the
+ * DB record and, best-effort, the Cloudinary asset. Blocked once the job is complete:
+ * a finished job's evidence is the audit trail.
+ */
+export async function deleteEvidenceForDriver(
+  jobId: string,
+  identifier: string,
+  evidenceId: string
+): Promise<void> {
+  setContext({ jobId });
+  const { job } = await getJobForDriver(jobId, identifier);
+  if (job.status === "COMPLETED") {
+    throw new ValidationError("This job is complete — its photos can no longer be changed.");
+  }
+
+  const record = await getEvidence(evidenceId);
+  if (!record || record.jobId !== jobId) {
+    throw new ValidationError("That photo no longer exists.");
+  }
+
+  await deleteEvidence(evidenceId);
+  if (record.cloudinaryPublicId) await destroyEvidenceImage(record.cloudinaryPublicId);
 }
 
 export async function getActiveJob(identifier: string) {

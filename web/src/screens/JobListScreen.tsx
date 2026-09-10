@@ -7,24 +7,16 @@ import { AppShell } from "../app/AppShell";
 import { OfflineBanner } from "../app/OfflineBanner";
 import {
   AlertStrip,
-  DatePickerSheet,
   FeaturedJobCard,
   JobFilterBar,
   MobileHeader,
   ScheduleRow,
   ScheduleRowSkeleton,
-  ScheduleSection
+  ScheduleSection,
+  type HomeFilter
 } from "../components/driver";
-import type { JobBucket } from "../components/driver";
 import { Alert, Button, EmptyState } from "../ui";
-import {
-  filterJobsByDate,
-  formatDateKeyLong,
-  formatDateKeyShort,
-  groupJobsByDate,
-  todayKey,
-  type JobFilter
-} from "../lib/jobDates";
+import { groupJobsByDate } from "../lib/jobDates";
 
 interface JobListScreenProps {
   driver: DriverProfile;
@@ -36,7 +28,6 @@ interface JobListScreenProps {
  * doesn't reset the view. sessionStorage (not localStorage): it's a within-session
  * convenience, not a durable preference. */
 const FILTER_KEY = "tmv-jobs:filter";
-const DATE_KEY = "tmv-jobs:custom-date";
 
 interface JobsListState {
   today: Job[];
@@ -44,18 +35,13 @@ interface JobsListState {
   next: Job[];
 }
 
-function readStored(): { filter: JobFilter; customDate: string | null; hadStored: boolean } {
+function readStoredFilter(): { filter: HomeFilter; hadStored: boolean } {
   try {
     const f = sessionStorage.getItem(FILTER_KEY);
-    const d = sessionStorage.getItem(DATE_KEY);
-    const valid = f === "today" || f === "previous" || f === "upcoming" || f === "custom";
-    return {
-      filter: valid ? (f as JobFilter) : "today",
-      customDate: d && /^\d{4}-\d{2}-\d{2}$/.test(d) ? d : null,
-      hadStored: valid
-    };
+    const valid = f === "today" || f === "upcoming";
+    return { filter: valid ? (f as HomeFilter) : "today", hadStored: valid };
   } catch {
-    return { filter: "today", customDate: null, hadStored: false };
+    return { filter: "today", hadStored: false };
   }
 }
 
@@ -63,24 +49,14 @@ function jobsLabel(n: number): string {
   return `${n} ${n === 1 ? "job" : "jobs"}`;
 }
 
-/** The list bucket a job belongs to for its status chip, given the day being viewed. */
-function bucketForKey(key: string): JobBucket {
-  const t = todayKey();
-  if (key < t) return "past";
-  if (key > t) return "next";
-  return "today";
-}
-
-export function JobListScreen({ driver, onOpenJob, onOpenProfile }: JobListScreenProps) {
+export function JobListScreen({ driver, onOpenJob }: JobListScreenProps) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [jobsList, setJobsList] = useState<JobsListState>({ today: [], past: [], next: [] });
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  const stored = useRef(readStored());
-  const [filter, setFilter] = useState<JobFilter>(stored.current.filter);
-  const [customDate, setCustomDate] = useState<string | null>(stored.current.customDate);
-  const [pickerOpen, setPickerOpen] = useState(false);
+  const stored = useRef(readStoredFilter());
+  const [filter, setFilter] = useState<HomeFilter>(stored.current.filter);
   /* Auto-pick a non-empty filter on first load only when the driver hasn't chosen one. */
   const autoSelectPending = useRef(!stored.current.hadStored);
 
@@ -89,13 +65,7 @@ export function JobListScreen({ driver, onOpenJob, onOpenProfile }: JobListScree
     setError(null);
     try {
       const result = await fetchJobsList();
-      // Preserve the server's calendar-day buckets for the main filters. The custom
-      // date picker still derives its single-day view from these same jobs.
-      setJobsList({
-        today: result.today,
-        past: result.past,
-        next: result.next
-      });
+      setJobsList({ today: result.today, past: result.past, next: result.next });
     } catch (err) {
       setError((err as ApiError)?.message || "Couldn't load your jobs.");
     } finally {
@@ -107,22 +77,18 @@ export function JobListScreen({ driver, onOpenJob, onOpenProfile }: JobListScree
     void load("initial");
   }, [load]);
 
-  const filtered = useMemo(() => {
-    const flat = [...jobsList.past, ...jobsList.today, ...jobsList.next];
-    const custom = filterJobsByDate(flat, customDate).custom;
-    return {
+  const filtered = useMemo(
+    () => ({
       today: jobsList.today,
-      upcoming: jobsList.next,
       upcomingGroups: groupJobsByDate(jobsList.next),
-      previous: jobsList.past,
-      custom,
       counts: {
         today: jobsList.today.length,
         upcoming: jobsList.next.length,
         previous: jobsList.past.length
       }
-    };
-  }, [jobsList, customDate]);
+    }),
+    [jobsList]
+  );
 
   // Persist the selection for this session.
   useEffect(() => {
@@ -132,151 +98,104 @@ export function JobListScreen({ driver, onOpenJob, onOpenProfile }: JobListScree
       /* ignore — non-critical */
     }
   }, [filter]);
-  useEffect(() => {
-    try {
-      if (customDate) sessionStorage.setItem(DATE_KEY, customDate);
-      else sessionStorage.removeItem(DATE_KEY);
-    } catch {
-      /* ignore — non-critical */
-    }
-  }, [customDate]);
 
-  // First successful load with no stored choice: if Today is empty but there's work
-  // elsewhere, land on the nearest non-empty filter instead of an empty screen.
-  // Previous (still-open jobs from earlier days) takes priority over Upcoming -- that
-  // work is overdue, so it's more urgent than something booked for later.
+  // First successful load with no stored choice: if Today is empty but there's
+  // work booked ahead, land on Upcoming instead of an empty screen.
   useEffect(() => {
     if (loading || error || !autoSelectPending.current) return;
     autoSelectPending.current = false;
     if (filter !== "today" || filtered.counts.today > 0) return;
-    if (filtered.counts.previous > 0) setFilter("previous");
-    else if (filtered.counts.upcoming > 0) setFilter("upcoming");
+    if (filtered.counts.upcoming > 0) setFilter("upcoming");
   }, [loading, error, filter, filtered.counts]);
 
   const hasAnyJobs = jobsList.today.length + jobsList.past.length + jobsList.next.length > 0;
-
   const showFilterBar = !loading && !error && hasAnyJobs;
 
   return (
-    <>
-      <AppShell banner={<OfflineBanner />} contentWidth="content" contentRef={scrollRef} topInset={false}>
-        {/* Greeting — scrolls away with the page. Pull down to refresh. */}
-        <div className="px-4 pt-5">
-          <MobileHeader
-            driver={driver}
-            jobCount={loading || error ? undefined : filtered.counts.today}
-            className="mb-4"
+    <AppShell banner={<OfflineBanner />} contentWidth="content" contentRef={scrollRef} topInset={false}>
+      {/* Greeting — scrolls away with the page. Pull down to refresh. */}
+      <div className="px-4 pt-5">
+        <MobileHeader driver={driver} className="mb-4" />
+      </div>
+
+      {/* The one operational fact that outranks everything: unfinished earlier jobs. */}
+      {showFilterBar && filtered.counts.previous > 0 && (
+        <div className="px-4 pb-1 pt-1">
+          <AlertStrip count={filtered.counts.previous} />
+        </div>
+      )}
+
+      {/* Date filters — the primary Jobs navigation. Sits directly in AppShell's
+       *  scroll flow (not inside PullToRefresh, whose overflow context would stop
+       *  `position: sticky` working) so it pins to the top as the list scrolls. */}
+      {showFilterBar && (
+        <div className="sticky top-0 z-20 bg-bg px-4 pb-1 pt-2">
+          <JobFilterBar
+            value={filter}
+            onChange={setFilter}
+            counts={{ today: filtered.counts.today, upcoming: filtered.counts.upcoming }}
           />
         </div>
+      )}
 
-        {/* The one operational fact that outranks everything: unfinished earlier jobs. */}
-        {showFilterBar && filtered.counts.previous > 0 && (
-          <div className="px-4 pb-1 pt-1">
-            <AlertStrip count={filtered.counts.previous} onClick={() => setFilter("previous")} />
-          </div>
-        )}
-
-        {/* Date filters — the primary Jobs navigation. Sits directly in AppShell's
-         *  scroll flow (not inside PullToRefresh, whose overflow context would stop
-         *  `position: sticky` working) so it pins to the top as the list scrolls. */}
-        {showFilterBar && (
-          <div className="sticky top-0 z-20 bg-bg px-4 pb-1 pt-2">
-            <JobFilterBar
-              value={filter}
-              onChange={setFilter}
-              counts={filtered.counts}
-              customDate={customDate}
-              onOpenDatePicker={() => {
-                setFilter("custom");
-                setPickerOpen(true);
-              }}
-              onClearCustomDate={() => {
-                setCustomDate(null);
-                setFilter("today");
-              }}
-            />
-          </div>
-        )}
-
-        <PullToRefresh onRefresh={() => load("refresh")} scrollRef={scrollRef}>
-          <div className="px-4 pb-4 pt-5 scroll-pb-nav">
-            {loading ? (
-              <div>
-                <ScheduleRowSkeleton />
-                <ScheduleRowSkeleton />
-                <ScheduleRowSkeleton />
-              </div>
-            ) : error ? (
-              <Alert
-                tone="danger"
-                title="Couldn't load your jobs"
-                action={
-                  <Button size="sm" variant="secondary" onClick={() => load("refresh")}>
-                    Retry
-                  </Button>
-                }
-              >
-                {error}
-              </Alert>
-            ) : !hasAnyJobs ? (
-              <div className="rounded-xl border border-line bg-surface py-12 text-center shadow-xs">
-                <p className="text-heading text-fg">Nothing assigned yet</p>
-                <p className="mx-auto mt-1.5 max-w-xs text-body text-fg-muted">
-                  New work appears here as soon as the office dispatches it.
-                </p>
-                <Button size="sm" variant="secondary" className="mt-4" onClick={() => load("refresh")}>
-                  Refresh
+      <PullToRefresh onRefresh={() => load("refresh")} scrollRef={scrollRef}>
+        <div className="px-4 pb-4 pt-5 scroll-pb-nav">
+          {loading ? (
+            <div>
+              <ScheduleRowSkeleton />
+              <ScheduleRowSkeleton />
+              <ScheduleRowSkeleton />
+            </div>
+          ) : error ? (
+            <Alert
+              tone="danger"
+              title="Couldn't load your jobs"
+              action={
+                <Button size="sm" variant="secondary" onClick={() => load("refresh")}>
+                  Retry
                 </Button>
-              </div>
-            ) : (
-              <div
-                key={`${filter}:${customDate ?? ""}`}
-                className="flex animate-in flex-col gap-6 fade-in"
-              >
-                <FilterView
-                  filter={filter}
-                  filtered={filtered}
-                  customDate={customDate}
-                  onOpenJob={onOpenJob}
-                  onOpenPicker={() => setPickerOpen(true)}
-                  onRefresh={() => load("refresh")}
-                />
-              </div>
-            )}
-          </div>
-        </PullToRefresh>
-      </AppShell>
-
-      <DatePickerSheet
-        open={pickerOpen}
-        value={customDate}
-        onClose={() => setPickerOpen(false)}
-        onSelect={key => {
-          setCustomDate(key);
-          setFilter("custom");
-        }}
-      />
-    </>
+              }
+            >
+              {error}
+            </Alert>
+          ) : !hasAnyJobs ? (
+            <div className="rounded-xl border border-line bg-surface py-12 text-center shadow-xs">
+              <p className="text-heading text-fg">Nothing assigned yet</p>
+              <p className="mx-auto mt-1.5 max-w-xs text-body text-fg-muted">
+                New work appears here as soon as the office dispatches it.
+              </p>
+              <Button size="sm" variant="secondary" className="mt-4" onClick={() => load("refresh")}>
+                Refresh
+              </Button>
+            </div>
+          ) : (
+            <div key={filter} className="flex animate-in flex-col gap-6 fade-in">
+              <FilterView
+                filter={filter}
+                filtered={filtered}
+                onOpenJob={onOpenJob}
+                onRefresh={() => load("refresh")}
+              />
+            </div>
+          )}
+        </div>
+      </PullToRefresh>
+    </AppShell>
   );
 }
 
 interface FilterViewProps {
-  filter: JobFilter;
-  filtered: ReturnType<typeof filterJobsByDate>;
-  customDate: string | null;
+  filter: HomeFilter;
+  filtered: {
+    today: Job[];
+    upcomingGroups: ReturnType<typeof groupJobsByDate>;
+    counts: { today: number; upcoming: number; previous: number };
+  };
   onOpenJob: (jobId: string) => void;
-  onOpenPicker: () => void;
   onRefresh: () => void;
 }
 
-function FilterView({
-  filter,
-  filtered,
-  customDate,
-  onOpenJob,
-  onOpenPicker,
-  onRefresh
-}: FilterViewProps) {
+function FilterView({ filter, filtered, onOpenJob, onRefresh }: FilterViewProps) {
   const refreshAction = (
     <Button size="sm" variant="secondary" onClick={onRefresh}>
       Refresh
@@ -289,7 +208,7 @@ function FilterView({
         <EmptyState
           icon={<CalendarClock />}
           title="No jobs scheduled for today"
-          description="Enjoy the quiet, or check another day."
+          description="Enjoy the quiet, or check what's coming up."
           action={refreshAction}
         />
       );
@@ -313,110 +232,32 @@ function FilterView({
     );
   }
 
-  if (filter === "previous") {
-    if (filtered.previous.length === 0) {
-      return (
-        <EmptyState
-          icon={<CalendarClock />}
-          title="Nothing needs finishing"
-          description="Jobs from earlier days that are still open will show up here."
-          action={refreshAction}
-        />
-      );
-    }
-    return (
-      <ScheduleSection
-        title="Needs finishing"
-        tone="attention"
-        meta={jobsLabel(filtered.previous.length)}
-        className="-mx-4"
-      >
-        {filtered.previous.map((job, i) => (
-          <ScheduleRow
-            key={job.jobId}
-            job={job}
-            bucket="past"
-            index={i}
-            onOpen={() => onOpenJob(job.jobId)}
-          />
-        ))}
-      </ScheduleSection>
-    );
-  }
-
-  if (filter === "upcoming") {
-    if (filtered.upcomingGroups.length === 0) {
-      return (
-        <EmptyState
-          icon={<CalendarClock />}
-          title="No upcoming jobs"
-          description="Jobs booked for tomorrow onward will show up here."
-          action={refreshAction}
-        />
-      );
-    }
-    return (
-      <>
-        {filtered.upcomingGroups.map(group => (
-          <ScheduleSection key={group.key} title={group.label} meta={jobsLabel(group.jobs.length)} className="-mx-4">
-            {group.jobs.map((job, i) => (
-              <ScheduleRow
-                key={job.jobId}
-                job={job}
-                bucket="next"
-                index={i}
-                onOpen={() => onOpenJob(job.jobId)}
-              />
-            ))}
-          </ScheduleSection>
-        ))}
-      </>
-    );
-  }
-
-  // custom
-  if (!customDate) {
+  // upcoming
+  if (filtered.upcomingGroups.length === 0) {
     return (
       <EmptyState
         icon={<CalendarClock />}
-        title="Choose a date"
-        description="Pick a day to see the jobs scheduled for it."
-        action={
-          <Button size="sm" variant="secondary" onClick={onOpenPicker}>
-            Choose date
-          </Button>
-        }
-      />
-    );
-  }
-  if (filtered.custom.length === 0) {
-    return (
-      <EmptyState
-        icon={<CalendarClock />}
-        title={`No jobs scheduled for ${formatDateKeyLong(customDate)}`}
-        action={
-          <Button size="sm" variant="secondary" onClick={onOpenPicker}>
-            Pick another date
-          </Button>
-        }
+        title="No upcoming jobs"
+        description="Jobs booked for tomorrow onward will show up here."
+        action={refreshAction}
       />
     );
   }
   return (
-    <ScheduleSection
-      title={formatDateKeyShort(customDate)}
-      meta={jobsLabel(filtered.custom.length)}
-      className="-mx-4"
-    >
-      {filtered.custom.map((job, i) => (
-        <ScheduleRow
-          key={job.jobId}
-          job={job}
-          bucket={bucketForKey(customDate)}
-          index={i}
-          onOpen={() => onOpenJob(job.jobId)}
-        />
+    <>
+      {filtered.upcomingGroups.map(group => (
+        <ScheduleSection key={group.key} title={group.label} meta={jobsLabel(group.jobs.length)} className="-mx-4">
+          {group.jobs.map((job, i) => (
+            <ScheduleRow
+              key={job.jobId}
+              job={job}
+              bucket="next"
+              index={i}
+              onOpen={() => onOpenJob(job.jobId)}
+            />
+          ))}
+        </ScheduleSection>
       ))}
-    </ScheduleSection>
+    </>
   );
 }

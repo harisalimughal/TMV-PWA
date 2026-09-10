@@ -345,6 +345,18 @@ export function SubmissionDetailDrawer({ job: initialJob, isOpen, onClose, onNav
                  <div className="text-[14px] font-medium text-admin-ink mt-1">{scenarioItem.damageCategories || rawRecord["Damage Categories"] || "—"}</div>
                </div>
              )}
+             {(kind === "parking" || kind === "liability") && (rawRecord["reported_at"] || rawRecord["Reported At"]) && (
+               <div className="sm:col-span-2">
+                 <span className="text-[11px] uppercase text-admin-muted font-semibold tracking-wider">Reported At</span>
+                 {/* Which checkpoint of the move this was filed from -- Pickup, a
+                     mid-route Stop-by / waypoint, or Drop-off -- set automatically by
+                     the driver app, not typed by the driver. See
+                     web/src/screens/JobWorkflowScreen.tsx's reportedAtForState. */}
+                 <div className="text-[14px] font-medium text-admin-ink mt-1">
+                   {rawRecord["reported_at"] || rawRecord["Reported At"]}
+                 </div>
+               </div>
+             )}
            </div>
          ) : (
            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

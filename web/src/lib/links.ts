@@ -15,10 +15,11 @@ export function mapsUrl(address: string): string {
 /** Turn-by-turn directions from one address to another, opened in Google Maps
  *  (Android / browser) or Apple Maps (iOS offers the hand-off). Origin and
  *  destination land pre-filled so the driver just taps Start. */
-export function directionsUrl(origin: string, destination: string): string {
+export function directionsUrl(origin: string, destination: string, via?: string): string {
   const params = new URLSearchParams({ api: "1", travelmode: "driving" });
   if (origin) params.set("origin", origin);
   if (destination) params.set("destination", destination);
+  if (via && via.trim()) params.set("waypoints", via.trim());
   return `https://www.google.com/maps/dir/?${params.toString()}`;
 }
 

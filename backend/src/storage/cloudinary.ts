@@ -70,6 +70,22 @@ export async function uploadEvidenceImage(
 }
 
 /**
+ * Permanently removes one evidence image. Used when a driver deletes a photo they'd
+ * already uploaded (e.g. after stepping back to a photo step). Best-effort: a failure
+ * here is logged, not thrown — the DB record is the source of truth for the workflow,
+ * and a stray Cloudinary asset is harmless (and sweepable later) next to blocking the
+ * driver on a transient API error.
+ */
+export async function destroyEvidenceImage(publicId: string): Promise<void> {
+  ensureConfigured();
+  try {
+    await cloudinary.uploader.destroy(publicId, { resource_type: "image", invalidate: true });
+  } catch (error) {
+    log.warn("cloudinary destroy failed", { public_id: publicId, error: errorMessage(error) });
+  }
+}
+
+/**
  * Cloudinary delivery URLs support transformations via a segment inserted right after
  * `/upload/` -- no extra API call or storage; the CDN transforms and caches the result
  * on first request. `thumbProxyUrl` (db/mongo.ts normalization, admin/dashboard/

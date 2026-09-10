@@ -5,7 +5,7 @@
  * site and is tree-shaken out of `vite build`. Nothing here is imported by production
  * code.
  */
-import type { ActivityEntry, Job } from "../api/jobs";
+import type { ActivityEntry, EvidenceItem, Job } from "../api/jobs";
 import type { DriverProfile } from "../api/auth";
 
 export const mockDriver: DriverProfile = {
@@ -15,9 +15,10 @@ export const mockDriver: DriverProfile = {
 };
 
 export const DEFAULT_CONFIRMATION_TEXT =
-  "By signing below, you confirm that you have inspected the van, that it is empty, that all items have been " +
-  "delivered, and that no items have been left behind. You also confirm that the removal service has been " +
-  "completed to your satisfaction.";
+  "I confirm that the moving service has been completed and all my belongings have been unloaded. " +
+  "I have checked the van and confirm that nothing has been left behind. By signing, I agree that the job " +
+  "is complete and the team is released to leave. Any request to return after sign-off will be subject to " +
+  "availability and additional charges.";
 
 function iso(daysFromNow: number, hour: number, minute = 0): string {
   const d = new Date();
@@ -53,6 +54,18 @@ export function makeJob(over: Partial<Job> & { jobId: string }): Job {
     crewSize: 2,
     basePrice: 320,
     paidOnline: false,
+    // Booking-form extras — on real jobs these are parsed from the Calendar event
+    // description (backend). Seeded here so the job-detail card shows a full,
+    // realistic set of rows in dev. Override per job in seedStore() where it matters.
+    vanSize: "Medium - Transit Van",
+    hireDurationText: "04 Hours",
+    floorFrom: "No stairs, ground floor",
+    floorTo: "01 flight of stairs",
+    extraChargeText: "£55 per half an hour",
+    extraRequest: "I don't need any extras",
+    inventory:
+      '55" TV and bracket stand / large bookcase / small display case / nest of tables / ' +
+      "chest of drawers / recliner chair / 50 medium boxes approximately",
     bookedStart: iso(0, 9),
     bookedFinish: iso(0, 12),
     actualStart: "",
@@ -86,6 +99,19 @@ export interface MockStore {
   buckets: { today: string[]; past: string[]; next: string[] };
   activity: Record<string, ActivityEntry[]>;
   settings: Record<string, string>;
+  /** Photos "uploaded" per job — so stepping back to a photo step shows them and
+   *  delete/add actually change something in dev. */
+  evidence: Record<string, EvidenceItem[]>;
+}
+
+let mockEvidenceSeq = 0;
+export function makeEvidenceItem(evidenceType: string): EvidenceItem {
+  mockEvidenceSeq += 1;
+  return {
+    evidenceId: `EV-MOCK-${mockEvidenceSeq}`,
+    evidenceType,
+    url: `https://picsum.photos/seed/tmv-${evidenceType}-${mockEvidenceSeq}/500/500`
+  };
 }
 
 /** Fresh store — call to reset dev state (e.g. on HMR of this module). */
@@ -184,8 +210,17 @@ export function seedStore(): MockStore {
       new URLSearchParams(window.location.search).get("mock") === "loggedout",
     driver: mockDriver,
     jobs: byId,
-    buckets: { today: ["10231", "10232"], past: ["10228"], next: ["10238", "10240", "10245"] },
+    buckets: {
+      today: ["10231", "10232"],
+      past: ["10228"],
+      next: ["10238", "10240", "10245"]
+    },
     activity: {},
-    settings: {}
+    settings: {},
+    // 10232 is mid-flow (WAITING_LOADED_PHOTO), so it already has arrival photos — step
+    // back to the arrival step in dev to see them, delete one, add another.
+    evidence: {
+      "10232": [makeEvidenceItem("Arrival"), makeEvidenceItem("Arrival")]
+    }
   };
 }

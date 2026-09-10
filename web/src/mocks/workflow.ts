@@ -43,8 +43,13 @@ export type WorkflowTrigger =
 export function nextState(
   current: string,
   trigger: WorkflowTrigger,
-  extraCharges: readonly string[] = []
+  extraCharges: readonly string[] = [],
+  hasStop = false
 ): string {
+  // Jobs with a mid-route stop insert a "stop-by issues" check between the van-loaded
+  // photo and the drop-off issues check; jobs without one skip straight past it.
+  const afterLoaded = hasStop ? "WAITING_STOP_BY_ISSUES_CHECK" : "WAITING_EMPTY_VAN_ISSUES_CHECK";
+
   switch (current) {
     case "READY":
       return trigger === "start" ? "WAITING_ARRIVAL_PHOTO" : current;
@@ -57,10 +62,15 @@ export function nextState(
     case "WAITING_ARRIVAL_ISSUES_CHOICE":
       return trigger === "scenario" ? "WAITING_LOADED_PHOTO" : current;
     case "WAITING_LOADED_PHOTO":
-      // After the van-loaded photo: "Any issues at drop-off point?" before Extra Charges.
-      return trigger === "evidence" ? "WAITING_EMPTY_VAN_ISSUES_CHECK" : current;
+      return trigger === "evidence" ? afterLoaded : current;
     case "IN_PROGRESS":
-      return trigger === "FINISH_MOVE" ? "WAITING_EMPTY_VAN_ISSUES_CHECK" : current;
+      return trigger === "FINISH_MOVE" ? afterLoaded : current;
+    case "WAITING_STOP_BY_ISSUES_CHECK":
+      if (trigger === "ISSUES_YES") return "WAITING_STOP_BY_ISSUES_CHOICE";
+      if (trigger === "ISSUES_NONE") return "WAITING_EMPTY_VAN_ISSUES_CHECK";
+      return current;
+    case "WAITING_STOP_BY_ISSUES_CHOICE":
+      return trigger === "scenario" ? "WAITING_EMPTY_VAN_ISSUES_CHECK" : current;
     case "WAITING_EMPTY_VAN_ISSUES_CHECK":
       if (trigger === "ISSUES_YES") return "WAITING_EMPTY_VAN_ISSUES_CHOICE";
       if (trigger === "ISSUES_NONE") return "WAITING_EXTRA_CHARGES";
@@ -104,8 +114,12 @@ function prevState(current: string, job: Job): string {
       return "WAITING_ARRIVAL_ISSUES_CHECK";
     case "IN_PROGRESS":
       return "WAITING_LOADED_PHOTO";
-    case "WAITING_EMPTY_VAN_ISSUES_CHECK":
+    case "WAITING_STOP_BY_ISSUES_CHECK":
       return "WAITING_LOADED_PHOTO";
+    case "WAITING_STOP_BY_ISSUES_CHOICE":
+      return "WAITING_STOP_BY_ISSUES_CHECK";
+    case "WAITING_EMPTY_VAN_ISSUES_CHECK":
+      return job.stopBy?.trim() ? "WAITING_STOP_BY_ISSUES_CHECK" : "WAITING_LOADED_PHOTO";
     case "WAITING_EMPTY_VAN_ISSUES_CHOICE":
       return "WAITING_EMPTY_VAN_ISSUES_CHECK";
     case "WAITING_EXTRA_CHARGES":
@@ -146,7 +160,12 @@ export function applyTrigger(
 
   const nextExtraCharges =
     trigger === "SUBMIT_EXTRA_CHARGES" ? (input.extra_charges ?? []) : job.extraCharges;
-  next.currentState = nextState(job.currentState, trigger, nextExtraCharges);
+  next.currentState = nextState(
+    job.currentState,
+    trigger,
+    nextExtraCharges,
+    Boolean(job.stopBy?.trim())
+  );
 
   switch (trigger) {
     case "start":
