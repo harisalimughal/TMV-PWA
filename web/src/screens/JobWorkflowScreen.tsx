@@ -30,6 +30,7 @@ import { AppShell } from "../app/AppShell";
 import { Alert, BottomActionBar, Button, cx, Field, Input, PageHeader, Select, Skeleton, Textarea } from "../ui";
 import {
   AnimatedSuccessTick,
+  BookingText,
   CompletionSummary,
   IssueChoiceCard,
   IssueDecision,
@@ -432,7 +433,15 @@ export function JobWorkflowScreen({ jobId, onBack }: JobWorkflowScreenProps) {
       ? overtimeApplies(formState.extraCharges)
       : overtimeApplies(job.extraCharges);
   const progress = workflowProgress(state, { overtime, hasStop });
-  const canGoBackStep = state !== "READY" && state !== "COMPLETED";
+  // WAITING_ARRIVAL_PHOTO's own GO_BACK target is READY (see backend's BACK_TARGET) --
+  // but READY is no longer a screen this app ever shows (see JobListScreen.tsx's
+  // FeaturedJobCard, which replaced it). Walking back into it here would just
+  // resurrect that eliminated view with a stale "I'm on my way" button. So the very
+  // first step's back arrow skips the GO_BACK call entirely and returns straight to
+  // the jobs list instead -- the job stays IN_PROGRESS/WAITING_ARRIVAL_PHOTO, and
+  // tapping Start Job again there is a safe no-op that lands right back on this same
+  // step (startJob is idempotent -- see jobs.service.ts).
+  const canGoBackStep = state !== "READY" && state !== "COMPLETED" && state !== "WAITING_ARRIVAL_PHOTO";
   const handleWorkflowBack = () => {
     if (canGoBackStep) {
       void run(() => sendAction(job.jobId, "GO_BACK"));
@@ -1306,83 +1315,6 @@ function StepBody({
 /** Placeholder for a detail the backend hasn't sent. */
 const NO_VALUE = "—";
 
-/** A "Label: value" line -- same shape as backend's booking.service.ts LABEL_LINE
- *  (label starts with a letter, no leading digit, so a numbered address line like
- *  "119 Queens Road: SE15 2EZ" is never mistaken for one). */
-const BOOKING_LABEL_LINE = /^([A-Za-z][A-Za-z /&'().+-]{0,28})\s*[:=]\s*(.*)$/;
-
-interface BookingField {
-  label: string;
-  value: string;
-}
-type BookingItem =
-  | { type: "field"; key: string; field: BookingField }
-  | { type: "text"; key: string; text: string }
-  | { type: "break"; key: string };
-
-/**
- * Turns the raw Calendar description into a light display structure -- NOT a re-parse
- * of business fields (job.pickup/job.dropoff/etc already exist for that; this is only
- * about how the same text reads). A "Label: value" line becomes a labelled block; a
- * bare line right after one folds into that field's value, the same way an address
- * split across two physical lines reads as one address (see backend's
- * withContinuation); a blank line starts a new visual group, same as the source text's
- * own paragraph breaks; anything else is a plain line. Driven entirely by the shape of
- * the text itself -- nothing here is tied to a specific field's name or wording, so it
- * reads any booking the same way regardless of what labels the office happened to use.
- */
-function parseBookingText(text: string): BookingItem[] {
-  const items: BookingItem[] = [];
-  let current: BookingField | null = null;
-  let key = 0;
-
-  for (const raw of text.split("\n")) {
-    const line = raw.trim();
-    if (!line) {
-      current = null;
-      if (items.length > 0 && items[items.length - 1].type !== "break") {
-        items.push({ type: "break", key: String(key++) });
-      }
-      continue;
-    }
-    const match = line.match(BOOKING_LABEL_LINE);
-    if (match) {
-      current = { label: match[1].trim(), value: match[2].trim() };
-      items.push({ type: "field", key: String(key++), field: current });
-    } else if (current) {
-      current.value = current.value ? `${current.value}, ${line}` : line;
-    } else {
-      items.push({ type: "text", key: String(key++), text: line });
-    }
-  }
-  return items;
-}
-
-function BookingText({ text }: { text: string }) {
-  return (
-    <div className="mt-3 flex flex-col">
-      {parseBookingText(text).map(item => {
-        if (item.type === "break") return <div key={item.key} className="h-3.5" aria-hidden />;
-        if (item.type === "text") {
-          return (
-            <p key={item.key} className="py-1 text-body text-fg [overflow-wrap:anywhere]">
-              {item.text}
-            </p>
-          );
-        }
-        return (
-          <div key={item.key} className="border-b border-line/60 py-2 last:border-b-0">
-            <p className="text-eyebrow uppercase tracking-wide text-fg-subtle">{item.field.label}</p>
-            {item.field.value && (
-              <p className="mt-0.5 text-body text-fg [overflow-wrap:anywhere]">{item.field.value}</p>
-            )}
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
 /**
  * The job exactly as booked -- title, window, and the full Calendar description
  * verbatim (see lib/htmlText.ts's htmlToPlainText). This used to sit below a set of
@@ -1410,7 +1342,7 @@ function ReadyCard({ job }: { job: Job }) {
         <p className="text-title font-bold text-fg [overflow-wrap:anywhere]">{job.rawTitle}</p>
       )}
       {when && <p className="text-body text-fg-muted">{when}</p>}
-      {description && <BookingText text={description} />}
+      {description && <BookingText text={description} className="mt-3" />}
     </div>
   );
 }

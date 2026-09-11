@@ -29,6 +29,12 @@ export type { ProfileMenuProps } from "./ProfileMenu";
 export { FeaturedJobCard } from "./FeaturedJobCard";
 export type { FeaturedJobCardProps } from "./FeaturedJobCard";
 
+export { JobDetailsPanel } from "./JobDetailsPanel";
+export type { JobDetailsPanelProps } from "./JobDetailsPanel";
+
+export { BookingText } from "./BookingText";
+export type { BookingTextProps } from "./BookingText";
+
 export { bigActionButtonClass } from "./bigActionButton";
 
 export { JobFilterBar } from "./JobFilterBar";

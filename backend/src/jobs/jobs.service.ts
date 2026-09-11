@@ -304,11 +304,11 @@ function sendJobStartedSmsIfAny(job: Job, driver: DriverProfile): void {
     .catch(err => log.warn("job started SMS failure audit failed", { job_id: job.jobId, error: String(err) }));
 }
 
-/** Same "I'm on the way" wording as the SMS above, sent by email too -- one message,
- *  both channels, so a customer who only gave an email still gets told the driver is
- *  on the way (see notifications/message.ts's doc comment). Independent of the SMS: a
- *  missing/unconfigured Firetext key never blocks this, and a Gmail failure never
- *  blocks the SMS. */
+/** Same driver-introduction wording as the SMS above, sent by email too -- one
+ *  message, both channels, so a customer who only gave an email still gets
+ *  introduced to their driver (see notifications/message.ts's doc comment).
+ *  Independent of the SMS: a missing/unconfigured Firetext key never blocks this, and
+ *  a Gmail failure never blocks the SMS. */
 function sendJobStartedEmailIfAny(job: Job, driver: DriverProfile): void {
   const actor = driver.email || driver.chatUserName;
   if (!job.customerEmail) {

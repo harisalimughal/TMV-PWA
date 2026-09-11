@@ -73,11 +73,11 @@ export const SETTINGS_SPEC: SettingFieldSpec[] = [
   { key: "TUNNEL_CHARGE", label: "Tunnel Charge (£)", type: "number", fallback: String(env.tunnelCharge) },
   {
     key: "JOB_STARTED_MESSAGE_TEXT",
-    label: "Customer Message — On My Way",
+    label: "Customer Message — Driver Introduction",
     type: "textarea",
     fallback: JOB_STARTED_MESSAGE_TEMPLATE,
-    hint: "Sent by SMS when the driver starts a job. Placeholders: {customerName} {companyName} {pickup} " +
-      "{dropoff} {driverPhone} {vanRegistration}."
+    hint: "Sent by SMS and email when the driver starts a job. Placeholders: {customerName} {companyName} " +
+      "{pickup} {dropoff} {driverPhone} {vanRegistration} {driver_name} {job_time} {job_date}."
   },
   {
     key: "CLIENT_NOTIFICATION_OFFSET_MINUTES",

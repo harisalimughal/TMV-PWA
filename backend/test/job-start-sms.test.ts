@@ -112,7 +112,7 @@ describe("startJob email notification", () => {
     getDriverProfile.mockResolvedValue(driver);
   });
 
-  it("sends the customer 'I'm on the way' email alongside the SMS when a job is newly started", async () => {
+  it("sends the customer a driver-introduction email alongside the SMS when a job is newly started", async () => {
     const readyJob = job();
     getJob.mockResolvedValue(readyJob);
 

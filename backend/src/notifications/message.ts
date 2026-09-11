@@ -3,15 +3,18 @@ import { env } from "../config/env";
 import { DriverProfile, Job } from "../jobs/job.types";
 
 /**
- * The "I'm on the way" message, shared verbatim between the email body
+ * The driver-introduction message, shared verbatim between the email body
  * (google/gmail.ts) and the SMS body (integrations/firetext.ts) -- one admin-editable
  * block of text (see /admin's Settings tab), not two templates that can drift apart.
- * Sent when the driver taps Start Job, after previewing and confirming it themselves
- * (see workflow.engine.ts's SEND_ON_MY_WAY_MESSAGE). This is only the fallback shown
- * until an admin overrides it.
+ * Sent when the driver taps Start Job (see jobs.service.ts's sendJobStartedSmsIfAny /
+ * sendJobStartedEmailIfAny). Introduces the driver and gives the customer a contact
+ * number and the booked time -- deliberately NOT framed as "I'm on the way" (that
+ * implies the driver is already en route, which isn't necessarily true the moment
+ * they tap Start). This is only the fallback shown until an admin overrides it.
  */
 export const JOB_STARTED_MESSAGE_TEMPLATE =
-  "I am your driver, I'm on the way. My number is {driverPhone} and van registration number is {vanRegistration}.";
+  "Hi, I'm {driver_name}, your driver for the job. My contact number is {driverPhone}. " +
+  "Your booking is scheduled for {job_time} on {job_date}.";
 
 /**
  * The customer review-request email, sent only if the driver opts in on the "Do you

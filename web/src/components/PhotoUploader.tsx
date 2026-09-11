@@ -135,30 +135,31 @@ export function PhotoUploader({
       )}
 
       {/* Small, quiet proof-of-place line -- where/when the most recent photo was
-          actually taken, not shown at all when neither is known. */}
+          actually taken, not shown at all when neither is known. Time and location
+          on their own lines rather than crammed onto one -- the location text can
+          run long, and wrapping mid-line read awkwardly. */}
       {captureCaption && (
-        <p className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-helper text-fg-subtle">
-          <MapPin className="size-3.5 shrink-0" aria-hidden />
+        <div className="flex flex-col gap-0.5 text-helper text-fg-subtle">
           {formatCapturedTime(captureCaption.capturedAt) && (
-            <span>Captured {formatCapturedTime(captureCaption.capturedAt)}</span>
+            <p className="flex items-center gap-1.5">
+              <MapPin className="size-3.5 shrink-0" aria-hidden />
+              Captured {formatCapturedTime(captureCaption.capturedAt)}
+            </p>
           )}
           {captureCaption.location ? (
-            <>
-              <span aria-hidden>·</span>
-              <a
-                href={mapsUrlForLocation(captureCaption.location)}
-                target="_blank"
-                rel="noopener noreferrer"
-                onClick={event => event.stopPropagation()}
-                className="font-mono text-brand underline underline-offset-2"
-              >
-                {formatLocationLabel(captureCaption.location, captureCaption.locationName)}
-              </a>
-            </>
+            <a
+              href={mapsUrlForLocation(captureCaption.location)}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={event => event.stopPropagation()}
+              className="pl-5 text-brand underline underline-offset-2"
+            >
+              {formatLocationLabel(captureCaption.location, captureCaption.locationName)}
+            </a>
           ) : (
-            <span>· location unavailable</span>
+            <span className="pl-5">Location unavailable</span>
           )}
-        </p>
+        </div>
       )}
     </div>
   );

@@ -8,6 +8,7 @@ import { OfflineBanner } from "../app/OfflineBanner";
 import {
   AlertStrip,
   FeaturedJobCard,
+  JobDetailsPanel,
   JobFilterBar,
   MobileHeader,
   ScheduleRow,
@@ -213,23 +214,7 @@ function FilterView({ filter, filtered, onOpenJob, onRefresh }: FilterViewProps)
         />
       );
     }
-    const [next, ...rest] = filtered.today;
-    return (
-      <div className="flex flex-col gap-5">
-        <div className="flex items-baseline justify-between px-1">
-          <h2 className="text-heading text-fg">Up next</h2>
-          <span className="font-mono text-[12.5px] text-fg-subtle">1 of {filtered.today.length}</span>
-        </div>
-        <FeaturedJobCard job={next} onOpen={() => onOpenJob(next.jobId)} />
-        {rest.length > 0 && (
-          <ScheduleSection title="Later today" meta={jobsLabel(rest.length)}>
-            {rest.map((job, i) => (
-              <ScheduleRow key={job.jobId} job={job} bucket="today" index={i} onOpen={() => onOpenJob(job.jobId)} />
-            ))}
-          </ScheduleSection>
-        )}
-      </div>
-    );
+    return <TodayJobsList jobs={filtered.today} onOpenJob={onOpenJob} />;
   }
 
   // upcoming
@@ -243,18 +228,117 @@ function FilterView({ filter, filtered, onOpenJob, onRefresh }: FilterViewProps)
       />
     );
   }
+  return <UpcomingJobsList groups={filtered.upcomingGroups} />;
+}
+
+interface TodayJobsListProps {
+  /** Sorted earliest-first, same as the backend sends it. */
+  jobs: Job[];
+  onOpenJob: (jobId: string) => void;
+}
+
+/**
+ * Today's jobs as an accordion: exactly one is expanded into the full
+ * <FeaturedJobCard> (booking details, contact, Start Job) at a time — every other
+ * job sits as a compact <ScheduleRow>. Tapping a compact row expands it; there's no
+ * separate "View Job" screen to navigate to for this any more, only
+ * <FeaturedJobCard>'s own Start Job button ever leaves this screen.
+ *
+ * "Up next" is a pinned slot, not just whichever card happens to be expanded: it's
+ * always whichever job the driver is actually mid-way through (IN_PROGRESS), or the
+ * earliest still-READY one if none is started yet — the same priority
+ * jobs.service.ts's getNextJobForDriver uses server-side for the single-job "active"
+ * screen. Expanding a *different* job (previewing something later today) doesn't
+ * replace that slot; it shrinks "Up next" down to a small card and inserts the
+ * previewed job's big card directly beneath it, so the driver never loses sight of
+ * what's actually next while looking at something else.
+ */
+function TodayJobsList({ jobs, onOpenJob }: TodayJobsListProps) {
+  const activeJobId = useMemo(() => {
+    const active = jobs.find(j => j.status === "IN_PROGRESS");
+    return (active ?? jobs[0])?.jobId ?? null;
+  }, [jobs]);
+
+  const [expandedJobId, setExpandedJobId] = useState<string | null>(activeJobId);
+
+  // Keep the expansion pointed at a real job -- if the driver's pick dropped out of
+  // today's list (completed elsewhere, or the list just refreshed), fall back to
+  // whichever job is now active/next rather than silently expanding nothing.
+  useEffect(() => {
+    if (expandedJobId && jobs.some(j => j.jobId === expandedJobId)) return;
+    setExpandedJobId(activeJobId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeJobId, jobs]);
+
+  const activeJob = jobs.find(j => j.jobId === activeJobId) ?? null;
+  const previewedJob =
+    expandedJobId && expandedJobId !== activeJobId ? jobs.find(j => j.jobId === expandedJobId) ?? null : null;
+  const rest = jobs.filter(j => j.jobId !== activeJobId && j.jobId !== expandedJobId);
+  // Everything today besides "Up next", regardless of whether one of them is
+  // currently pulled out into the preview card above -- the "Later today" heading
+  // stays put either way, it's only the rows underneath that come and go.
+  const laterCount = jobs.length - (activeJob ? 1 : 0);
+
   return (
-    <>
-      {filtered.upcomingGroups.map(group => (
-        <ScheduleSection key={group.key} title={group.label} meta={jobsLabel(group.jobs.length)}>
-          {group.jobs.map((job, i) => (
+    <div className="flex flex-col gap-5">
+      <div className="flex flex-col gap-3">
+        <h2 className="px-1 text-heading text-fg">Up next</h2>
+        {activeJob &&
+          (previewedJob ? (
+            <ScheduleRow
+              job={activeJob}
+              bucket="today"
+              onOpen={() => setExpandedJobId(activeJob.jobId)}
+            />
+          ) : (
+            <FeaturedJobCard job={activeJob} onStarted={onOpenJob} />
+          ))}
+      </div>
+      {/* "Later today" always sits directly above that list, whether or not one of
+          its jobs is currently pulled open into the big card -- the previewed job is
+          still a later-today job, so it renders as this section's first item rather
+          than floating above the heading. */}
+      {laterCount > 0 && (
+        <ScheduleSection title="Later today" meta={jobsLabel(laterCount)}>
+          {previewedJob && <FeaturedJobCard job={previewedJob} onStarted={onOpenJob} />}
+          {rest.map((job, i) => (
             <ScheduleRow
               key={job.jobId}
               job={job}
-              bucket="next"
+              bucket="today"
               index={i}
-              onOpen={() => onOpenJob(job.jobId)}
+              onOpen={() => setExpandedJobId(job.jobId)}
             />
+          ))}
+        </ScheduleSection>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Upcoming (tomorrow onward) jobs. Not actionable yet -- there's no Start Job, so
+ * tapping a row just expands a read-only <JobDetailsPanel> under it (name/email/
+ * phone + the rest of the booking behind "More details"), no route/navigate section
+ * and no footer button. Purely local: nothing here ever opens another screen.
+ */
+function UpcomingJobsList({ groups }: { groups: ReturnType<typeof groupJobsByDate> }) {
+  const [expandedJobId, setExpandedJobId] = useState<string | null>(null);
+
+  return (
+    <>
+      {groups.map(group => (
+        <ScheduleSection key={group.key} title={group.label} meta={jobsLabel(group.jobs.length)}>
+          {group.jobs.map((job, i) => (
+            <div key={job.jobId} className="flex flex-col gap-2">
+              <ScheduleRow
+                job={job}
+                bucket="next"
+                index={i}
+                onOpen={() => setExpandedJobId(id => (id === job.jobId ? null : job.jobId))}
+              />
+              {expandedJobId === job.jobId && <JobDetailsPanel job={job} alwaysExpanded />}
+            </div>
           ))}
         </ScheduleSection>
       ))}

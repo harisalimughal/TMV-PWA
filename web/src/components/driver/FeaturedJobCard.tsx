@@ -1,10 +1,12 @@
-import React from "react";
-import { ArrowRight, Users } from "lucide-react";
+import React, { useState } from "react";
+import { ArrowRight } from "lucide-react";
 import { cx } from "../../ui";
 import { haptics } from "../../lib/haptics";
-import { telUrl } from "../../lib/links";
-import type { Job } from "../../api/jobs";
+import { useOnline } from "../../lib/net";
+import { startJob, type ApiError, type Job } from "../../api/jobs";
+import { useToast } from "../ui/Toast";
 import { JobRoute } from "./JobRoute";
+import { JobDetailsPanel } from "./JobDetailsPanel";
 import { StatusIndicator } from "./JobStatusChip";
 import { bigActionButtonClass } from "./bigActionButton";
 
@@ -52,40 +54,49 @@ function crewPrice(job: Job): string {
 
 export interface FeaturedJobCardProps {
   job: Job;
-  onOpen: () => void;
+  /** Fires once the job is confirmed started (or was already in progress) — the
+   *  caller opens the workflow screen, which lands on whatever step the job is
+   *  actually on (arrival photo for a fresh start, wherever it left off otherwise). */
+  onStarted: (jobId: string) => void;
 }
 
 /**
- * The next / active job — the one hero of the screen. A crew/price pill and the
- * Calendar booking window (start–end, red) sit in a small header card, then the
- * status, the drawn pickup→drop-off route, the customer with a tap-to-call number,
- * the crew size and van, and a full-width View Job button. The whole card is a tap
- * target that opens the job; the inner actions stop propagation.
+ * The driver's active/next job, shown in full on the Jobs list itself — there's no
+ * separate "View Job" screen to tap through to any more (see JobListScreen.tsx's
+ * TodayJobsList, which keeps exactly one job expanded like this at a time). Booking
+ * window header, status, the booking's extra-charge note, the pickup/drop-off route
+ * (each address tap-to-navigate with a copy icon), then <JobDetailsPanel> (contact +
+ * the rest of the booking) with Start Job as its footer.
  */
-export function FeaturedJobCard({ job, onOpen }: FeaturedJobCardProps) {
+export function FeaturedJobCard({ job, onStarted }: FeaturedJobCardProps) {
   const day = dateChip(job.bookedStart);
+  const online = useOnline();
+  const toast = useToast();
+  const [starting, setStarting] = useState(false);
 
-  function open() {
+  async function handleStart() {
+    if (!online) {
+      haptics.warn();
+      toast.error("You're offline — reconnect to start this job.");
+      return;
+    }
     haptics.tap();
-    onOpen();
+    setStarting(true);
+    try {
+      await startJob(job.jobId);
+      onStarted(job.jobId);
+    } catch (err) {
+      toast.error((err as ApiError)?.message || "Couldn't start this job. Try again.");
+    } finally {
+      setStarting(false);
+    }
   }
 
   return (
     <div
-      role="button"
-      tabIndex={0}
-      onClick={open}
-      onKeyDown={e => {
-        if (e.key === "Enter" || e.key === " ") {
-          e.preventDefault();
-          open();
-        }
-      }}
       className={cx(
         "block w-full rounded-panel border border-line-strong bg-surface p-4 text-left",
-        "shadow-[0_1px_3px_rgb(15_23_42/0.08),0_12px_28px_-10px_rgb(15_23_42/0.22)]",
-        "transition-transform duration-fast active:scale-[0.99]",
-        "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
+        "shadow-[0_1px_3px_rgb(15_23_42/0.08),0_12px_28px_-10px_rgb(15_23_42/0.22)]"
       )}
     >
       {/* Booking window header */}
@@ -112,47 +123,39 @@ export function FeaturedJobCard({ job, onOpen }: FeaturedJobCardProps) {
         <StatusIndicator job={job} />
       </div>
 
-      <JobRoute pickup={job.pickup} dropoff={job.dropoff} stop={job.stopBy} density="full" className="mt-4" />
+      {/* The booking's own overtime/extra-charge note, verbatim from Calendar. */}
+      {job.extraChargeText && (
+        <p className="mt-3 text-helper text-fg-muted">
+          <span className="font-semibold text-fg">Any extra charge:</span> {job.extraChargeText}
+        </p>
+      )}
 
-      {/* Indented to line up with the address text in <JobRoute> above (24px rail
-          column + 14px gap-x-3.5). */}
-      <div className="mt-3 pl-[38px] text-[17px] font-semibold text-fg [overflow-wrap:anywhere]">
-        {job.customerName || "Unnamed customer"}
-        {job.customerPhone && (
-          <>
-            {"  "}
-            <a
-              href={telUrl(job.customerPhone)}
-              onClick={e => e.stopPropagation()}
-              className="font-mono text-[15px] font-semibold text-brand"
-            >
-              {job.customerPhone}
-            </a>
-          </>
-        )}
-      </div>
+      <JobRoute
+        pickup={job.pickup}
+        dropoff={job.dropoff}
+        stop={job.stopBy}
+        density="full"
+        interactive
+        className="mt-4"
+      />
 
-      <div className="mt-[18px] flex items-center gap-3 border-t border-line pt-4">
-        <span className="inline-flex items-center gap-1.5 text-body text-fg-muted">
-          <Users className="size-[18px] text-fg-subtle" aria-hidden />
-          {job.crewSize || "?"} crew
-        </span>
-        {job.vanSize && (
-          <span className="ml-auto text-body font-semibold text-fg">{job.vanSize}</span>
-        )}
-      </div>
-
-      <button
-        type="button"
-        onClick={e => {
-          e.stopPropagation();
-          open();
-        }}
-        className={cx(bigActionButtonClass, "-mx-2 mt-5")}
-      >
-        View Job
-        <ArrowRight className="size-[22px]" aria-hidden />
-      </button>
+      <JobDetailsPanel
+        job={job}
+        className="mt-[18px]"
+        excludeValues={[job.pickup, job.dropoff, job.stopBy, job.extraChargeText]}
+        footer={
+          <button
+            type="button"
+            disabled={starting}
+            aria-busy={starting || undefined}
+            onClick={handleStart}
+            className={cx(bigActionButtonClass, "mt-4")}
+          >
+            {starting ? "Starting…" : "Start Job"}
+            {!starting && <ArrowRight className="size-[22px]" aria-hidden />}
+          </button>
+        }
+      />
     </div>
   );
 }

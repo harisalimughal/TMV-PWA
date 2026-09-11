@@ -28,7 +28,8 @@ export interface DriverProfile {
   chatUserName: string;
   active: boolean;
   role: string;
-  /** Shown in the "I'm on the way" message preview -- blank until an admin fills it in. */
+  /** Shown in the driver-introduction message sent when a job starts (see
+   *  notifications/message.ts) -- blank until an admin fills it in. */
   phone: string;
   vanRegistration: string;
   /** GPSLive device IMEI for this driver's usual van -- see DriverAccountDoc's own
