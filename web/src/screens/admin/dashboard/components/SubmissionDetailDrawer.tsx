@@ -9,6 +9,7 @@ import { formatLondonDateTime } from "../utils/date";
 import { waitForPrintImages } from "../utils/printReady";
 import { resolveDriver } from "../utils/drivers";
 import { saveJobReview } from "../api";
+import { formatCapturedTime, formatCoords, mapsUrlForLocation } from "../../../../lib/geo";
 
 type ScenarioKind = "checkin" | "checkout" | "parking" | "liability";
 
@@ -137,13 +138,17 @@ export function SubmissionDetailDrawer({ job: initialJob, isOpen, onClose, onNav
     key: p.fileId || String(i),
     href: p.thumbUrl,
     thumbSrc: p.thumbUrl,
-    category: SCENARIO_TITLES[kind!]
+    category: SCENARIO_TITLES[kind!],
+    capturedAt: p.capturedAt,
+    location: p.location
   })) : [];
   const jobPhotos = !isScenario ? ((job as NormalizedJob).evidenceItems?.filter(e => !!e.fileId) || []).map(p => ({
     key: p.id,
     href: p.driveUrl || p.thumbProxyUrl || `/admin/api/jobs/${(job as NormalizedJob).jobId}/photos/${p.fileId}`,
     thumbSrc: p.thumbProxyUrl || `/admin/api/jobs/${(job as NormalizedJob).jobId}/photos/${p.fileId}`,
-    category: p.category
+    category: p.category,
+    capturedAt: p.capturedAt,
+    location: p.location
   })) : [];
   const photos = isScenario ? scenarioPhotos : jobPhotos;
 
@@ -433,22 +438,45 @@ export function SubmissionDetailDrawer({ job: initialJob, isOpen, onClose, onNav
          <label className="text-[13px] font-semibold text-admin-muted block mb-4">Evidence that the items have been loaded.</label>
          {photos.length > 0 ? (
            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
-             {photos.map((p) => (
-               <a
-                 key={p.key}
-                 href={p.href}
-                 target="_blank" rel="noreferrer"
-                 className="aspect-square rounded-card bg-admin-surface overflow-hidden border border-admin-line shadow-sm hover:ring-2 hover:ring-admin-brand/50 transition cursor-pointer block relative group"
-               >
-                 <img src={p.thumbSrc} className="w-full h-full object-cover" alt={p.category} />
-                 <div className="absolute inset-0 bg-admin-ink/50 opacity-0 group-hover:opacity-100 transition flex items-center justify-center">
-                    <Maximize2 className="w-5 h-5 text-white" />
+             {photos.map((p) => {
+               const capturedTime = p.capturedAt ? formatCapturedTime(p.capturedAt) : "";
+               return (
+                 <div key={p.key} className="space-y-1">
+                   <a
+                     href={p.href}
+                     target="_blank" rel="noreferrer"
+                     className="aspect-square rounded-card bg-admin-surface overflow-hidden border border-admin-line shadow-sm hover:ring-2 hover:ring-admin-brand/50 transition cursor-pointer block relative group"
+                   >
+                     <img src={p.thumbSrc} className="w-full h-full object-cover" alt={p.category} />
+                     <div className="absolute inset-0 bg-admin-ink/50 opacity-0 group-hover:opacity-100 transition flex items-center justify-center">
+                        <Maximize2 className="w-5 h-5 text-white" />
+                     </div>
+                     <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-admin-ink/80 to-transparent p-2 text-[9px] text-white font-bold truncate">
+                        {p.category}
+                     </div>
+                   </a>
+                   {/* Proof of place -- where/when the driver's device says this was
+                       actually taken. Absent on older submissions. */}
+                   {(capturedTime || p.location) && (
+                     <div className="text-[10px] leading-tight text-admin-muted text-center space-y-0.5">
+                       {capturedTime && <div>{capturedTime}</div>}
+                       {p.location ? (
+                         <a
+                           href={mapsUrlForLocation(p.location)}
+                           target="_blank"
+                           rel="noopener noreferrer"
+                           className="block truncate font-mono text-admin-brand underline underline-offset-2"
+                         >
+                           {formatCoords(p.location)}
+                         </a>
+                       ) : (
+                         <div>No location</div>
+                       )}
+                     </div>
+                   )}
                  </div>
-                 <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-admin-ink/80 to-transparent p-2 text-[9px] text-white font-bold truncate">
-                    {p.category}
-                 </div>
-               </a>
-             ))}
+               );
+             })}
            </div>
          ) : (
            <div className="p-8 text-center bg-admin-surface border border-dashed border-admin-line rounded-card">

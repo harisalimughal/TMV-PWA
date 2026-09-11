@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from "react";
 import { Camera, FileUp, Loader2, X } from "lucide-react";
 import { compressAll, formatBytes } from "../lib/image";
 import { haptics } from "../lib/haptics";
+import type { PhotoCaptureMeta } from "../lib/geo";
 import { cx } from "../ui";
 import { CameraCaptureModal } from "./camera";
 
@@ -10,7 +11,12 @@ export interface PhotoPickerProps {
   /** Minimum the caller requires -- shown as a live "1 of 2" counter. */
   min?: number;
   max: number;
-  onChange: (files: File[]) => void;
+  /**
+   * `metas` is parallel to `files` — where/when each photo was taken (null for a
+   * library upload, which has no shutter moment to record). Callers that don't care
+   * (`onChange={setPhotos}`) can simply ignore the second argument.
+   */
+  onChange: (files: File[], metas: Array<PhotoCaptureMeta | null>) => void;
   /** Rendered under the label, e.g. what the photo needs to show. */
   hint?: string;
   allowUpload?: boolean;
@@ -28,6 +34,8 @@ export interface PhotoPickerProps {
    * the parent, keyed per step, so navigating back and forward doesn't lose them).
    */
   initialFiles?: File[];
+  /** Capture metadata to start with — parallel to `initialFiles`. */
+  initialMeta?: Array<PhotoCaptureMeta | null>;
   /** Photos already uploaded to the server for this step, shown alongside newly
    *  captured ones. Deleting one calls `onRemoveRemote` with its id. */
   remoteFiles?: RemotePhoto[];
@@ -41,11 +49,16 @@ export interface PhotoPickerProps {
 export interface RemotePhoto {
   id: string;
   url: string;
+  /** Where/when this photo was captured, if the driver's device recorded it at the
+   *  time — absent for photos taken before this feature existed. */
+  capturedAt?: string;
+  location?: PhotoCaptureMeta["location"];
 }
 
 interface Preview {
   url: string;
   file: File;
+  meta: PhotoCaptureMeta | null;
 }
 
 /**
@@ -68,12 +81,17 @@ export function PhotoPicker({
   autoAcceptCapture = false,
   registerCapture,
   initialFiles,
+  initialMeta,
   remoteFiles,
   onRemoveRemote,
   labelHidden = false
 }: PhotoPickerProps) {
   const [previews, setPreviews] = useState<Preview[]>(() =>
-    (initialFiles ?? []).map(file => ({ file, url: URL.createObjectURL(file) }))
+    (initialFiles ?? []).map((file, i) => ({
+      file,
+      url: URL.createObjectURL(file),
+      meta: initialMeta?.[i] ?? null
+    }))
   );
   const [processing, setProcessing] = useState(false);
   const [cameraOpen, setCameraOpen] = useState(false);
@@ -94,17 +112,24 @@ export function PhotoPicker({
   }, [previews]);
   useEffect(() => () => urlsRef.current.forEach(URL.revokeObjectURL), []);
 
-  async function addFiles(files: File[]) {
+  async function addFiles(files: File[], metas: Array<PhotoCaptureMeta | null> = files.map(() => null)) {
     setProcessing(true);
     try {
       const compressed = await compressAll(files.slice(0, max));
-      const added: Preview[] = compressed.map(file => ({ file, url: URL.createObjectURL(file) }));
+      const metaSlice = metas.slice(0, max);
+      // Promise.all inside compressAll preserves order, so index-pairing with the
+      // metas we sliced from the same input array stays correct.
+      const added: Preview[] = compressed.map((file, i) => ({
+        file,
+        url: URL.createObjectURL(file),
+        meta: metaSlice[i] ?? null
+      }));
       if (max === 1) {
         previews.forEach(preview => URL.revokeObjectURL(preview.url));
       }
       const next = max === 1 ? added.slice(0, 1) : [...previews, ...added].slice(0, max);
       setPreviews(next);
-      onChange(next.map(p => p.file));
+      onChange(next.map(p => p.file), next.map(p => p.meta));
       if (next.length >= max) setCameraOpen(false);
       haptics.tap();
     } finally {
@@ -112,8 +137,8 @@ export function PhotoPicker({
     }
   }
 
-  async function handleCapture(file: File) {
-    await addFiles([file]);
+  async function handleCapture(file: File, meta: PhotoCaptureMeta) {
+    await addFiles([file], [meta]);
   }
 
   function removeAt(index: number) {
@@ -121,7 +146,7 @@ export function PhotoPicker({
     URL.revokeObjectURL(target.url);
     const next = previews.filter((_, i) => i !== index);
     setPreviews(next);
-    onChange(next.map(p => p.file));
+    onChange(next.map(p => p.file), next.map(p => p.meta));
   }
 
   const remote = remoteFiles ?? [];
@@ -261,7 +286,7 @@ export function PhotoPicker({
       <CameraCaptureModal
         open={cameraOpen}
         onClose={() => setCameraOpen(false)}
-        onCapture={file => void handleCapture(file)}
+        onCapture={(file, meta) => void handleCapture(file, meta)}
         autoAcceptCapture={autoAcceptCapture}
         title={`Take ${label.toLowerCase()}`}
       />

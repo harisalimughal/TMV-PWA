@@ -70,6 +70,11 @@ export interface UploadedPhoto {
   buffer: Buffer;
   contentType: string;
   fileName: string;
+  /** Where/when the driver's device says this one was taken — see
+   *  jobs/evidence.service.ts's EvidenceCapture. Optional: a library upload or an
+   *  older client build won't have it. */
+  capturedAt?: string;
+  location?: { lat: number; lng: number; accuracy: number };
 }
 
 /**
@@ -112,7 +117,10 @@ export async function handlePhotoStep(
     }
   } else {
     for (const photo of photos) {
-      await uploadEvidence(job, actor, evidenceType, photo.buffer, photo.contentType, photo.fileName);
+      await uploadEvidence(job, actor, evidenceType, photo.buffer, photo.contentType, photo.fileName, {
+        capturedAt: photo.capturedAt,
+        location: photo.location
+      });
     }
   }
 

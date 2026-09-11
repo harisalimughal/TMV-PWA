@@ -7,6 +7,9 @@ export interface ScenarioSubmissionDoc {
   driver: string;
   fields: Record<string, string>;
   photoUrls: string[];
+  /** Parallel to photoUrls, same index — where/when each photo was taken. Optional:
+   *  absent on submissions made before this existed. */
+  photoMeta?: Array<{ capturedAt?: string; location?: { lat: number; lng: number; accuracy: number } }>;
   signatureUrl: string;
   submittedAt: string;
 }

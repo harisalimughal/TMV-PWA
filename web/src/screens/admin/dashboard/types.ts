@@ -21,6 +21,10 @@ export interface NormalizedEvidenceItem {
   completedAt?: string;
   error?: string;
   provenance: "recorded" | "derived";
+  /** Where/when the driver's device recorded taking this photo — absent for older
+   *  evidence, or where GPS was denied/unavailable at capture time. */
+  capturedAt?: string;
+  location?: { lat: number; lng: number; accuracy: number };
 }
 
 export interface ActivityEntry {
@@ -266,7 +270,14 @@ export interface ScenarioItem {
   Address?: string;
   "Damage Categories"?: string;
   Date?: string;
-  photos: Array<{ fileId: string; thumbUrl: string }>;
+  photos: Array<{
+    fileId: string;
+    thumbUrl: string;
+    /** Where/when the driver's device recorded taking this photo — absent for
+     *  submissions made before this existed. */
+    capturedAt?: string;
+    location?: { lat: number; lng: number; accuracy: number };
+  }>;
   signature: { fileId: string; thumbUrl: string } | null;
 }
 

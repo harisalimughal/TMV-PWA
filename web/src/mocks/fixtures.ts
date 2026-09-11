@@ -110,7 +110,12 @@ export function makeEvidenceItem(evidenceType: string): EvidenceItem {
   return {
     evidenceId: `EV-MOCK-${mockEvidenceSeq}`,
     evidenceType,
-    url: `https://picsum.photos/seed/tmv-${evidenceType}-${mockEvidenceSeq}/500/500`
+    url: `https://picsum.photos/seed/tmv-${evidenceType}-${mockEvidenceSeq}/500/500`,
+    // Sample capture location/time so the driver's "small text under photos" caption
+    // and the admin thumbnail caption both have something real to show in dev.
+    // Somewhere around Findhorn Street E14, jittered a little per photo.
+    capturedAt: iso(0, 8, 30 + mockEvidenceSeq),
+    location: { lat: 51.5074 + mockEvidenceSeq * 0.0003, lng: -0.0089 - mockEvidenceSeq * 0.0003, accuracy: 12 }
   };
 }
 

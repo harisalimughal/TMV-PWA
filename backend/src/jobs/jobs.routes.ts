@@ -11,6 +11,7 @@ import {
   submitDrawnSignature, suggestedTotal
 } from "../workflow/workflow.engine";
 import { submitScenario } from "./scenario.service";
+import { parsePhotoMeta } from "./photo-meta";
 import { DAMAGE_CATEGORIES, SCENARIOS, ScenarioKey } from "../workflow/scenario.spec";
 import { ValidationError } from "../workflow/validation.engine";
 import { listActivityForJob } from "../db/activity.repo";
@@ -86,16 +87,28 @@ function errorResponse(res: Response, error: unknown): void {
 }
 
 /** The driver-visible list of photos already uploaded for a job — id, which step it
- *  belongs to, and its URL — so the app can show them when a driver steps back to a
- *  photo step, and offer to delete any. COMPLETED only (a half-processed upload isn't
- *  something the driver can act on). */
-async function evidenceItemsFor(
-  jobId: string
-): Promise<Array<{ evidenceId: string; evidenceType: string; url: string }>> {
+ *  belongs to, its URL, and where/when it was taken — so the app can show them when a
+ *  driver steps back to a photo step, and offer to delete any. COMPLETED only (a
+ *  half-processed upload isn't something the driver can act on). */
+async function evidenceItemsFor(jobId: string): Promise<
+  Array<{
+    evidenceId: string;
+    evidenceType: string;
+    url: string;
+    capturedAt?: string;
+    location?: { lat: number; lng: number; accuracy: number };
+  }>
+> {
   const records = await listEvidenceForJob(jobId);
   return records
     .filter(r => r.status === EvidenceStatus.COMPLETED && r.cloudinaryUrl)
-    .map(r => ({ evidenceId: r.evidenceId, evidenceType: r.evidenceType, url: r.cloudinaryUrl }));
+    .map(r => ({
+      evidenceId: r.evidenceId,
+      evidenceType: r.evidenceType,
+      url: r.cloudinaryUrl,
+      capturedAt: r.capturedAt,
+      location: r.location
+    }));
 }
 
 export function jobsRoutes(): Router {
@@ -185,10 +198,13 @@ export function jobsRoutes(): Router {
   router.post("/:jobId/evidence", upload.array("photos", 2), async (req: Request, res: Response) => {
     try {
       const files = (req.files as Express.Multer.File[] | undefined) ?? [];
-      const photos = files.map(file => ({
+      const metas = parsePhotoMeta(req.body?.photoMeta);
+      const photos = files.map((file, i) => ({
         buffer: file.buffer,
         contentType: file.mimetype,
-        fileName: file.originalname || "photo.jpg"
+        fileName: file.originalname || "photo.jpg",
+        capturedAt: metas[i]?.capturedAt,
+        location: metas[i]?.location
       }));
       const job = await handlePhotoStep(String(req.params.jobId), req.driverEmail!, photos);
       res.status(200).json({ job, evidenceItems: await evidenceItemsFor(job.jobId) });
@@ -273,15 +289,23 @@ export function jobsRoutes(): Router {
           return;
         }
         const filesByField = (req.files as Record<string, Express.Multer.File[]> | undefined) ?? {};
-        const photos = (filesByField.photos ?? []).map(file => ({ buffer: file.buffer, contentType: file.mimetype }));
+        const photoMetas = parsePhotoMeta(req.body?.photoMeta);
+        const photos = (filesByField.photos ?? []).map((file, i) => ({
+          buffer: file.buffer,
+          contentType: file.mimetype,
+          capturedAt: photoMetas[i]?.capturedAt,
+          location: photoMetas[i]?.location
+        }));
         const signatureFile = filesByField.signature?.[0];
         if (!signatureFile) throw new ValidationError("A signature is required.");
 
         // Every non-file form field is a scenario field, keyed by its own name (see
         // workflow/scenario.spec.ts's field names) -- multer already parses these as
-        // plain strings.
+        // plain strings. "photoMeta" is capture metadata, not a scenario field --
+        // parsed above, excluded here so it doesn't land in the submission's fields.
         const fields: Record<string, string> = {};
         for (const [key, value] of Object.entries(req.body ?? {})) {
+          if (key === "photoMeta") continue;
           fields[key] = String(value);
         }
 

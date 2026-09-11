@@ -39,13 +39,20 @@ export class InvalidImageError extends Error {}
  * upload posts the actual file directly, so there's no "download" step and nothing
  * async to queue -- one Cloudinary call, done inside the request.
  */
+export interface EvidenceCapture {
+  /** ISO timestamp from the driver's device, taken at the camera shutter. */
+  capturedAt?: string;
+  location?: { lat: number; lng: number; accuracy: number };
+}
+
 export async function uploadEvidence(
   job: Job,
   driverEmail: string,
   evidenceType: EvidenceType,
   buffer: Buffer,
   contentType: string,
-  fileName: string
+  fileName: string,
+  capture?: EvidenceCapture
 ): Promise<EvidenceRecord> {
   if (buffer.byteLength > MAX_IMAGE_BYTES) {
     throw new InvalidImageError(`Photo exceeds the maximum of ${Math.round(MAX_IMAGE_BYTES / 1024 / 1024)} MB.`);
@@ -75,7 +82,9 @@ export async function uploadEvidence(
       cloudinaryPublicId: uploaded.publicId,
       cloudinaryUrl: uploaded.url,
       retryCount: 0,
-      lastError: ""
+      lastError: "",
+      capturedAt: capture?.capturedAt,
+      location: capture?.location
     };
   } catch (error) {
     log.error("evidence upload failed", { job_id: job.jobId, evidence_type: evidenceType, error: String(error) });
@@ -93,7 +102,9 @@ export async function uploadEvidence(
       cloudinaryPublicId: "",
       cloudinaryUrl: "",
       retryCount: 0,
-      lastError: error instanceof Error ? error.message : String(error)
+      lastError: error instanceof Error ? error.message : String(error),
+      capturedAt: capture?.capturedAt,
+      location: capture?.location
     };
   }
 

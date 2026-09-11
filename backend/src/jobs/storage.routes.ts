@@ -3,6 +3,7 @@ import multer from "multer";
 import { env } from "../config/env";
 import { requireDriverAuth } from "../auth/require-driver-auth";
 import { submitStorageScenario } from "./scenario.service";
+import { parsePhotoMeta } from "./photo-meta";
 import { ValidationError } from "../workflow/validation.engine";
 import { log } from "../utils/logger";
 
@@ -54,12 +55,21 @@ export function storageRoutes(): Router {
         }
 
         const filesByField = (req.files as Record<string, Express.Multer.File[]> | undefined) ?? {};
-        const photos = (filesByField.photos ?? []).map(file => ({ buffer: file.buffer, contentType: file.mimetype }));
+        const photoMetas = parsePhotoMeta(req.body?.photoMeta);
+        const photos = (filesByField.photos ?? []).map((file, i) => ({
+          buffer: file.buffer,
+          contentType: file.mimetype,
+          capturedAt: photoMetas[i]?.capturedAt,
+          location: photoMetas[i]?.location
+        }));
         const signatureFile = filesByField.signature?.[0];
         if (!signatureFile) throw new ValidationError("A signature is required.");
 
+        // "photoMeta" is capture metadata (parsed above), not a scenario field --
+        // excluded here so it doesn't land in the submission's fields.
         const fields: Record<string, string> = {};
         for (const [key, value] of Object.entries(req.body ?? {})) {
+          if (key === "photoMeta") continue;
           fields[key] = String(value);
         }
 

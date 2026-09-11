@@ -22,6 +22,8 @@ import {
   type Job
 } from "../api/jobs";
 import { PhotoUploader } from "../components/PhotoUploader";
+import type { RemotePhoto } from "../components/PhotoPicker";
+import type { PhotoCaptureMeta } from "../lib/geo";
 import { SignatureModal } from "../components/SignatureModal";
 import { Choice, ChoiceGroup } from "../components/ui/Choice";
 import { useToast } from "../components/ui/Toast";
@@ -356,7 +358,7 @@ export function JobWorkflowScreen({ jobId, onBack }: JobWorkflowScreenProps) {
   const stepRemotePhotos = stepEvidenceType
     ? evidenceItems
         .filter(item => item.evidenceType === stepEvidenceType)
-        .map(item => ({ id: item.evidenceId, url: item.url }))
+        .map(item => ({ id: item.evidenceId, url: item.url, capturedAt: item.capturedAt, location: item.location }))
     : [];
 
   const removeRemotePhoto = (evidenceId: string) => {
@@ -438,15 +440,18 @@ export function JobWorkflowScreen({ jobId, onBack }: JobWorkflowScreenProps) {
             photoRemoteCount={stepRemotePhotos.length}
             onStart={() => run(() => startJob(job.jobId), "Job started")}
             onAction={(action, input, message) => run(() => sendAction(job.jobId, action, input), message)}
-            onUploadPhotos={async files => {
+            onUploadPhotos={async (files, metas) => {
               const submittedAt = job.currentState;
               const ok = await run(
-                () => uploadEvidencePhotos(job.jobId, files, setUploadProgress),
+                () => uploadEvidencePhotos(job.jobId, files, setUploadProgress, metas),
                 "Photos uploaded"
               );
               // Once the server has them, drop the local staging for that step so a
               // later trip back doesn't re-submit the same files.
-              if (ok) delete formState.photosByStep[submittedAt];
+              if (ok) {
+                delete formState.photosByStep[submittedAt];
+                delete formState.photoMetaByStep[submittedAt];
+              }
             }}
             onOpenSignature={() => setSignatureOpen(true)}
             onBackHome={onBack}
@@ -637,6 +642,10 @@ const formState: {
    *  back (GO_BACK / forward) restores exactly what the driver had taken and not yet
    *  submitted. `photos` above always mirrors the current step's entry. */
   photosByStep: Record<string, File[]>;
+  /** Where/when each of `photos` was taken — parallel array, same per-step keying as
+   *  photosByStep. */
+  photoMeta: Array<PhotoCaptureMeta | null>;
+  photoMetaByStep: Record<string, Array<PhotoCaptureMeta | null>>;
   totalChargesCorrect: "" | "yes" | "no";
   totalChargesAmount: string;
   totalChargesNote: string;
@@ -646,6 +655,8 @@ const formState: {
   payment: [],
   photos: [],
   photosByStep: {},
+  photoMeta: [],
+  photoMetaByStep: {},
   totalChargesCorrect: "",
   totalChargesAmount: "",
   totalChargesNote: ""
@@ -657,6 +668,8 @@ function resetFormState() {
   formState.payment = [];
   formState.photos = [];
   formState.photosByStep = {};
+  formState.photoMeta = [];
+  formState.photoMetaByStep = {};
   formState.totalChargesCorrect = "";
   formState.totalChargesAmount = "";
   formState.totalChargesNote = "";
@@ -803,7 +816,7 @@ function StepBody({
    *  of opening the signature pad, not just inside it. */
   confirmationText: string;
   /** Photos already uploaded for the current photo step (empty for other steps). */
-  remotePhotos: Array<{ id: string; url: string }>;
+  remotePhotos: RemotePhoto[];
   onRemoveRemotePhoto: (evidenceId: string) => void;
   onOpenScenario: (scenario: ScenarioKey) => void;
   onReportIssue: (scenario: IssueScenario) => void;
@@ -833,6 +846,7 @@ function StepBody({
     // Photos are kept per step (see photosByStep) so returning to a photo step
     // restores what was taken there; only the mirror for the current step is set here.
     formState.photos = formState.photosByStep[state] ?? [];
+    formState.photoMeta = formState.photoMetaByStep[state] ?? [];
     formState.totalChargesCorrect = "";
     formState.totalChargesAmount = state === "WAITING_TOTAL_CHARGES" ? suggestedTotal.toFixed(2) : "";
     formState.totalChargesNote = "";
@@ -855,11 +869,14 @@ function StepBody({
           error={error}
           registerCapture={registerPhotoCapture}
           initialFiles={formState.photosByStep[state] ?? []}
+          initialMeta={formState.photoMetaByStep[state] ?? []}
           remoteFiles={remotePhotos}
           onRemoveRemote={onRemoveRemotePhoto}
-          onFilesChange={files => {
+          onFilesChange={(files, metas) => {
             formState.photos = files;
             formState.photosByStep[state] = files;
+            formState.photoMeta = metas;
+            formState.photoMetaByStep[state] = metas;
             tick();
           }}
         />
@@ -878,11 +895,14 @@ function StepBody({
             error={error}
             registerCapture={registerPhotoCapture}
             initialFiles={formState.photosByStep[state] ?? []}
+            initialMeta={formState.photoMetaByStep[state] ?? []}
             remoteFiles={remotePhotos}
             onRemoveRemote={onRemoveRemotePhoto}
-            onFilesChange={files => {
+            onFilesChange={(files, metas) => {
               formState.photos = files;
               formState.photosByStep[state] = files;
+              formState.photoMeta = metas;
+              formState.photoMetaByStep[state] = metas;
               tick();
             }}
           />
@@ -914,11 +934,14 @@ function StepBody({
             error={error}
             registerCapture={registerPhotoCapture}
             initialFiles={formState.photosByStep[state] ?? []}
+            initialMeta={formState.photoMetaByStep[state] ?? []}
             remoteFiles={remotePhotos}
             onRemoveRemote={onRemoveRemotePhoto}
-            onFilesChange={files => {
+            onFilesChange={(files, metas) => {
               formState.photos = files;
               formState.photosByStep[state] = files;
+              formState.photoMeta = metas;
+              formState.photoMetaByStep[state] = metas;
               tick();
             }}
           />
@@ -1377,7 +1400,7 @@ interface StepDockProps {
   photoRemoteCount: number;
   onStart: () => void;
   onAction: (action: string, input?: Record<string, string[]>, message?: string) => void;
-  onUploadPhotos: (files: File[]) => void;
+  onUploadPhotos: (files: File[], metas: Array<PhotoCaptureMeta | null>) => void;
   onOpenSignature: () => void;
   onBackHome: () => void;
   onBlocked: (reason: string) => void;
@@ -1462,7 +1485,7 @@ function StepDock({
                 offlineReason ?? (photoTotal === 0 ? "Take a photo first." : undefined)
               }
               onBlocked={onBlocked}
-              onClick={() => onUploadPhotos(formState.photos)}
+              onClick={() => onUploadPhotos(formState.photos, formState.photoMeta)}
             >
               {busy
                 ? uploadProgress !== null

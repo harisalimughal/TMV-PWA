@@ -3,12 +3,14 @@ import { createPortal } from "react-dom";
 import { Camera, CameraOff, Loader2, RefreshCw, SwitchCamera, X } from "lucide-react";
 import { cx } from "../../ui";
 import { haptics } from "../../lib/haptics";
+import type { PhotoCaptureMeta } from "../../lib/geo";
 import { useCameraStream } from "./useCameraStream";
+import { useLocationWatch } from "./useLocationWatch";
 
 export interface CameraCaptureModalProps {
   open: boolean;
-  /** Fires with each captured photo (a JPEG File). */
-  onCapture: (file: File) => void;
+  /** Fires with each captured photo (a JPEG File) and where/when it was taken. */
+  onCapture: (file: File, meta: PhotoCaptureMeta) => void;
   onClose: () => void;
   /** Keep the camera open after "Use photo" so the driver can take another. */
   allowMultiple?: boolean;
@@ -63,6 +65,7 @@ export function CameraCaptureModal({
 }: CameraCaptureModalProps) {
   const { status, error, stream, hasMultipleCameras, start, stop, toggleFacing } =
     useCameraStream();
+  const locationRef = useLocationWatch(open);
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -73,6 +76,7 @@ export function CameraCaptureModal({
   const [phase, setPhase] = useState<Phase>("live");
   const [capturedUrl, setCapturedUrl] = useState<string | null>(null);
   const [capturedFile, setCapturedFile] = useState<File | null>(null);
+  const [capturedMeta, setCapturedMeta] = useState<PhotoCaptureMeta | null>(null);
   const [capturing, setCapturing] = useState(false);
   const [needsPermissionTap, setNeedsPermissionTap] = useState(false);
   const titleId = useId();
@@ -84,6 +88,7 @@ export function CameraCaptureModal({
     }
     setCapturedUrl(null);
     setCapturedFile(null);
+    setCapturedMeta(null);
   }, []);
 
   // Open / close lifecycle: start automatically after the first grant, otherwise wait
@@ -169,6 +174,9 @@ export function CameraCaptureModal({
       return;
     }
     ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    // The location/time that matter are of this instant — the shutter press — not
+    // whenever "Use photo" is eventually tapped on the confirm screen.
+    const meta: PhotoCaptureMeta = { capturedAt: new Date().toISOString(), location: locationRef.current };
     canvas.toBlob(
       blob => {
         setCapturing(false);
@@ -180,7 +188,7 @@ export function CameraCaptureModal({
           lastModified: Date.now(),
         });
         if (autoAcceptCapture) {
-          onCapture(file);
+          onCapture(file, meta);
           haptics.success();
           if (allowMultiple) {
             setPhase("live");
@@ -193,6 +201,7 @@ export function CameraCaptureModal({
         const url = URL.createObjectURL(blob);
         capturedUrlRef.current = url;
         setCapturedFile(file);
+        setCapturedMeta(meta);
         setCapturedUrl(url);
         setPhase("preview");
         haptics.tap();
@@ -211,7 +220,7 @@ export function CameraCaptureModal({
 
   function handleUse() {
     if (!capturedFile) return;
-    onCapture(capturedFile);
+    onCapture(capturedFile, capturedMeta ?? { capturedAt: new Date().toISOString(), location: null });
     haptics.success();
     if (allowMultiple) {
       clearCaptured();

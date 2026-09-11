@@ -11,6 +11,11 @@ import { Job } from "./job.types";
 export interface ScenarioPhoto {
   buffer: Buffer;
   contentType: string;
+  /** Where/when the driver's device recorded taking this photo — see
+   *  jobs/evidence.service.ts's EvidenceCapture / web/src/lib/geo.ts. Optional: a
+   *  library upload or an older client build won't have it. */
+  capturedAt?: string;
+  location?: { lat: number; lng: number; accuracy: number };
 }
 
 /** Shared by both submitScenario (job-scoped: Parking Liability / Liability Report)
@@ -79,6 +84,8 @@ export async function submitScenario(
     driver: actor,
     fields,
     photoUrls: photoUrls.map(p => p.url),
+    // Parallel to photoUrls, same index -- where/when each was taken.
+    photoMeta: photos.map(p => ({ capturedAt: p.capturedAt, location: p.location })),
     signatureUrl: signatureUpload.url,
     submittedAt
   };
@@ -139,6 +146,7 @@ export async function submitStorageScenario(
     driver: actor,
     fields,
     photoUrls: photoUrls.map(p => p.url),
+    photoMeta: photos.map(p => ({ capturedAt: p.capturedAt, location: p.location })),
     signatureUrl: signatureUpload.url,
     submittedAt
   };

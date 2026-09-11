@@ -1,8 +1,9 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { AlertTriangle, Camera, Check, CloudOff, Search, X } from "lucide-react";
+import { AlertTriangle, Camera, Check, CloudOff, MapPin, Search, X } from "lucide-react";
 import { fetchLiabilityDamageCategories, submitScenario, type ApiError } from "../api/jobs";
 import { MULTISELECT_DELIMITER, SCENARIOS, type ScenarioFieldSpec, type ScenarioKey } from "../scenarioSpec";
 import { PhotoPicker } from "../components/PhotoPicker";
+import { formatCapturedTime, formatCoords, mapsUrlForLocation, type PhotoCaptureMeta } from "../lib/geo";
 import { SignatureField } from "../components/SignatureField";
 import { SignatureModal } from "../components/SignatureModal";
 import { useToast } from "../components/ui/Toast";
@@ -160,6 +161,8 @@ export function ScenarioFormScreen({
     return initial;
   });
   const [photos, setPhotos] = useState<File[]>([]);
+  // Parallel to `photos` -- where/when each was taken (null for library uploads).
+  const [photoMeta, setPhotoMeta] = useState<Array<PhotoCaptureMeta | null>>([]);
   // Every scenario form docks the camera next to Submit — the built-in "Take photo"
   // button is hidden and triggered from here instead.
   const openCameraRef = useRef<(() => void) | null>(null);
@@ -179,6 +182,9 @@ export function ScenarioFormScreen({
   const online = useOnline();
 
   const hasSignature = signatureBlob !== null;
+  // The most recent capture worth showing a caption for -- older/removed photos with
+  // no recorded location just show nothing rather than a misleading blank line.
+  const captureCaption = photoMeta.length > 0 ? photoMeta[photoMeta.length - 1] : null;
 
   // Revoke the preview object URL when it's replaced or the screen unmounts.
   useEffect(() => {
@@ -273,11 +279,18 @@ export function ScenarioFormScreen({
           }
         : fields;
 
-      const result = await submitScenario(scenario, submissionFields, photos, signatureBlob ?? null, {
-        jobId,
-        label: jobId ? `${spec.title} — Job ${jobId}` : spec.title,
-        onProgress: setProgress
-      });
+      const result = await submitScenario(
+        scenario,
+        submissionFields,
+        photos,
+        signatureBlob ?? null,
+        {
+          jobId,
+          label: jobId ? `${spec.title} — Job ${jobId}` : spec.title,
+          onProgress: setProgress
+        },
+        photoMeta
+      );
 
       if (result === "queued") {
         toast.success(`${spec.title} saved on this phone. It'll send as soon as you have signal.`);
@@ -432,9 +445,38 @@ export function ScenarioFormScreen({
                 hint={spec.photoMin > 0 ? `At least ${spec.photoMin} required` : undefined}
                 min={spec.photoMin}
                 max={spec.photoMax}
-                onChange={setPhotos}
+                onChange={(next, metas) => {
+                  setPhotos(next);
+                  setPhotoMeta(metas);
+                }}
                 registerCapture={registerCapture}
               />
+              {/* Small, quiet proof-of-place line -- where/when the most recently taken
+                  photo was, not shown at all when nothing's been captured yet. */}
+              {captureCaption && (
+                <p className="mt-3 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-helper text-fg-subtle">
+                  <MapPin className="size-3.5 shrink-0" aria-hidden />
+                  {formatCapturedTime(captureCaption.capturedAt) && (
+                    <span>Captured {formatCapturedTime(captureCaption.capturedAt)}</span>
+                  )}
+                  {captureCaption.location ? (
+                    <>
+                      <span aria-hidden>·</span>
+                      <a
+                        href={mapsUrlForLocation(captureCaption.location)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        onClick={event => event.stopPropagation()}
+                        className="font-mono text-brand underline underline-offset-2"
+                      >
+                        {formatCoords(captureCaption.location)}
+                      </a>
+                    </>
+                  ) : (
+                    <span>· location unavailable</span>
+                  )}
+                </p>
+              )}
             </div>
           </Section>
 

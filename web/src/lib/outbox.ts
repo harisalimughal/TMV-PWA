@@ -18,6 +18,8 @@
  * IndexedDB as-is with no base64 round-trip.
  */
 
+import type { PhotoCaptureMeta } from "./geo";
+
 const DB_NAME = "tmv-outbox";
 const DB_VERSION = 1;
 const STORE = "submissions";
@@ -30,6 +32,9 @@ export interface QueuedSubmission {
   label: string;
   fields: Record<string, string>;
   photos: File[];
+  /** Parallel to `photos` -- where/when each was taken, captured before the device
+   *  ever went offline. Preserved here so a replayed submission doesn't silently lose it. */
+  photoMeta?: Array<PhotoCaptureMeta | null>;
   signature: Blob | null;
   createdAt: number;
   attempts: number;
@@ -125,6 +130,7 @@ export async function flush(): Promise<{ sent: number; failed: number }> {
       const form = new FormData();
       for (const [key, value] of Object.entries(item.fields)) form.append(key, value);
       item.photos.forEach(photo => form.append("photos", photo));
+      if (item.photoMeta && item.photoMeta.length > 0) form.append("photoMeta", JSON.stringify(item.photoMeta));
       if (item.signature) form.append("signature", item.signature, "signature.png");
 
       try {

@@ -33,6 +33,7 @@ import { PhotoModal } from "./PhotoModal";
 import { ThumbnailPreview } from "./ThumbnailPreview";
 import { resolveDriver, formatVanReg, getAvatarColor } from "../utils/drivers";
 import { fetchDrivers, reassignJob } from "../api";
+import { formatCapturedTime, formatCoords, mapsUrlForLocation } from "../../../../lib/geo";
 
 interface Props {
   job: NormalizedJob;
@@ -528,6 +529,7 @@ export function JobDetailDrawer({ job: initialJob, isOpen, onClose, onUpdated }:
                 {job.evidenceItems.map((ev, i) => {
                   const thumbUrl = ev.thumbProxyUrl || ev.driveUrl;
                   const fullUrl = ev.driveUrl || ev.thumbProxyUrl;
+                  const capturedTime = ev.capturedAt ? formatCapturedTime(ev.capturedAt) : "";
                   return (
                     <div key={ev.id || i} className="p-2 bg-admin-surface rounded-card border border-admin-line text-center space-y-2">
                       <span className="text-[11px] font-semibold text-admin-muted block truncate">{ev.category}</span>
@@ -546,6 +548,26 @@ export function JobDetailDrawer({ job: initialJob, isOpen, onClose, onUpdated }:
                           }
                         }}
                       />
+                      {/* Proof of place -- where/when the driver's device says this
+                          was actually taken. Absent on older evidence. */}
+                      {(capturedTime || ev.location) && (
+                        <div className="text-[10.5px] leading-tight text-admin-muted space-y-0.5">
+                          {capturedTime && <div>{capturedTime}</div>}
+                          {ev.location ? (
+                            <a
+                              href={mapsUrlForLocation(ev.location)}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              onClick={event => event.stopPropagation()}
+                              className="block truncate font-mono text-admin-brand underline underline-offset-2"
+                            >
+                              {formatCoords(ev.location)}
+                            </a>
+                          ) : (
+                            <div>No location</div>
+                          )}
+                        </div>
+                      )}
                     </div>
                   );
                 })}

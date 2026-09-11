@@ -191,6 +191,14 @@ export interface EvidenceRecord {
   cloudinaryUrl: string;
   retryCount: number;
   lastError: string;
+  /**
+   * Where/when the driver's device recorded taking this photo — read straight off
+   * the browser's Geolocation API at the moment of the camera shutter (see the PWA's
+   * useLocationWatch). Optional: absent on evidence uploaded before this existed, or
+   * where the driver had location permission denied/unavailable at the time.
+   */
+  capturedAt?: string;
+  location?: { lat: number; lng: number; accuracy: number };
 }
 
 export interface EvidenceProgress {

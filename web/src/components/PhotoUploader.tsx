@@ -1,5 +1,7 @@
 import React, { useState } from "react";
-import { AlertTriangle } from "lucide-react";
+import { AlertTriangle, MapPin } from "lucide-react";
+import type { PhotoCaptureMeta } from "../lib/geo";
+import { formatCapturedTime, formatCoords, mapsUrlForLocation } from "../lib/geo";
 import { PhotoPicker, type RemotePhoto } from "./PhotoPicker";
 
 export interface PhotoUploaderProps {
@@ -14,11 +16,13 @@ export interface PhotoUploaderProps {
   /** An upload/validation error to show inline. */
   error?: string | null;
   /**
-   * Fires on every add/remove with the current list. The submit control lives in
-   * the screen's sticky dock, outside this subtree, so callers use this to keep
-   * that button's state honest.
+   * Fires on every add/remove with the current list and where/when each was taken
+   * (parallel array; null entries are library uploads or older data with no capture
+   * location). The submit control lives in the screen's sticky dock, outside this
+   * subtree, so callers use this to keep that button's state — and the upload
+   * payload — honest.
    */
-  onFilesChange?: (files: File[]) => void;
+  onFilesChange?: (files: File[], metas: Array<PhotoCaptureMeta | null>) => void;
   /**
    * When set, the built-in "Take photo" button is hidden and the caller is handed a
    * camera-open trigger instead — used when the capture button lives in the dock.
@@ -27,6 +31,8 @@ export interface PhotoUploaderProps {
   /** Photos to pre-populate with (kept by the parent so a step's photos survive
    *  navigating away and back). */
   initialFiles?: File[];
+  /** Capture metadata to pre-populate with — parallel to `initialFiles`. */
+  initialMeta?: Array<PhotoCaptureMeta | null>;
   /** Photos already on the server for this step. */
   remoteFiles?: RemotePhoto[];
   onRemoveRemote?: (id: string) => void;
@@ -53,18 +59,31 @@ export function PhotoUploader({
   onFilesChange,
   registerCapture,
   initialFiles,
+  initialMeta,
   remoteFiles,
   onRemoveRemote,
   labelHidden
 }: PhotoUploaderProps) {
   const [files, setFiles] = useState<File[]>(initialFiles ?? []);
+  const [meta, setMeta] = useState<Array<PhotoCaptureMeta | null>>(initialMeta ?? []);
 
-  function handleChange(next: File[]) {
+  function handleChange(next: File[], nextMeta: Array<PhotoCaptureMeta | null>) {
     setFiles(next);
-    onFilesChange?.(next);
+    setMeta(nextMeta);
+    onFilesChange?.(next, nextMeta);
   }
 
   const remaining = Math.max(0, minPhotos - files.length - (remoteFiles?.length ?? 0));
+
+  // The most recent capture worth showing a caption for -- a fresh local photo first
+  // (the driver just took it), falling back to the newest already-uploaded one when
+  // stepping back into a completed step. Older evidence with no recorded location
+  // just shows nothing here rather than a misleading blank line.
+  const latestLocal = meta.length > 0 ? meta[meta.length - 1] : null;
+  const latestRemote =
+    remoteFiles && remoteFiles.length > 0 ? remoteFiles[remoteFiles.length - 1] : undefined;
+  const captureCaption =
+    latestLocal ?? (latestRemote?.capturedAt ? { capturedAt: latestRemote.capturedAt, location: latestRemote.location ?? null } : null);
 
   return (
     <div className="flex flex-col gap-4">
@@ -76,6 +95,7 @@ export function PhotoUploader({
         onChange={handleChange}
         registerCapture={registerCapture}
         initialFiles={initialFiles}
+        initialMeta={initialMeta}
         remoteFiles={remoteFiles}
         onRemoveRemote={onRemoveRemote}
         labelHidden={labelHidden}
@@ -108,6 +128,33 @@ export function PhotoUploader({
       {!submitting && remaining > 0 && files.length > 0 && (
         <p className="text-helper text-fg-subtle">
           {remaining} more photo{remaining === 1 ? "" : "s"} needed.
+        </p>
+      )}
+
+      {/* Small, quiet proof-of-place line -- where/when the most recent photo was
+          actually taken, not shown at all when neither is known. */}
+      {captureCaption && (
+        <p className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-helper text-fg-subtle">
+          <MapPin className="size-3.5 shrink-0" aria-hidden />
+          {formatCapturedTime(captureCaption.capturedAt) && (
+            <span>Captured {formatCapturedTime(captureCaption.capturedAt)}</span>
+          )}
+          {captureCaption.location ? (
+            <>
+              <span aria-hidden>·</span>
+              <a
+                href={mapsUrlForLocation(captureCaption.location)}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={event => event.stopPropagation()}
+                className="font-mono text-brand underline underline-offset-2"
+              >
+                {formatCoords(captureCaption.location)}
+              </a>
+            </>
+          ) : (
+            <span>· location unavailable</span>
+          )}
         </p>
       )}
     </div>

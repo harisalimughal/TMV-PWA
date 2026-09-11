@@ -287,7 +287,9 @@ function classifyEvidence(
         contentType: latest.contentType,
         receivedAt: toUtcIso(latest.receivedAt),
         completedAt: toUtcIso(latest.processingCompletedAt),
-        provenance: "recorded"
+        provenance: "recorded",
+        capturedAt: latest.capturedAt,
+        location: latest.location
       });
       return "COMPLETED";
     }

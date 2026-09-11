@@ -1,5 +1,6 @@
 import { request, postJson, isOffline, type ApiError } from "../lib/http";
 import { enqueue } from "../lib/outbox";
+import type { CapturedLocation, PhotoCaptureMeta } from "../lib/geo";
 
 export type { ApiError };
 
@@ -91,6 +92,10 @@ export interface EvidenceItem {
   /** "Arrival" | "VanLoaded" | "EmptyVan" | scenario types. */
   evidenceType: string;
   url: string;
+  /** Where/when the driver's device recorded this photo being taken — absent for
+   *  photos captured before this existed, or where GPS was denied/unavailable. */
+  capturedAt?: string;
+  location?: CapturedLocation;
 }
 
 export interface JobUpdateResult {
@@ -142,10 +147,14 @@ export function startJob(jobId: string): Promise<JobUpdateResult> {
 export function uploadEvidencePhotos(
   jobId: string,
   files: File[],
-  onProgress?: (fraction: number) => void
+  onProgress?: (fraction: number) => void,
+  /** Parallel to `files` — where/when each was taken. Sent as one JSON field
+   *  alongside the photos so the backend can pair them up by index. */
+  metas?: Array<PhotoCaptureMeta | null>
 ): Promise<JobUpdateResult> {
   const form = new FormData();
   files.forEach(file => form.append("photos", file));
+  if (metas && metas.length > 0) form.append("photoMeta", JSON.stringify(metas));
   return request(`/api/jobs/${encodeURIComponent(jobId)}/evidence`, {
     method: "POST",
     body: form,
@@ -205,18 +214,22 @@ export async function submitScenario(
   fields: Record<string, string>,
   photos: File[],
   signature: Blob | null,
-  options: { jobId?: string; label: string; onProgress?: (fraction: number) => void } = { label: "Form" }
+  options: { jobId?: string; label: string; onProgress?: (fraction: number) => void } = { label: "Form" },
+  /** Parallel to `photos` -- where/when each was taken. Sent as one JSON field
+   *  alongside the photos so the backend can pair them up by index. */
+  photoMeta?: Array<PhotoCaptureMeta | null>
 ): Promise<ScenarioSubmitResult> {
   const url = scenarioUrl(scenario, options.jobId);
 
   if (isOffline()) {
-    await enqueue({ url, label: options.label, fields, photos, signature });
+    await enqueue({ url, label: options.label, fields, photos, photoMeta, signature });
     return "queued";
   }
 
   const form = new FormData();
   for (const [key, value] of Object.entries(fields)) form.append(key, value);
   photos.forEach(photo => form.append("photos", photo));
+  if (photoMeta && photoMeta.length > 0) form.append("photoMeta", JSON.stringify(photoMeta));
   if (signature) form.append("signature", signature, "signature.png");
 
   try {
@@ -228,7 +241,7 @@ export async function submitScenario(
     // does not -- replaying it would fail identically every time, so it surfaces to
     // the driver to fix now, while the customer is still standing there.
     if (error?.offline) {
-      await enqueue({ url, label: options.label, fields, photos, signature });
+      await enqueue({ url, label: options.label, fields, photos, photoMeta, signature });
       return "queued";
     }
     throw error;
