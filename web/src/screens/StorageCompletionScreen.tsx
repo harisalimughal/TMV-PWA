@@ -1,6 +1,7 @@
 import React from "react";
-import { ArrowRight, Check } from "lucide-react";
+import { ArrowRight } from "lucide-react";
 import { AppShell } from "../app/AppShell";
+import { AnimatedSuccessTick } from "../components/driver";
 import { BottomActionBar, Button } from "../ui";
 
 export interface StorageSummary {
@@ -67,11 +68,9 @@ export function StorageCompletionScreen({ summary, onHome }: StorageCompletionSc
       }
     >
       <div className="px-4 pt-safe">
-        <div className="pt-8">
-          <span className="grid size-11 place-items-center rounded-full border border-success-line bg-success-subtle text-success-signal">
-            <Check className="size-[22px] stroke-[2.5]" aria-hidden />
-          </span>
-          <h1 className="mt-4 text-title text-fg">
+        <div className="pt-8 text-center">
+          <AnimatedSuccessTick />
+          <h1 className="mt-6 text-title text-fg">
             {isCheckIn ? "Check in complete" : "Check out complete"}
           </h1>
           <p className="mt-1.5 text-body text-fg-muted">
@@ -84,7 +83,7 @@ export function StorageCompletionScreen({ summary, onHome }: StorageCompletionSc
           </p>
         </div>
 
-        <dl className="mt-7">
+        <dl className="mt-7 text-left">
           {rows.map(([label, value]) => (
             <div
               key={label}

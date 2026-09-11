@@ -81,3 +81,6 @@ export type { IssueChoiceCardProps } from "./IssueChoiceCard";
 
 export { CompletionSummary } from "./CompletionSummary";
 export type { CompletionSummaryProps } from "./CompletionSummary";
+
+export { AnimatedSuccessTick } from "./AnimatedSuccessTick";
+export type { AnimatedSuccessTickProps } from "./AnimatedSuccessTick";

@@ -28,6 +28,7 @@ import { useToast } from "../components/ui/Toast";
 import { AppShell } from "../app/AppShell";
 import { Alert, BottomActionBar, Button, cx, Field, Input, PageHeader, Select, Skeleton, Textarea } from "../ui";
 import {
+  AnimatedSuccessTick,
   CompletionSummary,
   IssueChoiceCard,
   IssueDecision,
@@ -595,23 +596,7 @@ function IssueCompletionScreen({
       }
     >
       <div className="flex min-h-[calc(100dvh-12rem)] flex-col items-center justify-center px-6 py-8 text-center">
-        <div className="relative grid place-items-center">
-          <span className="issueDoneRing absolute size-24 rounded-full bg-success-subtle" aria-hidden />
-          <span className="issueDonePop relative grid size-24 place-items-center rounded-full border-4 border-success-line bg-success-subtle text-success-signal">
-            <svg
-              viewBox="0 0 24 24"
-              className="size-12"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth={3}
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              aria-hidden
-            >
-              <path className="issueDoneCheck" d="M4 12.5l5 5 11-11" />
-            </svg>
-          </span>
-        </div>
+        <AnimatedSuccessTick />
 
         <h1 className="mt-7 text-title text-fg">
           Liability form has been successfully saved. Good job! 👍
@@ -627,20 +612,6 @@ function IssueCompletionScreen({
         )}
         <div className="scroll-pb-dock" aria-hidden />
       </div>
-
-      <style>{`
-        .issueDonePop { animation: issueDonePop 520ms cubic-bezier(0.22, 1.2, 0.36, 1) both; }
-        .issueDoneRing { animation: issueDoneRing 900ms ease-out forwards; }
-        .issueDoneCheck { stroke-dasharray: 30; stroke-dashoffset: 30; animation: issueDoneCheck 460ms 250ms ease-out forwards; }
-        @keyframes issueDonePop { 0% { transform: scale(0.5); opacity: 0; } 60% { transform: scale(1.08); } 100% { transform: scale(1); opacity: 1; } }
-        @keyframes issueDoneRing { 0% { transform: scale(0.6); opacity: 0.55; } 100% { transform: scale(1.9); opacity: 0; } }
-        @keyframes issueDoneCheck { to { stroke-dashoffset: 0; } }
-        @media (prefers-reduced-motion: reduce) {
-          .issueDonePop, .issueDoneRing, .issueDoneCheck { animation: none; }
-          .issueDoneCheck { stroke-dashoffset: 0; }
-          .issueDoneRing { display: none; }
-        }
-      `}</style>
     </AppShell>
   );
 }

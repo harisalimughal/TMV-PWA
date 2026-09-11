@@ -13,17 +13,17 @@ export interface ScheduleSectionProps {
 
 /**
  * A block of the schedule: a section label, an optional mono count, then rows.
- * The rows carry their own dividers, so there is no card or heavy rule here — the
- * section IS the structure.
+ * Each row is its own white, shadowed card (see ScheduleRow) with a gap between --
+ * there's no enclosing card or divider list here, the rows carry their own.
  */
 export function ScheduleSection({ title, meta, tone = "default", children, className }: ScheduleSectionProps) {
   return (
     <section className={className}>
-      <div className="flex items-baseline justify-between gap-3 px-5 pb-2.5 pt-1">
+      <div className="flex items-baseline justify-between gap-3 px-1 pb-2.5 pt-1">
         <h2 className={cx("text-heading", tone === "attention" ? "text-warning" : "text-fg")}>{title}</h2>
         {meta != null && <span className="font-mono text-[12.5px] text-fg-subtle">{meta}</span>}
       </div>
-      <div>{children}</div>
+      <div className="flex flex-col gap-2.5">{children}</div>
     </section>
   );
 }

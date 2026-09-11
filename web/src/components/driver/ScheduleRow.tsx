@@ -41,8 +41,10 @@ export interface ScheduleRowProps {
 
 /**
  * One compact line of the schedule: a mono time column, the customer + a mono
- * route string, then the price. A past job that still needs paperwork gets an
- * amber left rule and a "Finish" tag.
+ * route string, then the price. Each row is its own white, shadowed card (not a
+ * continuous divided list) so it reads as a distinct tappable item against the
+ * page background. A past job that still needs paperwork gets an amber left rule
+ * and a "Finish" tag.
  */
 export function ScheduleRow({ job, bucket, onOpen, index }: ScheduleRowProps) {
   const { time, day } = parts(job.bookedStart);
@@ -54,8 +56,7 @@ export function ScheduleRow({ job, bucket, onOpen, index }: ScheduleRowProps) {
       onClick={onOpen}
       style={index !== undefined ? { animationDelay: `${Math.min(index, 12) * 28}ms` } : undefined}
       className={cx(
-        "relative grid w-full grid-cols-[54px_1fr_auto] items-center gap-x-3.5 px-5 py-[15px] text-left",
-        "border-t border-line first:border-t-0",
+        "relative grid w-full grid-cols-[54px_1fr_auto] items-center gap-x-3.5 rounded-card bg-surface px-4 py-[15px] text-left shadow-sm",
         "transition-colors duration-fast active:bg-surface-sunken",
         "focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-brand",
         index !== undefined && "row-stagger",
@@ -87,7 +88,7 @@ export function ScheduleRow({ job, bucket, onOpen, index }: ScheduleRowProps) {
 /** Structured loading placeholder shaped like a row. */
 export function ScheduleRowSkeleton() {
   return (
-    <div className="grid grid-cols-[54px_1fr_auto] items-center gap-x-3.5 border-t border-line px-5 py-[15px] first:border-t-0">
+    <div className="grid grid-cols-[54px_1fr_auto] items-center gap-x-3.5 rounded-card bg-surface px-4 py-[15px] shadow-sm">
       <div>
         <div className="skeleton h-4 w-11 rounded" />
         <div className="skeleton mt-1 h-2.5 w-10 rounded" />

@@ -1,6 +1,6 @@
 import React from "react";
-import { Check } from "lucide-react";
 import type { Job } from "../../api/jobs";
+import { AnimatedSuccessTick } from "./AnimatedSuccessTick";
 
 function gbp(v: number): string {
   return `£${(v ?? 0).toFixed(2)}`;
@@ -19,24 +19,22 @@ export interface CompletionSummaryProps {
 }
 
 /**
- * Job complete — a calm confirmation: a brand check, a plain headline, then the
- * record as ruled rows. Black text, no confetti.
+ * Job complete — the same big animated green tick as a submitted issue report, then
+ * a plain headline, then the record as ruled rows. Black text, no confetti.
  */
 export function CompletionSummary({ job }: CompletionSummaryProps) {
   const totalCharges = job.totalCharges;
   const amountCharged = job.amountCharged ?? job.totalCharges;
 
   return (
-    <div className="pt-6">
-      <span className="grid size-11 place-items-center rounded-full border border-success-line bg-success-subtle text-success-signal">
-        <Check className="size-[22px] stroke-[2.5]" aria-hidden />
-      </span>
-      <h1 className="mt-4 text-title text-fg">Job complete</h1>
+    <div className="pt-6 text-center">
+      <AnimatedSuccessTick />
+      <h1 className="mt-6 text-title text-fg">Job complete</h1>
       <p className="mt-1.5 text-body text-fg-muted">
         Recorded at {nowTime()}. Everything's saved and the customer has been notified.
       </p>
 
-      <dl className="mt-7">
+      <dl className="mt-7 text-left">
         <Row label="Total Charges" value={gbp(totalCharges)} />
         <Row label="Amount Charged" value={gbp(amountCharged)} strong />
         <Row label="Payment" value={job.paymentMethod || "Not recorded"} />

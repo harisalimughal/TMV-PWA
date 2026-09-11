@@ -17,11 +17,9 @@ import {
   Field,
   Input,
   PageHeader,
-  RequirementChecklist,
   Section,
   Select,
-  cx,
-  type RequirementItem
+  cx
 } from "../ui";
 import { useOnline } from "../lib/net";
 import type { StorageSummary } from "./StorageCompletionScreen";
@@ -162,9 +160,8 @@ export function ScenarioFormScreen({
     return initial;
   });
   const [photos, setPhotos] = useState<File[]>([]);
-  // Job-scoped scenarios (Parking Liability / Liability Report) dock the camera next
-  // to Submit — the built-in "Take photo" button is hidden and triggered from here.
-  const dockCapture = Boolean(jobId);
+  // Every scenario form docks the camera next to Submit — the built-in "Take photo"
+  // button is hidden and triggered from here instead.
   const openCameraRef = useRef<(() => void) | null>(null);
   const registerCapture = useCallback((open: (() => void) | null) => {
     openCameraRef.current = open;
@@ -237,40 +234,6 @@ export function ScenarioFormScreen({
     }
 
     return list;
-  }, [fields, photos.length, hasSignature, spec, needsSignature]);
-
-  /** The high-level "before you submit" checklist — three lines at most, so it stays
-   *  scannable. Per-field validity is shown inline on the fields themselves. */
-  const checklistItems = useMemo<RequirementItem[]>(() => {
-    const items: RequirementItem[] = [];
-    const requiredFields = spec.fields.filter(f => f.required);
-    if (requiredFields.length > 0) {
-      const done = requiredFields.every(f => {
-        const v = (fields[f.name] ?? "").trim();
-        if (!v) return false;
-        if (f.type === "email") return isValidEmail(v);
-        if (f.type === "tel") return isValidPhone(v);
-        return true;
-      });
-      items.push({ id: "details", label: "Fill in the details above", doneLabel: "Details filled in", done });
-    }
-    if (spec.photoMin > 0) {
-      items.push({
-        id: "photos",
-        label: spec.photoMin === 1 ? "Add a photo" : `Add ${spec.photoMin} photos`,
-        doneLabel: `${photos.length} photo${photos.length === 1 ? "" : "s"} added`,
-        done: photos.length >= spec.photoMin
-      });
-    }
-    if (needsSignature) {
-      items.push({
-        id: "signature",
-        label: "Capture the customer's signature",
-        doneLabel: "Customer signature captured",
-        done: hasSignature
-      });
-    }
-    return items;
   }, [fields, photos.length, hasSignature, spec, needsSignature]);
 
   const dirty =
@@ -399,33 +362,21 @@ export function ScenarioFormScreen({
             }
             noteTone="warning"
           >
-            {dockCapture ? (
-              <div className="grid grid-cols-2 gap-3">
-                <Button
-                  size="lg"
-                  className="!rounded-[10px]"
-                  iconLeft={<Camera aria-hidden />}
-                  disabled={submitting || photos.length >= spec.photoMax}
-                  onClick={() => openCameraRef.current?.()}
-                >
-                  {photos.length === 0 ? "Take photo" : "Take another"}
-                </Button>
-                <Button
-                  size="lg"
-                  className="!rounded-[10px]"
-                  loading={submitting}
-                  blockedReason={problems[0]?.message}
-                  onBlocked={jumpToProblem}
-                  onClick={() => void handleSubmit()}
-                  iconLeft={!online ? <CloudOff /> : undefined}
-                >
-                  {submitting ? busySubmitLabel : idleSubmitLabel}
-                </Button>
-              </div>
-            ) : (
+            {/* Take photo (left) + Submit (right) — same docked, side-by-side pattern
+                as the job workflow's photo steps, for every scenario form. */}
+            <div className="grid grid-cols-2 gap-3">
               <Button
                 size="lg"
-                fullWidth
+                className="!rounded-[10px]"
+                iconLeft={<Camera aria-hidden />}
+                disabled={submitting || photos.length >= spec.photoMax}
+                onClick={() => openCameraRef.current?.()}
+              >
+                {photos.length === 0 ? "Take photo" : "Take another"}
+              </Button>
+              <Button
+                size="lg"
+                className="!rounded-[10px]"
                 loading={submitting}
                 blockedReason={problems[0]?.message}
                 onBlocked={jumpToProblem}
@@ -434,7 +385,7 @@ export function ScenarioFormScreen({
               >
                 {submitting ? busySubmitLabel : idleSubmitLabel}
               </Button>
-            )}
+            </div>
           </BottomActionBar>
         }
       >
@@ -482,7 +433,7 @@ export function ScenarioFormScreen({
                 min={spec.photoMin}
                 max={spec.photoMax}
                 onChange={setPhotos}
-                registerCapture={dockCapture ? registerCapture : undefined}
+                registerCapture={registerCapture}
               />
             </div>
           </Section>
@@ -512,15 +463,6 @@ export function ScenarioFormScreen({
                   instruction="The customer signs to accept the terms above."
                 />
               </div>
-            </Section>
-          )}
-
-          {/* Parking Liability and the Liability Report skip the "Final check"
-              summary — a blocked submit already names the first missing thing and
-              jumps to it, and those two forms are short enough not to need the recap. */}
-          {checklistItems.length > 0 && scenario !== "parking" && scenario !== "liability" && (
-            <Section title="Final check">
-              <RequirementChecklist items={checklistItems} />
             </Section>
           )}
 

@@ -141,7 +141,7 @@ export function JobListScreen({ driver, onOpenJob }: JobListScreenProps) {
       <PullToRefresh onRefresh={() => load("refresh")} scrollRef={scrollRef}>
         <div className="px-4 pb-4 pt-5 scroll-pb-nav">
           {loading ? (
-            <div>
+            <div className="flex flex-col gap-2.5">
               <ScheduleRowSkeleton />
               <ScheduleRowSkeleton />
               <ScheduleRowSkeleton />
@@ -222,7 +222,7 @@ function FilterView({ filter, filtered, onOpenJob, onRefresh }: FilterViewProps)
         </div>
         <FeaturedJobCard job={next} onOpen={() => onOpenJob(next.jobId)} />
         {rest.length > 0 && (
-          <ScheduleSection title="Later today" meta={jobsLabel(rest.length)} className="-mx-4">
+          <ScheduleSection title="Later today" meta={jobsLabel(rest.length)}>
             {rest.map((job, i) => (
               <ScheduleRow key={job.jobId} job={job} bucket="today" index={i} onOpen={() => onOpenJob(job.jobId)} />
             ))}
@@ -246,7 +246,7 @@ function FilterView({ filter, filtered, onOpenJob, onRefresh }: FilterViewProps)
   return (
     <>
       {filtered.upcomingGroups.map(group => (
-        <ScheduleSection key={group.key} title={group.label} meta={jobsLabel(group.jobs.length)} className="-mx-4">
+        <ScheduleSection key={group.key} title={group.label} meta={jobsLabel(group.jobs.length)}>
           {group.jobs.map((job, i) => (
             <ScheduleRow
               key={job.jobId}

@@ -2,7 +2,7 @@ import React from "react";
 import { ArrowLeft, ChevronRight } from "lucide-react";
 import type { DriverProfile } from "../api/auth";
 import { AppShell } from "../app/AppShell";
-import { IconButton } from "../ui";
+import { cx, IconButton } from "../ui";
 import { ThemeToggle } from "../components/driver";
 import { InstallAppCard } from "./pwa-settings/components/InstallAppCard";
 import { NotificationsCard } from "./pwa-settings/components/NotificationsCard";
@@ -30,14 +30,13 @@ export function AccountSettingsScreen({ driver, onLogout, onBack }: AccountSetti
   return (
     <AppShell topInset={false}>
       <div className="scroll-pb-nav">
-        <div className="flex items-center gap-2.5 px-5 pb-1 pt-5">
-          {onBack && (
+        {onBack && (
+          <div className="px-5 pb-1 pt-5">
             <IconButton aria-label="Back to jobs" icon={<ArrowLeft />} onClick={onBack} className="-ml-1.5 text-fg" />
-          )}
-          <h1 className="text-title text-fg">Settings</h1>
-        </div>
+          </div>
+        )}
 
-        <div className="flex items-center gap-3.5 px-5 pb-[18px] pt-3">
+        <div className={cx("flex items-center justify-center gap-3.5 px-5 pb-[18px]", onBack ? "pt-3" : "pt-6")}>
           <span className="grid size-[52px] shrink-0 place-items-center rounded-card bg-brand text-[17px] font-bold text-brand-fg">
             {initials(driver)}
           </span>
