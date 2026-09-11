@@ -5,7 +5,7 @@ import { env } from "../config/env";
 import { listCalendarEvents } from "../google/calendar";
 import { listJobs, upsertJob } from "../db/jobs.repo";
 import { recordException } from "../db/exceptions.repo";
-import { sendPushToAdmins, sendPushToDriver } from "../push/push.service";
+import { sendPushToDriver } from "../push/push.service";
 import { Job, JobStatus, ParsedCalendarBooking } from "./job.types";
 import { WorkflowState } from "../workflow/workflow.states";
 import { log } from "../utils/logger";
@@ -397,17 +397,20 @@ async function reconcileDisappeared(existing: Job, reason: string): Promise<Job 
     // Surfaced on the admin dashboard's Exceptions page (TMV-Chat-bot reads this same
     // Mongo collection) -- previously only logged, invisible to ops unless someone
     // happened to grep the container logs.
+    //
+    // No push for this one (see removed sendPushToAdmins call, 2026-09-13): it was
+    // reaching driver devices whose push subscription had gotten tagged role:"admin"
+    // (same phone/browser used for both the driver app and an /admin login), so a
+    // driver mid-shift was getting a confusing internal ops alert. The Exceptions
+    // page is still the source of truth for this -- ops needs to check it, a push
+    // just isn't a safe way to surface it until subscription role-tagging is fixed
+    // at the source (push/push.routes.ts's /subscribe).
     await recordException({
       jobId: existing.jobId,
       type: "STARTED_JOB_BOOKING_DISAPPEARED",
       detail: `${reason}. The job is ${existing.status} and was not auto-cancelled.`,
       timestamp: new Date().toISOString()
     }).catch(err => log.warn("failed to record exception", { job_id: existing.jobId, error: String(err) }));
-    sendPushToAdmins({
-      title: "Exception: Review Job Booking",
-      body: `Job ${existing.jobId} for ${existing.customerName || "a customer"} is no longer present in Calendar and was not auto-cancelled.`,
-      url: "/?section=exceptions"
-    }).catch(err => log.warn("failed to send exception push", { job_id: existing.jobId, error: String(err) }));
     return null;
   }
 
