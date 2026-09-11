@@ -30,3 +30,7 @@ export function telUrl(phone: string): string {
 export function smsUrl(phone: string): string {
   return `sms:${phone.replace(/[^\d+]/g, "")}`;
 }
+
+export function mailtoUrl(email: string): string {
+  return `mailto:${email.trim()}`;
+}

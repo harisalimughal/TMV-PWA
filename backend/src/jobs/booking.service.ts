@@ -85,7 +85,26 @@ const ALL_LABELS = new Set(
  *  one. Group 1 = label text, group 2 = whatever follows the colon/equals. */
 const LABEL_LINE = /^([A-Za-z][A-Za-z /&'().+-]{0,28})\s*[:=]\s*(.*)$/;
 
-function field(description: string, labels: string[]): string {
+/**
+ * An address the form wrote across more than one physical line ("Drop off address: 61"
+ * then, on the next line, "Stanhope street, London, NW1 3LB" with no label of its own)
+ * reads as just "61" otherwise -- field() stops at the first line it finds. Bare
+ * continuation lines (no "Label:" of their own) immediately after the value line get
+ * folded in, comma-joined the same way the value itself would read if the form had
+ * written it all on one line. Stops at the first line that looks like the start of the
+ * *next* field ("Label: value"), and caps how far it'll look so an odd blank/stray line
+ * further down the description can't get swept into an address.
+ */
+function withContinuation(lines: string[], valueLineIdx: number, value: string): string {
+  const parts = [value];
+  for (let k = valueLineIdx + 1; k < lines.length && k <= valueLineIdx + 3; k++) {
+    if (LABEL_LINE.test(lines[k])) break;
+    parts.push(lines[k]);
+  }
+  return parts.join(", ");
+}
+
+function field(description: string, labels: string[], opts: { multiline?: boolean } = {}): string {
   const lines = htmlToText(description).split(/\r?\n/).map(l => l.trim()).filter(Boolean);
   const own = labels.map(l => l.toLowerCase());
   for (const label of labels) {
@@ -94,22 +113,22 @@ function field(description: string, labels: string[]): string {
       const found = lines[i].match(regex);
       if (!found) continue;
       const inlineValue = (found[1] ?? "").trim();
-      if (inlineValue) return inlineValue;
+      if (inlineValue) return opts.multiline ? withContinuation(lines, i, inlineValue) : inlineValue;
       // No value on the label line. The form stacks synonym labels ("Phone Number:",
       // "Phone:", "Call:", "Mob:") before the value, so walk forward past any further
       // bare recognised-label lines to reach it.
       for (let j = i + 1; j < lines.length && j <= i + 8; j++) {
         const lm = lines[j].match(LABEL_LINE);
-        if (!lm) return lines[j]; // plain line -> the value
+        if (!lm) return opts.multiline ? withContinuation(lines, j, lines[j]) : lines[j]; // plain line -> the value
         const head = lm[1].trim().toLowerCase();
         const val = lm[2].trim();
         if (!val) {
           if (ALL_LABELS.has(head)) continue; // bare recognised label -> keep scanning
           return ""; // "Word:" we don't recognise -> value is absent
         }
-        if (own.includes(head)) return val; // "Mob: 07919..." satisfies a phone lookup
+        if (own.includes(head)) return opts.multiline ? withContinuation(lines, j, val) : val; // "Mob: 07919..." satisfies a phone lookup
         if (ALL_LABELS.has(head)) return ""; // a *different* field's label+value -> ours is missing
-        return lines[j]; // some other "X: y" -> take the whole line
+        return opts.multiline ? withContinuation(lines, j, lines[j]) : lines[j]; // some other "X: y" -> take the whole line
       }
       return "";
     }
@@ -155,8 +174,8 @@ export function parseCalendarEvent(event: calendar_v3.Schema$Event): ParsedCalen
   const customerName = field(description, NAME_LABELS);
   const customerEmail = field(description, EMAIL_LABELS);
   const customerPhone = field(description, PHONE_LABELS);
-  const pickup = field(description, PICKUP_LABELS);
-  const dropoff = field(description, DROPOFF_LABELS);
+  const pickup = field(description, PICKUP_LABELS, { multiline: true });
+  const dropoff = field(description, DROPOFF_LABELS, { multiline: true });
 
   let floorFrom = field(description, FLOOR_FROM_LABELS);
   let floorTo = field(description, FLOOR_TO_LABELS);

@@ -114,8 +114,11 @@ export const SCENARIOS: Record<ScenarioKey, ScenarioSpec> = {
     title: "Parking Liability",
     noticeTitle: PARKING_LIABILITY_NOTICE_TITLE,
     noticeText: PARKING_LIABILITY_NOTICE_TEXT,
+    // No address field -- each parking-restriction photo already records exactly
+    // where it was taken (see the photo-capture-location-time feature), so a typed/
+    // picked address here would just be a second, less precise way of saying the
+    // same thing.
     fields: [
-      { name: "address", label: "Address as shown on the booking", type: "text", required: true },
       { name: "client_name", label: "Full client name as on the booking", type: "text", required: true }
     ],
     photoLabel: "Parking restriction photos",

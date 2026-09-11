@@ -33,7 +33,7 @@ import { PhotoModal } from "./PhotoModal";
 import { ThumbnailPreview } from "./ThumbnailPreview";
 import { resolveDriver, formatVanReg, getAvatarColor } from "../utils/drivers";
 import { fetchDrivers, reassignJob } from "../api";
-import { formatCapturedTime, formatCoords, mapsUrlForLocation } from "../../../../lib/geo";
+import { formatCapturedTime, formatLocationLabel, mapsUrlForLocation } from "../../../../lib/geo";
 
 interface Props {
   job: NormalizedJob;
@@ -559,9 +559,9 @@ export function JobDetailDrawer({ job: initialJob, isOpen, onClose, onUpdated }:
                               target="_blank"
                               rel="noopener noreferrer"
                               onClick={event => event.stopPropagation()}
-                              className="block truncate font-mono text-admin-brand underline underline-offset-2"
+                              className="block truncate text-admin-brand underline underline-offset-2"
                             >
-                              {formatCoords(ev.location)}
+                              {formatLocationLabel(ev.location, ev.locationName)}
                             </a>
                           ) : (
                             <div>No location</div>

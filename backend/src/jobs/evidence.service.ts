@@ -2,6 +2,7 @@ import { randomBytes } from "node:crypto";
 import { uploadEvidenceImage } from "../storage/cloudinary";
 import { insertEvidence } from "../db/evidence.repo";
 import { EvidenceRecord, EvidenceStatus, EvidenceType, Job } from "./job.types";
+import { reverseGeocode } from "../integrations/geocode";
 import { log } from "../utils/logger";
 
 /** Task-name safe: [A-Z0-9-] only. Kept from the original for continuity, though
@@ -65,9 +66,20 @@ export async function uploadEvidence(
   const receivedAt = new Date().toISOString();
   const folder = `tmv-pwa/${job.jobId}/${evidenceType}`;
 
+  // Resolved alongside the Cloudinary upload, not after it -- a photo with a location
+  // shouldn't wait through both round trips back to back. reverseGeocode is entirely
+  // best-effort and never throws (see its own doc comment), so this is safe to await
+  // again in the catch branch below without a separate .catch() there.
+  const locationNamePromise = capture?.location
+    ? reverseGeocode(capture.location.lat, capture.location.lng)
+    : Promise.resolve(null);
+
   let record: EvidenceRecord;
   try {
-    const uploaded = await uploadEvidenceImage(buffer, folder, evidenceId);
+    const [uploaded, locationName] = await Promise.all([
+      uploadEvidenceImage(buffer, folder, evidenceId),
+      locationNamePromise
+    ]);
     record = {
       evidenceId,
       jobId: job.jobId,
@@ -84,7 +96,8 @@ export async function uploadEvidence(
       retryCount: 0,
       lastError: "",
       capturedAt: capture?.capturedAt,
-      location: capture?.location
+      location: capture?.location,
+      locationName: locationName ?? undefined
     };
   } catch (error) {
     log.error("evidence upload failed", { job_id: job.jobId, evidence_type: evidenceType, error: String(error) });
@@ -104,7 +117,8 @@ export async function uploadEvidence(
       retryCount: 0,
       lastError: error instanceof Error ? error.message : String(error),
       capturedAt: capture?.capturedAt,
-      location: capture?.location
+      location: capture?.location,
+      locationName: (await locationNamePromise) ?? undefined
     };
   }
 

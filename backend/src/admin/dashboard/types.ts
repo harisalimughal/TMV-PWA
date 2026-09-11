@@ -32,6 +32,10 @@ export interface NormalizedEvidenceItem {
    *  evidence, or where GPS was denied/unavailable at capture time. */
   capturedAt?: string;
   location?: { lat: number; lng: number; accuracy: number };
+  /** A short human place name for `location`, reverse-geocoded once at upload time
+   *  (see integrations/geocode.ts) — absent when there was no location, or the lookup
+   *  failed; show the raw coordinates in that case instead. */
+  locationName?: string;
 }
 
 export interface ActivityEntry {

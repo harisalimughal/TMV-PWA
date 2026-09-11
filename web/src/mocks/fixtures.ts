@@ -41,6 +41,37 @@ function mockRawTitle(job: Pick<Job, "crewSize" | "basePrice" | "bookedStart">):
   return `${job.crewSize} Men - £${job.basePrice} - ${time} / Y - ${mockDriver.initials}`;
 }
 
+/** The verbatim Calendar event description, assembled from a job's own already-seeded
+ *  fields (not a separate hardcoded blob) so dev shows a realistic "Full booking (from
+ *  Calendar)" block on the READY step without it ever drifting from the structured
+ *  rows above it. Real jobs get this from backend/src/jobs/booking.service.ts's parse
+ *  of the actual Calendar event; this is only for local dev preview. */
+function mockRawDescription(job: Job): string {
+  const lines: (string | null)[] = [
+    job.extraChargeText ? `ANY EXTRA CHARGE: ${job.extraChargeText}` : null,
+    "",
+    `Pick up address: ${job.pickup}`,
+    "",
+    `Drop off: ${job.dropoff}`,
+    "",
+    `Name: ${job.customerName}`,
+    `Email Address: ${job.customerEmail}`,
+    `Phone Number: ${job.customerPhone}`,
+    `Move Date: ${new Date(job.bookedStart).toLocaleDateString("en-GB", { timeZone: "Europe/London" })}`,
+    job.vanSize ? `Van Size: ${job.vanSize}` : null,
+    job.hireDurationText ? `Duration of Van Hire: ${job.hireDurationText}` : null,
+    `Number of helpers: ${job.crewSize} Men`,
+    "",
+    job.extraRequest ? `Extra request: ${job.extraRequest}` : null,
+    job.floorFrom || job.floorTo
+      ? `Floor From and To: From: ${job.floorFrom || "—"} / To: ${job.floorTo || "—"}`
+      : null,
+    "",
+    job.inventory ? `Inventory item:\n${job.inventory}` : null
+  ];
+  return lines.filter((l): l is string => l !== null).join("\n");
+}
+
 export function makeJob(over: Partial<Job> & { jobId: string }): Job {
   const nowIso = new Date().toISOString();
   const job: Job = {
@@ -89,7 +120,8 @@ export function makeJob(over: Partial<Job> & { jobId: string }): Job {
     updatedAt: nowIso,
     ...over
   };
-  return { ...job, rawTitle: over.rawTitle ?? mockRawTitle(job) };
+  const withTitle = { ...job, rawTitle: over.rawTitle ?? mockRawTitle(job) };
+  return { ...withTitle, rawDescription: over.rawDescription ?? mockRawDescription(withTitle) };
 }
 
 export interface MockStore {
@@ -115,7 +147,11 @@ export function makeEvidenceItem(evidenceType: string): EvidenceItem {
     // and the admin thumbnail caption both have something real to show in dev.
     // Somewhere around Findhorn Street E14, jittered a little per photo.
     capturedAt: iso(0, 8, 30 + mockEvidenceSeq),
-    location: { lat: 51.5074 + mockEvidenceSeq * 0.0003, lng: -0.0089 - mockEvidenceSeq * 0.0003, accuracy: 12 }
+    location: { lat: 51.5074 + mockEvidenceSeq * 0.0003, lng: -0.0089 - mockEvidenceSeq * 0.0003, accuracy: 12 },
+    // Real jobs get this from a reverse-geocode lookup (backend/src/integrations/
+    // geocode.ts); a fixed sample name here shows what the resolved caption looks
+    // like in dev without an outbound network call.
+    locationName: "Findhorn Street, Tower Hamlets"
   };
 }
 

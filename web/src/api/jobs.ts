@@ -23,6 +23,12 @@ export interface Job {
    *  "2 Men - £170 - 16:00". Empty on jobs synced before the backend started
    *  storing it, until their next resync. */
   rawTitle?: string;
+  /** Verbatim Calendar event description (may contain the rich-text editor's HTML --
+   *  see lib/htmlText.ts's htmlToPlainText) this job was synced from. Shown to the
+   *  driver as-is alongside the already-parsed fields above, so nothing the office
+   *  typed into Calendar is ever hidden just because it doesn't match a known field
+   *  label. Empty on jobs synced before the backend started storing it. */
+  rawDescription?: string;
   /** Booking-form extras parsed from the Calendar description (see
    *  backend/src/jobs/booking.service.ts). Informational; may be empty on older jobs. */
   floorFrom?: string;
@@ -96,6 +102,10 @@ export interface EvidenceItem {
    *  photos captured before this existed, or where GPS was denied/unavailable. */
   capturedAt?: string;
   location?: CapturedLocation;
+  /** A short place name for `location`, reverse-geocoded once server-side at upload
+   *  time — absent when there was no location, or the lookup failed/was rate-limited;
+   *  show the raw coordinates in that case (see lib/geo.ts's formatLocationLabel). */
+  locationName?: string;
 }
 
 export interface JobUpdateResult {

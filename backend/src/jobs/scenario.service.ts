@@ -6,6 +6,7 @@ import { getJobForDriver, resolveDriver, saveJob } from "./jobs.service";
 import { ScenarioKey, ScenarioSpec, SCENARIOS } from "../workflow/scenario.spec";
 import { RESUME_AFTER_ISSUES, WorkflowState } from "../workflow/workflow.states";
 import { ValidationError } from "../workflow/validation.engine";
+import { reverseGeocode } from "../integrations/geocode";
 import { Job } from "./job.types";
 
 export interface ScenarioPhoto {
@@ -16,6 +17,23 @@ export interface ScenarioPhoto {
    *  library upload or an older client build won't have it. */
   capturedAt?: string;
   location?: { lat: number; lng: number; accuracy: number };
+}
+
+/** Parallel to `photos` -- resolves each located photo to a short place name (see
+ *  integrations/geocode.ts), started alongside the Cloudinary upload below so a
+ *  submission with located photos doesn't wait through both round trips back to
+ *  back. Best-effort: reverseGeocode never throws, so a photo with no location or a
+ *  failed lookup just carries no name. */
+function resolvePhotoMeta(
+  photos: ScenarioPhoto[]
+): Promise<Array<{ capturedAt?: string; location?: { lat: number; lng: number; accuracy: number }; locationName?: string }>> {
+  return Promise.all(
+    photos.map(async p => ({
+      capturedAt: p.capturedAt,
+      location: p.location,
+      locationName: p.location ? (await reverseGeocode(p.location.lat, p.location.lng)) ?? undefined : undefined
+    }))
+  );
 }
 
 /** Shared by both submitScenario (job-scoped: Parking Liability / Liability Report)
@@ -73,6 +91,7 @@ export async function submitScenario(
 
   const folder = `tmv-pwa/${jobId}/${spec.folderKey}`;
   const submittedAt = new Date().toISOString();
+  const photoMetaPromise = resolvePhotoMeta(photos);
   const photoUrls = await Promise.all(
     photos.map((photo, index) => uploadEvidenceImage(photo.buffer, folder, `photo-${index}-${Date.now()}`))
   );
@@ -85,7 +104,7 @@ export async function submitScenario(
     fields,
     photoUrls: photoUrls.map(p => p.url),
     // Parallel to photoUrls, same index -- where/when each was taken.
-    photoMeta: photos.map(p => ({ capturedAt: p.capturedAt, location: p.location })),
+    photoMeta: await photoMetaPromise,
     signatureUrl: signatureUpload.url,
     submittedAt
   };
@@ -135,6 +154,7 @@ export async function submitStorageScenario(
   const ref = `STORAGE-${Date.now().toString(36).toUpperCase()}`;
   const folder = `tmv-pwa/${ref}/${spec.folderKey}`;
   const submittedAt = new Date().toISOString();
+  const photoMetaPromise = resolvePhotoMeta(photos);
   const photoUrls = await Promise.all(
     photos.map((photo, index) => uploadEvidenceImage(photo.buffer, folder, `photo-${index}-${Date.now()}`))
   );
@@ -146,7 +166,7 @@ export async function submitStorageScenario(
     driver: actor,
     fields,
     photoUrls: photoUrls.map(p => p.url),
-    photoMeta: photos.map(p => ({ capturedAt: p.capturedAt, location: p.location })),
+    photoMeta: await photoMetaPromise,
     signatureUrl: signatureUpload.url,
     submittedAt
   };

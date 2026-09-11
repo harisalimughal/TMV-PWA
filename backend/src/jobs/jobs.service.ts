@@ -12,6 +12,7 @@ import { log } from "../utils/logger";
 import { withJobLock } from "../utils/lock";
 import { ValidationError } from "../workflow/validation.engine";
 import { sendJobStartedSms } from "../integrations/firetext";
+import { sendJobStartedEmail } from "../google/gmail";
 import { JOB_STARTED_MESSAGE_TEMPLATE } from "../notifications/message";
 import { checkCongestionZoneAtJobStart } from "./congestion-zone.service";
 
@@ -100,7 +101,12 @@ export async function getNextJobForDriver(
 ): Promise<{ job: Job | null; driver: DriverProfile }> {
   if (options.sync) await syncIfStale();
 
-  const [driver, jobs] = await Promise.all([resolveDriver(identifier), listJobs()]);
+  // Sequential, not Promise.all: listJobs needs the driver's initials to scope its
+  // query to just this driver's own jobs (see listJobs' own doc comment) rather than
+  // pulling every job in the company over the wire on every app open. resolveDriver is
+  // a single indexed document lookup, so this costs a few ms, not a second query.
+  const driver = await resolveDriver(identifier);
+  const jobs = await listJobs({ driverInitials: driver.initials });
 
   const active = jobs
     .filter(j => j.status === JobStatus.IN_PROGRESS && j.driverInitials === driver.initials)
@@ -184,7 +190,12 @@ export async function getJobsGroupedForDriver(identifier: string): Promise<{
   past: Job[];
   next: Job[];
 }> {
-  const [driver, jobs] = await Promise.all([resolveDriver(identifier), listJobs()]);
+  // Sequential, not Promise.all -- see getNextJobForDriver's matching comment above:
+  // this scopes the Mongo query to just this driver's jobs instead of the whole
+  // company's, which is what actually made the "Jobs" tab feel slow to load as the
+  // collection grew.
+  const driver = await resolveDriver(identifier);
+  const jobs = await listJobs({ driverInitials: driver.initials });
   const todayKey = DateTime.now().setZone(env.timezone).toISODate();
 
   const relevant = jobs
@@ -293,6 +304,44 @@ function sendJobStartedSmsIfAny(job: Job, driver: DriverProfile): void {
     .catch(err => log.warn("job started SMS failure audit failed", { job_id: job.jobId, error: String(err) }));
 }
 
+/** Same "I'm on the way" wording as the SMS above, sent by email too -- one message,
+ *  both channels, so a customer who only gave an email still gets told the driver is
+ *  on the way (see notifications/message.ts's doc comment). Independent of the SMS: a
+ *  missing/unconfigured Firetext key never blocks this, and a Gmail failure never
+ *  blocks the SMS. */
+function sendJobStartedEmailIfAny(job: Job, driver: DriverProfile): void {
+  const actor = driver.email || driver.chatUserName;
+  if (!job.customerEmail) {
+    appendActivity({
+      jobId: job.jobId,
+      driver: actor,
+      action: "CLIENT_JOB_STARTED_EMAIL_SKIPPED",
+      detail: "No customer email address"
+    }).catch(err => log.warn("job started email skip audit failed", { job_id: job.jobId, error: String(err) }));
+    return;
+  }
+
+  getSetting("JOB_STARTED_MESSAGE_TEXT", JOB_STARTED_MESSAGE_TEMPLATE)
+    .then(template => sendJobStartedEmail(job, template, driver))
+    .then(() => appendActivity({
+      jobId: job.jobId,
+      driver: actor,
+      action: "CLIENT_JOB_STARTED_EMAIL_SENT",
+      detail: job.customerEmail
+    }))
+    .catch(err => {
+      const message = err instanceof Error ? err.message : String(err);
+      log.warn("job started email failed (non-fatal)", { job_id: job.jobId, error: message });
+      return appendActivity({
+        jobId: job.jobId,
+        driver: actor,
+        action: "CLIENT_JOB_STARTED_EMAIL_FAILED",
+        detail: message
+      });
+    })
+    .catch(err => log.warn("job started email failure audit failed", { job_id: job.jobId, error: String(err) }));
+}
+
 export async function startJob(jobId: string, identifier: string): Promise<Job> {
   /*
    * The whole read/decide/write sequence runs under the job lock, so two clicks
@@ -339,6 +388,7 @@ export async function startJob(jobId: string, identifier: string): Promise<Job> 
 
     const startedJob = await saveJob(job, driver, "START_JOB", from, `Server start timestamp ${now}`);
     sendJobStartedSmsIfAny(startedJob, driver);
+    sendJobStartedEmailIfAny(startedJob, driver);
     // Best-effort, never awaited by the response -- see the function's own doc
     // comment for why a job can need this even though the real-time webhook exists.
     checkCongestionZoneAtJobStart(startedJob, driver).catch(error =>

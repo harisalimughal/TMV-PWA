@@ -29,10 +29,9 @@ interface ScenarioFormScreenProps {
   /** Present only for job-scoped scenarios (Parking Liability / Liability Report). */
   jobId?: string;
   scenario: ScenarioKey;
-  /** Booking context for job-scoped scenarios. Lets Parking Liability offer the
-   *  job's pickup / stop-by / drop-off as ready-made address choices and pre-fill the
-   *  customer's name instead of asking the driver to retype what we already know. */
-  job?: { customerName?: string; pickup?: string; stopBy?: string; dropoff?: string };
+  /** Booking context for job-scoped scenarios. Pre-fills the customer's name instead
+   *  of asking the driver to retype what we already know. */
+  job?: { customerName?: string };
   /**
    * Which checkpoint of the move this report is being filed from — inferred from the
    * workflow step that opened the form, not asked of the driver. Defaults Parking
@@ -127,20 +126,6 @@ export function ScenarioFormScreen({
     };
   }, [scenario]);
 
-  /** The booking's pickup / stop-by / drop-off, offered as address choices on Parking
-   *  Liability so the driver picks rather than retypes. Empty when none are known —
-   *  the address field then falls back to a plain text input. */
-  const addressChoices = useMemo(() => {
-    const choices: Array<{ label: string; value: string }> = [];
-    const pickup = job?.pickup?.trim();
-    const stopBy = job?.stopBy?.trim();
-    const dropoff = job?.dropoff?.trim();
-    if (pickup) choices.push({ label: `Pickup — ${pickup}`, value: pickup });
-    if (stopBy) choices.push({ label: `Stop-by — ${stopBy}`, value: stopBy });
-    if (dropoff) choices.push({ label: `Drop-off — ${dropoff}`, value: dropoff });
-    return choices;
-  }, [job?.pickup, job?.stopBy, job?.dropoff]);
-
   const [fields, setFields] = useState<Record<string, string>>(() => {
     const initial: Record<string, string> = {};
     for (const field of spec.fields) {
@@ -150,13 +135,6 @@ export function ScenarioFormScreen({
     const customerName = job?.customerName?.trim();
     if (customerName && spec.fields.some(f => f.name === "client_name")) {
       initial.client_name = customerName;
-    }
-    if (addressChoices.length > 0 && spec.fields.some(f => f.name === "address")) {
-      // Default to the address of the checkpoint the driver is actually reporting
-      // from (e.g. the stop-by address, if that's where they are), not just pickup.
-      const preferred = reportedAt?.address?.trim();
-      const match = preferred ? addressChoices.find(choice => choice.value === preferred) : undefined;
-      initial.address = (match ?? addressChoices[0]).value;
     }
     return initial;
   });
@@ -426,7 +404,6 @@ export function ScenarioFormScreen({
                       field={field}
                       value={fields[field.name] ?? ""}
                       onChange={value => setField(field.name, value)}
-                      addressChoices={field.name === "address" ? addressChoices : undefined}
                     />
                   </div>
                 ))}
@@ -561,32 +538,12 @@ function NoticeCard({ title, text }: { title?: string; text: string }) {
 function FieldRow({
   field,
   value,
-  onChange,
-  addressChoices
+  onChange
 }: {
   field: ScenarioFieldSpec;
   value: string;
   onChange: (value: string) => void;
-  /** When set (Parking Liability's address field, booking known), the driver
-   *  picks the booking's pickup / drop-off rather than typing an address. */
-  addressChoices?: Array<{ label: string; value: string }>;
 }) {
-  if (addressChoices && addressChoices.length > 0) {
-    return (
-      <Field label={field.label} required={field.required}>
-        {p => (
-          <Select {...p} placeholder="Pick the address" value={value} onChange={e => onChange(e.target.value)}>
-            {addressChoices.map(choice => (
-              <option key={choice.value} value={choice.value}>
-                {choice.label}
-              </option>
-            ))}
-          </Select>
-        )}
-      </Field>
-    );
-  }
-
   if (field.type === "yesno") {
     return <PresenceSelector field={field} value={value} onChange={onChange} />;
   }

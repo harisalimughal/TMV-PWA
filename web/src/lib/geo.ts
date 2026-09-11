@@ -30,6 +30,17 @@ export function formatCoords(location: CapturedLocation): string {
   return `${location.lat.toFixed(5)}, ${location.lng.toFixed(5)}`;
 }
 
+/**
+ * The caption's actual label text: a short place name when one's been resolved
+ * (reverse-geocoded server-side at upload time, once, and stored on the record — see
+ * backend/src/integrations/geocode.ts), falling back to raw coordinates when there
+ * isn't one yet -- a photo just captured but not yet uploaded, or a lookup that
+ * failed/was rate-limited. Never blank as long as a location exists at all.
+ */
+export function formatLocationLabel(location: CapturedLocation, locationName?: string): string {
+  return locationName?.trim() || formatCoords(location);
+}
+
 /** "14:32" in Europe/London, for the small caption under a photo. */
 export function formatCapturedTime(iso: string): string {
   const d = new Date(iso);

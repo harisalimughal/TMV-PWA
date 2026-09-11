@@ -97,6 +97,7 @@ async function evidenceItemsFor(jobId: string): Promise<
     url: string;
     capturedAt?: string;
     location?: { lat: number; lng: number; accuracy: number };
+    locationName?: string;
   }>
 > {
   const records = await listEvidenceForJob(jobId);
@@ -107,7 +108,8 @@ async function evidenceItemsFor(jobId: string): Promise<
       evidenceType: r.evidenceType,
       url: r.cloudinaryUrl,
       capturedAt: r.capturedAt,
-      location: r.location
+      location: r.location,
+      locationName: r.locationName
     }));
 }
 

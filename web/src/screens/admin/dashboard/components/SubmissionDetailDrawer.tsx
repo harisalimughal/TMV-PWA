@@ -9,7 +9,7 @@ import { formatLondonDateTime } from "../utils/date";
 import { waitForPrintImages } from "../utils/printReady";
 import { resolveDriver } from "../utils/drivers";
 import { saveJobReview } from "../api";
-import { formatCapturedTime, formatCoords, mapsUrlForLocation } from "../../../../lib/geo";
+import { formatCapturedTime, formatLocationLabel, mapsUrlForLocation } from "../../../../lib/geo";
 
 type ScenarioKind = "checkin" | "checkout" | "parking" | "liability";
 
@@ -140,7 +140,8 @@ export function SubmissionDetailDrawer({ job: initialJob, isOpen, onClose, onNav
     thumbSrc: p.thumbUrl,
     category: SCENARIO_TITLES[kind!],
     capturedAt: p.capturedAt,
-    location: p.location
+    location: p.location,
+    locationName: p.locationName
   })) : [];
   const jobPhotos = !isScenario ? ((job as NormalizedJob).evidenceItems?.filter(e => !!e.fileId) || []).map(p => ({
     key: p.id,
@@ -148,7 +149,8 @@ export function SubmissionDetailDrawer({ job: initialJob, isOpen, onClose, onNav
     thumbSrc: p.thumbProxyUrl || `/admin/api/jobs/${(job as NormalizedJob).jobId}/photos/${p.fileId}`,
     category: p.category,
     capturedAt: p.capturedAt,
-    location: p.location
+    location: p.location,
+    locationName: p.locationName
   })) : [];
   const photos = isScenario ? scenarioPhotos : jobPhotos;
 
@@ -465,9 +467,9 @@ export function SubmissionDetailDrawer({ job: initialJob, isOpen, onClose, onNav
                            href={mapsUrlForLocation(p.location)}
                            target="_blank"
                            rel="noopener noreferrer"
-                           className="block truncate font-mono text-admin-brand underline underline-offset-2"
+                           className="block truncate text-admin-brand underline underline-offset-2"
                          >
-                           {formatCoords(p.location)}
+                           {formatLocationLabel(p.location, p.locationName)}
                          </a>
                        ) : (
                          <div>No location</div>

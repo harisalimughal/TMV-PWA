@@ -20,8 +20,17 @@ export async function getJob(jobId: string): Promise<Job | null> {
   return job as Job;
 }
 
-export async function listJobs(): Promise<Job[]> {
+/**
+ * `filter.driverInitials`, when given, is pushed down into the Mongo query itself
+ * (using the {driverInitials, status} index from ensureIndexes) instead of pulling
+ * every job in the company -- every driver, every status, the collection's entire
+ * history -- over the wire just to filter it back down to one driver's own jobs in
+ * JS. Every driver-facing screen wants exactly that scoped set; only admin/sync call
+ * sites, which genuinely need the whole collection, call this with no filter.
+ */
+export async function listJobs(filter?: { driverInitials?: string }): Promise<Job[]> {
   const col = await jobsCollection();
-  const docs = await col.find({}).toArray();
+  const query = filter?.driverInitials ? { driverInitials: filter.driverInitials } : {};
+  const docs = await col.find(query).toArray();
   return docs.map(({ _id, ...job }: any) => job as Job);
 }

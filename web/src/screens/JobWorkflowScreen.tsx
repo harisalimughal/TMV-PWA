@@ -6,7 +6,6 @@ import {
   Car,
   Check,
   FileWarning,
-  MapPin,
   PenLine
 } from "lucide-react";
 import {
@@ -43,6 +42,7 @@ import {
 import { ScenarioFormScreen } from "./ScenarioFormScreen";
 import { useOnline } from "../lib/net";
 import { haptics } from "../lib/haptics";
+import { htmlToPlainText } from "../lib/htmlText";
 import type { ScenarioKey } from "../scenarioSpec";
 import {
   CONGESTION_CHARGE,
@@ -111,6 +111,40 @@ function formatBookedDay(bookedStart: string): string {
   } catch {
     return "";
   }
+}
+
+function timeOfDay(d: Date): { hm: string; period: "am" | "pm" } {
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+    timeZone: LONDON
+  }).formatToParts(d);
+  const hour = parts.find(p => p.type === "hour")?.value ?? "";
+  const minute = parts.find(p => p.type === "minute")?.value ?? "00";
+  const period = (parts.find(p => p.type === "dayPeriod")?.value ?? "").toLowerCase().startsWith("p") ? "pm" : "am";
+  return { hm: `${hour}:${minute}`, period };
+}
+
+/** "Friday, September 11 · 4:00 – 9:00pm" -- read the same way Calendar's own event
+ *  popup reads it, so the raw-booking block below feels like the same event the office
+ *  sees, not a re-derived summary. Drops the start time's am/pm when it matches the
+ *  end's, exactly like Calendar does. */
+function formatCalendarWindow(bookedStart: string, bookedFinish: string): string {
+  const start = bookedStart ? new Date(bookedStart) : null;
+  if (!start || Number.isNaN(start.getTime())) return "";
+  const datePart = new Intl.DateTimeFormat("en-GB", {
+    weekday: "long",
+    month: "long",
+    day: "numeric",
+    timeZone: LONDON
+  }).format(start);
+  const startT = timeOfDay(start);
+  const finish = bookedFinish ? new Date(bookedFinish) : null;
+  if (!finish || Number.isNaN(finish.getTime())) return `${datePart} · ${startT.hm}${startT.period}`;
+  const finishT = timeOfDay(finish);
+  const startLabel = startT.period === finishT.period ? startT.hm : `${startT.hm}${startT.period}`;
+  return `${datePart} · ${startLabel} – ${finishT.hm}${finishT.period}`;
 }
 
 export function JobWorkflowScreen({ jobId, onBack }: JobWorkflowScreenProps) {
@@ -312,7 +346,7 @@ export function JobWorkflowScreen({ jobId, onBack }: JobWorkflowScreenProps) {
       <ScenarioFormScreen
         jobId={job.jobId}
         scenario={openScenario}
-        job={{ customerName: job.customerName, pickup: job.pickup, stopBy: job.stopBy, dropoff: job.dropoff }}
+        job={{ customerName: job.customerName }}
         reportedAt={reportedAtForState(job.currentState, job)}
         onCancel={cancelScenario}
         onDone={() => {
@@ -358,7 +392,13 @@ export function JobWorkflowScreen({ jobId, onBack }: JobWorkflowScreenProps) {
   const stepRemotePhotos = stepEvidenceType
     ? evidenceItems
         .filter(item => item.evidenceType === stepEvidenceType)
-        .map(item => ({ id: item.evidenceId, url: item.url, capturedAt: item.capturedAt, location: item.location }))
+        .map(item => ({
+          id: item.evidenceId,
+          url: item.url,
+          capturedAt: item.capturedAt,
+          location: item.location,
+          locationName: item.locationName
+        }))
     : [];
 
   const removeRemotePhoto = (evidenceId: string) => {
@@ -375,29 +415,14 @@ export function JobWorkflowScreen({ jobId, onBack }: JobWorkflowScreenProps) {
 
   const hasStop = Boolean(job.stopBy && job.stopBy.trim());
   const routeExpanded = state === "READY";
-  const pickupOnly =
-    state === "WAITING_ARRIVAL_PHOTO" ||
-    state === "WAITING_ARRIVAL_ISSUES_CHECK" ||
-    state === "WAITING_ARRIVAL_ISSUES_CHOICE" ||
-    state === "WAITING_LOADED_PHOTO";
-  // The stop-by issues check happens at the stop-by address — show just that.
-  const stopByOnly =
-    state === "WAITING_STOP_BY_ISSUES_CHECK" || state === "WAITING_STOP_BY_ISSUES_CHOICE";
-  // The drop-off issues check happens at the delivery address, so it shows just that
-  // address rather than the full pickup -> drop-off route.
-  const dropoffOnly =
-    state === "WAITING_EMPTY_VAN_ISSUES_CHECK" || state === "WAITING_EMPTY_VAN_ISSUES_CHOICE";
-  // Once the move is done the route is no longer useful reference — the money and
-  // sign-off steps don't carry it at all.
-  const routeHidden =
-    state === "WAITING_EXTRA_CHARGES" ||
-    state === "WAITING_OVERTIME" ||
-    state === "WAITING_TOTAL_CHARGES" ||
-    state === "WAITING_PAYMENT" ||
-    state === "WAITING_EMPTY_VAN_PHOTO" ||
-    state === "WAITING_CLIENT_CONFIRMATION" ||
-    state === "WAITING_REVIEW_CHECK" ||
-    state === "WAITING_REVIEW_SEND";
+  // Every photo/issue-check step used to show a single-address reminder card (or, for
+  // the money/sign-off steps, nothing) instead of the full route -- redundant now that
+  // each photo already records exactly where it was taken (see the photo-capture-
+  // location-time feature: PhotoUploader's caption, and the admin-side thumbnail
+  // caption, both driven by real GPS, not a typed/selected address). The overview
+  // route + Navigate button stays exactly where it always has: only on READY, as the
+  // one "where am I going" reference before the job starts.
+  const routeHidden = state !== "READY";
 
   // Does this job's workflow include the Overtime step? While the driver is still on
   // the Extra charges step their live checkbox selection is the freshest signal;
@@ -499,13 +524,7 @@ export function JobWorkflowScreen({ jobId, onBack }: JobWorkflowScreenProps) {
                 </Alert>
               )}
 
-              {pickupOnly ? (
-                <PickupAddress address={job.pickup} />
-              ) : stopByOnly ? (
-                <StopByAddress address={job.stopBy ?? ""} />
-              ) : dropoffOnly ? (
-                <DropoffAddress address={job.dropoff} />
-              ) : routeHidden ? null : (
+              {routeHidden ? null : (
                 <RouteCard
                   pickup={job.pickup}
                   dropoff={job.dropoff}
@@ -922,7 +941,6 @@ function StepBody({
     case "WAITING_EMPTY_VAN_PHOTO":
       return (
         <div className="flex flex-col gap-4">
-          {job.dropoff && <DropoffAddress address={job.dropoff} />}
           <PhotoUploader
             key={state}
             label="Empty Van Photo (Drop Off Point)"
@@ -1285,52 +1303,114 @@ function StepBody({
   }
 }
 
-/** Placeholder for a detail the backend hasn't sent. The row/label always shows so
- *  the driver knows the field exists and simply has no value yet. */
+/** Placeholder for a detail the backend hasn't sent. */
 const NO_VALUE = "—";
 
-function DetailRow({ label, value }: { label: string; value?: string }) {
+/** A "Label: value" line -- same shape as backend's booking.service.ts LABEL_LINE
+ *  (label starts with a letter, no leading digit, so a numbered address line like
+ *  "119 Queens Road: SE15 2EZ" is never mistaken for one). */
+const BOOKING_LABEL_LINE = /^([A-Za-z][A-Za-z /&'().+-]{0,28})\s*[:=]\s*(.*)$/;
+
+interface BookingField {
+  label: string;
+  value: string;
+}
+type BookingItem =
+  | { type: "field"; key: string; field: BookingField }
+  | { type: "text"; key: string; text: string }
+  | { type: "break"; key: string };
+
+/**
+ * Turns the raw Calendar description into a light display structure -- NOT a re-parse
+ * of business fields (job.pickup/job.dropoff/etc already exist for that; this is only
+ * about how the same text reads). A "Label: value" line becomes a labelled block; a
+ * bare line right after one folds into that field's value, the same way an address
+ * split across two physical lines reads as one address (see backend's
+ * withContinuation); a blank line starts a new visual group, same as the source text's
+ * own paragraph breaks; anything else is a plain line. Driven entirely by the shape of
+ * the text itself -- nothing here is tied to a specific field's name or wording, so it
+ * reads any booking the same way regardless of what labels the office happened to use.
+ */
+function parseBookingText(text: string): BookingItem[] {
+  const items: BookingItem[] = [];
+  let current: BookingField | null = null;
+  let key = 0;
+
+  for (const raw of text.split("\n")) {
+    const line = raw.trim();
+    if (!line) {
+      current = null;
+      if (items.length > 0 && items[items.length - 1].type !== "break") {
+        items.push({ type: "break", key: String(key++) });
+      }
+      continue;
+    }
+    const match = line.match(BOOKING_LABEL_LINE);
+    if (match) {
+      current = { label: match[1].trim(), value: match[2].trim() };
+      items.push({ type: "field", key: String(key++), field: current });
+    } else if (current) {
+      current.value = current.value ? `${current.value}, ${line}` : line;
+    } else {
+      items.push({ type: "text", key: String(key++), text: line });
+    }
+  }
+  return items;
+}
+
+function BookingText({ text }: { text: string }) {
   return (
-    <div className="flex items-start justify-between gap-3">
-      <span className="text-body text-fg-muted">{label}</span>
-      <span className="max-w-[62%] text-right text-card text-fg">{value?.trim() || NO_VALUE}</span>
+    <div className="mt-3 flex flex-col">
+      {parseBookingText(text).map(item => {
+        if (item.type === "break") return <div key={item.key} className="h-3.5" aria-hidden />;
+        if (item.type === "text") {
+          return (
+            <p key={item.key} className="py-1 text-body text-fg [overflow-wrap:anywhere]">
+              {item.text}
+            </p>
+          );
+        }
+        return (
+          <div key={item.key} className="border-b border-line/60 py-2 last:border-b-0">
+            <p className="text-eyebrow uppercase tracking-wide text-fg-subtle">{item.field.label}</p>
+            {item.field.value && (
+              <p className="mt-0.5 text-body text-fg [overflow-wrap:anywhere]">{item.field.value}</p>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }
 
+/**
+ * The job exactly as booked -- title, window, and the full Calendar description
+ * verbatim (see lib/htmlText.ts's htmlToPlainText). This used to sit below a set of
+ * already-parsed summary rows (balance/crew/van/floors/...); those were dropped as
+ * redundant with this and the route card above -- everything they showed is already
+ * in here, in whatever words the office actually used, so there's nothing to keep in
+ * sync between two versions of the same booking. Styled as the card's main content,
+ * not a secondary block, since it's now the only thing here.
+ */
 function ReadyCard({ job }: { job: Job }) {
-  const floors =
-    job.floorFrom || job.floorTo ? `${job.floorFrom || NO_VALUE} → ${job.floorTo || NO_VALUE}` : "";
-  return (
-    <div className="flex flex-col gap-3 rounded-card border border-line bg-surface px-4 py-4">
-      <div className="flex items-center justify-between gap-3">
-        <span className="text-body text-fg-muted">Remaining balance</span>
-        <span className="text-heading font-bold tabular-nums text-fg">£{(job.basePrice ?? 0).toFixed(2)}</span>
-      </div>
-      <div className="h-px bg-line" />
-      <div className="flex items-center justify-between gap-3">
-        <span className="text-body text-fg-muted">Crew</span>
-        <span className="text-card text-fg">{job.crewSize || NO_VALUE}</span>
-      </div>
-      {/* Van / Hire time / Floors come from the Calendar booking. Every row is shown
-          even when empty (dashed) so a missing value is obvious rather than silent. */}
-      <DetailRow label="Van" value={job.vanSize} />
-      <DetailRow label="Hire time" value={job.hireDurationText} />
-      <DetailRow label="Floors" value={floors} />
-      {/* Overtime rate is a global Pricing Settings value (admin panel), not per-job —
-          it should always be present; dashes here mean the backend didn't send it. */}
-      <DetailRow label="Overtime rate" value={job.extraChargeText} />
+  const when = formatCalendarWindow(job.bookedStart, job.bookedFinish);
+  const description = job.rawDescription ? htmlToPlainText(job.rawDescription) : "";
 
-      <div className="h-px bg-line" />
-      <div>
-        <span className="text-body text-fg-muted">Extra request</span>
-        <p className="mt-1 whitespace-pre-wrap text-card text-fg">{job.extraRequest?.trim() || NO_VALUE}</p>
+  if (!job.rawTitle && !description) {
+    return (
+      <div className="rounded-card border border-line bg-surface px-4 py-4">
+        <p className="text-body text-fg-muted">{NO_VALUE} Booking details aren't in yet.</p>
       </div>
-      <div className="h-px bg-line" />
-      <div>
-        <span className="text-body text-fg-muted">What's moving</span>
-        <p className="mt-1 whitespace-pre-wrap text-card text-fg">{job.inventory?.trim() || NO_VALUE}</p>
-      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-1 rounded-card border border-line bg-surface px-4 py-4">
+      {job.rawTitle && (
+        <p className="text-title font-bold text-fg [overflow-wrap:anywhere]">{job.rawTitle}</p>
+      )}
+      {when && <p className="text-body text-fg-muted">{when}</p>}
+      {description && <BookingText text={description} />}
     </div>
   );
 }
@@ -1353,33 +1433,6 @@ function InProgressCard({ job }: { job: Job }) {
         <span className="size-2 rounded-pill bg-success motion-safe:animate-pulse" aria-hidden />
         Running
       </span>
-    </div>
-  );
-}
-
-function PickupAddress({ address }: { address: string }) {
-  return <StopAddress label="Pickup address" address={address} fallback="Pickup TBC" />;
-}
-
-function DropoffAddress({ address }: { address: string }) {
-  return <StopAddress label="Drop-off address" address={address} fallback="Delivery TBC" />;
-}
-
-function StopByAddress({ address }: { address: string }) {
-  return <StopAddress label="Stop-by address" address={address} fallback="Stop-by address TBC" />;
-}
-
-/** A single route stop shown on its own — a pin, a heading, and the address. Used
- *  wherever a step concerns just one end of the job (arrival steps -> pickup,
- *  drop-off issue steps -> delivery) rather than the whole route. */
-function StopAddress({ label, address, fallback }: { label: string; address: string; fallback: string }) {
-  return (
-    <div className="flex items-start gap-3 rounded-lg border border-line bg-surface px-4 py-3 shadow-xs">
-      <MapPin className="mt-0.5 size-4 shrink-0 text-fg-subtle" aria-hidden />
-      <div className="min-w-0">
-        <p className="text-eyebrow text-fg-subtle">{label}</p>
-        <p className="mt-0.5 text-card font-semibold text-fg [overflow-wrap:anywhere]">{address || fallback}</p>
-      </div>
     </div>
   );
 }

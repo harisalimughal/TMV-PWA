@@ -289,7 +289,8 @@ function classifyEvidence(
         completedAt: toUtcIso(latest.processingCompletedAt),
         provenance: "recorded",
         capturedAt: latest.capturedAt,
-        location: latest.location
+        location: latest.location,
+        locationName: latest.locationName
       });
       return "COMPLETED";
     }

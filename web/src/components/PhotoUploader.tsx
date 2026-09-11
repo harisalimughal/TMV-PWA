@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { AlertTriangle, MapPin } from "lucide-react";
 import type { PhotoCaptureMeta } from "../lib/geo";
-import { formatCapturedTime, formatCoords, mapsUrlForLocation } from "../lib/geo";
+import { formatCapturedTime, formatLocationLabel, mapsUrlForLocation } from "../lib/geo";
 import { PhotoPicker, type RemotePhoto } from "./PhotoPicker";
 
 export interface PhotoUploaderProps {
@@ -82,8 +82,11 @@ export function PhotoUploader({
   const latestLocal = meta.length > 0 ? meta[meta.length - 1] : null;
   const latestRemote =
     remoteFiles && remoteFiles.length > 0 ? remoteFiles[remoteFiles.length - 1] : undefined;
-  const captureCaption =
-    latestLocal ?? (latestRemote?.capturedAt ? { capturedAt: latestRemote.capturedAt, location: latestRemote.location ?? null } : null);
+  const captureCaption: (PhotoCaptureMeta & { locationName?: string }) | null =
+    latestLocal ??
+    (latestRemote?.capturedAt
+      ? { capturedAt: latestRemote.capturedAt, location: latestRemote.location ?? null, locationName: latestRemote.locationName }
+      : null);
 
   return (
     <div className="flex flex-col gap-4">
@@ -149,7 +152,7 @@ export function PhotoUploader({
                 onClick={event => event.stopPropagation()}
                 className="font-mono text-brand underline underline-offset-2"
               >
-                {formatCoords(captureCaption.location)}
+                {formatLocationLabel(captureCaption.location, captureCaption.locationName)}
               </a>
             </>
           ) : (

@@ -36,7 +36,7 @@ export function dashboardScenariosRoutes(): Router {
           ...fieldNames.map(f => r.fields[f] ?? ""),
           r.photoUrls.join(" | "),
           (r.photoMeta ?? [])
-            .map(m => (m.location ? `${m.location.lat},${m.location.lng}` : m.capturedAt ? "no location" : ""))
+            .map(m => (m.location ? m.locationName || `${m.location.lat},${m.location.lng}` : m.capturedAt ? "no location" : ""))
             .filter(Boolean)
             .join(" | "),
           r.signatureUrl
@@ -91,7 +91,8 @@ export function dashboardScenariosRoutes(): Router {
             fileId: url,
             thumbUrl: toThumbnailUrl(url),
             capturedAt: r.photoMeta?.[i]?.capturedAt,
-            location: r.photoMeta?.[i]?.location
+            location: r.photoMeta?.[i]?.location,
+            locationName: r.photoMeta?.[i]?.locationName
           })),
           signature: r.signatureUrl ? { fileId: r.signatureUrl, thumbUrl: toThumbnailUrl(r.signatureUrl) } : null
         };

@@ -25,6 +25,10 @@ export interface NormalizedEvidenceItem {
    *  evidence, or where GPS was denied/unavailable at capture time. */
   capturedAt?: string;
   location?: { lat: number; lng: number; accuracy: number };
+  /** A short place name for `location`, reverse-geocoded once server-side at upload
+   *  time — absent when there was no location, or the lookup failed; show the raw
+   *  coordinates in that case (see ../../../lib/geo.ts's formatLocationLabel). */
+  locationName?: string;
 }
 
 export interface ActivityEntry {
@@ -277,6 +281,9 @@ export interface ScenarioItem {
      *  submissions made before this existed. */
     capturedAt?: string;
     location?: { lat: number; lng: number; accuracy: number };
+    /** A short place name for `location`, reverse-geocoded once server-side — absent
+     *  when there was no location, or the lookup failed. */
+    locationName?: string;
   }>;
   signature: { fileId: string; thumbUrl: string } | null;
 }

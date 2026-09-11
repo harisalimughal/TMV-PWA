@@ -199,6 +199,13 @@ export interface EvidenceRecord {
    */
   capturedAt?: string;
   location?: { lat: number; lng: number; accuracy: number };
+  /** A short human place name for `location` (e.g. "56 Bucklebury, Tower Hamlets"),
+   *  resolved once via reverse geocoding at upload time (see
+   *  integrations/geocode.ts's reverseGeocode) and stored here so it's never looked
+   *  up twice. Absent when there was no location to resolve, or the lookup failed --
+   *  callers fall back to showing the raw coordinates (web/src/lib/geo.ts's
+   *  formatLocationLabel). */
+  locationName?: string;
 }
 
 export interface EvidenceProgress {

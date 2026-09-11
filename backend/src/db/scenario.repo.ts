@@ -7,9 +7,15 @@ export interface ScenarioSubmissionDoc {
   driver: string;
   fields: Record<string, string>;
   photoUrls: string[];
-  /** Parallel to photoUrls, same index — where/when each photo was taken. Optional:
-   *  absent on submissions made before this existed. */
-  photoMeta?: Array<{ capturedAt?: string; location?: { lat: number; lng: number; accuracy: number } }>;
+  /** Parallel to photoUrls, same index — where/when each photo was taken, plus a
+   *  reverse-geocoded place name for its location (see integrations/geocode.ts).
+   *  Optional: absent on submissions made before this existed; locationName absent
+   *  when there was no location, or the lookup failed. */
+  photoMeta?: Array<{
+    capturedAt?: string;
+    location?: { lat: number; lng: number; accuracy: number };
+    locationName?: string;
+  }>;
   signatureUrl: string;
   submittedAt: string;
 }

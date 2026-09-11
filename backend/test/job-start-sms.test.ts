@@ -9,6 +9,7 @@ const getDriverProfile = vi.fn();
 const appendActivity = vi.fn().mockResolvedValue(undefined);
 const getSetting = vi.fn().mockResolvedValue("On my way {vanRegistration}");
 const sendJobStartedSms = vi.fn().mockResolvedValue(undefined);
+const sendJobStartedEmail = vi.fn().mockResolvedValue(undefined);
 
 vi.mock("../src/config/env", () => ({
   env: {
@@ -35,6 +36,9 @@ vi.mock("../src/db/settings.repo", () => ({
 vi.mock("../src/integrations/firetext", () => ({
   sendJobStartedSms: (...args: any[]) => sendJobStartedSms(...args)
 }));
+vi.mock("../src/google/gmail", () => ({
+  sendJobStartedEmail: (...args: any[]) => sendJobStartedEmail(...args)
+}));
 
 import { startJob } from "../src/jobs/jobs.service";
 
@@ -55,6 +59,7 @@ function job(overrides: Partial<any> = {}) {
     driverInitials: "AB",
     customerName: "Client",
     customerPhone: "07111 222333",
+    customerEmail: "client@example.com",
     bookedStart: new Date().toISOString(),
     bookedFinish: new Date(Date.now() + 60 * 60_000).toISOString(),
     status: JobStatus.READY,
@@ -98,5 +103,55 @@ describe("startJob SMS notification", () => {
     await startJob("TMV-SMS", "abi@example.com");
 
     expect(sendJobStartedSms).not.toHaveBeenCalled();
+  });
+});
+
+describe("startJob email notification", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    getDriverProfile.mockResolvedValue(driver);
+  });
+
+  it("sends the customer 'I'm on the way' email alongside the SMS when a job is newly started", async () => {
+    const readyJob = job();
+    getJob.mockResolvedValue(readyJob);
+
+    await startJob("TMV-SMS", "abi@example.com");
+
+    await vi.waitFor(() => expect(sendJobStartedEmail).toHaveBeenCalledTimes(1));
+    expect(sendJobStartedEmail).toHaveBeenCalledWith(
+      expect.objectContaining({ jobId: "TMV-SMS", status: JobStatus.IN_PROGRESS }),
+      "On my way {vanRegistration}",
+      driver
+    );
+    expect(appendActivity).toHaveBeenCalledWith(expect.objectContaining({
+      jobId: "TMV-SMS",
+      action: "CLIENT_JOB_STARTED_EMAIL_SENT",
+      detail: "client@example.com"
+    }));
+  });
+
+  it("skips the email (but still sends SMS) when the booking has no customer email", async () => {
+    getJob.mockResolvedValue(job({ customerEmail: "" }));
+
+    await startJob("TMV-SMS", "abi@example.com");
+
+    await vi.waitFor(() => expect(sendJobStartedSms).toHaveBeenCalledTimes(1));
+    expect(sendJobStartedEmail).not.toHaveBeenCalled();
+    expect(appendActivity).toHaveBeenCalledWith(expect.objectContaining({
+      jobId: "TMV-SMS",
+      action: "CLIENT_JOB_STARTED_EMAIL_SKIPPED"
+    }));
+  });
+
+  it("does not resend the email for a job that is already in progress", async () => {
+    getJob.mockResolvedValue(job({
+      status: JobStatus.IN_PROGRESS,
+      currentState: WorkflowState.WAITING_ARRIVAL_PHOTO
+    }));
+
+    await startJob("TMV-SMS", "abi@example.com");
+
+    expect(sendJobStartedEmail).not.toHaveBeenCalled();
   });
 });

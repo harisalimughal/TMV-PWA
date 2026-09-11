@@ -53,6 +53,9 @@ export interface RemotePhoto {
    *  time — absent for photos taken before this feature existed. */
   capturedAt?: string;
   location?: PhotoCaptureMeta["location"];
+  /** A short place name for `location`, resolved server-side — absent when there was
+   *  no location or the lookup failed (falls back to raw coordinates). */
+  locationName?: string;
 }
 
 interface Preview {

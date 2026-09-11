@@ -89,6 +89,65 @@ describe("parseCalendarEvent field extraction", () => {
     expect(parsed!.pickup).toBe("119 Queens Road, LONDON: SE15 2EZ");
   });
 
+  it("joins a pickup/drop-off address the form split across two physical lines", () => {
+    const parsed = parseCalendarEvent(
+      ev(
+        [
+          "Pickup address: 56 Bucklebury",
+          "Stanhope street, London, nw1 3lb",
+          "Drop off address: 61",
+          "Prince Court, London, nw1 4rb"
+        ].join("\n")
+      )
+    );
+    expect(parsed!.pickup).toBe("56 Bucklebury, Stanhope street, London, nw1 3lb");
+    expect(parsed!.dropoff).toBe("61, Prince Court, London, nw1 4rb");
+  });
+
+  it("stops the address continuation at the next labelled field, not further down the description", () => {
+    const parsed = parseCalendarEvent(
+      ev(
+        [
+          "Drop off address: 61",
+          "Prince Court, London, nw1 4rb",
+          "Floor to: 3rd floor",
+          "Extra request: leave by the door"
+        ].join("\n")
+      )
+    );
+    expect(parsed!.dropoff).toBe("61, Prince Court, London, nw1 4rb");
+    expect(parsed!.floorTo).toBe("3rd floor");
+  });
+
+  it("reads the real Rebekah Johnson booking whose 'Drop off:' address was split across two lines", () => {
+    const parsed = parseCalendarEvent(
+      ev(
+        [
+          "ANY EXTRA CHARGE: £55 PER HALF AN HOUR",
+          "",
+          "Pick up address: 56 Bucklebury, Stanhope street, London, nw1 3lb",
+          "",
+          "Drop off: 61",
+          "Tudor Road London E6 1DP",
+          "",
+          "",
+          "Name: Rebekah Johnson",
+          "Email Address: rebekah.kj.johnson@outlook.com",
+          "Phone Number: 07539993764",
+          "Move Date: 11/09/2026",
+          "Van Size: Large - Luton Van",
+          "Duration of Van Hire: 05 Hours",
+          "Number of helpers: 2 Men - Client doesn't need to help",
+          "",
+          "Extra request: I don't need any extras"
+        ].join("\n"),
+        "2 men 295£/Y-TI1"
+      )
+    );
+    expect(parsed!.pickup).toBe("56 Bucklebury, Stanhope street, London, nw1 3lb");
+    expect(parsed!.dropoff).toBe("61, Tudor Road London E6 1DP");
+  });
+
   it("captures van size, hire duration, extra request, inventory and the extra-charge rate", () => {
     const parsed = parseCalendarEvent(
       ev(
