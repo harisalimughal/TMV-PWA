@@ -3,6 +3,7 @@ import { Camera, FileUp, Loader2, X } from "lucide-react";
 import { compressAll, formatBytes } from "../lib/image";
 import { haptics } from "../lib/haptics";
 import type { PhotoCaptureMeta } from "../lib/geo";
+import { reverseGeocodeLive } from "../api/jobs";
 import { cx } from "../ui";
 import { CameraCaptureModal } from "./camera";
 
@@ -115,6 +116,23 @@ export function PhotoPicker({
   }, [previews]);
   useEffect(() => () => urlsRef.current.forEach(URL.revokeObjectURL), []);
 
+  // Fire-and-forget: resolves a place name for a freshly captured photo's location
+  // live, well before that photo has actually uploaded anywhere, then merges it into
+  // this specific preview once it resolves -- the caption upgrades itself from raw
+  // coordinates to a real place a moment after capture instead of only once the photo
+  // has finished uploading (see api/jobs.ts's reverseGeocodeLive). Matched by object
+  // URL, which is unique per preview and stable for its lifetime here.
+  function resolveLocationName(url: string, location: NonNullable<PhotoCaptureMeta["location"]>) {
+    void reverseGeocodeLive(location.lat, location.lng).then(locationName => {
+      if (!locationName) return;
+      setPreviews(current => {
+        const next = current.map(p => (p.url === url && p.meta ? { ...p, meta: { ...p.meta, locationName } } : p));
+        onChange(next.map(p => p.file), next.map(p => p.meta));
+        return next;
+      });
+    });
+  }
+
   async function addFiles(files: File[], metas: Array<PhotoCaptureMeta | null> = files.map(() => null)) {
     setProcessing(true);
     try {
@@ -135,6 +153,12 @@ export function PhotoPicker({
       onChange(next.map(p => p.file), next.map(p => p.meta));
       if (next.length >= max) setCameraOpen(false);
       haptics.tap();
+
+      // Only the ones just added -- an already-resolved (or already-attempted)
+      // preview from a previous addFiles call is left alone.
+      for (const preview of added) {
+        if (preview.meta?.location) resolveLocationName(preview.url, preview.meta.location);
+      }
     } finally {
       setProcessing(false);
     }

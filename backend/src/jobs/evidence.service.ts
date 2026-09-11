@@ -44,6 +44,10 @@ export interface EvidenceCapture {
   /** ISO timestamp from the driver's device, taken at the camera shutter. */
   capturedAt?: string;
   location?: { lat: number; lng: number; accuracy: number };
+  /** A place name the client already resolved live, before this upload ever started
+   *  (see jobs/photo-meta.ts's own doc comment) -- used as-is when present so this
+   *  upload doesn't redo the same Nominatim lookup a second time. */
+  locationName?: string;
 }
 
 export async function uploadEvidence(
@@ -69,10 +73,14 @@ export async function uploadEvidence(
   // Resolved alongside the Cloudinary upload, not after it -- a photo with a location
   // shouldn't wait through both round trips back to back. reverseGeocode is entirely
   // best-effort and never throws (see its own doc comment), so this is safe to await
-  // again in the catch branch below without a separate .catch() there.
-  const locationNamePromise = capture?.location
-    ? reverseGeocode(capture.location.lat, capture.location.lng)
-    : Promise.resolve(null);
+  // again in the catch branch below without a separate .catch() there. Skipped
+  // entirely when the client already resolved a name live (see EvidenceCapture's doc
+  // comment) -- no need to ask Nominatim the same question twice.
+  const locationNamePromise = capture?.locationName
+    ? Promise.resolve(capture.locationName)
+    : capture?.location
+      ? reverseGeocode(capture.location.lat, capture.location.lng)
+      : Promise.resolve(null);
 
   let record: EvidenceRecord;
   try {

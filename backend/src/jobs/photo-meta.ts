@@ -2,6 +2,13 @@ export interface PhotoCapture {
   /** ISO timestamp from the driver's device, taken at the camera shutter. */
   capturedAt?: string;
   location?: { lat: number; lng: number; accuracy: number };
+  /** A place name the client already resolved for `location` (see the driver app's
+   *  GET /api/jobs/geocode/reverse, called live while the camera's open) -- trusted
+   *  as-is when present so the upload path never redoes the same Nominatim lookup a
+   *  second time. Absent if the client's own lookup hadn't resolved yet by the time
+   *  this photo was sent, in which case the upload path falls back to resolving it
+   *  itself (see jobs/evidence.service.ts / jobs/scenario.service.ts). */
+  locationName?: string;
 }
 
 /**
@@ -33,6 +40,10 @@ export function parsePhotoMeta(raw: unknown): PhotoCapture[] {
       typeof loc.lat === "number" && typeof loc.lng === "number" && typeof loc.accuracy === "number"
         ? { lat: loc.lat, lng: loc.lng, accuracy: loc.accuracy }
         : undefined;
-    return { capturedAt, location };
+    const locationName =
+      typeof (entry as any).locationName === "string" && (entry as any).locationName.trim()
+        ? (entry as any).locationName.trim()
+        : undefined;
+    return { capturedAt, location, locationName };
   });
 }

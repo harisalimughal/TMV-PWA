@@ -60,7 +60,8 @@ export function storageRoutes(): Router {
           buffer: file.buffer,
           contentType: file.mimetype,
           capturedAt: photoMetas[i]?.capturedAt,
-          location: photoMetas[i]?.location
+          location: photoMetas[i]?.location,
+          locationName: photoMetas[i]?.locationName
         }));
         const signatureFile = filesByField.signature?.[0];
         if (!signatureFile) throw new ValidationError("A signature is required.");

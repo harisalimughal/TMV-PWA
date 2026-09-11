@@ -3,7 +3,7 @@ import { AlertTriangle, Camera, Check, CloudOff, MapPin, Search, X } from "lucid
 import { fetchLiabilityDamageCategories, submitScenario, type ApiError } from "../api/jobs";
 import { MULTISELECT_DELIMITER, SCENARIOS, type ScenarioFieldSpec, type ScenarioKey } from "../scenarioSpec";
 import { PhotoPicker } from "../components/PhotoPicker";
-import { formatCapturedTime, formatCoords, mapsUrlForLocation, type PhotoCaptureMeta } from "../lib/geo";
+import { formatCapturedTime, formatLocationLabel, mapsUrlForLocation, type PhotoCaptureMeta } from "../lib/geo";
 import { SignatureField } from "../components/SignatureField";
 import { SignatureModal } from "../components/SignatureModal";
 import { useToast } from "../components/ui/Toast";
@@ -447,7 +447,7 @@ export function ScenarioFormScreen({
                       onClick={event => event.stopPropagation()}
                       className="pl-5 text-brand underline underline-offset-2"
                     >
-                      {formatCoords(captureCaption.location)}
+                      {formatLocationLabel(captureCaption.location, captureCaption.locationName)}
                     </a>
                   ) : (
                     <span className="pl-5">Location unavailable</span>

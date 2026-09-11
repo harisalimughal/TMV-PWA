@@ -19,6 +19,7 @@ import { listEvidenceForJob, readEvidenceSummary } from "../db/evidence.repo";
 import { EvidenceStatus } from "./job.types";
 import { listScenarioSubmissionsForJob } from "../db/scenario.repo";
 import { getSetting } from "../db/settings.repo";
+import { reverseGeocode } from "../integrations/geocode";
 import { log } from "../utils/logger";
 
 const upload = multer({
@@ -143,6 +144,27 @@ export function jobsRoutes(): Router {
     }
   });
 
+  // Live reverse-geocode preview -- called from the camera the moment a location fix
+  // comes in (see components/camera/useLocationWatch.ts), well before the photo it'll
+  // end up attached to is ever uploaded, so the driver sees a real place name in the
+  // capture caption immediately instead of only after that photo's own upload
+  // completes. Same reverseGeocode() the upload path already calls, and the result
+  // this returns is what the client then sends back as photoMeta[].locationName on
+  // that upload -- so the lookup only ever runs once per photo, not twice.
+  router.get("/geocode/reverse", async (req: Request, res: Response) => {
+    try {
+      const lat = Number(req.query.lat);
+      const lng = Number(req.query.lng);
+      if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+        throw new ValidationError("A valid lat and lng are required.");
+      }
+      const locationName = await reverseGeocode(lat, lng);
+      res.status(200).json({ locationName });
+    } catch (error) {
+      errorResponse(res, error);
+    }
+  });
+
   router.get("/liability-categories", async (_req: Request, res: Response) => {
     try {
       const categories = parseLiabilityCategories(
@@ -206,7 +228,8 @@ export function jobsRoutes(): Router {
         contentType: file.mimetype,
         fileName: file.originalname || "photo.jpg",
         capturedAt: metas[i]?.capturedAt,
-        location: metas[i]?.location
+        location: metas[i]?.location,
+        locationName: metas[i]?.locationName
       }));
       const job = await handlePhotoStep(String(req.params.jobId), req.driverEmail!, photos);
       res.status(200).json({ job, evidenceItems: await evidenceItemsFor(job.jobId) });
@@ -296,7 +319,8 @@ export function jobsRoutes(): Router {
           buffer: file.buffer,
           contentType: file.mimetype,
           capturedAt: photoMetas[i]?.capturedAt,
-          location: photoMetas[i]?.location
+          location: photoMetas[i]?.location,
+          locationName: photoMetas[i]?.locationName
         }));
         const signatureFile = filesByField.signature?.[0];
         if (!signatureFile) throw new ValidationError("A signature is required.");

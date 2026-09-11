@@ -75,6 +75,9 @@ export interface UploadedPhoto {
    *  older client build won't have it. */
   capturedAt?: string;
   location?: { lat: number; lng: number; accuracy: number };
+  /** A place name the client already resolved live, before this photo was ever sent
+   *  (see jobs/photo-meta.ts's own doc comment). */
+  locationName?: string;
 }
 
 /**
@@ -119,7 +122,8 @@ export async function handlePhotoStep(
     for (const photo of photos) {
       await uploadEvidence(job, actor, evidenceType, photo.buffer, photo.contentType, photo.fileName, {
         capturedAt: photo.capturedAt,
-        location: photo.location
+        location: photo.location,
+        locationName: photo.locationName
       });
     }
   }

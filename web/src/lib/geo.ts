@@ -18,6 +18,13 @@ export interface PhotoCaptureMeta {
   /** ISO timestamp, set the instant the shutter fired. */
   capturedAt: string;
   location: CapturedLocation | null;
+  /** A short place name for `location`, resolved live client-side moments after
+   *  capture (see api/jobs.ts's reverseGeocodeLive, called from
+   *  components/PhotoPicker.tsx) so the driver sees a real place instead of raw
+   *  coordinates without waiting for this photo to actually finish uploading.
+   *  Undefined until that lookup resolves (or if it fails/never had a location to
+   *  resolve) -- callers fall back to formatCoords in that case. */
+  locationName?: string;
 }
 
 /** Opens the point in Google Maps. */

@@ -145,6 +145,28 @@ export function deleteEvidence(jobId: string, evidenceId: string): Promise<{ evi
   });
 }
 
+/**
+ * Resolves a place name for a GPS fix, live -- called from PhotoPicker.tsx the moment
+ * a photo is captured (or, better, while the camera's still open watching position),
+ * so the caption can show a real place instead of raw coordinates without waiting for
+ * that photo's own upload to complete. Same server-side lookup the upload path itself
+ * would otherwise do -- the resolved name gets sent back as photoMeta[].locationName
+ * on the actual upload so it's never looked up twice for the same photo. Best-effort:
+ * resolves to null on any failure rather than throwing, so a slow/offline/failed
+ * lookup here never blocks or breaks taking or using a photo.
+ */
+export async function reverseGeocodeLive(lat: number, lng: number): Promise<string | null> {
+  try {
+    const body = await request<{ locationName: string | null }>(
+      `/api/jobs/geocode/reverse?lat=${encodeURIComponent(lat)}&lng=${encodeURIComponent(lng)}`,
+      { timeoutMs: 8_000 }
+    );
+    return body.locationName;
+  } catch {
+    return null;
+  }
+}
+
 export async function fetchLiabilityDamageCategories(): Promise<string[]> {
   const body = await request<{ categories: string[] }>("/api/jobs/liability-categories");
   return body.categories;

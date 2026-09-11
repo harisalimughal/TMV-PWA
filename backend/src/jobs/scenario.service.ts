@@ -17,13 +17,17 @@ export interface ScenarioPhoto {
    *  library upload or an older client build won't have it. */
   capturedAt?: string;
   location?: { lat: number; lng: number; accuracy: number };
+  /** A place name the client already resolved live, before this submission was ever
+   *  sent (see jobs/photo-meta.ts's own doc comment) -- used as-is when present. */
+  locationName?: string;
 }
 
 /** Parallel to `photos` -- resolves each located photo to a short place name (see
  *  integrations/geocode.ts), started alongside the Cloudinary upload below so a
  *  submission with located photos doesn't wait through both round trips back to
  *  back. Best-effort: reverseGeocode never throws, so a photo with no location or a
- *  failed lookup just carries no name. */
+ *  failed lookup just carries no name. Skipped when the client already resolved one
+ *  live (p.locationName) -- no need to ask Nominatim the same question twice. */
 function resolvePhotoMeta(
   photos: ScenarioPhoto[]
 ): Promise<Array<{ capturedAt?: string; location?: { lat: number; lng: number; accuracy: number }; locationName?: string }>> {
@@ -31,7 +35,7 @@ function resolvePhotoMeta(
     photos.map(async p => ({
       capturedAt: p.capturedAt,
       location: p.location,
-      locationName: p.location ? (await reverseGeocode(p.location.lat, p.location.lng)) ?? undefined : undefined
+      locationName: p.locationName ?? (p.location ? (await reverseGeocode(p.location.lat, p.location.lng)) ?? undefined : undefined)
     }))
   );
 }
