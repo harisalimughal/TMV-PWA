@@ -3,6 +3,7 @@ import { AlertTriangle, Camera, Check, CloudOff, MapPin, Search, X } from "lucid
 import { fetchLiabilityDamageCategories, submitScenario, type ApiError } from "../api/jobs";
 import { MULTISELECT_DELIMITER, SCENARIOS, type ScenarioFieldSpec, type ScenarioKey } from "../scenarioSpec";
 import { PhotoPicker } from "../components/PhotoPicker";
+import { JobDetailsToggle } from "../components/driver";
 import { formatCapturedTime, formatLocationLabel, mapsUrlForLocation, type PhotoCaptureMeta } from "../lib/geo";
 import { SignatureField } from "../components/SignatureField";
 import { SignatureModal } from "../components/SignatureModal";
@@ -23,15 +24,34 @@ import {
   cx
 } from "../ui";
 import { useOnline } from "../lib/net";
-import type { StorageSummary } from "./StorageCompletionScreen";
+
+/** Shape resolved to a standalone (no `jobId`) storage form's caller so it can show a
+ *  completion summary -- see the `onDone` prop below. Job-scoped check-in/out (opened
+ *  from the Liability step) doesn't use this; it resolves with no argument. */
+export interface StorageSummary {
+  scenario: "checkin" | "checkout";
+  container: string;
+  clientName: string;
+  /** yyyy-mm-dd from the form's date field. */
+  date: string;
+  photoCount: number;
+  /** "Yes" / "No" / "". */
+  clientPresent: string;
+  /** True when it went to the offline outbox instead of straight to the server. */
+  queued: boolean;
+}
 
 interface ScenarioFormScreenProps {
   /** Present only for job-scoped scenarios (Parking Liability / Liability Report). */
   jobId?: string;
   scenario: ScenarioKey;
-  /** Booking context for job-scoped scenarios. Pre-fills the customer's name instead
-   *  of asking the driver to retype what we already know. */
-  job?: { customerName?: string };
+  /** Booking context for job-scoped scenarios. customerName/Email/Phone pre-fill the
+   *  matching fields instead of asking the driver to retype what we already know --
+   *  still editable, since the person actually checking items in/out isn't always
+   *  the booking contact. rawDescription feeds the "Job details" toggle below the
+   *  heading, same as every workflow step -- absent (and the toggle hidden) for a
+   *  standalone form with no job attached. */
+  job?: { customerName?: string; customerEmail?: string; customerPhone?: string; rawDescription?: string };
   /**
    * Which checkpoint of the move this report is being filed from — inferred from the
    * workflow step that opened the form, not asked of the driver. Defaults Parking
@@ -48,9 +68,12 @@ interface ScenarioFormScreenProps {
 }
 
 /** Which section heading each storage field sits under. Anything unlisted (the
- *  job-scoped parking / liability fields) falls back to "Details". */
+ *  job-scoped parking / liability fields) falls back to "Details". Container Number
+ *  gets an empty heading (its own group, just with nothing labelling it) -- it's
+ *  the form's very first field, right under the title, so a heading above it was
+ *  redundant. */
 const FIELD_SECTION: Record<string, string> = {
-  container_number: "Container",
+  container_number: "",
   client_name: "Customer details",
   client_phone: "Customer details",
   client_email: "Customer details",
@@ -106,8 +129,11 @@ export function ScenarioFormScreen({
     };
   }, [baseSpec, liabilityCategories, scenario]);
   const needsSignature = Boolean(spec.signatureText) || scenario === "parking";
-  const storageKind: "checkin" | "checkout" | null =
-    !jobId && (scenario === "checkin" || scenario === "checkout") ? scenario : null;
+  const isStorageScenario = scenario === "checkin" || scenario === "checkout";
+  // A standalone storage form (no jobId) resolves onDone with a summary for a
+  // completion screen; one opened from a job's Liability step already has somewhere
+  // to return to, so it resolves with nothing, same as Parking/Liability.
+  const storageKind: "checkin" | "checkout" | null = !jobId && isStorageScenario ? scenario : null;
   const fieldGroups = useMemo(() => groupFields(spec.fields), [spec.fields]);
 
   useEffect(() => {
@@ -131,10 +157,20 @@ export function ScenarioFormScreen({
     for (const field of spec.fields) {
       if (field.type === "date") initial[field.name] = todayInLondon();
     }
-    // Pre-fill what the booking already tells us for job-scoped scenarios.
+    // Pre-fill what the booking already tells us for job-scoped scenarios -- still
+    // editable, since whoever's actually checking items in/out isn't always the
+    // booking contact.
     const customerName = job?.customerName?.trim();
     if (customerName && spec.fields.some(f => f.name === "client_name")) {
       initial.client_name = customerName;
+    }
+    const customerEmail = job?.customerEmail?.trim();
+    if (customerEmail && spec.fields.some(f => f.name === "client_email")) {
+      initial.client_email = customerEmail;
+    }
+    const customerPhone = job?.customerPhone?.trim();
+    if (customerPhone && spec.fields.some(f => f.name === "client_phone")) {
+      initial.client_phone = customerPhone;
     }
     return initial;
   });
@@ -310,15 +346,15 @@ export function ScenarioFormScreen({
   const agreementText = conditionalNotice?.text ?? spec.signatureText;
   const signerName = fields.client_name?.trim() || undefined;
 
-  const headerSubtitle = storageKind
-    ? storageKind === "checkin"
+  const headerSubtitle = isStorageScenario
+    ? scenario === "checkin"
       ? "Record items being placed into storage."
       : "Record items being released from storage."
     : jobId
       ? `Job ${jobId}`
       : "Storage form";
 
-  const submitVerb = storageKind === "checkin" ? "check in" : storageKind === "checkout" ? "check out" : null;
+  const submitVerb = scenario === "checkin" ? "check in" : scenario === "checkout" ? "check out" : null;
   const idleSubmitLabel = !online
     ? "Save & send later"
     : submitVerb
@@ -381,6 +417,8 @@ export function ScenarioFormScreen({
         }
       >
         <div className="flex flex-col gap-7 px-4 py-5">
+          <JobDetailsToggle rawDescription={job?.rawDescription} />
+
           {spec.noticeText && <NoticeCard title={spec.noticeTitle} text={spec.noticeText} />}
 
           {!online && (
@@ -391,7 +429,7 @@ export function ScenarioFormScreen({
           )}
 
           {fieldGroups.map(group => (
-            <Section key={group.title} title={group.title}>
+            <Section key={group.fields[0]?.name ?? group.title} title={group.title || undefined}>
               <div className="flex flex-col gap-4">
                 {group.fields.map(field => (
                   <div

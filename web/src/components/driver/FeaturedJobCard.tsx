@@ -5,10 +5,9 @@ import { haptics } from "../../lib/haptics";
 import { useOnline } from "../../lib/net";
 import { startJob, type ApiError, type Job } from "../../api/jobs";
 import { useToast } from "../ui/Toast";
-import { JobRoute } from "./JobRoute";
 import { JobDetailsPanel } from "./JobDetailsPanel";
-import { StatusIndicator } from "./JobStatusChip";
 import { bigActionButtonClass } from "./bigActionButton";
+import { STEPS } from "../../screens/workflow/steps";
 
 const LONDON = "Europe/London";
 
@@ -64,15 +63,22 @@ export interface FeaturedJobCardProps {
  * The driver's active/next job, shown in full on the Jobs list itself — there's no
  * separate "View Job" screen to tap through to any more (see JobListScreen.tsx's
  * TodayJobsList, which keeps exactly one job expanded like this at a time). Booking
- * window header, status, the booking's extra-charge note, the pickup/drop-off route
- * (each address tap-to-navigate with a copy icon), then <JobDetailsPanel> (contact +
- * the rest of the booking) with Start Job as its footer.
+ * window header, then <JobDetailsPanel> (the raw booking text, which already
+ * carries the pickup/drop-off addresses and any extra-charge note verbatim) with
+ * Start Job as its footer.
  */
 export function FeaturedJobCard({ job, onStarted }: FeaturedJobCardProps) {
   const day = dateChip(job.bookedStart);
   const online = useOnline();
   const toast = useToast();
   const [starting, setStarting] = useState(false);
+
+  // Once the job has actually moved past READY, the button names whatever step is
+  // next rather than always reading "Start Job" -- that's what lets the driver
+  // resume from here after each step now bounces back to Home (see
+  // JobWorkflowScreen.tsx's run()).
+  const inProgress = Boolean(job.currentState && job.currentState !== "READY" && job.currentState !== "COMPLETED");
+  const startLabel = inProgress ? STEPS[job.currentState]?.shortLabel ?? "Continue" : "Start Job";
 
   async function handleStart() {
     if (!online) {
@@ -119,30 +125,9 @@ export function FeaturedJobCard({ job, onStarted }: FeaturedJobCardProps) {
         )}
       </div>
 
-      <div className="mt-4">
-        <StatusIndicator job={job} />
-      </div>
-
-      {/* The booking's own overtime/extra-charge note, verbatim from Calendar. */}
-      {job.extraChargeText && (
-        <p className="mt-3 text-helper text-fg-muted">
-          <span className="font-semibold text-fg">Any extra charge:</span> {job.extraChargeText}
-        </p>
-      )}
-
-      <JobRoute
-        pickup={job.pickup}
-        dropoff={job.dropoff}
-        stop={job.stopBy}
-        density="full"
-        interactive
-        className="mt-4"
-      />
-
       <JobDetailsPanel
         job={job}
-        className="mt-[18px]"
-        excludeValues={[job.pickup, job.dropoff, job.stopBy, job.extraChargeText]}
+        className="mt-4"
         footer={
           <button
             type="button"
@@ -151,7 +136,7 @@ export function FeaturedJobCard({ job, onStarted }: FeaturedJobCardProps) {
             onClick={handleStart}
             className={cx(bigActionButtonClass, "mt-4")}
           >
-            {starting ? "Starting…" : "Start Job"}
+            {starting ? "Starting…" : startLabel}
             {!starting && <ArrowRight className="size-[22px]" aria-hidden />}
           </button>
         }

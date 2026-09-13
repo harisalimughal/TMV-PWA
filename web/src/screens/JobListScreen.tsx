@@ -6,7 +6,6 @@ import { PullToRefresh } from "../app/PullToRefresh";
 import { AppShell } from "../app/AppShell";
 import { OfflineBanner } from "../app/OfflineBanner";
 import {
-  AlertStrip,
   FeaturedJobCard,
   JobDetailsPanel,
   JobFilterBar,
@@ -17,7 +16,7 @@ import {
   type HomeFilter
 } from "../components/driver";
 import { Alert, Button, EmptyState } from "../ui";
-import { groupJobsByDate } from "../lib/jobDates";
+import { groupJobsByDate, todayKey } from "../lib/jobDates";
 
 interface JobListScreenProps {
   driver: DriverProfile;
@@ -78,18 +77,28 @@ export function JobListScreen({ driver, onOpenJob }: JobListScreenProps) {
     void load("initial");
   }, [load]);
 
-  const filtered = useMemo(
-    () => ({
-      today: jobsList.today,
-      upcomingGroups: groupJobsByDate(jobsList.next),
+  const filtered = useMemo(() => {
+    // Today shows exactly one job at a time -- whichever the driver is actually
+    // mid-way through (IN_PROGRESS), or the earliest still-READY one if none is
+    // started yet. Everything else booked for today is "later today" work the
+    // driver hasn't reached yet, so it reads the same as any other day still to
+    // come -- it moves into Upcoming, not sitting in Today ahead of its turn. Once
+    // the active job is COMPLETED it drops out of jobsList.today entirely (see the
+    // backend's getJobsGroupedForDriver), so the next-earliest one here becomes
+    // "Up next" on the very next load -- one at a time, automatically.
+    const active = jobsList.today.find(j => j.status === "IN_PROGRESS") ?? jobsList.today[0] ?? null;
+    const laterToday = jobsList.today.filter(j => j.jobId !== active?.jobId);
+
+    return {
+      today: active,
+      upcomingGroups: groupJobsByDate([...laterToday, ...jobsList.next]),
       counts: {
-        today: jobsList.today.length,
-        upcoming: jobsList.next.length,
+        today: active ? 1 : 0,
+        upcoming: laterToday.length + jobsList.next.length,
         previous: jobsList.past.length
       }
-    }),
-    [jobsList]
-  );
+    };
+  }, [jobsList]);
 
   // Persist the selection for this session.
   useEffect(() => {
@@ -118,13 +127,6 @@ export function JobListScreen({ driver, onOpenJob }: JobListScreenProps) {
       <div className="px-4 pt-5">
         <MobileHeader driver={driver} className="mb-4" />
       </div>
-
-      {/* The one operational fact that outranks everything: unfinished earlier jobs. */}
-      {showFilterBar && filtered.counts.previous > 0 && (
-        <div className="px-4 pb-1 pt-1">
-          <AlertStrip count={filtered.counts.previous} />
-        </div>
-      )}
 
       {/* Date filters — the primary Jobs navigation. Sits directly in AppShell's
        *  scroll flow (not inside PullToRefresh, whose overflow context would stop
@@ -188,7 +190,7 @@ export function JobListScreen({ driver, onOpenJob }: JobListScreenProps) {
 interface FilterViewProps {
   filter: HomeFilter;
   filtered: {
-    today: Job[];
+    today: Job | null;
     upcomingGroups: ReturnType<typeof groupJobsByDate>;
     counts: { today: number; upcoming: number; previous: number };
   };
@@ -204,7 +206,7 @@ function FilterView({ filter, filtered, onOpenJob, onRefresh }: FilterViewProps)
   );
 
   if (filter === "today") {
-    if (filtered.today.length === 0) {
+    if (!filtered.today) {
       return (
         <EmptyState
           icon={<CalendarClock />}
@@ -214,7 +216,7 @@ function FilterView({ filter, filtered, onOpenJob, onRefresh }: FilterViewProps)
         />
       );
     }
-    return <TodayJobsList jobs={filtered.today} onOpenJob={onOpenJob} />;
+    return <TodayJobsList job={filtered.today} onOpenJob={onOpenJob} />;
   }
 
   // upcoming
@@ -232,103 +234,42 @@ function FilterView({ filter, filtered, onOpenJob, onRefresh }: FilterViewProps)
 }
 
 interface TodayJobsListProps {
-  /** Sorted earliest-first, same as the backend sends it. */
-  jobs: Job[];
+  /** The one job Today ever shows -- whichever the driver is actually mid-way
+   *  through (IN_PROGRESS), or the earliest still-READY one if none is started yet.
+   *  Everything else booked for today has already been moved into Upcoming by the
+   *  caller (see JobListScreen's `filtered`), so there's nothing left to list here. */
+  job: Job;
   onOpenJob: (jobId: string) => void;
 }
 
-/**
- * Today's jobs as an accordion: exactly one is expanded into the full
- * <FeaturedJobCard> (booking details, contact, Start Job) at a time — every other
- * job sits as a compact <ScheduleRow>. Tapping a compact row expands it; there's no
- * separate "View Job" screen to navigate to for this any more, only
- * <FeaturedJobCard>'s own Start Job button ever leaves this screen.
- *
- * "Up next" is a pinned slot, not just whichever card happens to be expanded: it's
- * always whichever job the driver is actually mid-way through (IN_PROGRESS), or the
- * earliest still-READY one if none is started yet — the same priority
- * jobs.service.ts's getNextJobForDriver uses server-side for the single-job "active"
- * screen. Expanding a *different* job (previewing something later today) doesn't
- * replace that slot; it shrinks "Up next" down to a small card and inserts the
- * previewed job's big card directly beneath it, so the driver never loses sight of
- * what's actually next while looking at something else.
- */
-function TodayJobsList({ jobs, onOpenJob }: TodayJobsListProps) {
-  const activeJobId = useMemo(() => {
-    const active = jobs.find(j => j.status === "IN_PROGRESS");
-    return (active ?? jobs[0])?.jobId ?? null;
-  }, [jobs]);
-
-  const [expandedJobId, setExpandedJobId] = useState<string | null>(activeJobId);
-
-  // Keep the expansion pointed at a real job -- if the driver's pick dropped out of
-  // today's list (completed elsewhere, or the list just refreshed), fall back to
-  // whichever job is now active/next rather than silently expanding nothing.
-  useEffect(() => {
-    if (expandedJobId && jobs.some(j => j.jobId === expandedJobId)) return;
-    setExpandedJobId(activeJobId);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeJobId, jobs]);
-
-  const activeJob = jobs.find(j => j.jobId === activeJobId) ?? null;
-  const previewedJob =
-    expandedJobId && expandedJobId !== activeJobId ? jobs.find(j => j.jobId === expandedJobId) ?? null : null;
-  const rest = jobs.filter(j => j.jobId !== activeJobId && j.jobId !== expandedJobId);
-  // Everything today besides "Up next", regardless of whether one of them is
-  // currently pulled out into the preview card above -- the "Later today" heading
-  // stays put either way, it's only the rows underneath that come and go.
-  const laterCount = jobs.length - (activeJob ? 1 : 0);
-
-  return (
-    <div className="flex flex-col gap-5">
-      <div className="flex flex-col gap-3">
-        <h2 className="px-1 text-heading text-fg">Up next</h2>
-        {activeJob &&
-          (previewedJob ? (
-            <ScheduleRow
-              job={activeJob}
-              bucket="today"
-              onOpen={() => setExpandedJobId(activeJob.jobId)}
-            />
-          ) : (
-            <FeaturedJobCard job={activeJob} onStarted={onOpenJob} />
-          ))}
-      </div>
-      {/* "Later today" always sits directly above that list, whether or not one of
-          its jobs is currently pulled open into the big card -- the previewed job is
-          still a later-today job, so it renders as this section's first item rather
-          than floating above the heading. */}
-      {laterCount > 0 && (
-        <ScheduleSection title="Later today" meta={jobsLabel(laterCount)}>
-          {previewedJob && <FeaturedJobCard job={previewedJob} onStarted={onOpenJob} />}
-          {rest.map((job, i) => (
-            <ScheduleRow
-              key={job.jobId}
-              job={job}
-              bucket="today"
-              index={i}
-              onOpen={() => setExpandedJobId(job.jobId)}
-            />
-          ))}
-        </ScheduleSection>
-      )}
-    </div>
-  );
+/** Today's one actionable job -- the full <FeaturedJobCard> (booking details,
+ *  contact, Start Job). One job at a time: the rest of today's work sits in
+ *  Upcoming until this one is completed, at which point the next-earliest job
+ *  becomes this slot on the next load (see JobListScreen's `filtered`). */
+function TodayJobsList({ job, onOpenJob }: TodayJobsListProps) {
+  return <FeaturedJobCard job={job} onStarted={onOpenJob} />;
 }
 
 /**
- * Upcoming (tomorrow onward) jobs. Not actionable yet -- there's no Start Job, so
+ * Upcoming (later today onward) jobs. Not actionable yet -- there's no Start Job, so
  * tapping a row just expands a read-only <JobDetailsPanel> under it (name/email/
  * phone + the rest of the booking behind "More details"), no route/navigate section
  * and no footer button. Purely local: nothing here ever opens another screen.
  */
 function UpcomingJobsList({ groups }: { groups: ReturnType<typeof groupJobsByDate> }) {
   const [expandedJobId, setExpandedJobId] = useState<string | null>(null);
+  // Recomputed on every render (not module-scope) so a session left open past
+  // midnight doesn't keep labelling a group by yesterday's "today" key.
+  const todaysKey = todayKey();
 
   return (
     <>
       {groups.map(group => (
-        <ScheduleSection key={group.key} title={group.label} meta={jobsLabel(group.jobs.length)}>
+        <ScheduleSection
+          key={group.key}
+          title={group.key === todaysKey ? "Later today" : group.label}
+          meta={jobsLabel(group.jobs.length)}
+        >
           {group.jobs.map((job, i) => (
             <div key={job.jobId} className="flex flex-col gap-2">
               <ScheduleRow
@@ -337,7 +278,7 @@ function UpcomingJobsList({ groups }: { groups: ReturnType<typeof groupJobsByDat
                 index={i}
                 onOpen={() => setExpandedJobId(id => (id === job.jobId ? null : job.jobId))}
               />
-              {expandedJobId === job.jobId && <JobDetailsPanel job={job} alwaysExpanded />}
+              {expandedJobId === job.jobId && <JobDetailsPanel job={job} />}
             </div>
           ))}
         </ScheduleSection>

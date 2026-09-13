@@ -6,11 +6,8 @@ import { ForgotPasswordScreen } from "./screens/ForgotPasswordScreen";
 import { ResetPasswordScreen } from "./screens/ResetPasswordScreen";
 import { JobListScreen } from "./screens/JobListScreen";
 import { JobWorkflowScreen } from "./screens/JobWorkflowScreen";
-import { ScenarioFormScreen } from "./screens/ScenarioFormScreen";
 import { AccountSettingsScreen } from "./screens/AccountSettingsScreen";
 import { PwaSettingsScreen } from "./screens/pwa-settings/PwaSettingsScreen";
-import { StorageHomeScreen } from "./screens/StorageHomeScreen";
-import { StorageCompletionScreen, type StorageSummary } from "./screens/StorageCompletionScreen";
 import { VanScreen } from "./screens/VanScreen";
 import { logout } from "./api/auth";
 import { setUnauthorizedHandler } from "./lib/http";
@@ -74,23 +71,15 @@ type View =
   | { name: "forgot-password" }
   // ---- tab destinations (chrome: sidebar on desktop, bottom nav on mobile) ----
   | { name: "jobs"; driver: DriverProfile }
-  | { name: "storage-home"; driver: DriverProfile }
   | { name: "van"; driver: DriverProfile }
   | { name: "settings"; driver: DriverProfile }
   // ---- drill-in flows (own the whole screen, no tab chrome) -------------------
   | { name: "pwa-settings"; driver: DriverProfile }
-  | { name: "job"; driver: DriverProfile; jobId: string }
-  | { name: "storage-form"; driver: DriverProfile; scenario: "checkin" | "checkout" }
-  // The confirmation screen after a storage form is recorded. Only ever reached
-  // from a real submission -- `summary` carries what was actually sent.
-  | { name: "storage-complete"; driver: DriverProfile; summary: StorageSummary };
+  | { name: "job"; driver: DriverProfile; jobId: string };
 
 const TAB_FOR_VIEW: Record<string, TabId> = {
   jobs: "jobs",
   job: "jobs",
-  "storage-home": "storage",
-  "storage-form": "storage",
-  "storage-complete": "storage",
   van: "van",
   settings: "profile"
 };
@@ -240,13 +229,7 @@ export function App() {
           setView({ name: "login" });
           return;
         }
-        setView(
-          SHORTCUT_TAB === "storage"
-            ? { name: "storage-home", driver }
-            : SHORTCUT_TAB === "profile"
-              ? { name: "settings", driver }
-              : { name: "jobs", driver }
-        );
+        setView(SHORTCUT_TAB === "profile" ? { name: "settings", driver } : { name: "jobs", driver });
       })
       .catch(() => setView({ name: "login" }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -331,39 +314,8 @@ export function App() {
       );
       break;
 
-    case "storage-home":
-      screen = (
-        <StorageHomeScreen
-          onOpenScenario={scenario => setView({ name: "storage-form", driver: view.driver, scenario })}
-        />
-      );
-      break;
-
     case "van":
       screen = <VanScreen driver={view.driver} />;
-      break;
-
-    case "storage-form":
-      screen = (
-        <ScenarioFormScreen
-          scenario={view.scenario}
-          onCancel={() => setView({ name: "storage-home", driver: view.driver })}
-          onDone={result =>
-            result?.summary
-              ? setView({ name: "storage-complete", driver: view.driver, summary: result.summary })
-              : setView({ name: "storage-home", driver: view.driver })
-          }
-        />
-      );
-      break;
-
-    case "storage-complete":
-      screen = (
-        <StorageCompletionScreen
-          summary={view.summary}
-          onHome={() => setView({ name: "jobs", driver: view.driver })}
-        />
-      );
       break;
 
     case "jobs":
@@ -386,14 +338,13 @@ export function App() {
     view.name === "forgot-password" ||
     view.name === "reset-password";
 
-  const isTabView =
-    view.name === "jobs" || view.name === "storage-home" || view.name === "van" || view.name === "settings";
+  const isTabView = view.name === "jobs" || view.name === "van" || view.name === "settings";
 
   let framed: React.ReactNode;
   if (isAuthView) {
     framed = screen;
   } else if (isTabView && "driver" in view) {
-    // Jobs / Storage / Profile get the sidebar (desktop) + bottom nav (mobile).
+    // Jobs / Van / Profile get the sidebar (desktop) + bottom nav (mobile).
     // The keyed wrapper gives each tab a subtle entry transition; the sidebar and
     // bottom nav sit outside it and stay put.
     framed = (
@@ -401,15 +352,7 @@ export function App() {
         active={TAB_FOR_VIEW[view.name]}
         onSelect={tab => {
           const d = view.driver;
-          setView(
-            tab === "jobs"
-              ? { name: "jobs", driver: d }
-              : tab === "storage"
-                ? { name: "storage-home", driver: d }
-                : tab === "van"
-                  ? { name: "van", driver: d }
-                  : { name: "settings", driver: d }
-          );
+          setView(tab === "jobs" ? { name: "jobs", driver: d } : tab === "van" ? { name: "van", driver: d } : { name: "settings", driver: d });
         }}
         driver={view.driver}
         onLogout={() => setConfirmLogout(true)}

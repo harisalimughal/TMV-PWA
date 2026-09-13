@@ -6,6 +6,8 @@ import {
   Car,
   Check,
   FileWarning,
+  PackageMinus,
+  PackagePlus,
   PenLine
 } from "lucide-react";
 import {
@@ -30,10 +32,11 @@ import { AppShell } from "../app/AppShell";
 import { Alert, BottomActionBar, Button, cx, Field, Input, PageHeader, Select, Skeleton, Textarea } from "../ui";
 import {
   AnimatedSuccessTick,
-  BookingText,
   CompletionSummary,
   IssueChoiceCard,
   IssueDecision,
+  JobDetailsToggle,
+  RawBookingText,
   bigActionButtonClass,
   JobHeader,
   JobProgress,
@@ -71,21 +74,54 @@ const LEFT_ALIGNED_STEPS = new Set(["WAITING_PAYMENT", "WAITING_EMPTY_VAN_PHOTO"
  *  text -- both are "pay attention, this affects the money" moments. */
 const RED_HINT_STEPS = new Set(["WAITING_OVERTIME", "WAITING_EMPTY_VAN_PHOTO"]);
 
+/** Actions that keep the driver on this screen for the next step instead of
+ *  bouncing home -- the money steps (Extra Charges -> Overtime -> Total Charges)
+ *  read as one continuous task, so only Payment (the last of that group) returns
+ *  home; and once Payment sends the driver back to pick up Empty Van Photo, that
+ *  photo -> Customer sign-off -> Ask for a review all run straight through to
+ *  COMPLETED without another home bounce in between. */
+const STAY_ON_SCREEN_ACTIONS = new Set([
+  "SUBMIT_EXTRA_CHARGES",
+  "SUBMIT_OVERTIME",
+  "SUBMIT_TOTAL_CHARGES",
+  "REVIEW_NONE",
+  "REVIEW_YES"
+]);
+
 /** The near-final "you're basically done" moment — a bigger heading than every
  *  other step's, to read as the celebratory beat it is. */
 const LARGE_TITLE_STEPS = new Set(["WAITING_REVIEW_CHECK"]);
 
-const ISSUE_SCENARIOS = ["parking", "liability"] as const;
+/** Every card the Liability step's "any issue to report?" screen offers -- all four
+ *  share the same "submit, then optionally add another, then continue" flow (see
+ *  IssueCompletionScreen below), since each is just something the driver may need
+ *  to do at this checkpoint before moving on, not only a liability report. */
+const LIABILITY_STEP_SCENARIOS: readonly ScenarioKey[] = ["parking", "liability", "checkin", "checkout"];
 
-type IssueScenario = (typeof ISSUE_SCENARIOS)[number];
-
-function isIssueScenario(scenario: ScenarioKey): scenario is IssueScenario {
-  return (ISSUE_SCENARIOS as readonly ScenarioKey[]).includes(scenario);
-}
-
-function otherIssueScenario(scenario: IssueScenario): IssueScenario {
-  return scenario === "parking" ? "liability" : "parking";
-}
+/** Icon/title/description for each card, shared between the step's own screen and
+ *  the completion screen's "add another" list so the two always read the same way. */
+const SCENARIO_META: Record<ScenarioKey, { icon: React.ReactNode; title: string; description: string }> = {
+  parking: {
+    icon: <Car aria-hidden />,
+    title: "Parking Liability",
+    description: "Restricted bay, red route, or anywhere a PCN could land. The customer accepts the charge."
+  },
+  liability: {
+    icon: <FileWarning aria-hidden />,
+    title: "Liability Report",
+    description: "Damage, unprotected items, or anything that needs evidence."
+  },
+  checkin: {
+    icon: <PackagePlus aria-hidden />,
+    title: "Check in",
+    description: "Record items entering storage."
+  },
+  checkout: {
+    icon: <PackageMinus aria-hidden />,
+    title: "Check out",
+    description: "Release items from storage."
+  }
+};
 
 /** "yyyy-MM-dd" as seen in Europe/London -- the operating timezone, regardless of the
  *  device's own setting. A device several hours ahead previously compared calendar
@@ -159,10 +195,10 @@ export function JobWorkflowScreen({ jobId, onBack }: JobWorkflowScreenProps) {
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
   const [signatureOpen, setSignatureOpen] = useState(false);
   const [openScenario, setOpenScenario] = useState<ScenarioKey | null>(null);
-  const [completedIssueScenarios, setCompletedIssueScenarios] = useState<IssueScenario[]>([]);
+  const [completedIssueScenarios, setCompletedIssueScenarios] = useState<ScenarioKey[]>([]);
   const [issueCompletion, setIssueCompletion] = useState<{
-    last: IssueScenario;
-    completed: IssueScenario[];
+    last: ScenarioKey;
+    completed: ScenarioKey[];
   } | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const toast = useToast();
@@ -205,14 +241,15 @@ export function JobWorkflowScreen({ jobId, onBack }: JobWorkflowScreenProps) {
   const autoReviewSendFrom = useRef<string | null>(null);
 
   const openFirstIssueScenario = useCallback((scenario: ScenarioKey) => {
-    if (isIssueScenario(scenario)) {
-      setCompletedIssueScenarios([]);
-      setIssueCompletion(null);
-    }
+    setCompletedIssueScenarios([]);
+    setIssueCompletion(null);
     setOpenScenario(scenario);
   }, []);
 
-  const openAdditionalIssueScenario = useCallback((scenario: IssueScenario) => {
+  /** Opens one more form from the completion screen's "add another" list -- ISSUES_YES
+   *  already fired for this checkpoint (whichever card was picked first), so this just
+   *  opens the form directly rather than re-running that transition. */
+  const openAdditionalScenario = useCallback((scenario: ScenarioKey) => {
     setOpenScenario(scenario);
   }, []);
 
@@ -225,9 +262,21 @@ export function JobWorkflowScreen({ jobId, onBack }: JobWorkflowScreenProps) {
    * server-side state machine and the driver needs to see the real next step before
    * continuing. Replaying them later, out of order, would corrupt the job. So they
    * block with an honest message, and every form keeps its state so nothing is lost.
+   *
+   * On success this returns the driver to Home rather than rendering the next step in
+   * place -- the same "back to your jobs" move COMPLETED's dock always did, now applied
+   * to every step: Home's card names whatever step comes next (see
+   * workflow/steps.ts's shortLabel and FeaturedJobCard.tsx), so tapping it there is how
+   * the driver moves forward. Pass `{ home: false }` for an action that's mid-step
+   * rather than a completion -- entering a scenario form (ISSUES_YES) or stepping
+   * backward (GO_BACK) should stay in place, not bounce home.
    */
   const run = useCallback(
-    async (action: () => Promise<JobUpdateResult>, successMessage?: string): Promise<boolean> => {
+    async (
+      action: () => Promise<JobUpdateResult>,
+      successMessage?: string,
+      opts?: { home?: boolean }
+    ): Promise<boolean> => {
       if (!online) {
         toast.error("You're offline. Reconnect to continue this job — nothing you've entered is lost.");
         return false;
@@ -240,9 +289,13 @@ export function JobWorkflowScreen({ jobId, onBack }: JobWorkflowScreenProps) {
         if (typeof result.suggestedTotal === "number") setSuggestedTotal(result.suggestedTotal);
         if (result.evidenceItems) setEvidenceItems(result.evidenceItems);
         if (successMessage) toast.success(successMessage);
-        // A new step means new content: put the driver at the top of it rather than
-        // wherever the previous step happened to be scrolled to.
-        scrollRef.current?.scrollTo({ top: 0, behavior: "smooth" });
+        if (opts?.home === false) {
+          // Staying on this screen for a new step's content: put the driver at the
+          // top of it rather than wherever the previous step happened to be scrolled to.
+          scrollRef.current?.scrollTo({ top: 0, behavior: "smooth" });
+        } else {
+          onBack();
+        }
         return true;
       } catch (err) {
         const apiError = err as ApiError;
@@ -253,13 +306,18 @@ export function JobWorkflowScreen({ jobId, onBack }: JobWorkflowScreenProps) {
         setUploadProgress(null);
       }
     },
-    [online, toast]
+    [online, toast, onBack]
   );
 
+  /** The Liability step's first pick (any of the 4 cards) -- fires ISSUES_YES to mark
+   *  this checkpoint as "the driver is doing something here, not just passing through"
+   *  before opening the chosen form. Submitting that form is what actually resumes the
+   *  main flow (see backend's RESUME_AFTER_ISSUES) -- every scenario type shares this
+   *  same detour, whether it's a liability report or a stock check-in/out. */
   const openIssueScenarioFromCheck = useCallback(
-    async (scenario: IssueScenario) => {
+    async (scenario: ScenarioKey) => {
       if (!job) return;
-      const ok = await run(() => sendAction(job.jobId, "ISSUES_YES"));
+      const ok = await run(() => sendAction(job.jobId, "ISSUES_YES"), undefined, { home: false });
       if (ok) openFirstIssueScenario(scenario);
     },
     [job, openFirstIssueScenario, run]
@@ -277,10 +335,10 @@ export function JobWorkflowScreen({ jobId, onBack }: JobWorkflowScreenProps) {
       job.currentState === "WAITING_EMPTY_VAN_ISSUES_CHOICE";
 
     setOpenScenario(null);
-    if (isIssueScenario(openScenario) && issueChoiceState) {
+    if (issueChoiceState) {
       setIssueCompletion(null);
       setCompletedIssueScenarios([]);
-      void run(() => sendAction(job.jobId, "GO_BACK"));
+      void run(() => sendAction(job.jobId, "GO_BACK"), undefined, { home: false });
     }
   }, [job, openScenario, run]);
 
@@ -297,7 +355,7 @@ export function JobWorkflowScreen({ jobId, onBack }: JobWorkflowScreenProps) {
       return;
     }
     autoSkippedFrom.current = job.jobId;
-    void run(() => sendAction(job.jobId, "SUBMIT_OVERTIME", {}));
+    void run(() => sendAction(job.jobId, "SUBMIT_OVERTIME", {}), undefined, { home: false });
   }, [job, busy, online, run]);
 
   useEffect(() => {
@@ -307,7 +365,7 @@ export function JobWorkflowScreen({ jobId, onBack }: JobWorkflowScreenProps) {
     }
     if (busy || !online || autoReviewSendFrom.current === job.jobId) return;
     autoReviewSendFrom.current = job.jobId;
-    void run(() => sendAction(job.jobId, "SEND_REVIEW_EMAIL"), "Review email sent");
+    void run(() => sendAction(job.jobId, "SEND_REVIEW_EMAIL"), "Review email sent", { home: false });
   }, [job, busy, online, run]);
 
   if (loading) {
@@ -347,21 +405,21 @@ export function JobWorkflowScreen({ jobId, onBack }: JobWorkflowScreenProps) {
       <ScenarioFormScreen
         jobId={job.jobId}
         scenario={openScenario}
-        job={{ customerName: job.customerName }}
+        job={{
+          customerName: job.customerName,
+          customerEmail: job.customerEmail,
+          customerPhone: job.customerPhone,
+          rawDescription: job.rawDescription
+        }}
         reportedAt={reportedAtForState(job.currentState, job)}
         onCancel={cancelScenario}
         onDone={() => {
-          if (isIssueScenario(openScenario)) {
-            const completed = completedIssueScenarios.includes(openScenario)
-              ? completedIssueScenarios
-              : [...completedIssueScenarios, openScenario];
-            setCompletedIssueScenarios(completed);
-            setIssueCompletion({ last: openScenario, completed });
-            setOpenScenario(null);
-            return;
-          }
+          const completed = completedIssueScenarios.includes(openScenario)
+            ? completedIssueScenarios
+            : [...completedIssueScenarios, openScenario];
+          setCompletedIssueScenarios(completed);
+          setIssueCompletion({ last: openScenario, completed });
           setOpenScenario(null);
-          void load();
         }}
       />
     );
@@ -373,11 +431,11 @@ export function JobWorkflowScreen({ jobId, onBack }: JobWorkflowScreenProps) {
         job={job}
         completion={issueCompletion}
         onBack={onBack}
-        onOther={openAdditionalIssueScenario}
+        onPickAnother={openAdditionalScenario}
         onContinue={() => {
           setIssueCompletion(null);
           setCompletedIssueScenarios([]);
-          void load();
+          onBack();
         }}
       />
     );
@@ -444,7 +502,7 @@ export function JobWorkflowScreen({ jobId, onBack }: JobWorkflowScreenProps) {
   const canGoBackStep = state !== "READY" && state !== "COMPLETED" && state !== "WAITING_ARRIVAL_PHOTO";
   const handleWorkflowBack = () => {
     if (canGoBackStep) {
-      void run(() => sendAction(job.jobId, "GO_BACK"));
+      void run(() => sendAction(job.jobId, "GO_BACK"), undefined, { home: false });
       return;
     }
     onBack();
@@ -473,12 +531,19 @@ export function JobWorkflowScreen({ jobId, onBack }: JobWorkflowScreenProps) {
             uploadProgress={uploadProgress}
             photoRemoteCount={stepRemotePhotos.length}
             onStart={() => run(() => startJob(job.jobId), "Job started")}
-            onAction={(action, input, message) => run(() => sendAction(job.jobId, action, input), message)}
+            onAction={(action, input, message) =>
+              run(() => sendAction(job.jobId, action, input), message, {
+                home: !STAY_ON_SCREEN_ACTIONS.has(action)
+              })
+            }
             onUploadPhotos={async (files, metas) => {
               const submittedAt = job.currentState;
               const ok = await run(
                 () => uploadEvidencePhotos(job.jobId, files, setUploadProgress, metas),
-                "Photos uploaded"
+                "Photos uploaded",
+                // Empty Van Photo runs straight into Customer sign-off, no home
+                // bounce -- Arrival/Van Loaded Photo keep the default (bounce home).
+                submittedAt === "WAITING_EMPTY_VAN_PHOTO" ? { home: false } : undefined
               );
               // Once the server has them, drop the local staging for that step so a
               // later trip back doesn't re-submit the same files.
@@ -518,6 +583,8 @@ export function JobWorkflowScreen({ jobId, onBack }: JobWorkflowScreenProps) {
                   </p>
                 )}
               </div>
+
+              <JobDetailsToggle rawDescription={job.rawDescription} />
 
               {isNotToday(job.bookedStart) && (
                 <WarningNotice title="Check the date">
@@ -578,7 +645,8 @@ export function JobWorkflowScreen({ jobId, onBack }: JobWorkflowScreenProps) {
         onSave={async blob => {
           const ok = await run(
             () => uploadSignature(job.jobId, job.customerName, blob, setUploadProgress),
-            "Signature saved"
+            "Signature saved",
+            { home: false }
           );
           if (ok) setSignatureOpen(false);
         }}
@@ -587,21 +655,29 @@ export function JobWorkflowScreen({ jobId, onBack }: JobWorkflowScreenProps) {
   );
 }
 
+/**
+ * Shown after any one of the Liability step's four cards (Parking Liability,
+ * Liability Report, Check in, Check out) is submitted. Offers every card not yet
+ * done this round so the driver can add another before moving on -- ISSUES_YES
+ * already fired for this checkpoint on the very first pick, and submitting resumes
+ * the main flow (see backend's RESUME_AFTER_ISSUES), so Continue just needs to
+ * leave the screen; anything picked here on top is simply an extra record.
+ */
 function IssueCompletionScreen({
   job,
   completion,
   onBack,
-  onOther,
+  onPickAnother,
   onContinue
 }: {
   job: Job;
-  completion: { last: IssueScenario; completed: IssueScenario[] };
+  completion: { last: ScenarioKey; completed: ScenarioKey[] };
   onBack: () => void;
-  onOther: (scenario: IssueScenario) => void;
+  onPickAnother: (scenario: ScenarioKey) => void;
   onContinue: () => void;
 }) {
-  const other = otherIssueScenario(completion.last);
-  const canReportOther = !completion.completed.includes(other);
+  const remaining = LIABILITY_STEP_SCENARIOS.filter(s => !completion.completed.includes(s));
+  const lastTitle = SCENARIO_META[completion.last].title;
 
   return (
     <AppShell
@@ -615,36 +691,39 @@ function IssueCompletionScreen({
       }
       dock={
         <BottomActionBar>
-          <div className="flex flex-col gap-3">
-            {canReportOther && (
-              <Button fullWidth size="lg" variant="secondary" onClick={() => onOther(other)}>
-                Other liability Issues
-              </Button>
-            )}
-            <Button fullWidth size="lg" onClick={onContinue}>
-              Continue
-            </Button>
-          </div>
+          <Button fullWidth size="lg" onClick={onContinue}>
+            Continue
+          </Button>
         </BottomActionBar>
       }
     >
-      <div className="flex min-h-[calc(100dvh-12rem)] flex-col items-center justify-center px-6 py-8 text-center">
+      <div className="flex flex-col items-center px-6 pt-8 text-center">
         <AnimatedSuccessTick />
-
-        <h1 className="mt-7 text-title text-fg">
-          Liability form has been successfully saved. Good job! 👍
-        </h1>
+        <h1 className="mt-7 text-title text-fg">{lastTitle} saved. Good job! 👍</h1>
         <p className="mt-2 max-w-sm text-body text-fg-muted">
-          This confirms that it has been completed and recorded. The report and signature are saved
-          against this job.
+          This confirms it's been completed and recorded against this job.
         </p>
-        {canReportOther && (
-          <p className="mt-4 max-w-sm text-body text-fg-muted">
-            If there is another issue, use Other liability Issues before continuing.
-          </p>
-        )}
-        <div className="scroll-pb-dock" aria-hidden />
       </div>
+
+      {remaining.length > 0 && (
+        <div className="flex flex-col gap-3 px-4 pt-7">
+          <h2 className="px-1 text-heading text-fg">Need anything else here?</h2>
+          {remaining.map(scenario => {
+            const meta = SCENARIO_META[scenario];
+            return (
+              <IssueChoiceCard
+                key={scenario}
+                icon={meta.icon}
+                title={meta.title}
+                description={meta.description}
+                onClick={() => onPickAnother(scenario)}
+              />
+            );
+          })}
+        </div>
+      )}
+
+      <div className="scroll-pb-dock" aria-hidden />
     </AppShell>
   );
 }
@@ -847,7 +926,7 @@ function StepBody({
   remotePhotos: RemotePhoto[];
   onRemoveRemotePhoto: (evidenceId: string) => void;
   onOpenScenario: (scenario: ScenarioKey) => void;
-  onReportIssue: (scenario: IssueScenario) => void;
+  onReportIssue: (scenario: ScenarioKey) => void;
   onFormChange: () => void;
 }) {
   // Re-renders the whole workflow screen -- not just this subtree -- so the docked
@@ -990,6 +1069,18 @@ function StepBody({
             description="Existing damage, item condition, access risk, or anything that needs evidence."
             onClick={() => onReportIssue("liability")}
           />
+          <IssueChoiceCard
+            icon={<PackagePlus aria-hidden />}
+            title="Check in"
+            description="Record items entering storage."
+            onClick={() => onReportIssue("checkin")}
+          />
+          <IssueChoiceCard
+            icon={<PackageMinus aria-hidden />}
+            title="Check out"
+            description="Release items from storage."
+            onClick={() => onReportIssue("checkout")}
+          />
         </div>
       );
 
@@ -1007,6 +1098,18 @@ function StepBody({
             title="Liability Report"
             description="Damage, unprotected items, or anything that needs evidence at the stop-by address."
             onClick={() => onReportIssue("liability")}
+          />
+          <IssueChoiceCard
+            icon={<PackagePlus aria-hidden />}
+            title="Check in"
+            description="Record items entering storage."
+            onClick={() => onReportIssue("checkin")}
+          />
+          <IssueChoiceCard
+            icon={<PackageMinus aria-hidden />}
+            title="Check out"
+            description="Release items from storage."
+            onClick={() => onReportIssue("checkout")}
           />
         </div>
       );
@@ -1026,9 +1129,25 @@ function StepBody({
             description="Damage, unprotected items, or anything that needs evidence at the drop-off."
             onClick={() => onReportIssue("liability")}
           />
+          <IssueChoiceCard
+            icon={<PackagePlus aria-hidden />}
+            title="Check in"
+            description="Record items entering storage."
+            onClick={() => onReportIssue("checkin")}
+          />
+          <IssueChoiceCard
+            icon={<PackageMinus aria-hidden />}
+            title="Check out"
+            description="Release items from storage."
+            onClick={() => onReportIssue("checkout")}
+          />
         </div>
       );
 
+    // Recovery path: a driver who left the app mid-detour (ISSUES_YES already fired,
+    // no form ever submitted) lands back here with `openScenario` reset to null on
+    // remount. These call onOpenScenario directly -- ISSUES_YES already happened, so
+    // re-firing it would just error against the backend's state machine.
     case "WAITING_ARRIVAL_ISSUES_CHOICE":
     case "WAITING_STOP_BY_ISSUES_CHOICE":
     case "WAITING_EMPTY_VAN_ISSUES_CHOICE":
@@ -1045,6 +1164,18 @@ function StepBody({
             title="Liability Report"
             description="Damage, unprotected items, or an overloaded van. The customer signs to accept liability."
             onClick={() => onOpenScenario("liability")}
+          />
+          <IssueChoiceCard
+            icon={<PackagePlus aria-hidden />}
+            title="Check in"
+            description="Record items entering storage."
+            onClick={() => onOpenScenario("checkin")}
+          />
+          <IssueChoiceCard
+            icon={<PackageMinus aria-hidden />}
+            title="Check out"
+            description="Release items from storage."
+            onClick={() => onOpenScenario("checkout")}
           />
         </div>
       );
@@ -1342,7 +1473,7 @@ function ReadyCard({ job }: { job: Job }) {
         <p className="text-title font-bold text-fg [overflow-wrap:anywhere]">{job.rawTitle}</p>
       )}
       {when && <p className="text-body text-fg-muted">{when}</p>}
-      {description && <BookingText text={description} className="mt-3" />}
+      {description && <RawBookingText text={description} className="mt-3" />}
     </div>
   );
 }

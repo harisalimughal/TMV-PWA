@@ -21,6 +21,10 @@ export interface StepMeta {
   hint?: string;
   /** Position on the happy path, 1-based. */
   order: number;
+  /** Button-sized name for the Home screen's "continue" button -- distinct from
+   *  `label`, which is a full screen heading (sometimes a whole sentence) rather than
+   *  something that reads well on a button. See FeaturedJobCard.tsx. */
+  shortLabel: string;
 }
 
 export const TOTAL_STEPS = 13;
@@ -29,95 +33,113 @@ export const STEPS: Record<string, StepMeta> = {
   READY: {
     label: "Ready to start",
     hint: "Start the job when you arrive at the pickup address. This stamps your start time.",
-    order: 1
+    order: 1,
+    shortLabel: "Start Job"
   },
   WAITING_ARRIVAL_PHOTO: {
     label: "Proof of arrival",
     hint: "Take up to 2 photos of the property or load as you found it at the pickup point.",
-    order: 2
+    order: 2,
+    shortLabel: "Proof of Arrival"
   },
   WAITING_ARRIVAL_ISSUES_CHECK: {
     label: "Great! We're at the pick-up point now — any issue to report?",
     hint: "Choose a report if needed, or continue with no issues.",
-    order: 3
+    order: 3,
+    shortLabel: "Issues to Report"
   },
   WAITING_ARRIVAL_ISSUES_CHOICE: {
     label: "Record the issue",
     hint: "Pick the form that matches what you found. The job continues once it's submitted.",
-    order: 3
+    order: 3,
+    shortLabel: "Issues to Report"
   },
   WAITING_LOADED_PHOTO: {
     label: "Van Loaded Photo (pick up point)",
     hint: "Show how the load is stacked and secured. Add a liability report first if anything needs sign-off.",
-    order: 4
+    order: 4,
+    shortLabel: "Van Loaded Photo"
   },
   IN_PROGRESS: {
     label: "Move in progress",
     hint: "Finish the move when everything is unloaded at the drop-off address.",
-    order: 4
+    order: 4,
+    shortLabel: "Finish Move"
   },
   // Only reached for jobs that carry a mid-route stop (job.stopBy). Sits between the
   // van-loaded photo and the drop-off issues check.
   WAITING_STOP_BY_ISSUES_CHECK: {
     label: "Nice! We're at the stop-by point now — any issue to report ?",
     hint: "Choose a report if needed, or continue with no issues.",
-    order: 5
+    order: 5,
+    shortLabel: "Issues to Report (Stop-by)"
   },
   WAITING_STOP_BY_ISSUES_CHOICE: {
     label: "Record the issue",
     hint: "Pick the form that matches what happened at the stop-by address.",
-    order: 5
+    order: 5,
+    shortLabel: "Issues to Report (Stop-by)"
   },
   WAITING_EMPTY_VAN_ISSUES_CHECK: {
     label: "Well done, you're almost finished! We're at the drop-off point now — any issues to report?",
     hint: "Choose a report if needed, or continue with no issues.",
-    order: 6
+    order: 6,
+    shortLabel: "Issues to Report (Drop-off)"
   },
   WAITING_EMPTY_VAN_ISSUES_CHOICE: {
     label: "Record the issue",
     hint: "Pick the form that matches what happened.",
-    order: 6
+    order: 6,
+    shortLabel: "Issues to Report (Drop-off)"
   },
   WAITING_EXTRA_CHARGES: {
     label: "Extra charges",
     hint: "Select everything that applies. Pick “No Extras Time” if there were none.",
-    order: 7
+    order: 7,
+    shortLabel: "Extra Charges"
   },
   WAITING_OVERTIME: {
     label: "Extra Time Needed and Paid",
     hint: "Minutes worked beyond the booked window",
-    order: 8
+    order: 8,
+    shortLabel: "Overtime"
   },
   WAITING_TOTAL_CHARGES: {
     label: "Total charges",
     hint: "The final amount for this job, including any extras and overtime.",
-    order: 9
+    order: 9,
+    shortLabel: "Total Charges"
   },
   WAITING_PAYMENT: {
     label: "How customer Paid ?",
-    order: 10
+    order: 10,
+    shortLabel: "How customer paid ?"
   },
   WAITING_EMPTY_VAN_PHOTO: {
     label: "Empty van photo (drop-off point)",
     hint: "Show the van empty at the drop-off — proof nothing was left behind.",
-    order: 11
+    order: 11,
+    shortLabel: "Empty Van Photo"
   },
   WAITING_CLIENT_CONFIRMATION: {
     label: "Customer sign-off",
     hint: "Hand your phone to the customer to review and sign.",
-    order: 12
+    order: 12,
+    shortLabel: "Customer Sign-off"
   },
   WAITING_REVIEW_CHECK: {
     label: "Ask for a review ?",
     hint: "Only if the customer is happy to leave one.",
-    order: 13
+    order: 13,
+    shortLabel: "Ask for a Review"
   },
   WAITING_REVIEW_SEND: {
     label: "Send review email",
     hint: "This finishes the job.",
-    order: 13
+    order: 13,
+    shortLabel: "Ask for a Review"
   },
-  COMPLETED: { label: "Job complete", order: TOTAL_STEPS }
+  COMPLETED: { label: "Job complete", order: TOTAL_STEPS, shortLabel: "Job Complete" }
 };
 
 /** Position of the conditional stop-by issues step — used to collapse its slot for

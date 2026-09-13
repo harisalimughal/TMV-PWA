@@ -106,7 +106,7 @@ export const SCENARIOS: Record<ScenarioKey, ScenarioSpec> = {
     ],
     photoLabel: "Evidence that the items have been loaded.",
     photoMin: 1,
-    photoMax: 1,
+    photoMax: 12,
     signatureText: CHECK_IN_SIGNATURE_TEXT,
     folderKey: "CheckIn"
   },
@@ -122,7 +122,7 @@ export const SCENARIOS: Record<ScenarioKey, ScenarioSpec> = {
     ],
     photoLabel: "Evidence that the items have been loaded.",
     photoMin: 1,
-    photoMax: 1,
+    photoMax: 12,
     signatureText: CHECK_OUT_SIGNATURE_TEXT,
     folderKey: "CheckOut"
   },
@@ -132,7 +132,6 @@ export const SCENARIOS: Record<ScenarioKey, ScenarioSpec> = {
     noticeTitle: PARKING_LIABILITY_NOTICE_TITLE,
     noticeText: PARKING_LIABILITY_NOTICE_TEXT,
     fields: [
-      { name: "address", label: "Address as shown on the booking", type: "text", required: true },
       { name: "client_name", label: "Full client name as on the booking", type: "text", required: true }
     ],
     photoLabel: "Parking restriction photos",

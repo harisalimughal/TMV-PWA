@@ -32,16 +32,16 @@ export type { FeaturedJobCardProps } from "./FeaturedJobCard";
 export { JobDetailsPanel } from "./JobDetailsPanel";
 export type { JobDetailsPanelProps } from "./JobDetailsPanel";
 
-export { BookingText } from "./BookingText";
-export type { BookingTextProps } from "./BookingText";
+export { RawBookingText } from "./RawBookingText";
+export type { RawBookingTextProps } from "./RawBookingText";
+
+export { JobDetailsToggle } from "./JobDetailsToggle";
+export type { JobDetailsToggleProps } from "./JobDetailsToggle";
 
 export { bigActionButtonClass } from "./bigActionButton";
 
 export { JobFilterBar } from "./JobFilterBar";
 export type { JobFilterBarProps, HomeFilter } from "./JobFilterBar";
-
-export { AlertStrip } from "./AlertStrip";
-export type { AlertStripProps } from "./AlertStrip";
 
 export { DatePickerSheet } from "./DatePickerSheet";
 export type { DatePickerSheetProps } from "./DatePickerSheet";
@@ -72,12 +72,6 @@ export type { WarningNoticeProps } from "./WarningNotice";
 
 export { RouteCard } from "./RouteCard";
 export type { RouteCardProps } from "./RouteCard";
-
-export { StorageActionCard } from "./StorageActionCard";
-export type { StorageActionCardProps } from "./StorageActionCard";
-
-export { StorageActivity } from "./StorageActivity";
-export type { StorageActivityProps } from "./StorageActivity";
 
 export { IssueDecision } from "./IssueDecision";
 export type { IssueDecisionProps } from "./IssueDecision";

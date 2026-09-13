@@ -91,7 +91,7 @@ export const SCENARIOS: Record<ScenarioKey, ScenarioSpec> = {
     ],
     photoLabel: "Evidence that the items have been loaded.",
     photoMin: 1,
-    photoMax: 1,
+    photoMax: 12,
     signatureText: CHECK_IN_SIGNATURE_TEXT
   },
   checkout: {
@@ -106,7 +106,7 @@ export const SCENARIOS: Record<ScenarioKey, ScenarioSpec> = {
     ],
     photoLabel: "Evidence that the items have been loaded.",
     photoMin: 1,
-    photoMax: 1,
+    photoMax: 12,
     signatureText: CHECK_OUT_SIGNATURE_TEXT
   },
   parking: {
