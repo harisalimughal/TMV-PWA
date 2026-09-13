@@ -315,6 +315,7 @@ function classifyEvidence(
 
   const arrival = checkCategory("Arrival", "Arrival");
   const vanLoaded = checkCategory("VanLoaded", "VanLoaded");
+  const stopBy = checkCategory("StopBy", "StopBy");
   const emptyVan = checkCategory("EmptyVan", "EmptyVan");
   // "Organized" is a retired photo step -- no job collects it anymore, kept only
   // because NormalizedJob's shape still has the field.
@@ -358,7 +359,7 @@ function classifyEvidence(
     }
   }
 
-  return { completeness: { arrival, vanLoaded, emptyVan, organized, signature }, items };
+  return { completeness: { arrival, vanLoaded, stopBy, emptyVan, organized, signature }, items };
 }
 
 function calculateWorkflowCompletionPct(

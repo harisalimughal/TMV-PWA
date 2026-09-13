@@ -6,6 +6,7 @@ interface Props {
   completeness: {
     arrival: EvidenceState;
     vanLoaded: EvidenceState;
+    stopBy: EvidenceState;
     emptyVan: EvidenceState;
     organized: EvidenceState;
     signature: EvidenceState;
@@ -15,6 +16,7 @@ interface Props {
 const ITEMS: Array<{ key: keyof Props["completeness"]; label: string; short: string }> = [
   { key: "arrival", label: "Arrival Photo", short: "ARR" },
   { key: "vanLoaded", label: "Van Loaded Photo", short: "LOAD" },
+  { key: "stopBy", label: "Stop-by Photo", short: "STOP" },
   { key: "emptyVan", label: "Empty Van Photo", short: "EMPTY" },
   { key: "organized", label: "Organized Photo", short: "ORG" },
   { key: "signature", label: "Customer Sign-Off", short: "SIG" }
@@ -25,6 +27,10 @@ export function EvidenceCompletenessPill({ completeness }: Props) {
     <div className="inline-flex items-center gap-1 p-1 bg-admin-surface-2/80 rounded-card border border-admin-line shadow-2xs">
       {ITEMS.map(({ key, label, short }) => {
         const state = completeness[key];
+        // Stop-by only applies to a job where the driver actually took one -- most
+        // jobs never do, so unlike every other (always-relevant) category here, a
+        // permanent MISSING for it is noise rather than a real gap to flag.
+        if (key === "stopBy" && state === "MISSING") return null;
 
         let stateStyles = "bg-slate-100/60 text-slate-400 border-slate-200";
         let icon = <Circle className="w-2.5 h-2.5" />;

@@ -4,7 +4,7 @@ export type JobStatus = "READY" | "IN_PROGRESS" | "COMPLETED" | "CANCELLED";
 
 export type DelayBand = "EARLY" | "ON_TIME" | "LATE_5_15" | "LATE_15_30" | "LATE_OVER_30";
 
-export type EvidenceCategory = "Arrival" | "VanLoaded" | "EmptyVan" | "Organized" | "Signature" | "Documents";
+export type EvidenceCategory = "Arrival" | "VanLoaded" | "StopBy" | "EmptyVan" | "Organized" | "Signature" | "Documents";
 
 export type EvidenceState = "MISSING" | "PROCESSING" | "COMPLETED" | "FAILED";
 
@@ -98,6 +98,7 @@ export interface NormalizedJob {
   evidenceCompleteness: {
     arrival: EvidenceState;
     vanLoaded: EvidenceState;
+    stopBy: EvidenceState;
     emptyVan: EvidenceState;
     organized: EvidenceState;
     signature: EvidenceState;

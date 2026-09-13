@@ -11,7 +11,7 @@ export type Provenance = "recorded" | "derived";
 
 export type DelayBand = "EARLY" | "ON_TIME" | "LATE_5_15" | "LATE_15_30" | "LATE_OVER_30";
 
-export type EvidenceCategory = "Arrival" | "VanLoaded" | "EmptyVan" | "Organized" | "Signature" | "Documents";
+export type EvidenceCategory = "Arrival" | "VanLoaded" | "StopBy" | "EmptyVan" | "Organized" | "Signature" | "Documents";
 
 export type EvidenceState = "MISSING" | "PROCESSING" | "COMPLETED" | "FAILED";
 
@@ -112,6 +112,10 @@ export interface NormalizedJob {
   evidenceCompleteness: {
     arrival: EvidenceState;
     vanLoaded: EvidenceState;
+    /** Only ever COMPLETED for a job where the driver said "yes" to the stop-by
+     *  detour (see workflow.states.ts's WAITING_STOP_BY_PHOTO) -- MISSING for every
+     *  job with no stop, same as any other job-shaped-differently field. */
+    stopBy: EvidenceState;
     emptyVan: EvidenceState;
     organized: EvidenceState;
     signature: EvidenceState;

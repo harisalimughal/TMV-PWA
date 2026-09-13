@@ -14,6 +14,7 @@ export function PaperJobReport({ job, onClose }: Props) {
   const photoCategories = [
     { key: "Arrival", label: "Arrival and Start the Job !" },
     { key: "Loaded", label: "Proof Of Van Loaded" },
+    { key: "StopBy", label: "Stop-by Point" },
     { key: "Empty", label: "Empty Van / Unloaded ?" },
     { key: "Organized", label: "Is the van organized ?" },
   ];
