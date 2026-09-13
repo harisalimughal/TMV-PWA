@@ -18,8 +18,8 @@ export interface CustomerIdentityProps {
  */
 export function CustomerIdentity({ customerName, customerPhone, className }: CustomerIdentityProps) {
   return (
-    <div className={cx("flex min-w-0 items-center gap-2.5", className)}>
-      <p className="min-w-0 flex-1 truncate text-[17px] font-bold leading-[1.15] text-fg">
+    <div className={cx("flex min-w-0 items-center justify-center gap-2.5", className)}>
+      <p className="min-w-0 max-w-[55%] shrink truncate text-[17px] font-bold leading-[1.15] text-fg">
         {customerName || "Unnamed customer"}
       </p>
 
