@@ -50,8 +50,17 @@ interface ScenarioFormScreenProps {
    *  still editable, since the person actually checking items in/out isn't always
    *  the booking contact. rawDescription feeds the "Job details" toggle below the
    *  heading, same as every workflow step -- absent (and the toggle hidden) for a
-   *  standalone form with no job attached. */
-  job?: { customerName?: string; customerEmail?: string; customerPhone?: string; rawDescription?: string };
+   *  standalone form with no job attached. rawTitle/bookedStart/bookedFinish feed
+   *  that same toggle's title + booking window, above the description. */
+  job?: {
+    customerName?: string;
+    customerEmail?: string;
+    customerPhone?: string;
+    rawDescription?: string;
+    rawTitle?: string;
+    bookedStart?: string;
+    bookedFinish?: string;
+  };
   /**
    * Which checkpoint of the move this report is being filed from — inferred from the
    * workflow step that opened the form, not asked of the driver. Defaults Parking
@@ -396,7 +405,7 @@ export function ScenarioFormScreen({
                 size="lg"
                 className="!rounded-[10px]"
                 iconLeft={<Camera aria-hidden />}
-                disabled={submitting || photos.length >= spec.photoMax}
+                disabled={submitting || (typeof spec.photoMax === "number" && photos.length >= spec.photoMax)}
                 onClick={() => openCameraRef.current?.()}
               >
                 {photos.length === 0 ? "Take photo" : "Take another"}
@@ -417,7 +426,12 @@ export function ScenarioFormScreen({
         }
       >
         <div className="flex flex-col gap-7 px-4 py-5">
-          <JobDetailsToggle rawDescription={job?.rawDescription} />
+          <JobDetailsToggle
+            rawDescription={job?.rawDescription}
+            rawTitle={job?.rawTitle}
+            bookedStart={job?.bookedStart}
+            bookedFinish={job?.bookedFinish}
+          />
 
           {spec.noticeText && <NoticeCard title={spec.noticeTitle} text={spec.noticeText} />}
 

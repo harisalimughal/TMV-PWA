@@ -5,6 +5,7 @@ import { haptics } from "../../lib/haptics";
 import { useOnline } from "../../lib/net";
 import { startJob, type ApiError, type Job } from "../../api/jobs";
 import { useToast } from "../ui/Toast";
+import { CustomerIdentity } from "./CustomerIdentity";
 import { JobDetailsPanel } from "./JobDetailsPanel";
 import { bigActionButtonClass } from "./bigActionButton";
 import { STEPS } from "../../screens/workflow/steps";
@@ -63,9 +64,10 @@ export interface FeaturedJobCardProps {
  * The driver's active/next job, shown in full on the Jobs list itself — there's no
  * separate "View Job" screen to tap through to any more (see JobListScreen.tsx's
  * TodayJobsList, which keeps exactly one job expanded like this at a time). Booking
- * window header, then <JobDetailsPanel> (the raw booking text, which already
- * carries the pickup/drop-off addresses and any extra-charge note verbatim) with
- * Start Job as its footer.
+ * window header, <CustomerIdentity> (name + tap-to-call, same pairing as the
+ * workflow's JobHeader minus its icon and job number), then <JobDetailsPanel> (the
+ * raw booking text, which already carries the pickup/drop-off addresses and any
+ * extra-charge note verbatim) with Start Job as its footer.
  */
 export function FeaturedJobCard({ job, onStarted }: FeaturedJobCardProps) {
   const day = dateChip(job.bookedStart);
@@ -124,6 +126,8 @@ export function FeaturedJobCard({ job, onStarted }: FeaturedJobCardProps) {
           </div>
         )}
       </div>
+
+      <CustomerIdentity customerName={job.customerName} customerPhone={job.customerPhone} className="mt-4" />
 
       <JobDetailsPanel
         job={job}

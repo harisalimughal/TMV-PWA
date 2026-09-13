@@ -57,7 +57,7 @@ function validateScenarioSubmission(
   if (photos.length < spec.photoMin) {
     throw new ValidationError(`Attach at least ${spec.photoMin} photo(s).`);
   }
-  if (photos.length > spec.photoMax) {
+  if (typeof spec.photoMax === "number" && photos.length > spec.photoMax) {
     throw new ValidationError(`${spec.title} accepts at most ${spec.photoMax} photo(s).`);
   }
   for (const photo of [...photos, signature]) {

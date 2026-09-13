@@ -16,7 +16,16 @@ import {
   type HomeFilter
 } from "../components/driver";
 import { Alert, Button, EmptyState } from "../ui";
-import { groupJobsByDate, todayKey } from "../lib/jobDates";
+import { addDaysToKey, groupJobsByDate, todayKey } from "../lib/jobDates";
+import { subscribeJobsRefresh } from "../lib/jobsRefresh";
+
+/** How often the Jobs list quietly refetches in the background while this screen
+ *  is open and visible -- a fallback for whenever a push doesn't arrive (missed,
+ *  permission never granted, notifications disabled at the OS level, ...), not the
+ *  primary mechanism. A newly assigned job's own push (see booking.service.ts /
+ *  jobs.routes.ts) triggers an immediate refetch via lib/jobsRefresh instead of
+ *  waiting for the next tick. */
+const POLL_INTERVAL_MS = 30_000;
 
 interface JobListScreenProps {
   driver: DriverProfile;
@@ -77,6 +86,41 @@ export function JobListScreen({ driver, onOpenJob }: JobListScreenProps) {
     void load("initial");
   }, [load]);
 
+  // Background refresh, three ways:
+  //  1. A push notification (new job assigned, reassigned, edited, ...) tells us
+  //     directly and immediately -- see lib/jobsRefresh.ts and
+  //     InAppNotificationListener.tsx, which fires this for every push it gets.
+  //  2. Regaining focus/visibility (switching back to this tab, unlocking the
+  //     phone) -- catches anything that changed while this screen wasn't the one
+  //     on screen, without waiting for the next poll tick.
+  //  3. A plain interval, paused while the tab is hidden -- the fallback for
+  //     whenever neither of the above fires (push permission never granted, the
+  //     driver never left the screen at all).
+  // All three call the same "refresh" mode as pull-to-refresh: no skeleton, no
+  // loading flash, just a quiet swap-in once the new data arrives.
+  useEffect(() => {
+    const refresh = () => void load("refresh");
+
+    const unsubscribePush = subscribeJobsRefresh(refresh);
+
+    const onVisibilityOrFocus = () => {
+      if (!document.hidden) refresh();
+    };
+    document.addEventListener("visibilitychange", onVisibilityOrFocus);
+    window.addEventListener("focus", onVisibilityOrFocus);
+
+    const intervalId = window.setInterval(() => {
+      if (!document.hidden) refresh();
+    }, POLL_INTERVAL_MS);
+
+    return () => {
+      unsubscribePush();
+      document.removeEventListener("visibilitychange", onVisibilityOrFocus);
+      window.removeEventListener("focus", onVisibilityOrFocus);
+      window.clearInterval(intervalId);
+    };
+  }, [load]);
+
   const filtered = useMemo(() => {
     // Today shows exactly one job at a time -- whichever the driver is actually
     // mid-way through (IN_PROGRESS), or the earliest still-READY one if none is
@@ -135,7 +179,13 @@ export function JobListScreen({ driver, onOpenJob }: JobListScreenProps) {
         <div className="sticky top-0 z-20 bg-bg px-4 pb-1 pt-2">
           <JobFilterBar
             value={filter}
-            onChange={setFilter}
+            onChange={value => {
+              setFilter(value);
+              // Switching tabs is also a natural moment to check for anything new --
+              // no reason to make the driver pull-to-refresh just because they
+              // tapped between Today and Upcoming.
+              void load("refresh");
+            }}
             counts={{ today: filtered.counts.today, upcoming: filtered.counts.upcoming }}
           />
         </div>
@@ -256,10 +306,20 @@ function TodayJobsList({ job, onOpenJob }: TodayJobsListProps) {
  * phone + the rest of the booking behind "More details"), no route/navigate section
  * and no footer button. Purely local: nothing here ever opens another screen.
  */
+/** "Later today" / "Tomorrow" / "Day after tomorrow" for the next few days, then
+ *  the plain formatted date beyond that -- relative names stop being useful once
+ *  they'd force the driver to count days in their head anyway. */
+function relativeGroupLabel(key: string, label: string, todaysKey: string): string {
+  if (key === todaysKey) return "Later today";
+  if (key === addDaysToKey(todaysKey, 1)) return "Tomorrow";
+  if (key === addDaysToKey(todaysKey, 2)) return "Day after tomorrow";
+  return label;
+}
+
 function UpcomingJobsList({ groups }: { groups: ReturnType<typeof groupJobsByDate> }) {
   const [expandedJobId, setExpandedJobId] = useState<string | null>(null);
   // Recomputed on every render (not module-scope) so a session left open past
-  // midnight doesn't keep labelling a group by yesterday's "today" key.
+  // midnight doesn't keep labelling groups by yesterday's "today" key.
   const todaysKey = todayKey();
 
   return (
@@ -267,7 +327,7 @@ function UpcomingJobsList({ groups }: { groups: ReturnType<typeof groupJobsByDat
       {groups.map(group => (
         <ScheduleSection
           key={group.key}
-          title={group.key === todaysKey ? "Later today" : group.label}
+          title={relativeGroupLabel(group.key, group.label, todaysKey)}
           meta={jobsLabel(group.jobs.length)}
         >
           {group.jobs.map((job, i) => (

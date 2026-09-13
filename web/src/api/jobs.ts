@@ -13,11 +13,14 @@ export interface Job {
   customerPhone: string;
   pickup: string;
   dropoff: string;
-  /** Optional mid-route stop ("stop by" / waypoint) parsed from the Calendar event.
-   *  When present it sits between pickup and drop-off on the route and is added as a
-   *  waypoint to the Navigate link. NOT YET POPULATED BY THE BACKEND — only the dev
-   *  mock sets it today (see src/mocks/fixtures.ts). Safe to read anywhere: absent
-   *  or "" means a plain two-stop job. */
+  /** Optional mid-route stop ("stop by" / waypoint), parsed from the Calendar
+   *  description (see backend's booking.service.ts) if the booking mentions one --
+   *  when present it sits between pickup and drop-off on the route and is added as
+   *  a waypoint to the Navigate link. This is only ever a hint, though: the driver
+   *  is asked "is there a stop-by point?" in the workflow regardless of this value
+   *  (see JobWorkflowScreen.tsx's WAITING_STOP_BY_CHECK), since a stop decided on
+   *  the day is never reflected here. Safe to read anywhere: absent or "" means the
+   *  booking didn't mention one. */
   stopBy?: string;
   /** Verbatim Calendar event title this job was synced from, e.g.
    *  "2 Men - £170 - 16:00". Empty on jobs synced before the backend started

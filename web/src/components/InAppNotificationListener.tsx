@@ -1,5 +1,6 @@
 import React, { useEffect } from "react";
 import { useToast } from "./ui/Toast";
+import { notifyJobsRefresh } from "../lib/jobsRefresh";
 
 export function InAppNotificationListener(): React.ReactElement | null {
   const toast = useToast();
@@ -17,6 +18,10 @@ export function InAppNotificationListener(): React.ReactElement | null {
       const body = payload.body || "New update received";
       const url = payload.url;
       toast.info(`${title}: ${body}`, url ? { onClick: () => { window.location.href = url; } } : undefined);
+      // Any push (new job assigned, reassigned, a booking edited, ...) is a sign the
+      // Jobs list may be stale -- refetch it in the background rather than waiting
+      // for the driver to notice and pull-to-refresh themselves.
+      notifyJobsRefresh();
     };
 
     let channel: BroadcastChannel | null = null;

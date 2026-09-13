@@ -439,7 +439,7 @@ async function mirrorNewJob(calendarEventId: string, fields: NewJobFields): Prom
     jobId, calendarEventId,
     driverInitials: fields.driverInitials, customerName: fields.customerName,
     customerEmail: fields.customerEmail, customerPhone: fields.customerPhone,
-    pickup: fields.pickup, dropoff: fields.dropoff, floorFrom: "", floorTo: "", crewSize: fields.crewSize,
+    pickup: fields.pickup, dropoff: fields.dropoff, stopBy: "", floorFrom: "", floorTo: "", crewSize: fields.crewSize,
     vanSize: "", hireDurationText: "", extraRequest: "", inventory: "", extraChargeText: "",
     basePrice: fields.price, paidOnline: fields.paidOnline,
     bookedStart: fields.bookedStart, bookedFinish: fields.bookedFinish,

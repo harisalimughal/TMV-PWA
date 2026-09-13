@@ -66,8 +66,22 @@ export const STEPS: Record<string, StepMeta> = {
     order: 4,
     shortLabel: "Finish Move"
   },
-  // Only reached for jobs that carry a mid-route stop (job.stopBy). Sits between the
-  // van-loaded photo and the drop-off issues check.
+  // Asked on every job after the van-loaded photo, regardless of job.stopBy (Calendar
+  // isn't always kept current for a stop decided on the day) -- but the whole
+  // check -> photo -> issues-check -> issues-choice episode shares one progress slot,
+  // collapsed to 0 steps for a job that turns out to have no stop (see STOP_BY_ORDER).
+  WAITING_STOP_BY_CHECK: {
+    label: "Is there a stop-by point?",
+    hint: "Say yes if you're stopping anywhere on the way to drop-off -- we'll grab a quick photo there.",
+    order: 5,
+    shortLabel: "Stop-by Check"
+  },
+  WAITING_STOP_BY_PHOTO: {
+    label: "Stop-by Photo",
+    hint: "Take up to 2 photos of the property or load at the stop-by point.",
+    order: 5,
+    shortLabel: "Stop-by Photo"
+  },
   WAITING_STOP_BY_ISSUES_CHECK: {
     label: "Nice! We're at the stop-by point now — any issue to report ?",
     hint: "Choose a report if needed, or continue with no issues.",
@@ -142,8 +156,9 @@ export const STEPS: Record<string, StepMeta> = {
   COMPLETED: { label: "Job complete", order: TOTAL_STEPS, shortLabel: "Job Complete" }
 };
 
-/** Position of the conditional stop-by issues step — used to collapse its slot for
- *  jobs without a mid-route stop, the same way Overtime's slot collapses. */
+/** Position of the whole conditional stop-by episode (check -> photo -> issues-check
+ *  -> issues-choice, all sharing this one slot) — used to collapse it for jobs that
+ *  turn out to have no stop, the same way Overtime's slot collapses. */
 export const STOP_BY_ORDER = 5;
 
 /** Steps a driver can safely reverse out of -- all pure data-entry, nothing that has

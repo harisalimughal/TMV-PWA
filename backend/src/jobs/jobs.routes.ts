@@ -305,10 +305,12 @@ export function jobsRoutes(): Router {
   // Chat-bot's multi-step progress tracking.
   router.post(
     "/:jobId/scenarios/:scenario",
-    // 12 -- the highest photoMax across all job-scoped scenarios (Check In/Out now
-    // allow up to 12; Liability Report 8, Parking Liability 4). Multer rejects the
-    // whole request if this field cap is under what a scenario's own spec allows.
-    scenarioUpload.fields([{ name: "photos", maxCount: 12 }, { name: "signature", maxCount: 1 }]),
+    // 50 -- Check In/Out have no app-level photoMax (as many as the driver wants);
+    // this is only the hard technical ceiling multer needs a number for, well above
+    // Liability Report's 8 and Parking Liability's 4 so neither is ever the binding
+    // constraint. Multer rejects the whole request if this cap is under what a
+    // scenario's own spec allows.
+    scenarioUpload.fields([{ name: "photos", maxCount: 50 }, { name: "signature", maxCount: 1 }]),
     async (req: Request, res: Response) => {
       try {
         const scenario = req.params.scenario as ScenarioKey;

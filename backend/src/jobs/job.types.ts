@@ -47,6 +47,13 @@ export interface Job {
   customerPhone: string;
   pickup: string;
   dropoff: string;
+  /** A mid-route stop parsed from the Calendar description (e.g. "Stop by:
+   *  ..."), if the booking mentions one -- "" when it doesn't. Drives the
+   *  workflow's stop-by detour (see workflow/workflow.states.ts): the driver is
+   *  asked "is there a stop-by point?" after the van-loaded photo regardless of
+   *  this value (Calendar isn't always updated for a stop decided on the day),
+   *  but this pre-fills the Liability step's address context and the map route. */
+  stopBy: string;
   floorFrom: string;
   floorTo: string;
   crewSize: number;
@@ -132,6 +139,7 @@ export interface ParsedCalendarBooking {
   customerPhone: string;
   pickup: string;
   dropoff: string;
+  stopBy: string;
   floorFrom: string;
   floorTo: string;
   crewSize: number;
@@ -161,7 +169,7 @@ export interface ParsedCalendarBooking {
  * flow through the same async evidence pipeline instead of a bespoke one.
  */
 export type EvidenceType =
-  | "Arrival" | "VanLoaded" | "EmptyVan" | "Organized"
+  | "Arrival" | "VanLoaded" | "EmptyVan" | "Organized" | "StopBy"
   | "CheckIn" | "CheckOut" | "ParkingLiability" | "LiabilityReport";
 
 export enum EvidenceStatus {

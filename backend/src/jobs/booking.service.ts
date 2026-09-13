@@ -56,6 +56,10 @@ const DROPOFF_LABELS = [
   "Unloading address", "Address to", "Move To", "Drop-off", "Drop off", "Dropoff", "Delivery",
   "Deliver to", "Deliver", "Destination", "Unload to", "To address", "Drop", "To"
 ];
+const STOP_BY_LABELS = [
+  "Stop by address", "Stop-by address", "Stopby address", "Stop off address", "Waypoint address",
+  "Stop by", "Stop-by", "Stopby", "Stop off", "Waypoint", "Mid-route stop", "Extra stop", "Stop"
+];
 const FLOOR_FROM_LABELS = ["Floor from", "From floor", "Pickup floor", "Floor at pickup", "Floors from"];
 const FLOOR_TO_LABELS = ["Floor to", "To floor", "Dropoff floor", "Drop off floor", "Delivery floor", "Floor at dropoff", "Floors to"];
 const COMBINED_FLOOR_LABELS = ["Floor from and to", "Floors from and to", "Floor from & to", "Floor", "Floors", "Stairs"];
@@ -71,7 +75,7 @@ const EXTRA_CHARGE_LABELS = ["Any extra charge", "Extra charge", "Extra charges"
  *  "a label, not a value" while scanning forward for a stacked value. */
 const ALL_LABELS = new Set(
   [
-    ...NAME_LABELS, ...EMAIL_LABELS, ...PHONE_LABELS, ...PICKUP_LABELS, ...DROPOFF_LABELS,
+    ...NAME_LABELS, ...EMAIL_LABELS, ...PHONE_LABELS, ...PICKUP_LABELS, ...DROPOFF_LABELS, ...STOP_BY_LABELS,
     ...FLOOR_FROM_LABELS, ...FLOOR_TO_LABELS, ...COMBINED_FLOOR_LABELS,
     ...HELPERS_LABELS, ...VAN_SIZE_LABELS, ...HIRE_DURATION_LABELS,
     ...EXTRA_REQUEST_LABELS, ...INVENTORY_LABELS, ...EXTRA_CHARGE_LABELS,
@@ -176,6 +180,7 @@ export function parseCalendarEvent(event: calendar_v3.Schema$Event): ParsedCalen
   const customerPhone = field(description, PHONE_LABELS);
   const pickup = field(description, PICKUP_LABELS, { multiline: true });
   const dropoff = field(description, DROPOFF_LABELS, { multiline: true });
+  const stopBy = field(description, STOP_BY_LABELS, { multiline: true });
 
   let floorFrom = field(description, FLOOR_FROM_LABELS);
   let floorTo = field(description, FLOOR_TO_LABELS);
@@ -210,6 +215,7 @@ export function parseCalendarEvent(event: calendar_v3.Schema$Event): ParsedCalen
     customerPhone,
     pickup,
     dropoff,
+    stopBy,
     floorFrom,
     floorTo,
     crewSize,
@@ -269,6 +275,7 @@ function toJob(parsed: ParsedCalendarBooking, existing?: Job): Job {
     customerPhone: parsed.customerPhone,
     pickup: parsed.pickup,
     dropoff: parsed.dropoff,
+    stopBy: parsed.stopBy,
     floorFrom: parsed.floorFrom,
     floorTo: parsed.floorTo,
     crewSize,
@@ -321,7 +328,7 @@ function toJob(parsed: ParsedCalendarBooking, existing?: Job): Job {
 function isUnchanged(next: Job, existing?: Job): boolean {
   if (!existing) return false;
   const keys: Array<keyof Job> = [
-    "driverInitials", "customerName", "customerEmail", "customerPhone", "pickup", "dropoff",
+    "driverInitials", "customerName", "customerEmail", "customerPhone", "pickup", "dropoff", "stopBy",
     "floorFrom", "floorTo", "vanSize", "hireDurationText", "extraRequest", "inventory", "extraChargeText",
     "crewSize", "basePrice", "paidOnline", "bookedStart", "bookedFinish", "bookedMinutes", "status",
     "rawTitle", "rawDescription"

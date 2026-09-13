@@ -47,6 +47,7 @@ import { ScenarioFormScreen } from "./ScenarioFormScreen";
 import { useOnline } from "../lib/net";
 import { haptics } from "../lib/haptics";
 import { htmlToPlainText } from "../lib/htmlText";
+import { formatCalendarWindow } from "../lib/calendarWindow";
 import type { ScenarioKey } from "../scenarioSpec";
 import {
   CONGESTION_CHARGE,
@@ -75,17 +76,23 @@ const LEFT_ALIGNED_STEPS = new Set(["WAITING_PAYMENT", "WAITING_EMPTY_VAN_PHOTO"
 const RED_HINT_STEPS = new Set(["WAITING_OVERTIME", "WAITING_EMPTY_VAN_PHOTO"]);
 
 /** Actions that keep the driver on this screen for the next step instead of
- *  bouncing home -- the money steps (Extra Charges -> Overtime -> Total Charges)
- *  read as one continuous task, so only Payment (the last of that group) returns
- *  home; and once Payment sends the driver back to pick up Empty Van Photo, that
- *  photo -> Customer sign-off -> Ask for a review all run straight through to
- *  COMPLETED without another home bounce in between. */
+ *  bouncing home -- Extra Charges -> Overtime -> Total Charges -> Payment ->
+ *  Empty Van Photo -> Customer sign-off -> Ask for a review all read as one
+ *  continuous task once the driver starts it, running straight through to
+ *  COMPLETED with no home bounce in between. */
 const STAY_ON_SCREEN_ACTIONS = new Set([
   "SUBMIT_EXTRA_CHARGES",
   "SUBMIT_OVERTIME",
   "SUBMIT_TOTAL_CHARGES",
+  "SUBMIT_PAYMENT",
   "REVIEW_NONE",
-  "REVIEW_YES"
+  "REVIEW_YES",
+  // Saying "yes" to a stop-by goes straight into its photo step -- the same
+  // "answering yes opens the next thing to do" pattern as ISSUES_YES, which fires
+  // separately (see openIssueScenarioFromCheck) since it opens a scenario form
+  // rather than re-rendering StepBody for a new state. STOP_BY_NONE keeps the
+  // default (bounces home), matching every other "no issues"-style answer.
+  "STOP_BY_YES"
 ]);
 
 /** The near-final "you're basically done" moment — a bigger heading than every
@@ -148,40 +155,6 @@ function formatBookedDay(bookedStart: string): string {
   } catch {
     return "";
   }
-}
-
-function timeOfDay(d: Date): { hm: string; period: "am" | "pm" } {
-  const parts = new Intl.DateTimeFormat("en-GB", {
-    hour: "numeric",
-    minute: "2-digit",
-    hour12: true,
-    timeZone: LONDON
-  }).formatToParts(d);
-  const hour = parts.find(p => p.type === "hour")?.value ?? "";
-  const minute = parts.find(p => p.type === "minute")?.value ?? "00";
-  const period = (parts.find(p => p.type === "dayPeriod")?.value ?? "").toLowerCase().startsWith("p") ? "pm" : "am";
-  return { hm: `${hour}:${minute}`, period };
-}
-
-/** "Friday, September 11 · 4:00 – 9:00pm" -- read the same way Calendar's own event
- *  popup reads it, so the raw-booking block below feels like the same event the office
- *  sees, not a re-derived summary. Drops the start time's am/pm when it matches the
- *  end's, exactly like Calendar does. */
-function formatCalendarWindow(bookedStart: string, bookedFinish: string): string {
-  const start = bookedStart ? new Date(bookedStart) : null;
-  if (!start || Number.isNaN(start.getTime())) return "";
-  const datePart = new Intl.DateTimeFormat("en-GB", {
-    weekday: "long",
-    month: "long",
-    day: "numeric",
-    timeZone: LONDON
-  }).format(start);
-  const startT = timeOfDay(start);
-  const finish = bookedFinish ? new Date(bookedFinish) : null;
-  if (!finish || Number.isNaN(finish.getTime())) return `${datePart} · ${startT.hm}${startT.period}`;
-  const finishT = timeOfDay(finish);
-  const startLabel = startT.period === finishT.period ? startT.hm : `${startT.hm}${startT.period}`;
-  return `${datePart} · ${startLabel} – ${finishT.hm}${finishT.period}`;
 }
 
 export function JobWorkflowScreen({ jobId, onBack }: JobWorkflowScreenProps) {
@@ -409,7 +382,10 @@ export function JobWorkflowScreen({ jobId, onBack }: JobWorkflowScreenProps) {
           customerName: job.customerName,
           customerEmail: job.customerEmail,
           customerPhone: job.customerPhone,
-          rawDescription: job.rawDescription
+          rawDescription: job.rawDescription,
+          rawTitle: job.rawTitle,
+          bookedStart: job.bookedStart,
+          bookedFinish: job.bookedFinish
         }}
         reportedAt={reportedAtForState(job.currentState, job)}
         onCancel={cancelScenario}
@@ -472,7 +448,15 @@ export function JobWorkflowScreen({ jobId, onBack }: JobWorkflowScreenProps) {
       .finally(() => setBusy(false));
   };
 
-  const hasStop = Boolean(job.stopBy && job.stopBy.trim());
+  // job.stopBy is only ever a hint from Calendar -- the driver is asked "is there a
+  // stop-by point?" regardless of it (see WAITING_STOP_BY_CHECK), so a stop decided
+  // on the day with nothing in Calendar wouldn't otherwise show its progress slot
+  // while the driver is actually in the middle of it.
+  const hasStop =
+    Boolean(job.stopBy && job.stopBy.trim()) ||
+    state === "WAITING_STOP_BY_PHOTO" ||
+    state === "WAITING_STOP_BY_ISSUES_CHECK" ||
+    state === "WAITING_STOP_BY_ISSUES_CHOICE";
   const routeExpanded = state === "READY";
   // Every photo/issue-check step used to show a single-address reminder card (or, for
   // the money/sign-off steps, nothing) instead of the full route -- redundant now that
@@ -584,7 +568,12 @@ export function JobWorkflowScreen({ jobId, onBack }: JobWorkflowScreenProps) {
                 )}
               </div>
 
-              <JobDetailsToggle rawDescription={job.rawDescription} />
+              <JobDetailsToggle
+                rawDescription={job.rawDescription}
+                rawTitle={job.rawTitle}
+                bookedStart={job.bookedStart}
+                bookedFinish={job.bookedFinish}
+              />
 
               {isNotToday(job.bookedStart) && (
                 <WarningNotice title="Check the date">
@@ -802,6 +791,8 @@ function evidenceTypeForState(state: string): string | null {
       return "Arrival";
     case "WAITING_LOADED_PHOTO":
       return "VanLoaded";
+    case "WAITING_STOP_BY_PHOTO":
+      return "StopBy";
     case "WAITING_EMPTY_VAN_PHOTO":
       return "EmptyVan";
     default:
@@ -1024,6 +1015,40 @@ function StepBody({
             Other liability issues ?
           </Button>
         </div>
+      );
+
+    case "WAITING_STOP_BY_CHECK":
+      return (
+        <div className="rounded-card border border-line bg-surface px-4 py-6 text-center">
+          <p className="text-body text-fg-muted">
+            A stop-by is any extra address on the way to drop-off — dropping something off, picking
+            up more items, anything beyond the booked pickup and drop-off.
+          </p>
+        </div>
+      );
+
+    case "WAITING_STOP_BY_PHOTO":
+      return (
+        <PhotoUploader
+          key={state}
+          label="Stop-by pictures"
+          maxPhotos={2}
+          submitting={busy}
+          progress={uploadProgress}
+          error={error}
+          registerCapture={registerPhotoCapture}
+          initialFiles={formState.photosByStep[state] ?? []}
+          initialMeta={formState.photoMetaByStep[state] ?? []}
+          remoteFiles={remotePhotos}
+          onRemoveRemote={onRemoveRemotePhoto}
+          onFilesChange={(files, metas) => {
+            formState.photos = files;
+            formState.photosByStep[state] = files;
+            formState.photoMeta = metas;
+            formState.photoMetaByStep[state] = metas;
+            tick();
+          }}
+        />
       );
 
     case "WAITING_EMPTY_VAN_PHOTO":
@@ -1575,6 +1600,7 @@ function StepDock({
 
     case "WAITING_ARRIVAL_PHOTO":
     case "WAITING_LOADED_PHOTO":
+    case "WAITING_STOP_BY_PHOTO":
     case "WAITING_EMPTY_VAN_PHOTO": {
       // Local (just taken) + remote (already uploaded) photos both count toward the step.
       const photoTotal = formState.photos.length + photoRemoteCount;
@@ -1613,6 +1639,27 @@ function StepDock({
         </BottomActionBar>
       );
     }
+
+    case "WAITING_STOP_BY_CHECK":
+      return (
+        <BottomActionBar>
+          <div className="grid grid-cols-2 gap-3">
+            <Button
+              variant="secondary"
+              size="lg"
+              loading={busy}
+              blockedReason={offlineReason}
+              onBlocked={onBlocked}
+              onClick={() => onAction("STOP_BY_NONE")}
+            >
+              No
+            </Button>
+            <Button size="lg" loading={busy} blockedReason={offlineReason} onBlocked={onBlocked} onClick={() => onAction("STOP_BY_YES")}>
+              Yes
+            </Button>
+          </div>
+        </BottomActionBar>
+      );
 
     case "WAITING_ARRIVAL_ISSUES_CHECK":
     case "WAITING_STOP_BY_ISSUES_CHECK":

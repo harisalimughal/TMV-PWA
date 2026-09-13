@@ -63,6 +63,7 @@ export async function beginJob(jobId: string, identifier: string): Promise<Job> 
 const PHOTO_FOLDER: Record<string, EvidenceType> = {
   [WorkflowState.WAITING_ARRIVAL_PHOTO]: "Arrival",
   [WorkflowState.WAITING_LOADED_PHOTO]: "VanLoaded",
+  [WorkflowState.WAITING_STOP_BY_PHOTO]: "StopBy",
   [WorkflowState.WAITING_EMPTY_VAN_PHOTO]: "EmptyVan"
 };
 
@@ -365,15 +366,30 @@ export async function handleAction(
       const from = job.currentState as WorkflowState;
       const noneTarget: Partial<Record<WorkflowState, WorkflowState>> = {
         [WorkflowState.WAITING_ARRIVAL_ISSUES_CHECK]: WorkflowState.WAITING_LOADED_PHOTO,
+        [WorkflowState.WAITING_STOP_BY_ISSUES_CHECK]: WorkflowState.WAITING_EMPTY_VAN_ISSUES_CHECK,
         [WorkflowState.WAITING_EMPTY_VAN_ISSUES_CHECK]: WorkflowState.WAITING_EXTRA_CHARGES
       };
       const yesTarget: Partial<Record<WorkflowState, WorkflowState>> = {
         [WorkflowState.WAITING_ARRIVAL_ISSUES_CHECK]: WorkflowState.WAITING_ARRIVAL_ISSUES_CHOICE,
+        [WorkflowState.WAITING_STOP_BY_ISSUES_CHECK]: WorkflowState.WAITING_STOP_BY_ISSUES_CHOICE,
         [WorkflowState.WAITING_EMPTY_VAN_ISSUES_CHECK]: WorkflowState.WAITING_EMPTY_VAN_ISSUES_CHOICE
       };
       const target = (action === "ISSUES_NONE" ? noneTarget : yesTarget)[from];
       if (!target) throw new ValidationError(`This action is not valid at the current step (${from}).`);
       job.currentState = target;
+      return saveJob(job, driver, action, from);
+    }
+
+    // "Is there a stop-by point?" -- asked after every Van Loaded photo, independent
+    // of Job.stopBy (Calendar isn't always kept current for a stop decided on the
+    // day). Yes opens the same proof-photo -> "any issues?" detour Arrival/Empty Van
+    // already have, just for the stop; No skips straight to the drop-off issues check.
+    case "STOP_BY_YES":
+    case "STOP_BY_NONE": {
+      assertState(job.currentState, WorkflowState.WAITING_STOP_BY_CHECK);
+      const from = job.currentState;
+      job.currentState =
+        action === "STOP_BY_YES" ? WorkflowState.WAITING_STOP_BY_PHOTO : WorkflowState.WAITING_EMPTY_VAN_ISSUES_CHECK;
       return saveJob(job, driver, action, from);
     }
 
@@ -442,7 +458,14 @@ const BACK_TARGET: Partial<Record<WorkflowState, WorkflowState | ((job: Job) => 
   [WorkflowState.WAITING_ARRIVAL_ISSUES_CHOICE]: WorkflowState.WAITING_ARRIVAL_ISSUES_CHECK,
   [WorkflowState.WAITING_LOADED_PHOTO]: WorkflowState.WAITING_ARRIVAL_ISSUES_CHECK,
   [WorkflowState.IN_PROGRESS]: WorkflowState.WAITING_LOADED_PHOTO,
-  [WorkflowState.WAITING_EMPTY_VAN_ISSUES_CHECK]: WorkflowState.WAITING_LOADED_PHOTO,
+  [WorkflowState.WAITING_STOP_BY_CHECK]: WorkflowState.WAITING_LOADED_PHOTO,
+  [WorkflowState.WAITING_STOP_BY_PHOTO]: WorkflowState.WAITING_STOP_BY_CHECK,
+  [WorkflowState.WAITING_STOP_BY_ISSUES_CHECK]: WorkflowState.WAITING_STOP_BY_PHOTO,
+  [WorkflowState.WAITING_STOP_BY_ISSUES_CHOICE]: WorkflowState.WAITING_STOP_BY_ISSUES_CHECK,
+  // A job with a stop retraces through its issues check; one without skips straight
+  // back to the van-loaded photo, same as before this feature existed.
+  [WorkflowState.WAITING_EMPTY_VAN_ISSUES_CHECK]: job =>
+    job.stopBy?.trim() ? WorkflowState.WAITING_STOP_BY_ISSUES_CHECK : WorkflowState.WAITING_LOADED_PHOTO,
   [WorkflowState.WAITING_EMPTY_VAN_ISSUES_CHOICE]: WorkflowState.WAITING_EMPTY_VAN_ISSUES_CHECK,
   // Extra Charges is reached from the drop-off issues check, so Back returns there.
   [WorkflowState.WAITING_EXTRA_CHARGES]: WorkflowState.WAITING_EMPTY_VAN_ISSUES_CHECK,

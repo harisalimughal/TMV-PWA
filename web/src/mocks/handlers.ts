@@ -34,6 +34,8 @@ const HAPPY_ORDER = [
   "WAITING_ARRIVAL_ISSUES_CHECK",
   "WAITING_LOADED_PHOTO",
   "IN_PROGRESS",
+  "WAITING_STOP_BY_CHECK",
+  "WAITING_STOP_BY_PHOTO",
   "WAITING_STOP_BY_ISSUES_CHECK",
   "WAITING_EMPTY_VAN_ISSUES_CHECK",
   "WAITING_EXTRA_CHARGES",
@@ -101,6 +103,7 @@ function transition(jobId: string, trigger: WorkflowTrigger, input?: Record<stri
 const PHOTO_STATE_TYPE: Record<string, string> = {
   WAITING_ARRIVAL_PHOTO: "Arrival",
   WAITING_LOADED_PHOTO: "VanLoaded",
+  WAITING_STOP_BY_PHOTO: "StopBy",
   WAITING_EMPTY_VAN_PHOTO: "EmptyVan"
 };
 

@@ -11,7 +11,9 @@ export interface PhotoPickerProps {
   label: string;
   /** Minimum the caller requires -- shown as a live "1 of 2" counter. */
   min?: number;
-  max: number;
+  /** Omit for no cap -- the driver can keep adding photos indefinitely (the counter
+   *  then shows a plain running count, no "/ N"). */
+  max?: number;
   /**
    * `metas` is parallel to `files` — where/when each photo was taken (null for a
    * library upload, which has no shutter moment to record). Callers that don't care
@@ -151,7 +153,7 @@ export function PhotoPicker({
       const next = max === 1 ? added.slice(0, 1) : [...previews, ...added].slice(0, max);
       setPreviews(next);
       onChange(next.map(p => p.file), next.map(p => p.meta));
-      if (next.length >= max) setCameraOpen(false);
+      if (typeof max === "number" && next.length >= max) setCameraOpen(false);
       haptics.tap();
 
       // Only the ones just added -- an already-resolved (or already-attempted)
@@ -179,8 +181,9 @@ export function PhotoPicker({
   const remote = remoteFiles ?? [];
   const total = remote.length + previews.length;
   // Keep the pre-existing behaviour for callers without server photos (max===1 stays
-  // replaceable); when server photos are in play, "full" is a hard total cap.
-  const full = remote.length > 0 ? total >= max : max > 1 && previews.length >= max;
+  // replaceable); when server photos are in play, "full" is a hard total cap. No cap
+  // (max undefined) is never full.
+  const full = typeof max === "number" && (remote.length > 0 ? total >= max : max > 1 && previews.length >= max);
   const totalBytes = previews.reduce((sum, p) => sum + p.file.size, 0);
   const met = total >= min;
   const captureLabel = total === 0 ? "Take photo" : "Take another";
@@ -199,7 +202,7 @@ export function PhotoPicker({
           )}
         >
           {total}
-          {max > 1 ? ` / ${max}` : min > 0 ? " / 1" : ""}
+          {typeof max !== "number" ? "" : max > 1 ? ` / ${max}` : min > 0 ? " / 1" : ""}
         </span>
       </div>
 

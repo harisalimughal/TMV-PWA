@@ -28,7 +28,8 @@ export interface ScenarioSpec {
   conditionalNotice?: { field: string; whenValue: string; title: string; text: string };
   photoLabel: string;
   photoMin: number;
-  photoMax: number;
+  /** Omit for no cap -- Check In/Check Out take as many as the driver wants. */
+  photoMax?: number;
   signatureText?: string;
 }
 
@@ -91,7 +92,6 @@ export const SCENARIOS: Record<ScenarioKey, ScenarioSpec> = {
     ],
     photoLabel: "Evidence that the items have been loaded.",
     photoMin: 1,
-    photoMax: 12,
     signatureText: CHECK_IN_SIGNATURE_TEXT
   },
   checkout: {
@@ -106,7 +106,6 @@ export const SCENARIOS: Record<ScenarioKey, ScenarioSpec> = {
     ],
     photoLabel: "Evidence that the items have been loaded.",
     photoMin: 1,
-    photoMax: 12,
     signatureText: CHECK_OUT_SIGNATURE_TEXT
   },
   parking: {

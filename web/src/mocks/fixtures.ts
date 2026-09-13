@@ -20,11 +20,49 @@ export const DEFAULT_CONFIRMATION_TEXT =
   "is complete and the team is released to leave. Any request to return after sign-off will be subject to " +
   "availability and additional charges.";
 
+const LONDON = "Europe/London";
+
+/** Minutes London is ahead of UTC at the given instant (60 during BST, 0 during
+ *  GMT) -- derived from what the wall clock actually reads there, not a hardcoded
+ *  DST calendar, so it's correct on both sides of the March/October changeover. */
+function londonOffsetMinutes(instant: Date): number {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: LONDON,
+    hour12: false,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit"
+  }).formatToParts(instant);
+  const get = (type: string) => Number(parts.find(p => p.type === type)?.value ?? 0);
+  // Intl can report hour 24 for local midnight -- treat it as 0.
+  const asIfUtc = Date.UTC(get("year"), get("month") - 1, get("day"), get("hour") % 24, get("minute"), get("second"));
+  return Math.round((asIfUtc - instant.getTime()) / 60000);
+}
+
+/** A mock job's bookedStart, `daysFromNow`/`hour`/`minute` read as Europe/London
+ *  wall-clock time -- not the host machine's own timezone. The app buckets/labels
+ *  every job by its Europe/London calendar day (see lib/jobDates.ts), so building
+ *  these fixtures from the *system's* local "today" was a bug in this file, not the
+ *  app: whenever the dev/CI sandbox's own clock or timezone disagreed with London
+ *  (which is often -- most sandboxes run UTC or something else entirely, and near
+ *  midnight even London vs. UTC itself disagrees on the date), a job seeded as
+ *  "today" could read as tomorrow's, breaking things like the Upcoming tab's
+ *  "Later today" grouping in a way no production job ever would.
+ */
 function iso(daysFromNow: number, hour: number, minute = 0): string {
-  const d = new Date();
-  d.setDate(d.getDate() + daysFromNow);
-  d.setHours(hour, minute, 0, 0);
-  return d.toISOString();
+  const [y, m, d] = new Intl.DateTimeFormat("en-CA", { timeZone: LONDON, year: "numeric", month: "2-digit", day: "2-digit" })
+    .format(new Date())
+    .split("-")
+    .map(Number);
+  // First guess treating hour/minute as UTC, then correct by London's real offset
+  // at that moment (a second pass isn't needed -- the offset is the same on either
+  // side of a same-day one-hour shift).
+  const guessUtc = new Date(Date.UTC(y, m - 1, d + daysFromNow, hour, minute, 0));
+  const offsetMin = londonOffsetMinutes(guessUtc);
+  return new Date(guessUtc.getTime() - offsetMin * 60_000).toISOString();
 }
 
 /** The verbatim Calendar event title ops type for a booking, in the shape

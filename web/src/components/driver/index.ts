@@ -38,6 +38,9 @@ export type { RawBookingTextProps } from "./RawBookingText";
 export { JobDetailsToggle } from "./JobDetailsToggle";
 export type { JobDetailsToggleProps } from "./JobDetailsToggle";
 
+export { CustomerIdentity } from "./CustomerIdentity";
+export type { CustomerIdentityProps } from "./CustomerIdentity";
+
 export { bigActionButtonClass } from "./bigActionButton";
 
 export { JobFilterBar } from "./JobFilterBar";
