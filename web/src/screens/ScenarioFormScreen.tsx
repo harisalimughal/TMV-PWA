@@ -519,8 +519,8 @@ export function ScenarioFormScreen({
               >
                 {conditionalNotice && <NoticeCard title={conditionalNotice.title} text={conditionalNotice.text} />}
                 {spec.signatureText && (
-                  <div className="rounded-card border border-line bg-surface px-4 py-4">
-                    <p className="mb-2 text-eyebrow uppercase text-fg-subtle">
+                  <div className="rounded-card border border-warning-line bg-warning-subtle px-4 py-4">
+                    <p className="mb-2 text-eyebrow uppercase text-warning">
                       Please read before signing
                     </p>
                     <p className="text-body text-fg">{spec.signatureText}</p>

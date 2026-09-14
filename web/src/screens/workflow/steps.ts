@@ -38,7 +38,7 @@ export const STEPS: Record<string, StepMeta> = {
   },
   WAITING_ARRIVAL_PHOTO: {
     label: "Proof of arrival",
-    hint: "Take up to 2 photos of the property or load as you found it at the pickup point.",
+    hint: "Please take picture to proof that you have arrived at the job",
     order: 2,
     shortLabel: "Proof of Arrival"
   },
@@ -46,13 +46,13 @@ export const STEPS: Record<string, StepMeta> = {
     label: "Great! We're at the pick-up point now — any issue to report?",
     hint: "Choose a report if needed, or continue with no issues.",
     order: 3,
-    shortLabel: "Issues to Report"
+    shortLabel: "Any Issues ?"
   },
   WAITING_ARRIVAL_ISSUES_CHOICE: {
     label: "Record the issue",
     hint: "Pick the form that matches what you found. The job continues once it's submitted.",
     order: 3,
-    shortLabel: "Issues to Report"
+    shortLabel: "Any Issues ?"
   },
   WAITING_LOADED_PHOTO: {
     label: "Van Loaded Photo (pick up point)",
@@ -74,7 +74,7 @@ export const STEPS: Record<string, StepMeta> = {
     label: "Is there a stop-by point?",
     hint: "Say yes if you're stopping anywhere on the way to drop-off -- we'll grab a quick photo there.",
     order: 5,
-    shortLabel: "Stop-by Check"
+    shortLabel: "Any Stop by ?"
   },
   WAITING_STOP_BY_PHOTO: {
     label: "Stop-by Photo",
@@ -86,31 +86,31 @@ export const STEPS: Record<string, StepMeta> = {
     label: "Nice! We're at the stop-by point now — any issue to report ?",
     hint: "Choose a report if needed, or continue with no issues.",
     order: 5,
-    shortLabel: "Issues to Report (Stop-by)"
+    shortLabel: "Any Issues ? (Stop-by)"
   },
   WAITING_STOP_BY_ISSUES_CHOICE: {
     label: "Record the issue",
     hint: "Pick the form that matches what happened at the stop-by address.",
     order: 5,
-    shortLabel: "Issues to Report (Stop-by)"
+    shortLabel: "Any Issues ? (Stop-by)"
   },
   WAITING_EMPTY_VAN_ISSUES_CHECK: {
     label: "Well done, you're almost finished! We're at the drop-off point now — any issues to report?",
     hint: "Choose a report if needed, or continue with no issues.",
     order: 6,
-    shortLabel: "Issues to Report (Drop-off)"
+    shortLabel: "Any Issues ? (Drop-off)"
   },
   WAITING_EMPTY_VAN_ISSUES_CHOICE: {
     label: "Record the issue",
     hint: "Pick the form that matches what happened.",
     order: 6,
-    shortLabel: "Issues to Report (Drop-off)"
+    shortLabel: "Any Issues ? (Drop-off)"
   },
   WAITING_EXTRA_CHARGES: {
     label: "Extra charges",
     hint: "Select everything that applies. Pick “No Extras Time” if there were none.",
     order: 7,
-    shortLabel: "Extra Charges"
+    shortLabel: "Check out"
   },
   WAITING_OVERTIME: {
     label: "Extra Time Needed and Paid",

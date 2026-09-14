@@ -1213,7 +1213,7 @@ function StepBody({
         <div className="flex flex-col gap-4">
           {job.congestionZoneEnteredAt && (
             <Alert tone="info" title="Central London detected">
-              This job passed through the Congestion Charge zone — consider adding "{CONGESTION_CHARGE}" below.
+              This Van passed through the Congestion Charge zone — consider adding "{CONGESTION_CHARGE}" below.
             </Alert>
           )}
           {job.tunnelZoneEnteredAt && (
@@ -1429,11 +1429,11 @@ function StepBody({
 
     case "WAITING_CLIENT_CONFIRMATION":
       return (
-        <div className="flex flex-col items-center gap-3 rounded-card border border-line bg-surface px-4 py-6">
+        <div className="flex flex-col items-center gap-3 rounded-card border border-warning-line bg-warning-subtle px-4 py-6">
           <span className="grid size-11 place-items-center rounded-pill bg-brand-subtle text-brand">
             <PenLine className="size-5" aria-hidden />
           </span>
-          <p className="text-heading text-fg">Hand your phone to the customer</p>
+          <p className="text-heading text-warning">Hand your phone to the customer</p>
           {/* The actual agreement they're signing -- shown up front here too, not
               just inside the signature pad, so they can read it before the driver
               even opens it. */}
