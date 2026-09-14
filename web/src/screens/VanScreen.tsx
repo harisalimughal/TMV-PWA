@@ -55,6 +55,7 @@ export function VanScreen({ driver }: VanScreenProps) {
 
         <FuelCard online={online} />
         <ServiceCard online={online} />
+        <ServiceMileageCard driver={driver} />
         <ComplianceCard driver={driver} />
       </div>
     </AppShell>
@@ -319,6 +320,46 @@ function ServiceCard({ online }: { online: boolean }) {
   );
 }
 
+/** Its own card, directly under Record Service -- was previously folded into
+ *  ComplianceCard below, but a driver who just logged a service should see "miles
+ *  remaining" right there, not have to scroll past the date-based compliance rings
+ *  to find it. */
+function ServiceMileageCard({ driver }: { driver: DriverProfile }) {
+  const { data: compliance } = useQuery({
+    queryKey: ["van-compliance", driver.vanRegistration],
+    queryFn: fetchVanCompliance,
+    retry: 1,
+    enabled: Boolean(driver.vanRegistration)
+  });
+  const mileageItem = buildServiceMileageItem(compliance);
+  const mileageUrgent = mileageItem.tone === "warning" || mileageItem.tone === "danger";
+
+  return (
+    <section className="overflow-hidden rounded-card border border-line bg-surface shadow-xs">
+      <div className="flex items-center gap-3 px-4 py-3 text-white" style={{ backgroundColor: SERVICE_MILEAGE_RING_BLUE }}>
+        <span className="grid size-9 shrink-0 place-items-center rounded-card bg-white/25">
+          <Wrench className="size-4" aria-hidden />
+        </span>
+        <div className="min-w-0">
+          <h2 className="text-card">Next Service</h2>
+          <p className="text-helper opacity-80">{driver.vanRegistration || "Current van"}</p>
+        </div>
+      </div>
+      <div className="flex flex-col gap-4 p-4">
+        {mileageUrgent && (
+          <Alert
+            tone={mileageItem.tone === "danger" ? "danger" : "warning"}
+            title={`${driver.vanRegistration || "Current van"} service ${mileageItem.statusLabel.toLowerCase()}`}
+          >
+            {mileageItem.tone === "danger" ? "Book a service as soon as possible." : `Alerts show when ${SERVICE_MILEAGE_WARNING_MILES} miles or less remain.`}
+          </Alert>
+        )}
+        <ServiceMileageStatus item={mileageItem} />
+      </div>
+    </section>
+  );
+}
+
 function ComplianceCard({ driver }: { driver: DriverProfile }) {
   const { data: compliance } = useQuery({
     queryKey: ["van-compliance", driver.vanRegistration],
@@ -329,8 +370,6 @@ function ComplianceCard({ driver }: { driver: DriverProfile }) {
   const items = complianceItems(compliance);
   const urgentItems = items.filter(item => item.daysRemaining !== null && item.daysRemaining <= COMPLIANCE_ALERT_DAYS);
   const firstUrgent = urgentItems[0];
-  const mileageItem = buildServiceMileageItem(compliance);
-  const mileageUrgent = mileageItem.tone === "warning" || mileageItem.tone === "danger";
 
   return (
     <section className="overflow-hidden rounded-card border border-line bg-surface shadow-xs">
@@ -352,14 +391,7 @@ function ComplianceCard({ driver }: { driver: DriverProfile }) {
             Renew soon. Alerts show when 30 days or less remain.
           </Alert>
         )}
-        {!firstUrgent && mileageUrgent && (
-          <Alert tone={mileageItem.tone === "danger" ? "danger" : "warning"} title={`${driver.vanRegistration || "Current van"} service ${mileageItem.statusLabel.toLowerCase()}`}>
-            {mileageItem.tone === "danger" ? "Book a service as soon as possible." : `Alerts show when ${SERVICE_MILEAGE_WARNING_MILES} miles or less remain.`}
-          </Alert>
-        )}
-
         <div className="divide-y divide-line">
-          <ServiceMileageStatus item={mileageItem} />
           {items.map(item => (
             <ComplianceStatus key={item.key} item={item} />
           ))}
@@ -522,10 +554,8 @@ function buildServiceMileageItem(compliance?: VanCompliance | null): ServiceMile
     centerLabel: overdue ? `${Math.abs(milesRemaining).toLocaleString()} mi over` : `${milesRemaining.toLocaleString()} mi`,
     topLabel: currentMileage !== null ? `Current: ${currentMileage.toLocaleString()} mi` : `Since service: ${milesSinceService.toLocaleString()} mi`,
     statusLabel: overdue
-      ? `Overdue by ${Math.abs(milesRemaining).toLocaleString()} miles`
-      : dueSoon
-        ? `Due in ${milesRemaining.toLocaleString()} miles`
-        : "Status: OK"
+      ? `Overdue by ${Math.abs(milesRemaining).toLocaleString()} mi`
+      : `Next Service in: ${milesRemaining.toLocaleString()} mi`
   };
 }
 
@@ -558,11 +588,11 @@ function ServiceMileageStatus({ item }: { item: ServiceMileageStatusItem }) {
         </div>
       )}
 
-      <p className={cx(
-        "text-label font-semibold uppercase",
-        item.tone === "danger" ? "text-danger" : item.tone === "warning" ? "text-warning" : item.tone === "ok" ? "text-success" : "text-fg-muted"
-      )}>
-        {item.statusLabel}
+      <p
+        className="text-label font-semibold"
+        style={showRing ? { color: ringColor } : undefined}
+      >
+        {showRing ? item.statusLabel : <span className="text-fg-muted uppercase">{item.statusLabel}</span>}
       </p>
     </div>
   );

@@ -576,10 +576,8 @@ function buildServiceMileageItem(compliance?: VanComplianceItem | null): Service
     centerLabel: overdue ? `${Math.abs(milesRemaining).toLocaleString()} mi over` : `${milesRemaining.toLocaleString()} mi`,
     topLabel: currentMileage !== null ? `Current: ${currentMileage.toLocaleString()} mi` : `Since service: ${milesSinceService.toLocaleString()} mi`,
     statusLabel: overdue
-      ? `Overdue by ${Math.abs(milesRemaining).toLocaleString()} miles`
-      : dueSoon
-        ? `Due in ${milesRemaining.toLocaleString()} miles`
-        : "Status: OK"
+      ? `Overdue by ${Math.abs(milesRemaining).toLocaleString()} mi`
+      : `Next Service in: ${milesRemaining.toLocaleString()} mi`
   };
 }
 
@@ -608,15 +606,10 @@ function ServiceMileageStatus({ item }: { item: ServiceMileageStatusItem }) {
         </div>
       )}
 
-      <p className={`text-[13px] font-extrabold uppercase ${
-        item.tone === "danger"
-          ? "text-admin-status-red"
-          : item.tone === "warning"
-            ? "text-admin-status-amber"
-            : item.tone === "ok"
-              ? "text-admin-status-green"
-              : "text-admin-muted"
-      }`}>
+      <p
+        className={`text-[13px] font-extrabold ${showRing ? "" : "uppercase text-admin-muted"}`}
+        style={showRing ? { color: ringColor } : undefined}
+      >
         {item.statusLabel}
       </p>
     </div>
