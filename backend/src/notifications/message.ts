@@ -14,7 +14,7 @@ import { DriverProfile, Job } from "../jobs/job.types";
  */
 export const JOB_STARTED_MESSAGE_TEMPLATE =
   "Hi, I'm {driver_name}, your driver for the job. My contact number is {driverPhone}. " +
-  "Your booking is scheduled for {job_time} on {job_date}.";
+  "Your booking is scheduled for {job_date}.";
 
 /**
  * The customer review-request email, sent only if the driver opts in on the "Do you
@@ -27,16 +27,6 @@ export const REVIEW_REQUEST_EMAIL_TEMPLATE =
   "If you have a moment, we’d really appreciate it if you could leave us a quick 5-star ⭐⭐⭐⭐⭐ review. Your review will be featured on The Man Van website and helps our drivers build their reputation and get more work — so it genuinely means a lot to us.\n\n" +
   "Thanks again for choosing The Man Van and for making the move such a pleasure! 🤗\n\n" +
   "Review us here 👉 https://g.page/Themanvan/review?gm";
-
-/**
- * Sent automatically when a job is marked COMPLETED (see workflow.engine.ts's
- * COMPLETE_JOB). Admin-editable via /ops Messaging tab. Falls back to this default
- * until overridden in the Settings sheet.
- */
-export const JOB_COMPLETION_EMAIL_TEMPLATE =
-  "Hi {customerName}, your move with {companyName} today has been completed. " +
-  "Thank you for choosing us — it was a pleasure helping you. " +
-  "If you have any questions or concerns about your move, please don't hesitate to get in touch.";
 
 /**
  * Flat placeholder substitution — a plain block of text an admin edits as a whole,

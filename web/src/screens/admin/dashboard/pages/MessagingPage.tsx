@@ -25,14 +25,13 @@ const MOCK_DATA: Record<string, string> = {
 // now-replaced Sheets-backed settings.route.ts used.
 const MESSAGING_KEYS = [
   "CUSTOMER_CONFIRMATION_TEXT", "JOB_STARTED_MESSAGE_TEXT",
-  "REVIEW_REQUEST_EMAIL_TEXT", "JOB_COMPLETION_EMAIL_TEXT", "CLIENT_NOTIFICATION_OFFSET_MINUTES"
+  "REVIEW_REQUEST_EMAIL_TEXT", "CLIENT_NOTIFICATION_OFFSET_MINUTES"
 ];
 
 const VARIABLES_BY_KEY: Record<string, string[]> = {
   CUSTOMER_CONFIRMATION_TEXT: [],
-  JOB_STARTED_MESSAGE_TEXT: ["{customerName}", "{companyName}", "{pickup}", "{dropoff}", "{driverPhone}", "{vanRegistration}", "{driver_name}", "{job_time}", "{job_date}"],
+  JOB_STARTED_MESSAGE_TEXT: ["{customerName}", "{companyName}", "{pickup}", "{dropoff}", "{driverPhone}", "{vanRegistration}", "{driver_name}", "{job_date}"],
   REVIEW_REQUEST_EMAIL_TEXT: ["{customerName}", "{companyName}", "{pickup}", "{dropoff}", "{job_date}"],
-  JOB_COMPLETION_EMAIL_TEXT: ["{customerName}", "{companyName}", "{pickup}", "{dropoff}", "{driver_name}", "{job_time}", "{job_date}"],
   CLIENT_NOTIFICATION_OFFSET_MINUTES: []
 };
 
@@ -40,7 +39,6 @@ const CHANNELS_BY_KEY: Record<string, string[]> = {
   CUSTOMER_CONFIRMATION_TEXT: ["Signature pad"],
   JOB_STARTED_MESSAGE_TEXT: ["SMS", "Email"],
   REVIEW_REQUEST_EMAIL_TEXT: ["Email"],
-  JOB_COMPLETION_EMAIL_TEXT: ["Email"],
   CLIENT_NOTIFICATION_OFFSET_MINUTES: ["Auto-scheduler"]
 };
 

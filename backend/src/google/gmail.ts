@@ -63,12 +63,6 @@ export async function sendReviewRequestEmail(job: Job, template: string): Promis
   await sendPlainTextEmail(job.customerEmail, subject, renderMessageTemplate(template, job));
 }
 
-export async function sendJobCompletionEmail(job: Job, template: string): Promise<void> {
-  if (!job.customerEmail) return;
-  const subject = `Your ${env.notificationFromName} move is complete — thank you!`;
-  await sendPlainTextEmail(job.customerEmail, subject, renderMessageTemplate(template, job));
-}
-
 /** Sent by reminder.service.ts's sweep, ~TMV_JOB_REMINDER_LEAD_MS (default 1 hour)
  *  before a job's booked start. Driver-facing, so it's a plain internal notice rather
  *  than the admin-editable customer templates above. */

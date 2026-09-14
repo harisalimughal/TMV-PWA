@@ -14,8 +14,8 @@ import {
 } from "./validation.engine";
 import { log, setContext } from "../utils/logger";
 import { formatPounds } from "../utils/money";
-import { sendJobCompletionEmail, sendReviewRequestEmail } from "../google/gmail";
-import { JOB_COMPLETION_EMAIL_TEMPLATE, REVIEW_REQUEST_EMAIL_TEMPLATE } from "../notifications/message";
+import { sendReviewRequestEmail } from "../google/gmail";
+import { REVIEW_REQUEST_EMAIL_TEMPLATE } from "../notifications/message";
 import { sendPushToAdmins } from "../push/push.service";
 
 export const DEFAULT_CUSTOMER_CONFIRMATION_TEXT =
@@ -176,19 +176,8 @@ export async function getActiveJob(identifier: string) {
   return { job, driver };
 }
 
-/** Fire-and-forget -- a slow/failed customer email must never hold up (or fail) the
- * driver's completion action. Fetches the live template from Mongo each time rather
- * than caching it, so an /admin Settings edit takes effect on the very next
- * completion. */
-function sendCompletionEmailIfAny(job: Job, jobId: string): void {
-  if (!job.customerEmail) return;
-  getSetting("JOB_COMPLETION_EMAIL_TEXT", JOB_COMPLETION_EMAIL_TEMPLATE)
-    .then(template => sendJobCompletionEmail(job, template))
-    .catch(err => log.warn("job completion email failed (non-fatal)", { job_id: jobId, error: String(err) }));
-}
-
-/** Fire-and-forget, same shape as sendCompletionEmailIfAny -- an admin's phone being
- *  unreachable must never hold up (or fail) the driver's completion action. */
+/** Fire-and-forget -- an admin's phone being unreachable must never hold up (or
+ *  fail) the driver's completion action. */
 function notifyAdminsOfCompletion(job: Job, jobId: string): void {
   sendPushToAdmins({
     title: "Job Completed",
@@ -410,21 +399,18 @@ export async function handleAction(
 
     case "REVIEW_NONE": {
       assertState(job.currentState, WorkflowState.WAITING_REVIEW_CHECK);
-      sendCompletionEmailIfAny(job, jobId);
       return completeJob(jobId, identifier);
     }
 
     case "REVIEW_YES": {
       assertState(job.currentState, WorkflowState.WAITING_REVIEW_CHECK);
       await sendReviewRequestIfAny(job, jobId, actor, job.currentState);
-      sendCompletionEmailIfAny(job, jobId);
       return completeJob(jobId, identifier);
     }
 
     case "SEND_REVIEW_EMAIL": {
       assertState(job.currentState, WorkflowState.WAITING_REVIEW_SEND);
       await sendReviewRequestIfAny(job, jobId, actor, job.currentState);
-      sendCompletionEmailIfAny(job, jobId);
       return completeJob(jobId, identifier);
     }
 
@@ -439,7 +425,6 @@ export async function handleAction(
 
     case "COMPLETE_JOB": {
       await assertCompletionGate(jobId, job);
-      sendCompletionEmailIfAny(job, jobId);
       notifyAdminsOfCompletion(job, jobId);
       return completeJob(jobId, identifier);
     }

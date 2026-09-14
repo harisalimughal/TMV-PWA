@@ -1,5 +1,5 @@
 import { env } from "../config/env";
-import { JOB_COMPLETION_EMAIL_TEMPLATE, JOB_STARTED_MESSAGE_TEMPLATE, REVIEW_REQUEST_EMAIL_TEMPLATE } from "../notifications/message";
+import { JOB_STARTED_MESSAGE_TEMPLATE, REVIEW_REQUEST_EMAIL_TEMPLATE } from "../notifications/message";
 import { DEFAULT_CUSTOMER_CONFIRMATION_TEXT } from "../workflow/workflow.engine";
 import { DAMAGE_CATEGORIES } from "../workflow/scenario.spec";
 
@@ -28,13 +28,6 @@ export const SETTINGS_SPEC: SettingFieldSpec[] = [
     type: "textarea",
     fallback: DEFAULT_CUSTOMER_CONFIRMATION_TEXT,
     hint: "Shown to the customer just before they sign at the end of the job."
-  },
-  {
-    key: "JOB_COMPLETION_EMAIL_TEXT",
-    label: "Job Completion Email",
-    type: "textarea",
-    fallback: JOB_COMPLETION_EMAIL_TEMPLATE,
-    hint: "Sent automatically when a job is marked complete. Placeholders: {customerName} {companyName} {pickup} {dropoff} {driverPhone} {vanRegistration} {driver_name} {job_time} {job_date}"
   },
   {
     key: "REVIEW_REQUEST_EMAIL_TEXT",
@@ -77,7 +70,7 @@ export const SETTINGS_SPEC: SettingFieldSpec[] = [
     type: "textarea",
     fallback: JOB_STARTED_MESSAGE_TEMPLATE,
     hint: "Sent by SMS and email when the driver starts a job. Placeholders: {customerName} {companyName} " +
-      "{pickup} {dropoff} {driverPhone} {vanRegistration} {driver_name} {job_time} {job_date}."
+      "{pickup} {dropoff} {driverPhone} {vanRegistration} {driver_name} {job_date}."
   },
   {
     key: "CLIENT_NOTIFICATION_OFFSET_MINUTES",
