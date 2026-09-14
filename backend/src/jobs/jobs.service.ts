@@ -94,11 +94,22 @@ async function runSyncOnce(): Promise<void> {
   await inFlightSync;
 }
 
-/** Throttled: skips entirely if the last successful sync (by either trigger) is still
- * within the TTL. */
-async function syncIfStale(): Promise<void> {
+/**
+ * Throttled: no-ops if the last successful sync (by either trigger) is still within
+ * the TTL. Deliberately fire-and-forget when it isn't -- a driver's read request must
+ * never block on this. `syncTodayBookings()` makes up to 11 sequential Google
+ * Calendar API calls with no hard timeout (only retry-with-backoff on failure), so
+ * awaiting it here before returning a page of jobs risks the request itself timing
+ * out (found live 2026-09-14: every "Jobs" tab load started blocking on a full
+ * Calendar sync once the TTL dropped low enough that it was almost always due,
+ * surfacing to the driver as "Couldn't load your jobs -- that took too long"). The
+ * caller gets whatever's already in Mongo immediately; if a sync was actually due,
+ * it runs in the background and the *next* read (the following poll, or the driver
+ * tapping refresh again moments later) sees the result.
+ */
+function syncIfStale(): void {
   if (Date.now() - lastSyncAt < env.calendarSyncTtlMs) return;
-  await runSyncOnce();
+  void runSyncOnce();
 }
 
 /** Called by server.ts's unconditional background timer -- shares runSyncOnce's lock
@@ -118,7 +129,7 @@ export async function getNextJobForDriver(
   identifier: string,
   options: NextJobOptions = {}
 ): Promise<{ job: Job | null; driver: DriverProfile }> {
-  if (options.sync) await syncIfStale();
+  if (options.sync) syncIfStale();
 
   // Sequential, not Promise.all: listJobs needs the driver's initials to scope its
   // query to just this driver's own jobs (see listJobs' own doc comment) rather than
@@ -210,13 +221,11 @@ export async function getJobsGroupedForDriver(identifier: string): Promise<{
   next: Job[];
 }> {
   // This is the screen a driver actually watches for a newly-assigned job to appear
-  // on, so a refresh here forces a throttled Calendar re-check via syncIfStale --
-  // safe now that it and the background timer both funnel through runSyncOnce's
-  // single shared lock (see that function's comment: this exact call site briefly
-  // raced the background timer on 2026-09-14 back when the two had no shared lock,
-  // incorrectly cancelling a handful of jobs; that's what runSyncOnce actually fixed,
-  // not "calling sync from here" itself).
-  await syncIfStale();
+  // on, so a refresh here nudges a throttled, fire-and-forget Calendar re-check (see
+  // syncIfStale's own comment -- deliberately not awaited, so this read never blocks
+  // on Calendar's latency). Safe from the 2026-09-14 race incident now that this and
+  // the background timer both funnel through runSyncOnce's single shared lock.
+  syncIfStale();
 
   // Sequential, not Promise.all -- see getNextJobForDriver's matching comment above:
   // this scopes the Mongo query to just this driver's jobs instead of the whole
