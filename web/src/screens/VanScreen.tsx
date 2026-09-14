@@ -54,8 +54,7 @@ export function VanScreen({ driver }: VanScreenProps) {
         </header>
 
         <FuelCard online={online} />
-        <ServiceCard online={online} />
-        <ServiceMileageCard driver={driver} />
+        <ServiceCard online={online} driver={driver} />
         <ComplianceCard driver={driver} />
       </div>
     </AppShell>
@@ -75,7 +74,9 @@ function VanRecordCard({
   fieldsValid,
   fieldsError,
   onSubmit,
-  children
+  children,
+  topContent,
+  formTitle
 }: {
   icon: React.ReactNode;
   title: string;
@@ -90,6 +91,15 @@ function VanRecordCard({
   fieldsError?: string;
   onSubmit: (photo: File, onProgress: (fraction: number) => void) => Promise<void>;
   children: React.ReactNode;
+  /** Extra content in the same card, above the form fields, separated by a light
+   *  divider rather than becoming its own bordered section -- see ServiceCard's
+   *  mileage gauge, which the driver should see first, right under the card's own
+   *  header, before the fields for logging a new service. */
+  topContent?: React.ReactNode;
+  /** Centered sub-heading right above the form fields -- only needed when topContent
+   *  is also present, so the fields still read as their own labelled section rather
+   *  than a continuation of whatever topContent just showed. */
+  formTitle?: string;
 }) {
   const [photos, setPhotos] = useState<File[]>([]);
   const [photoPickerKey, setPhotoPickerKey] = useState(0);
@@ -137,6 +147,14 @@ function VanRecordCard({
       </div>
 
       <div className="flex flex-col gap-4 p-4">
+        {topContent && (
+          <div className="flex flex-col gap-4 border-b border-line pb-4">
+            {topContent}
+          </div>
+        )}
+
+        {formTitle && <h3 className="text-center text-card text-fg">{formTitle}</h3>}
+
         {children}
 
         <PhotoPicker
@@ -238,10 +256,19 @@ function FuelCard({ online }: { online: boolean }) {
   );
 }
 
-function ServiceCard({ online }: { online: boolean }) {
+function ServiceCard({ online, driver }: { online: boolean; driver: DriverProfile }) {
   const [serviceMileage, setServiceMileage] = useState("");
   const [serviceDate, setServiceDate] = useState("");
   const [serviceType, setServiceType] = useState("");
+
+  const { data: compliance } = useQuery({
+    queryKey: ["van-compliance", driver.vanRegistration],
+    queryFn: fetchVanCompliance,
+    retry: 1,
+    enabled: Boolean(driver.vanRegistration)
+  });
+  const mileageItem = buildServiceMileageItem(compliance);
+  const mileageUrgent = mileageItem.tone === "warning" || mileageItem.tone === "danger";
 
   const mileageValid = (() => {
     if (!serviceMileage.trim()) return false;
@@ -255,7 +282,7 @@ function ServiceCard({ online }: { online: boolean }) {
   return (
     <VanRecordCard
       icon={<Wrench className="size-4" aria-hidden />}
-      title="Record Service"
+      title="Vehicle Service"
       hint="Record service mileage, date and type."
       photoLabel="Upload invoice/receipt"
       photoHint="Take a photo or upload the service invoice or receipt."
@@ -282,6 +309,20 @@ function ServiceCard({ online }: { online: boolean }) {
           setServiceType("");
         })
       }
+      topContent={
+        <>
+          {mileageUrgent && (
+            <Alert
+              tone={mileageItem.tone === "danger" ? "danger" : "warning"}
+              title={`${driver.vanRegistration || "Current van"} service ${mileageItem.statusLabel.toLowerCase()}`}
+            >
+              {mileageItem.tone === "danger" ? "Book a service as soon as possible." : `Alerts show when ${SERVICE_MILEAGE_WARNING_MILES} miles or less remain.`}
+            </Alert>
+          )}
+          <ServiceMileageStatus item={mileageItem} />
+        </>
+      }
+      formTitle="Record Service"
     >
       <Field label="Service mileage" required>
         {p => (
@@ -317,46 +358,6 @@ function ServiceCard({ online }: { online: boolean }) {
         )}
       </Field>
     </VanRecordCard>
-  );
-}
-
-/** Its own card, directly under Record Service -- was previously folded into
- *  ComplianceCard below, but a driver who just logged a service should see "miles
- *  remaining" right there, not have to scroll past the date-based compliance rings
- *  to find it. */
-function ServiceMileageCard({ driver }: { driver: DriverProfile }) {
-  const { data: compliance } = useQuery({
-    queryKey: ["van-compliance", driver.vanRegistration],
-    queryFn: fetchVanCompliance,
-    retry: 1,
-    enabled: Boolean(driver.vanRegistration)
-  });
-  const mileageItem = buildServiceMileageItem(compliance);
-  const mileageUrgent = mileageItem.tone === "warning" || mileageItem.tone === "danger";
-
-  return (
-    <section className="overflow-hidden rounded-card border border-line bg-surface shadow-xs">
-      <div className="flex items-center gap-3 px-4 py-3 text-white" style={{ backgroundColor: SERVICE_MILEAGE_RING_BLUE }}>
-        <span className="grid size-9 shrink-0 place-items-center rounded-card bg-white/25">
-          <Wrench className="size-4" aria-hidden />
-        </span>
-        <div className="min-w-0">
-          <h2 className="text-card">Next Service</h2>
-          <p className="text-helper opacity-80">{driver.vanRegistration || "Current van"}</p>
-        </div>
-      </div>
-      <div className="flex flex-col gap-4 p-4">
-        {mileageUrgent && (
-          <Alert
-            tone={mileageItem.tone === "danger" ? "danger" : "warning"}
-            title={`${driver.vanRegistration || "Current van"} service ${mileageItem.statusLabel.toLowerCase()}`}
-          >
-            {mileageItem.tone === "danger" ? "Book a service as soon as possible." : `Alerts show when ${SERVICE_MILEAGE_WARNING_MILES} miles or less remain.`}
-          </Alert>
-        )}
-        <ServiceMileageStatus item={mileageItem} />
-      </div>
-    </section>
   );
 }
 
@@ -570,10 +571,7 @@ function ServiceMileageStatus({ item }: { item: ServiceMileageStatusItem }) {
       role="group"
       aria-label={`Next service: ${item.statusLabel}`}
     >
-      <div>
-        <h3 className="text-heading font-semibold uppercase text-fg">Next Service</h3>
-        <p className={cx("mt-1 text-title", item.tone === "danger" ? "text-danger" : "text-fg")}>{item.topLabel}</p>
-      </div>
+      <p className={cx("text-title", item.tone === "danger" ? "text-danger" : "text-fg")}>{item.topLabel}</p>
 
       {showRing && (
         <div

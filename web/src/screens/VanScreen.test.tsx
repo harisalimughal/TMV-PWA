@@ -37,7 +37,7 @@ describe("VanScreen", () => {
     expect(screen.getByLabelText(/Odometer reading/)).toBeInTheDocument();
     expect(screen.getByLabelText(/Total cost/)).toBeInTheDocument();
 
-    expect(screen.getByRole("heading", { name: "Record Service" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Vehicle Service" })).toBeInTheDocument();
     expect(screen.getByLabelText(/Service mileage/)).toBeInTheDocument();
     expect(screen.getByLabelText(/Service type/)).toBeInTheDocument();
     expect(screen.getByLabelText(/Service date/)).toBeInTheDocument();

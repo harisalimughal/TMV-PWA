@@ -587,12 +587,9 @@ function ServiceMileageStatus({ item }: { item: ServiceMileageStatusItem }) {
   const ringColor = item.tone === "danger" ? "#DC2626" : SERVICE_MILEAGE_RING_BLUE;
   return (
     <div className="flex flex-col items-center gap-3 py-5 text-center">
-      <div>
-        <h4 className="text-[14px] font-bold uppercase text-admin-ink">Next Service</h4>
-        <p className={`mt-1 text-[22px] font-extrabold ${item.tone === "danger" ? "text-admin-status-red" : "text-admin-ink"}`}>
-          {item.topLabel}
-        </p>
-      </div>
+      <p className={`text-[22px] font-extrabold ${item.tone === "danger" ? "text-admin-status-red" : "text-admin-ink"}`}>
+        {item.topLabel}
+      </p>
 
       {showRing && (
         <div
