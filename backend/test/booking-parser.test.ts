@@ -171,4 +171,16 @@ describe("parseCalendarEvent field extraction", () => {
     expect(parsed!.extraChargeText).toBe("£55 PER HALF AN HOUR");
     expect(parsed!.crewSize).toBe(2);
   });
+
+  it("syncs an invoice-billed booking tagged '/INV-XX' instead of '/Y-XX'", () => {
+    const parsed = parseCalendarEvent(ev("Name: Rafi Ashfakul Hoque", "2 men/INV-TI"));
+    expect(parsed).not.toBeNull();
+    expect(parsed!.driverInitials).toBe("TI");
+    expect(parsed!.paidOnline).toBe(false);
+    expect(parsed!.crewSize).toBe(2);
+  });
+
+  it("still rejects an unconfirmed '/N-XX' booking", () => {
+    expect(parseCalendarEvent(ev("Name: A B", "2 men/N-HE"))).toBeNull();
+  });
 });

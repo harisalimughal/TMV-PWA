@@ -150,12 +150,15 @@ function splitCombinedFloor(v: string): { from: string; to: string } {
   return { from: v.trim(), to: "" };
 }
 
-function parseTitle(title: string): { crewSize: number; price: number; paidOnline: boolean; driverInitials: string } {
+function parseTitle(title: string): { crewSize: number; price: number; paidOnline: boolean; confirmed: boolean; driverInitials: string } {
   const crew = Number(title.match(/(\d+)\s*(?:men|man|people|person)/i)?.[1] ?? 0);
   const price = Number(title.match(/(?:£\s*(\d+(?:\.\d+)?)|(\d+(?:\.\d+)?)\s*£)/)?.slice(1).find(Boolean) ?? 0);
-  const paidFlag = title.match(/\/\s*([YN])(?:\s*-|\b)/i)?.[1]?.toUpperCase() ?? "N";
-  const driverInitials = title.match(/\/\s*[YN]\s*-\s*([A-Z]{1,2})/i)?.[1]?.toUpperCase() ?? "";
-  return { crewSize: crew, price, paidOnline: paidFlag === "Y", driverInitials };
+  // "Y"/"N" is the usual confirmation tag, but invoice-billed jobs use "INV" instead
+  // (there's no upfront paid/unpaid distinction to make -- see invoice-jobs memory) --
+  // both count as confirmed so the job still syncs; only "Y" counts as paid online.
+  const tag = title.match(/\/\s*(Y|N|INV)(?:\s*-|\b)/i)?.[1]?.toUpperCase() ?? "";
+  const driverInitials = title.match(/\/\s*(?:Y|N|INV)\s*-\s*([A-Z]{1,2})/i)?.[1]?.toUpperCase() ?? "";
+  return { crewSize: crew, price, paidOnline: tag === "Y", confirmed: tag === "Y" || tag === "INV", driverInitials };
 }
 
 export function parseCalendarEvent(event: calendar_v3.Schema$Event): ParsedCalendarBooking | null {
@@ -167,13 +170,14 @@ export function parseCalendarEvent(event: calendar_v3.Schema$Event): ParsedCalen
   const bookedFinish = event.end?.dateTime || event.end?.date || "";
   if (!bookedStart || !bookedFinish) return null;
 
-  // Title carries a "/Y-XX" or "/N-XX" confirmation tag (Y = confirmed, N = tentative
-  // -- see parseTitle). An unconfirmed (N) booking, or one with no tag at all, is not
-  // synced into a Job: it isn't real work yet and shouldn't appear on a driver's list
-  // or the admin dashboard. Once ops flips the tag to Y in Calendar, the next sync
-  // pass (background interval, or a driver/admin request triggering syncIfStale)
-  // parses this same event again and it lands normally -- nothing else has to happen.
-  if (!parsedTitle.paidOnline) return null;
+  // Title carries a "/Y-XX", "/N-XX", or "/INV-XX" confirmation tag (Y = confirmed,
+  // INV = confirmed but invoice-billed, N = tentative -- see parseTitle). An
+  // unconfirmed (N) booking, or one with no tag at all, is not synced into a Job: it
+  // isn't real work yet and shouldn't appear on a driver's list or the admin
+  // dashboard. Once ops flips the tag to Y/INV in Calendar, the next sync pass
+  // (background interval, or a driver/admin request triggering syncIfStale) parses
+  // this same event again and it lands normally -- nothing else has to happen.
+  if (!parsedTitle.confirmed) return null;
 
   const customerName = field(description, NAME_LABELS);
   const customerEmail = field(description, EMAIL_LABELS);
