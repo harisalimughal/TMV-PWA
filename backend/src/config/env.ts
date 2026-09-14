@@ -70,16 +70,15 @@ export const env = {
   // Caching / throttling. Safe to lower to 0 to disable.
   //
   // 2026-09-14 incident: briefly lowered to 20s and had getJobsGroupedForDriver also
-  // trigger a sync, to make a newly-assigned job appear faster. Reverted the same day
-  // -- the background timer (server.ts's startBackgroundSync) and the request-
-  // triggered sync used to call syncTodayBookings() through two separate code paths
-  // with no shared lock, and the extra trigger point made them collide often enough
-  // to race on the same job documents, incorrectly cancelling live jobs in a loop.
-  // Both paths now funnel through one lock (see jobs.service.ts's runSyncOnce), which
-  // fixes the race itself, but the TTL is left at the original safe value until that
-  // fix has run in production for a while -- lower this again only alongside real
-  // load testing, not as a quick follow-up.
-  calendarSyncTtlMs: numberEnv("TMV_CALENDAR_SYNC_TTL_MS", 120_000),
+  // trigger a sync, to make a newly-assigned job appear faster. Reverted same-day --
+  // the background timer (server.ts's startBackgroundSync) and the request-triggered
+  // sync called syncTodayBookings() through two separate code paths with no shared
+  // lock, and the extra trigger point made them collide often enough to race on the
+  // same job documents, incorrectly cancelling live jobs in a loop. Root cause fixed
+  // properly: both paths now funnel through one lock (jobs.service.ts's
+  // runSyncOnce), so at most one sync is ever in flight system-wide regardless of
+  // which trigger asked for it -- re-enabled the same day once that held up.
+  calendarSyncTtlMs: numberEnv("TMV_CALENDAR_SYNC_TTL_MS", 15_000),
 
   // How long before a job's booked start the driver's "starting soon" email + push
   // reminder fires, and how often the sweep that checks for due reminders runs.

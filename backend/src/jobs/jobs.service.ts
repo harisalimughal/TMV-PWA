@@ -210,12 +210,13 @@ export async function getJobsGroupedForDriver(identifier: string): Promise<{
   next: Job[];
 }> {
   // This is the screen a driver actually watches for a newly-assigned job to appear
-  // on, so it'd be nice for a refresh here to be able to force a Calendar re-check --
-  // but that was tried (2026-09-14) and reverted the same day: it made the once-safe
-  // "background timer vs request-triggered sync" race collide often enough to
-  // actually corrupt jobs (see runSyncOnce's comment in the throttle section above).
-  // Freshness here is intentionally left to the background timer alone until a
-  // version of this is shipped with real load-tested confidence behind it.
+  // on, so a refresh here forces a throttled Calendar re-check via syncIfStale --
+  // safe now that it and the background timer both funnel through runSyncOnce's
+  // single shared lock (see that function's comment: this exact call site briefly
+  // raced the background timer on 2026-09-14 back when the two had no shared lock,
+  // incorrectly cancelling a handful of jobs; that's what runSyncOnce actually fixed,
+  // not "calling sync from here" itself).
+  await syncIfStale();
 
   // Sequential, not Promise.all -- see getNextJobForDriver's matching comment above:
   // this scopes the Mongo query to just this driver's jobs instead of the whole
