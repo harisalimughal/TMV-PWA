@@ -34,6 +34,16 @@ function looksLikePhone(label: string): boolean {
   return PHONE_LABEL_KEYWORDS.some(keyword => l.includes(keyword));
 }
 
+/** A bare URL, e.g. a pasted Gmail thread link -- checked before LABEL_LINE because
+ *  "https://..." would otherwise itself match as a "https" label with the rest of
+ *  the URL as its value (":" right after "https" satisfies the label/value split). */
+const STARTS_WITH_URL = /^https?:\/\//i;
+
+/** Finds every http(s) URL in a chunk of text so it can be rendered as a link
+ *  instead of dead text -- the office sometimes pastes a Gmail thread link or
+ *  similar straight into the Calendar description. */
+const URL_PATTERN = /https?:\/\/[^\s]+/gi;
+
 type Line =
   | { type: "field"; label: string; value: string }
   | { type: "text"; text: string };
@@ -53,11 +63,47 @@ function splitSections(text: string): Line[][] {
       }
       continue;
     }
-    const match = line.match(LABEL_LINE);
+    const match = STARTS_WITH_URL.test(line) ? null : line.match(LABEL_LINE);
     current.push(match ? { type: "field", label: match[1].trim(), value: match[2].trim() } : { type: "text", text: line });
   }
   if (current.length > 0) sections.push(current);
   return sections;
+}
+
+/** Renders a chunk of text with any http(s) URL inside it swapped for a clickable,
+ *  underlined link -- trailing punctuation right after the URL (a sentence's closing
+ *  "." or a wrapping ")") is kept out of the href so it still reads as prose. */
+function linkifyText(value: string): React.ReactNode {
+  if (!value || !/https?:\/\//i.test(value)) return value;
+  const nodes: React.ReactNode[] = [];
+  let lastIndex = 0;
+  let key = 0;
+  for (const match of value.matchAll(URL_PATTERN)) {
+    const start = match.index ?? 0;
+    if (start > lastIndex) nodes.push(value.slice(lastIndex, start));
+    let url = match[0];
+    let trailing = "";
+    const trailingPunctuation = url.match(/[).,;:!?]+$/);
+    if (trailingPunctuation) {
+      trailing = trailingPunctuation[0];
+      url = url.slice(0, -trailing.length);
+    }
+    nodes.push(
+      <a
+        key={key++}
+        href={url}
+        target="_blank"
+        rel="noreferrer"
+        className="text-brand underline underline-offset-2 [overflow-wrap:anywhere]"
+      >
+        {url}
+      </a>
+    );
+    if (trailing) nodes.push(trailing);
+    lastIndex = start + match[0].length;
+  }
+  if (lastIndex < value.length) nodes.push(value.slice(lastIndex));
+  return nodes;
 }
 
 export interface RawBookingTextProps {
@@ -107,7 +153,7 @@ export function RawBookingText({ text, className }: RawBookingTextProps) {
             if (line.type === "text") {
               return (
                 <p key={j} className="text-body leading-relaxed text-fg [overflow-wrap:anywhere]">
-                  {line.text}
+                  {linkifyText(line.text)}
                 </p>
               );
             }
@@ -121,7 +167,7 @@ export function RawBookingText({ text, className }: RawBookingTextProps) {
               <React.Fragment key={j}>
                 <p className="text-body leading-relaxed [overflow-wrap:anywhere]">
                   <span className="font-semibold text-fg">{line.label}:</span>{" "}
-                  <span className="text-fg-muted">{line.value}</span>
+                  <span className="text-fg-muted">{linkifyText(line.value)}</span>
                   {isAddress && (
                     <button
                       type="button"
