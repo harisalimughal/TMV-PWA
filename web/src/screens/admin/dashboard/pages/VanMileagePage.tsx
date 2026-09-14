@@ -561,6 +561,7 @@ function buildServiceMileageItem(compliance?: VanComplianceItem | null): Service
 
   const milesSinceService = Math.max(0, (currentMileage ?? lastServiceMileage) - lastServiceMileage);
   const milesRemaining = serviceIntervalMiles - milesSinceService;
+  const nextServiceMileage = lastServiceMileage + serviceIntervalMiles;
   const overdue = milesRemaining < 0;
   const dueSoon = !overdue && milesRemaining <= SERVICE_MILEAGE_WARNING_MILES;
   const tone: ServiceMileageStatusItem["tone"] = overdue ? "danger" : dueSoon ? "warning" : "ok";
@@ -574,10 +575,10 @@ function buildServiceMileageItem(compliance?: VanComplianceItem | null): Service
     tone,
     ringPercent,
     centerLabel: overdue ? `${Math.abs(milesRemaining).toLocaleString()} mi over` : `${milesRemaining.toLocaleString()} mi`,
-    topLabel: currentMileage !== null ? `Current: ${currentMileage.toLocaleString()} mi` : `Since service: ${milesSinceService.toLocaleString()} mi`,
+    topLabel: `Next Service on: ${nextServiceMileage.toLocaleString()} mi`,
     statusLabel: overdue
       ? `Overdue by ${Math.abs(milesRemaining).toLocaleString()} mi`
-      : `Next Service in: ${milesRemaining.toLocaleString()} mi`
+      : `Remaining miles: ${milesRemaining.toLocaleString()}`
   };
 }
 
