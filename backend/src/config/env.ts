@@ -67,16 +67,19 @@ export const env = {
   bootstrapOnStart: boolEnv("BOOTSTRAP_ON_START", true),
   syncSecret: process.env.SYNC_SECRET?.trim() || "",
 
-  // Caching / throttling. Safe to lower to 0 to disable. Lowered from 120s to 20s
-  // 2026-09 -- a newly-assigned job (driver-initials tag added to the Calendar title)
-  // was taking up to 2 minutes to reach a driver's app, and no user action (refresh,
-  // tab switch) could shorten that because nothing on the read path forced an early
-  // resync (see jobs.service.ts's getJobsGroupedForDriver, which now also calls
-  // syncIfStale() itself). 20s keeps this comfortably under the frontend's own 30s
-  // poll interval so a background poll usually finds fresh data waiting, without
-  // polling Google's Calendar API meaningfully harder than before (still one shared,
-  // throttled sync regardless of how many drivers/requests land in that window).
-  calendarSyncTtlMs: numberEnv("TMV_CALENDAR_SYNC_TTL_MS", 20_000),
+  // Caching / throttling. Safe to lower to 0 to disable.
+  //
+  // 2026-09-14 incident: briefly lowered to 20s and had getJobsGroupedForDriver also
+  // trigger a sync, to make a newly-assigned job appear faster. Reverted the same day
+  // -- the background timer (server.ts's startBackgroundSync) and the request-
+  // triggered sync used to call syncTodayBookings() through two separate code paths
+  // with no shared lock, and the extra trigger point made them collide often enough
+  // to race on the same job documents, incorrectly cancelling live jobs in a loop.
+  // Both paths now funnel through one lock (see jobs.service.ts's runSyncOnce), which
+  // fixes the race itself, but the TTL is left at the original safe value until that
+  // fix has run in production for a while -- lower this again only alongside real
+  // load testing, not as a quick follow-up.
+  calendarSyncTtlMs: numberEnv("TMV_CALENDAR_SYNC_TTL_MS", 120_000),
 
   // How long before a job's booked start the driver's "starting soon" email + push
   // reminder fires, and how often the sweep that checks for due reminders runs.

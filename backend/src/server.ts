@@ -22,7 +22,7 @@ import { storageRoutes } from "./jobs/storage.routes";
 import { vanRoutes } from "./jobs/van.routes";
 import { pushRoutes } from "./push/push.routes";
 import { gpsLiveWebhookRoutes } from "./integrations/gpslive-webhook.routes";
-import { syncTodayBookings } from "./jobs/booking.service";
+import { runScheduledCalendarSync } from "./jobs/jobs.service";
 import { sweepJobReminders } from "./jobs/reminder.service";
 import { dashboardActivityRoutes } from "./admin/dashboard/activity.routes";
 import { dashboardAlertsRoutes } from "./admin/dashboard/alerts.routes";
@@ -133,14 +133,14 @@ app.use((error: Error, _req: express.Request, res: express.Response, _next: expr
  * TMV-Chat-bot's equivalent relies on Cloud Scheduler hitting /internal/sync; this app
  * has no such infra configured yet, so it just syncs itself on the same interval
  * jobs.service.ts's own throttle uses. A driver requesting their job list also
- * triggers a throttled sync (see getNextJobForDriver's `sync: true`), so this interval
- * mainly matters for picking up new/changed bookings when nobody has the app open.
+ * triggers a throttled sync (see getNextJobForDriver's `sync: true`) -- routed through
+ * the same runScheduledCalendarSync()/lock jobs.service.ts uses internally, so this
+ * timer firing mid-request can never race that path and corrupt jobs (see that
+ * function's own comment for the incident this fixed).
  */
 function startBackgroundSync(): void {
   const run = () => {
-    syncTodayBookings()
-      .then(jobs => log.debug("background calendar sync completed", { synced: jobs.length }))
-      .catch(error => log.warn("background calendar sync failed", { error: String(error) }));
+    runScheduledCalendarSync().catch(error => log.warn("background calendar sync failed", { error: String(error) }));
   };
   run();
   setInterval(run, env.calendarSyncTtlMs);

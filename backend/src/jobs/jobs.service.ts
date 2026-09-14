@@ -62,11 +62,19 @@ function isFutureDay(iso: string): boolean {
 let lastSyncAt = 0;
 let inFlightSync: Promise<unknown> | null = null;
 
-/** Throttled and single-flighted so a burst of driver requests doesn't each trigger
- * their own Calendar read. server.ts also runs this on a fixed interval in the
- * background, so most calls here find it already fresh and skip entirely. */
-async function syncIfStale(): Promise<void> {
-  if (Date.now() - lastSyncAt < env.calendarSyncTtlMs) return;
+/**
+ * The one place syncTodayBookings() is ever actually called from. Single-flighted so
+ * two near-simultaneous callers share one run instead of racing two independent
+ * Calendar reads/writes against each other on the same job documents -- that race is
+ * exactly what caused a real incident (2026-09-14): server.ts's background timer and
+ * this module's own request-triggered sync used to call syncTodayBookings() through
+ * two completely separate code paths with no shared lock between them, so they could
+ * (and did) overlap, each seeing a slightly different snapshot of "which jobs Calendar
+ * still has today" and flip-flopping a handful of jobs between active and cancelled
+ * every time they collided. Both paths now funnel through this one function, so at
+ * most one sync is ever in flight system-wide, regardless of which trigger started it.
+ */
+async function runSyncOnce(): Promise<void> {
   if (inFlightSync) {
     await inFlightSync.catch(() => undefined);
     return;
@@ -86,8 +94,19 @@ async function syncIfStale(): Promise<void> {
   await inFlightSync;
 }
 
-export function markSynced(): void {
-  lastSyncAt = Date.now();
+/** Throttled: skips entirely if the last successful sync (by either trigger) is still
+ * within the TTL. */
+async function syncIfStale(): Promise<void> {
+  if (Date.now() - lastSyncAt < env.calendarSyncTtlMs) return;
+  await runSyncOnce();
+}
+
+/** Called by server.ts's unconditional background timer -- shares runSyncOnce's lock
+ *  and lastSyncAt bookkeeping with syncIfStale above rather than calling
+ *  syncTodayBookings() directly, so the timer firing mid-request can never race a
+ *  driver-triggered sync (see runSyncOnce's own comment). */
+export async function runScheduledCalendarSync(): Promise<void> {
+  await runSyncOnce();
 }
 
 export interface NextJobOptions {
@@ -190,13 +209,13 @@ export async function getJobsGroupedForDriver(identifier: string): Promise<{
   past: Job[];
   next: Job[];
 }> {
-  // Unlike getNextJobForDriver, this is the screen a driver actually watches for a
-  // newly-assigned job to appear on -- refresh, tab-switch and the 30s poll all land
-  // here, so it needs to be able to force a Calendar re-check itself rather than only
-  // ever reading however-stale Mongo already is (see syncIfStale's own doc comment;
-  // this is throttled, so it's a no-op on every call except the rare one that lands
-  // after the staleness window).
-  await syncIfStale();
+  // This is the screen a driver actually watches for a newly-assigned job to appear
+  // on, so it'd be nice for a refresh here to be able to force a Calendar re-check --
+  // but that was tried (2026-09-14) and reverted the same day: it made the once-safe
+  // "background timer vs request-triggered sync" race collide often enough to
+  // actually corrupt jobs (see runSyncOnce's comment in the throttle section above).
+  // Freshness here is intentionally left to the background timer alone until a
+  // version of this is shipped with real load-tested confidence behind it.
 
   // Sequential, not Promise.all -- see getNextJobForDriver's matching comment above:
   // this scopes the Mongo query to just this driver's jobs instead of the whole
