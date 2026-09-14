@@ -19,6 +19,11 @@ const COMPLIANCE_ALERT_DAYS = 30;
 const COMPLIANCE_RING_ORANGE = "#ff8a00";
 const COMPLIANCE_RING_TRACK = "#d6d6d6";
 const DAY_MS = 24 * 60 * 60 * 1000;
+// Miles-remaining threshold that turns the gauge amber, mirroring COMPLIANCE_ALERT_DAYS's
+// role for the date rings above.
+const SERVICE_MILEAGE_WARNING_MILES = 500;
+const SERVICE_MILEAGE_RING_BLUE = "rgb(var(--brand))";
+const SERVICE_MILEAGE_RING_DANGER = "rgb(var(--danger-fg))";
 const todayInputValue = () => new Date().toISOString().slice(0, 10);
 
 export function VanScreen({ driver }: VanScreenProps) {
@@ -324,6 +329,8 @@ function ComplianceCard({ driver }: { driver: DriverProfile }) {
   const items = complianceItems(compliance);
   const urgentItems = items.filter(item => item.daysRemaining !== null && item.daysRemaining <= COMPLIANCE_ALERT_DAYS);
   const firstUrgent = urgentItems[0];
+  const mileageItem = buildServiceMileageItem(compliance);
+  const mileageUrgent = mileageItem.tone === "warning" || mileageItem.tone === "danger";
 
   return (
     <section className="overflow-hidden rounded-card border border-line bg-surface shadow-xs">
@@ -345,8 +352,14 @@ function ComplianceCard({ driver }: { driver: DriverProfile }) {
             Renew soon. Alerts show when 30 days or less remain.
           </Alert>
         )}
+        {!firstUrgent && mileageUrgent && (
+          <Alert tone={mileageItem.tone === "danger" ? "danger" : "warning"} title={`${driver.vanRegistration || "Current van"} service ${mileageItem.statusLabel.toLowerCase()}`}>
+            {mileageItem.tone === "danger" ? "Book a service as soon as possible." : `Alerts show when ${SERVICE_MILEAGE_WARNING_MILES} miles or less remain.`}
+          </Alert>
+        )}
 
         <div className="divide-y divide-line">
+          <ServiceMileageStatus item={mileageItem} />
           {items.map(item => (
             <ComplianceStatus key={item.key} item={item} />
           ))}
@@ -449,6 +462,110 @@ function alertLabel(daysRemaining: number | null): string {
   if (daysRemaining < 0) return `expired ${Math.abs(daysRemaining)} day${Math.abs(daysRemaining) === 1 ? "" : "s"} ago`;
   if (daysRemaining === 0) return "due today";
   return `due in ${daysRemaining} day${daysRemaining === 1 ? "" : "s"}`;
+}
+
+type ServiceMileageStatusItem = {
+  hasInterval: boolean;
+  hasBaseline: boolean;
+  currentMileage: number | null;
+  milesRemaining: number | null;
+  tone: "ok" | "warning" | "danger" | "empty";
+  ringPercent: number;
+  centerLabel: string;
+  topLabel: string;
+  statusLabel: string;
+};
+
+/**
+ * Always-on gauge (unlike the date rings above, which only appear inside their alert
+ * window) -- miles since the last logged Service against the admin's configured
+ * interval for this van. `lastServiceMileage`/`currentMileage` are server-computed
+ * (see backend's van-mileage.service.ts): the former from the most recent Service log
+ * (or the admin's manual override), the latter reconciled across whichever record
+ * type -- Mileage, Fuel or Service -- most recently carried an odometer reading.
+ */
+function buildServiceMileageItem(compliance?: VanCompliance | null): ServiceMileageStatusItem {
+  const serviceIntervalMiles = compliance?.serviceIntervalMiles ?? null;
+  const lastServiceMileage = compliance?.lastServiceMileage ?? null;
+  const currentMileage = compliance?.currentMileage ?? null;
+  const hasInterval = typeof serviceIntervalMiles === "number" && serviceIntervalMiles > 0;
+  const hasBaseline = typeof lastServiceMileage === "number";
+
+  if (!hasInterval || !hasBaseline) {
+    return {
+      hasInterval,
+      hasBaseline,
+      currentMileage,
+      milesRemaining: null,
+      tone: "empty",
+      ringPercent: 0,
+      centerLabel: "Missing",
+      topLabel: "Not recorded",
+      statusLabel: !hasInterval ? "Service interval not set" : "Log a service to start tracking"
+    };
+  }
+
+  const milesSinceService = Math.max(0, (currentMileage ?? lastServiceMileage) - lastServiceMileage);
+  const milesRemaining = serviceIntervalMiles - milesSinceService;
+  const overdue = milesRemaining < 0;
+  const dueSoon = !overdue && milesRemaining <= SERVICE_MILEAGE_WARNING_MILES;
+  const tone: ServiceMileageStatusItem["tone"] = overdue ? "danger" : dueSoon ? "warning" : "ok";
+  const ringPercent = Math.min(100, Math.max(0, Math.round((milesSinceService / serviceIntervalMiles) * 100)));
+
+  return {
+    hasInterval,
+    hasBaseline,
+    currentMileage,
+    milesRemaining,
+    tone,
+    ringPercent,
+    centerLabel: overdue ? `${Math.abs(milesRemaining).toLocaleString()} mi over` : `${milesRemaining.toLocaleString()} mi`,
+    topLabel: currentMileage !== null ? `Current: ${currentMileage.toLocaleString()} mi` : `Since service: ${milesSinceService.toLocaleString()} mi`,
+    statusLabel: overdue
+      ? `Overdue by ${Math.abs(milesRemaining).toLocaleString()} miles`
+      : dueSoon
+        ? `Due in ${milesRemaining.toLocaleString()} miles`
+        : "Status: OK"
+  };
+}
+
+function ServiceMileageStatus({ item }: { item: ServiceMileageStatusItem }) {
+  const showRing = item.hasInterval && item.hasBaseline;
+  const ringColor = item.tone === "danger" ? SERVICE_MILEAGE_RING_DANGER : SERVICE_MILEAGE_RING_BLUE;
+
+  return (
+    <div
+      className="flex flex-col items-center gap-3 px-3 py-5 text-center"
+      role="group"
+      aria-label={`Next service: ${item.statusLabel}`}
+    >
+      <div>
+        <h3 className="text-heading font-semibold uppercase text-fg">Next Service</h3>
+        <p className={cx("mt-1 text-title", item.tone === "danger" ? "text-danger" : "text-fg")}>{item.topLabel}</p>
+      </div>
+
+      {showRing && (
+        <div
+          className="grid size-[132px] place-items-center rounded-full"
+          style={{ background: `conic-gradient(${ringColor} ${item.ringPercent}%, ${COMPLIANCE_RING_TRACK} 0)` }}
+          aria-hidden
+        >
+          <div className="grid size-[110px] place-items-center rounded-full bg-surface">
+            <span className={cx("px-2 text-center text-heading", item.tone === "danger" ? "text-danger" : "text-fg")}>
+              {item.centerLabel}
+            </span>
+          </div>
+        </div>
+      )}
+
+      <p className={cx(
+        "text-label font-semibold uppercase",
+        item.tone === "danger" ? "text-danger" : item.tone === "warning" ? "text-warning" : item.tone === "ok" ? "text-success" : "text-fg-muted"
+      )}>
+        {item.statusLabel}
+      </p>
+    </div>
+  );
 }
 
 function ComplianceStatus({ item }: { item: ComplianceStatusItem }) {

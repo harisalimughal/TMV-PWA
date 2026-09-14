@@ -164,7 +164,10 @@ export async function fetchVanDriverRecords(query: Record<string, any> = {}): Pr
 
 export async function saveVanCompliance(
   vanRegistration: string,
-  payload: Pick<VanComplianceItem, "roadTaxRenewalDate" | "motExpiryDate" | "insuranceExpiryDate" | "notes">
+  payload: Pick<
+    VanComplianceItem,
+    "roadTaxRenewalDate" | "motExpiryDate" | "insuranceExpiryDate" | "notes" | "serviceIntervalMiles" | "lastServiceMileageOverride"
+  >
 ): Promise<VanComplianceItem> {
   const res = await apiFetch(`/api/admin/van/compliance/${encodeURIComponent(vanRegistration)}`, {
     method: "POST",

@@ -1,6 +1,7 @@
 import { Request, Response, Router } from "express";
 import { listVanRecords, VanRecordType } from "../../db/van.repo";
-import { listVanCompliance, saveVanCompliance, VanComplianceDoc } from "../../db/van-compliance.repo";
+import { listVanCompliance, saveVanCompliance } from "../../db/van-compliance.repo";
+import { toVanComplianceItem, VanComplianceItem } from "../../jobs/van-mileage.service";
 import { listDriverProfiles } from "../../auth/driver-account.service";
 import { toThumbnailUrl } from "../../storage/cloudinary";
 
@@ -32,7 +33,7 @@ type VanDriverApiItem = {
   latestMileage: VanRecordApiItem | null;
   latestFuel: VanRecordApiItem | null;
   latestService: VanRecordApiItem | null;
-  compliance: VanComplianceDoc | null;
+  compliance: VanComplianceItem | null;
   records: VanRecordApiItem[];
 };
 
@@ -77,13 +78,28 @@ export function dashboardVanRoutes(): Router {
   router.post("/compliance/:vanRegistration", async (req: Request, res: Response) => {
     try {
       const vanRegistration = String(req.params.vanRegistration || "");
+      const rawInterval = String(req.body?.serviceIntervalMiles ?? "").trim();
+      const rawOverride = String(req.body?.lastServiceMileageOverride ?? "").trim();
+      const serviceIntervalMiles = rawInterval ? Number(rawInterval) : null;
+      const lastServiceMileageOverride = rawOverride ? Number(rawOverride) : null;
+      if (serviceIntervalMiles !== null && (!Number.isFinite(serviceIntervalMiles) || serviceIntervalMiles <= 0)) {
+        res.status(400).json({ error: { code: "VALIDATION_FAILED", message: "Enter a valid service interval." } });
+        return;
+      }
+      if (lastServiceMileageOverride !== null && (!Number.isFinite(lastServiceMileageOverride) || lastServiceMileageOverride < 0)) {
+        res.status(400).json({ error: { code: "VALIDATION_FAILED", message: "Enter a valid last service mileage." } });
+        return;
+      }
       const doc = await saveVanCompliance(vanRegistration, {
         roadTaxRenewalDate: String(req.body?.roadTaxRenewalDate || ""),
         motExpiryDate: String(req.body?.motExpiryDate || ""),
         insuranceExpiryDate: String(req.body?.insuranceExpiryDate || ""),
-        notes: String(req.body?.notes || "")
+        notes: String(req.body?.notes || ""),
+        serviceIntervalMiles,
+        lastServiceMileageOverride
       });
-      res.status(200).json({ compliance: doc });
+      const records = await listVanRecords();
+      res.status(200).json({ compliance: toVanComplianceItem(vanRegistration, doc, records) });
     } catch {
       res.status(500).json({ error: { code: "VAN_COMPLIANCE_SAVE_FAILED", message: "Failed to save van compliance." } });
     }
@@ -102,7 +118,19 @@ export function dashboardVanRoutes(): Router {
         listDriverProfiles(),
         listVanCompliance()
       ]);
-      const complianceByVan = new Map(complianceRows.map(row => [row.vanRegistration.toUpperCase(), row]));
+      const complianceDocByVan = new Map(complianceRows.map(row => [row.vanRegistration.toUpperCase(), row]));
+      // Memoized per van registration -- computeVanMileageStatus scans every record,
+      // and several drivers/rows can share the same van.
+      const complianceItemCache = new Map<string, VanComplianceItem>();
+      const complianceItemForVan = (vanRegistration: string): VanComplianceItem | null => {
+        if (!vanRegistration) return null;
+        const key = vanRegistration.toUpperCase();
+        const cached = complianceItemCache.get(key);
+        if (cached) return cached;
+        const item = toVanComplianceItem(vanRegistration, complianceDocByVan.get(key) ?? null, allRows);
+        complianceItemCache.set(key, item);
+        return item;
+      };
 
       let rows = allRows;
       if (from) rows = rows.filter(r => r.submittedAt >= from);
@@ -130,7 +158,7 @@ export function dashboardVanRoutes(): Router {
           latestMileage: null,
           latestFuel: null,
           latestService: null,
-          compliance: vanRegistration ? complianceByVan.get(vanRegistration.toUpperCase()) ?? null : null,
+          compliance: complianceItemForVan(vanRegistration),
           records: []
         });
       }
@@ -149,7 +177,7 @@ export function dashboardVanRoutes(): Router {
           latestMileage: null,
           latestFuel: null,
           latestService: null,
-          compliance: row.vanRegistration ? complianceByVan.get(row.vanRegistration.toUpperCase()) ?? null : null,
+          compliance: complianceItemForVan(row.vanRegistration),
           records: []
         };
         target.latestSubmittedAt = target.latestSubmittedAt > row.submittedAt ? target.latestSubmittedAt : row.submittedAt;

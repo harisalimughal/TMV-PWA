@@ -5,8 +5,9 @@ import { requireDriverAuth } from "../auth/require-driver-auth";
 import { resolveDriver } from "./jobs.service";
 import { looksLikeImage } from "./evidence.service";
 import { uploadEvidenceImage } from "../storage/cloudinary";
-import { insertVanRecord, VanRecordDoc, VanRecordType } from "../db/van.repo";
+import { insertVanRecord, listVanRecords, VanRecordDoc, VanRecordType } from "../db/van.repo";
 import { getVanCompliance } from "../db/van-compliance.repo";
+import { toVanComplianceItem } from "./van-mileage.service";
 import { ValidationError } from "../workflow/validation.engine";
 import { log } from "../utils/logger";
 
@@ -81,7 +82,12 @@ export function vanRoutes(): Router {
   router.get("/compliance", async (req, res) => {
     try {
       const driver = await resolveDriver(req.driverEmail!);
-      const compliance = driver.vanRegistration ? await getVanCompliance(driver.vanRegistration) : null;
+      if (!driver.vanRegistration) {
+        res.status(200).json({ compliance: null });
+        return;
+      }
+      const [doc, records] = await Promise.all([getVanCompliance(driver.vanRegistration), listVanRecords()]);
+      const compliance = toVanComplianceItem(driver.vanRegistration, doc, records);
       res.status(200).json({ compliance });
     } catch (error) {
       errorResponse(res, error);

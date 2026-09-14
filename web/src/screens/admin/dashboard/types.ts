@@ -232,6 +232,19 @@ export interface VanComplianceItem {
   insuranceExpiryDate?: string;
   notes?: string;
   updatedAt?: string;
+  /** Admin-configured distance between services (e.g. 8000) -- null until an admin
+   *  sets one for this van. */
+  serviceIntervalMiles?: number | null;
+  /** Admin override for the mileage baseline, in place of the driver's most recent
+   *  Service log -- almost always null (the normal case is automatic). */
+  lastServiceMileageOverride?: number | null;
+  /** The mileage baseline the gauge actually counts from -- the override above when
+   *  set, otherwise computed server-side from the most recent Service log. Read-only. */
+  lastServiceMileage?: number | null;
+  /** Latest known odometer reading for this van, reconciled server-side across
+   *  whichever record type -- Mileage, Fuel or Service -- most recently carried one.
+   *  Read-only. */
+  currentMileage?: number | null;
 }
 
 export interface VanDriverRecordItem {

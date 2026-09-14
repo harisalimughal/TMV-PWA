@@ -7,6 +7,15 @@ export interface VanComplianceDoc {
   motExpiryDate?: string;
   insuranceExpiryDate?: string;
   notes?: string;
+  /** Admin-configured distance between services for this van (e.g. 8000). Miles
+   *  remaining is computed live from this against the van's logged Service/Mileage/
+   *  Fuel records -- see van-mileage.service.ts -- never stored. */
+  serviceIntervalMiles?: number | null;
+  /** Admin override for the mileage baseline the "miles remaining" gauge counts from,
+   *  in place of the driver's most recent Service log -- for correcting a bad log
+   *  entry without needing the driver to resubmit one. Unset (null) means "use the
+   *  most recent Service log automatically", which is the normal case. */
+  lastServiceMileageOverride?: number | null;
   updatedAt: string;
 }
 
@@ -38,6 +47,8 @@ export async function saveVanCompliance(
     motExpiryDate: input.motExpiryDate || "",
     insuranceExpiryDate: input.insuranceExpiryDate || "",
     notes: input.notes || "",
+    serviceIntervalMiles: input.serviceIntervalMiles ?? null,
+    lastServiceMileageOverride: input.lastServiceMileageOverride ?? null,
     updatedAt
   };
   const col = await vanComplianceCollection();

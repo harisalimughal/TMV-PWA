@@ -16,6 +16,10 @@ const COMPLIANCE_ALERT_DAYS = 30;
 const COMPLIANCE_RING_ORANGE = "#ff8a00";
 const COMPLIANCE_RING_TRACK = "#d6d6d6";
 const DAY_MS = 24 * 60 * 60 * 1000;
+// Miles-remaining threshold that turns the service gauge amber, mirroring
+// COMPLIANCE_ALERT_DAYS's role for the date rings.
+const SERVICE_MILEAGE_WARNING_MILES = 500;
+const SERVICE_MILEAGE_RING_BLUE = "#2563EB";
 
 function recordDetail(item: VanRecordItem | null, type: VanRecordType): string {
   if (!item) return "-";
@@ -53,6 +57,7 @@ function RecordCell({ item, type }: { item: VanRecordItem | null; type: VanRecor
 
 function ComplianceCell({ compliance }: { compliance: VanComplianceItem | null }) {
   const hasAny = Boolean(compliance?.roadTaxRenewalDate || compliance?.motExpiryDate || compliance?.insuranceExpiryDate);
+  const mileage = buildServiceMileageItem(compliance);
   return (
     <div className="min-w-[150px]">
       <div className="inline-flex items-center gap-1.5 rounded-control border border-admin-status-amber/20 bg-admin-status-amber-bg px-2 py-1 text-[11px] font-semibold text-admin-status-amber">
@@ -62,6 +67,11 @@ function ComplianceCell({ compliance }: { compliance: VanComplianceItem | null }
       <div className="mt-0.5 text-[11px] text-admin-muted">
         MOT {compliance?.motExpiryDate || "-"} · Tax {compliance?.roadTaxRenewalDate || "-"}
       </div>
+      {mileage.hasInterval && mileage.hasBaseline && (
+        <div className={`mt-0.5 text-[11px] font-semibold ${mileage.tone === "danger" ? "text-admin-status-red" : mileage.tone === "warning" ? "text-admin-status-amber" : "text-admin-muted"}`}>
+          Service: {mileage.statusLabel}
+        </div>
+      )}
     </div>
   );
 }
@@ -276,6 +286,8 @@ function CompliancePreview({ item, onSaved }: { item: VanDriverRecordItem; onSav
   const [roadTaxRenewalDate, setRoadTaxRenewalDate] = useState(item.compliance?.roadTaxRenewalDate || "");
   const [motExpiryDate, setMotExpiryDate] = useState(item.compliance?.motExpiryDate || "");
   const [notes, setNotes] = useState(item.compliance?.notes || "");
+  const [serviceIntervalMiles, setServiceIntervalMiles] = useState(String(item.compliance?.serviceIntervalMiles ?? ""));
+  const [lastServiceMileageOverride, setLastServiceMileageOverride] = useState(String(item.compliance?.lastServiceMileageOverride ?? ""));
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -283,16 +295,29 @@ function CompliancePreview({ item, onSaved }: { item: VanDriverRecordItem; onSav
     roadTaxRenewalDate: item.compliance?.roadTaxRenewalDate || roadTaxRenewalDate,
     motExpiryDate: item.compliance?.motExpiryDate || motExpiryDate
   });
+  const mileageItem = buildServiceMileageItem(item.compliance);
 
   useEffect(() => {
     setRoadTaxRenewalDate(item.compliance?.roadTaxRenewalDate || "");
     setMotExpiryDate(item.compliance?.motExpiryDate || "");
     setNotes(item.compliance?.notes || "");
+    setServiceIntervalMiles(String(item.compliance?.serviceIntervalMiles ?? ""));
+    setLastServiceMileageOverride(String(item.compliance?.lastServiceMileageOverride ?? ""));
     setError("");
   }, [item.compliance]);
 
   async function handleSave() {
     if (!item.vanRegistration || saving) return;
+    const interval = serviceIntervalMiles.trim() ? Number(serviceIntervalMiles) : null;
+    const override = lastServiceMileageOverride.trim() ? Number(lastServiceMileageOverride) : null;
+    if (interval !== null && (!Number.isFinite(interval) || interval <= 0)) {
+      setError("Enter a valid service interval.");
+      return;
+    }
+    if (override !== null && (!Number.isFinite(override) || override < 0)) {
+      setError("Enter a valid last service mileage.");
+      return;
+    }
     setSaving(true);
     setError("");
     try {
@@ -300,7 +325,9 @@ function CompliancePreview({ item, onSaved }: { item: VanDriverRecordItem; onSav
         roadTaxRenewalDate,
         motExpiryDate,
         insuranceExpiryDate: item.compliance?.insuranceExpiryDate || "",
-        notes
+        notes,
+        serviceIntervalMiles: interval,
+        lastServiceMileageOverride: override
       });
       onSaved(compliance);
       setEditing(false);
@@ -335,6 +362,7 @@ function CompliancePreview({ item, onSaved }: { item: VanDriverRecordItem; onSav
       </div>
 
       <div className="divide-y divide-admin-line px-4">
+        <ServiceMileageStatus item={mileageItem} />
         {complianceItems.map(complianceItem => (
           <ComplianceStatus key={complianceItem.key} item={complianceItem} />
         ))}
@@ -349,6 +377,33 @@ function CompliancePreview({ item, onSaved }: { item: VanDriverRecordItem; onSav
 
       {editing && (
         <div className="space-y-3 border-t border-admin-line bg-admin-surface px-4 py-4">
+          <label className="block">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-admin-muted">Service interval (miles)</span>
+            <input
+              type="number"
+              min="1"
+              inputMode="numeric"
+              value={serviceIntervalMiles}
+              onChange={event => setServiceIntervalMiles(event.target.value)}
+              placeholder="e.g. 8000"
+              className="mt-1 h-9 w-full rounded-card border border-admin-line bg-white px-3 text-[13px] font-semibold text-admin-ink outline-none focus:border-admin-brand"
+            />
+          </label>
+          <label className="block">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-admin-muted">Override last service mileage</span>
+            <input
+              type="number"
+              min="0"
+              inputMode="numeric"
+              value={lastServiceMileageOverride}
+              onChange={event => setLastServiceMileageOverride(event.target.value)}
+              placeholder="Leave blank to use the driver's most recent Service log"
+              className="mt-1 h-9 w-full rounded-card border border-admin-line bg-white px-3 text-[13px] font-semibold text-admin-ink outline-none focus:border-admin-brand"
+            />
+            <span className="mt-1 block text-[11px] text-admin-muted">
+              Only needed to correct a bad log entry -- clear it to go back to automatic.
+            </span>
+          </label>
           <ComplianceInput label="Road tax renewal" value={roadTaxRenewalDate} onChange={setRoadTaxRenewalDate} />
           <ComplianceInput label="MOT expiry" value={motExpiryDate} onChange={setMotExpiryDate} />
           <label className="block">
@@ -439,6 +494,111 @@ function ComplianceStatus({ item }: { item: ComplianceStatusItem }) {
           style={{
             background: `conic-gradient(${COMPLIANCE_RING_ORANGE} ${item.ringPercent}%, ${COMPLIANCE_RING_TRACK} 0)`
           }}
+        >
+          <div className="grid h-[110px] w-[110px] place-items-center rounded-full bg-white">
+            <span className={`px-2 text-[16px] font-extrabold ${item.tone === "danger" ? "text-admin-status-red" : "text-admin-ink"}`}>
+              {item.centerLabel}
+            </span>
+          </div>
+        </div>
+      )}
+
+      <p className={`text-[13px] font-extrabold uppercase ${
+        item.tone === "danger"
+          ? "text-admin-status-red"
+          : item.tone === "warning"
+            ? "text-admin-status-amber"
+            : item.tone === "ok"
+              ? "text-admin-status-green"
+              : "text-admin-muted"
+      }`}>
+        {item.statusLabel}
+      </p>
+    </div>
+  );
+}
+
+type ServiceMileageStatusItem = {
+  hasInterval: boolean;
+  hasBaseline: boolean;
+  currentMileage: number | null;
+  milesRemaining: number | null;
+  tone: "ok" | "warning" | "danger" | "empty";
+  ringPercent: number;
+  centerLabel: string;
+  topLabel: string;
+  statusLabel: string;
+};
+
+/**
+ * Always-on gauge (unlike the date rings above, which only appear inside their alert
+ * window) -- miles since the last logged Service against the admin's configured
+ * interval for this van. `lastServiceMileage`/`currentMileage` are server-computed
+ * (see backend's van-mileage.service.ts): the former from the most recent Service log
+ * (or this admin's manual override below), the latter reconciled across whichever
+ * record type -- Mileage, Fuel or Service -- most recently carried an odometer reading.
+ */
+function buildServiceMileageItem(compliance?: VanComplianceItem | null): ServiceMileageStatusItem {
+  const serviceIntervalMiles = compliance?.serviceIntervalMiles ?? null;
+  const lastServiceMileage = compliance?.lastServiceMileage ?? null;
+  const currentMileage = compliance?.currentMileage ?? null;
+  const hasInterval = typeof serviceIntervalMiles === "number" && serviceIntervalMiles > 0;
+  const hasBaseline = typeof lastServiceMileage === "number";
+
+  if (!hasInterval || !hasBaseline) {
+    return {
+      hasInterval,
+      hasBaseline,
+      currentMileage,
+      milesRemaining: null,
+      tone: "empty",
+      ringPercent: 0,
+      centerLabel: "Missing",
+      topLabel: "Not recorded",
+      statusLabel: !hasInterval ? "Interval not set" : "No service logged yet"
+    };
+  }
+
+  const milesSinceService = Math.max(0, (currentMileage ?? lastServiceMileage) - lastServiceMileage);
+  const milesRemaining = serviceIntervalMiles - milesSinceService;
+  const overdue = milesRemaining < 0;
+  const dueSoon = !overdue && milesRemaining <= SERVICE_MILEAGE_WARNING_MILES;
+  const tone: ServiceMileageStatusItem["tone"] = overdue ? "danger" : dueSoon ? "warning" : "ok";
+  const ringPercent = Math.min(100, Math.max(0, Math.round((milesSinceService / serviceIntervalMiles) * 100)));
+
+  return {
+    hasInterval,
+    hasBaseline,
+    currentMileage,
+    milesRemaining,
+    tone,
+    ringPercent,
+    centerLabel: overdue ? `${Math.abs(milesRemaining).toLocaleString()} mi over` : `${milesRemaining.toLocaleString()} mi`,
+    topLabel: currentMileage !== null ? `Current: ${currentMileage.toLocaleString()} mi` : `Since service: ${milesSinceService.toLocaleString()} mi`,
+    statusLabel: overdue
+      ? `Overdue by ${Math.abs(milesRemaining).toLocaleString()} miles`
+      : dueSoon
+        ? `Due in ${milesRemaining.toLocaleString()} miles`
+        : "Status: OK"
+  };
+}
+
+function ServiceMileageStatus({ item }: { item: ServiceMileageStatusItem }) {
+  const showRing = item.hasInterval && item.hasBaseline;
+  const ringColor = item.tone === "danger" ? "#DC2626" : SERVICE_MILEAGE_RING_BLUE;
+  return (
+    <div className="flex flex-col items-center gap-3 py-5 text-center">
+      <div>
+        <h4 className="text-[14px] font-bold uppercase text-admin-ink">Next Service</h4>
+        <p className={`mt-1 text-[22px] font-extrabold ${item.tone === "danger" ? "text-admin-status-red" : "text-admin-ink"}`}>
+          {item.topLabel}
+        </p>
+      </div>
+
+      {showRing && (
+        <div
+          className="grid h-[132px] w-[132px] place-items-center rounded-full"
+          style={{ background: `conic-gradient(${ringColor} ${item.ringPercent}%, ${COMPLIANCE_RING_TRACK} 0)` }}
         >
           <div className="grid h-[110px] w-[110px] place-items-center rounded-full bg-white">
             <span className={`px-2 text-[16px] font-extrabold ${item.tone === "danger" ? "text-admin-status-red" : "text-admin-ink"}`}>
