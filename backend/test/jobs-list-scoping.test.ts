@@ -27,6 +27,12 @@ vi.mock("../src/db/jobs.repo", () => ({
 vi.mock("../src/auth/driver-account.service", () => ({
   getDriverProfile: (...args: any[]) => getDriverProfile(...args)
 }));
+// getJobsGroupedForDriver also triggers a throttled Calendar syncIfStale() now (see
+// its own doc comment) -- irrelevant to what this file locks in (the Mongo query
+// scoping), so stubbed out rather than left to hit the real Google Calendar client.
+vi.mock("../src/jobs/booking.service", () => ({
+  syncTodayBookings: vi.fn().mockResolvedValue([])
+}));
 
 import { getJobsGroupedForDriver, getNextJobForDriver } from "../src/jobs/jobs.service";
 

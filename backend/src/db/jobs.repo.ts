@@ -28,9 +28,11 @@ export async function getJob(jobId: string): Promise<Job | null> {
  * JS. Every driver-facing screen wants exactly that scoped set; only admin/sync call
  * sites, which genuinely need the whole collection, call this with no filter.
  */
-export async function listJobs(filter?: { driverInitials?: string }): Promise<Job[]> {
+export async function listJobs(filter?: { driverInitials?: string; gpsliveImei?: string }): Promise<Job[]> {
   const col = await jobsCollection();
-  const query = filter?.driverInitials ? { driverInitials: filter.driverInitials } : {};
+  const query: Record<string, string> = {};
+  if (filter?.driverInitials) query.driverInitials = filter.driverInitials;
+  if (filter?.gpsliveImei) query.gpsliveImei = filter.gpsliveImei;
   const docs = await col.find(query).toArray();
   return docs.map(({ _id, ...job }: any) => job as Job);
 }

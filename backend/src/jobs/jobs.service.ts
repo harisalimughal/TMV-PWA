@@ -190,6 +190,14 @@ export async function getJobsGroupedForDriver(identifier: string): Promise<{
   past: Job[];
   next: Job[];
 }> {
+  // Unlike getNextJobForDriver, this is the screen a driver actually watches for a
+  // newly-assigned job to appear on -- refresh, tab-switch and the 30s poll all land
+  // here, so it needs to be able to force a Calendar re-check itself rather than only
+  // ever reading however-stale Mongo already is (see syncIfStale's own doc comment;
+  // this is throttled, so it's a no-op on every call except the rare one that lands
+  // after the staleness window).
+  await syncIfStale();
+
   // Sequential, not Promise.all -- see getNextJobForDriver's matching comment above:
   // this scopes the Mongo query to just this driver's jobs instead of the whole
   // company's, which is what actually made the "Jobs" tab feel slow to load as the

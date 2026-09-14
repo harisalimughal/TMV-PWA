@@ -1,7 +1,8 @@
 import { DateTime } from "luxon";
+import { env } from "../config/env";
 import { getGpsApiKey } from "../config/live-settings";
 import { DriverProfile, Job } from "./job.types";
-import { getJob, upsertJob } from "../db/jobs.repo";
+import { getJob, listJobs, upsertJob } from "../db/jobs.repo";
 import { sendPushToDriver } from "../push/push.service";
 import { fetchGpsLiveAlertsForDevice, fetchGpsLiveDevices, findDeviceForDriver } from "../integrations/gpslive";
 import { log } from "../utils/logger";
@@ -19,6 +20,28 @@ const ZONE_FIELD: Record<Zone, "congestionZoneEnteredAt" | "tunnelZoneEnteredAt"
 };
 
 /**
+ * True if some OTHER job already carries this zone's flag for the same physical van
+ * (matched by GPSLive device identity, not driver) on today's Europe/London calendar
+ * day. The London Congestion Charge (and the Dartford Crossing toll) is a once-per-day
+ * charge, not a per-job one -- without this, a van still sitting inside the zone
+ * between jobs (no zone_out recorded yet) got the "already inside" job-start check
+ * (below) to re-flag every subsequent job that day too, suggesting the same day's
+ * charge be added again on a job that may never itself have gone near the zone.
+ */
+async function alreadyChargedTodayForVan(zone: Zone, imei: string, excludeJobId: string): Promise<boolean> {
+  if (!imei) return false;
+  const field = ZONE_FIELD[zone];
+  const todayKey = DateTime.now().setZone(env.timezone).toISODate();
+  const others = await listJobs({ gpsliveImei: imei });
+  return others.some(j => {
+    if (j.jobId === excludeJobId) return false;
+    const flaggedAt = j[field];
+    if (!flaggedAt) return false;
+    return DateTime.fromISO(flaggedAt).setZone(env.timezone).toISODate() === todayKey;
+  });
+}
+
+/**
  * Flags a job's van as having entered the Congestion Charge (or tunnel toll) zone,
  * and pushes the driver. Shared by gpslive-webhook.routes.ts (a fresh "zone_in"
  * crossing while the job is already in progress) and checkCongestionZoneAtJobStart
@@ -26,17 +49,27 @@ const ZONE_FIELD: Record<Zone, "congestionZoneEnteredAt" | "tunnelZoneEnteredAt"
  * for GPSLive to report). Idempotent per job -- re-reads the job fresh and does
  * nothing if that zone's *ZoneEnteredAt is already set, so calling this twice for the
  * same job (e.g. a GPSLive webhook retry, or both paths firing close together) never
- * double-notifies.
+ * double-notifies. `imei`, when known, also guards against flagging a second job for
+ * a charge the same van already triggered today (see alreadyChargedTodayForVan) --
+ * pass "" when the device couldn't be resolved to skip that check (best-effort, same
+ * as everywhere else in this file).
  */
 async function flagZoneEntry(
   zone: Zone,
   jobId: string,
   driverInitials: string,
+  imei: string,
   notification: { title: string; body: string }
 ): Promise<void> {
   const job = await getJob(jobId);
   const field = ZONE_FIELD[zone];
   if (!job || job[field]) return;
+  if (await alreadyChargedTodayForVan(zone, imei, jobId)) {
+    log.info(`${zone} zone entry skipped -- already charged today on another job for this van`, {
+      job_id: jobId, driver: driverInitials
+    });
+    return;
+  }
 
   await upsertJob({ ...job, [field]: new Date().toISOString() });
 
@@ -50,17 +83,19 @@ async function flagZoneEntry(
 export function flagCongestionZoneEntry(
   jobId: string,
   driverInitials: string,
+  imei: string,
   notification: { title: string; body: string }
 ): Promise<void> {
-  return flagZoneEntry("congestion", jobId, driverInitials, notification);
+  return flagZoneEntry("congestion", jobId, driverInitials, imei, notification);
 }
 
 export function flagTunnelZoneEntry(
   jobId: string,
   driverInitials: string,
+  imei: string,
   notification: { title: string; body: string }
 ): Promise<void> {
-  return flagZoneEntry("tunnel", jobId, driverInitials, notification);
+  return flagZoneEntry("tunnel", jobId, driverInitials, imei, notification);
 }
 
 /** Zone-specific bits of the job-start "already inside" check below: the GPSLive
@@ -128,7 +163,7 @@ export async function checkCongestionZoneAtJobStart(job: Job, driver: DriverProf
         .sort((a, b) => b.dt_tracker.localeCompare(a.dt_tracker))[0];
 
       if (latest?.type === "zone_in") {
-        await flag(job.jobId, driver.initials, notification);
+        await flag(job.jobId, driver.initials, device.imei, notification);
       }
     }
   } catch (error) {

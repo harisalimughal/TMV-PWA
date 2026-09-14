@@ -117,13 +117,18 @@ export function gpsLiveWebhookRoutes(): Router {
         return;
       }
 
+      // The job's own pinned imei when set (primary match), otherwise the event's --
+      // either way this is the physical device identity alreadyChargedTodayForVan
+      // needs, not something re-derived from the driver's current profile.
+      const imei = activeJob.gpsliveImei || event.imei || "";
+
       if (isCongestion) {
-        await flagCongestionZoneEntry(activeJob.jobId, driverInitials, {
+        await flagCongestionZoneEntry(activeJob.jobId, driverInitials, imei, {
           title: "Entered Central London",
           body: "Congestion charge may apply -- add it on the Extra Charges step."
         });
       } else {
-        await flagTunnelZoneEntry(activeJob.jobId, driverInitials, {
+        await flagTunnelZoneEntry(activeJob.jobId, driverInitials, imei, {
           title: "Entered a tunnel toll zone",
           body: "Tunnel charge may apply -- add it on the Extra Charges step."
         });

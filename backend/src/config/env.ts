@@ -67,8 +67,16 @@ export const env = {
   bootstrapOnStart: boolEnv("BOOTSTRAP_ON_START", true),
   syncSecret: process.env.SYNC_SECRET?.trim() || "",
 
-  // Caching / throttling. Safe to lower to 0 to disable.
-  calendarSyncTtlMs: numberEnv("TMV_CALENDAR_SYNC_TTL_MS", 120_000),
+  // Caching / throttling. Safe to lower to 0 to disable. Lowered from 120s to 20s
+  // 2026-09 -- a newly-assigned job (driver-initials tag added to the Calendar title)
+  // was taking up to 2 minutes to reach a driver's app, and no user action (refresh,
+  // tab switch) could shorten that because nothing on the read path forced an early
+  // resync (see jobs.service.ts's getJobsGroupedForDriver, which now also calls
+  // syncIfStale() itself). 20s keeps this comfortably under the frontend's own 30s
+  // poll interval so a background poll usually finds fresh data waiting, without
+  // polling Google's Calendar API meaningfully harder than before (still one shared,
+  // throttled sync regardless of how many drivers/requests land in that window).
+  calendarSyncTtlMs: numberEnv("TMV_CALENDAR_SYNC_TTL_MS", 20_000),
 
   // How long before a job's booked start the driver's "starting soon" email + push
   // reminder fires, and how often the sweep that checks for due reminders runs.
