@@ -363,7 +363,13 @@ export async function syncBookingsForDate(date = DateTime.now().setZone(env.time
 
     if (event.status === "cancelled") {
       const existing = event.id ? existingByEvent.get(event.id) : undefined;
-      if (existing) {
+      // Google returns a "cancelled" tombstone for a deleted event on every day-window
+      // query that overlaps its original span -- for a multi-day event (e.g. an
+      // all-day "driver off" marker spanning a week+) that's every one of the 11 days
+      // this sync checks, so without this guard a job already cancelled gets
+      // needlessly re-cancelled (redundant write + log line) up to ~10 times in one
+      // pass. Same idempotency guard the "no longer present" branch below already has.
+      if (existing && existing.status !== JobStatus.COMPLETED && existing.status !== JobStatus.CANCELLED) {
         const reconciled = await reconcileDisappeared(existing, "cancelled in Calendar");
         if (reconciled) writes.push(reconciled);
       }
