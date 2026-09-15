@@ -180,6 +180,31 @@ describe("parseCalendarEvent field extraction", () => {
     expect(parsed!.crewSize).toBe(2);
   });
 
+  it("strips rich-text HTML from rawDescription instead of leaving literal tags, and doesn't run a plain-text line into an HTML-wrapped one that follows it with no <br>", () => {
+    // The exact rawDescription Calendar returned for a real booking (Rafi Ashfakul
+    // Hoque, 2026-09-14): the first line is plain typed text, but Calendar auto-linked
+    // the address right after it into a <p>, with no <br> or closing tag of its own
+    // between the two -- which used to leave "ANY EXTRA CHARGE..." and "Move from..."
+    // jammed onto one line in the driver app.
+    const html =
+      'ANY EXTRA CHARGE: £55 PER HALF AN HOUR<p><u></u> Move from:      ' +
+      '<a href="https://www.google.com/maps/search/22+Roffey+Street+E14+3NH?entry=gmail&amp;source=g">22 Roffey Street E14 3NH</a>  </p>' +
+      '<p>Move to:          <a href="https://www.google.com/maps/search/114,+Hylands+Road+41?entry=gmail&amp;source=g">114, Hylands Road 41</a> Goldfinch Apartments E17,4FZ</p>' +
+      '<p><br></p><p>Name: Rafi Ashfakul Hoque <u></u></p><p>Tel: <a target="_blank"><u>+44 7362 208131</u></a></p>' +
+      '<a href="https://mail.google.com/mail/u/0/?tab=rm&amp;ogbl#inbox/WhctKLcMbzJrTCBXXMcLbnNdpGXTWMDDQRNdPnSxNwgGPFTxKZlCLqzPgNsCtlnMLQxNkjQ">' +
+      "https://mail.google.com/mail/u/0/?tab=rm&amp;ogbl#inbox/WhctKLcMbzJrTCBXXMcLbnNdpGXTWMDDQRNdPnSxNwgGPFTxKZlCLqzPgNsCtlnMLQxNkjQ</a>";
+
+    const parsed = parseCalendarEvent(ev(html, "2 men/Y-TI"));
+    expect(parsed).not.toBeNull();
+
+    const lines = parsed!.rawDescription.split("\n").map(l => l.trim()).filter(Boolean);
+    expect(lines.some(l => l.includes("<") || l.includes(">"))).toBe(false); // no literal HTML tag survives
+    expect(lines[0]).toBe("ANY EXTRA CHARGE: £55 PER HALF AN HOUR"); // on its own line now
+    expect(lines).toContain("Move from:      22 Roffey Street E14 3NH");
+    expect(lines.some(l => l.startsWith("Tel:"))).toBe(true);
+    expect(lines.some(l => l.includes("mail.google.com"))).toBe(true); // link text preserved, plain
+  });
+
   it("still rejects an unconfirmed '/N-XX' booking", () => {
     expect(parseCalendarEvent(ev("Name: A B", "2 men/N-HE"))).toBeNull();
   });

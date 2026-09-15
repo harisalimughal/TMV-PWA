@@ -12,14 +12,25 @@ import { log } from "../utils/logger";
 
 /**
  * Google Calendar's rich-text description editor (the Bold/Italic/link toolbar) saves
- * line breaks as HTML <br>/<div> tags and auto-linkifies emails into <a> tags instead of
- * plain "\n"-separated text. Normalise back to plain lines before parsing, so a
- * rich-text description parses the same as a plain-text one.
+ * line breaks as HTML <br>/<div> tags and auto-linkifies emails/addresses into <a>
+ * tags instead of plain "\n"-separated text. Normalise back to plain lines before
+ * parsing, so a rich-text description parses the same as a plain-text one.
+ *
+ * Both the opening AND closing <p>/<div>/<li> convert to a newline, not just the
+ * closing one -- a description that starts as plain typed text and only picks up
+ * rich-tag wrapping partway through (e.g. the office types a line, then Calendar
+ * auto-links an address into "<p><a href=...>...</a></p>" right after it, with no
+ * <br> or closing tag of its own separating the two) otherwise leaves that boundary
+ * with no newline at all: the closing-tag-only version added the break *after* a
+ * paragraph but never *before* one that opens directly against plain text. Bug found
+ * live 2026-09-14: a job's "ANY EXTRA CHARGE" line and the "Move from" address right
+ * after it, only the address wrapped in <p>, rendered jammed onto one line in the
+ * driver app instead of two.
  */
 function htmlToText(html: string): string {
   return html
     .replace(/<br\s*\/?>/gi, "\n")
-    .replace(/<\/(p|div|li)>/gi, "\n")
+    .replace(/<\/?(?:p|div|li)(?:\s[^>]*)?>/gi, "\n")
     .replace(/<[^>]+>/g, "")
     .replace(/&nbsp;/gi, " ")
     .replace(/&amp;/gi, "&")
@@ -233,7 +244,12 @@ export function parseCalendarEvent(event: calendar_v3.Schema$Event): ParsedCalen
     bookedStart,
     bookedFinish,
     rawTitle: title,
-    rawDescription: description
+    // Plain-texted, not the verbatim event.description -- Calendar's rich-text editor
+    // returns actual HTML (<p>, <a href>, <u>) whenever the description has any
+    // formatting or an auto-linked address/email, and the driver app's "Job details"
+    // panel has no HTML renderer -- it would show the literal tags otherwise (see
+    // htmlToText's own comment for the live bug this fixed).
+    rawDescription: htmlToText(description)
   };
 }
 
