@@ -234,7 +234,7 @@ function VanDriverModal({ item, onClose, onSaved }: { item: VanDriverRecordItem;
         <div className="p-6 overflow-y-auto space-y-5">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <RecordPreview title="Fuel" item={item.latestFuel} type="FUEL" />
-            <RecordPreview title="Service" item={item.latestService} type="SERVICE" />
+            <ServicePreview item={item} onSaved={onSaved} />
             <CompliancePreview item={item} onSaved={onSaved} />
           </div>
 
@@ -282,25 +282,26 @@ function RecordPreview({ title, item, type }: { title: string; item: VanRecordIt
   );
 }
 
-function CompliancePreview({ item, onSaved }: { item: VanDriverRecordItem; onSaved: (compliance: VanComplianceItem) => void }) {
-  const [roadTaxRenewalDate, setRoadTaxRenewalDate] = useState(item.compliance?.roadTaxRenewalDate || "");
-  const [motExpiryDate, setMotExpiryDate] = useState(item.compliance?.motExpiryDate || "");
-  const [notes, setNotes] = useState(item.compliance?.notes || "");
+/**
+ * Service record preview + the "miles remaining until next service" gauge and its
+ * admin-editable interval/override -- kept together here rather than split across
+ * this panel (read-only record) and CompliancePreview (dates), since both the driver
+ * app's own "Vehicle Service" card and this panel now agree: service-mileage
+ * tracking is a Service concern, not a Compliance one. Saving here still round-trips
+ * the *whole* compliance document (see saveVanCompliance), so it passes through the
+ * current road-tax/MOT/insurance/notes values unchanged rather than clearing them.
+ */
+function ServicePreview({ item, onSaved }: { item: VanDriverRecordItem; onSaved: (compliance: VanComplianceItem) => void }) {
   const [serviceIntervalMiles, setServiceIntervalMiles] = useState(String(item.compliance?.serviceIntervalMiles ?? ""));
   const [lastServiceMileageOverride, setLastServiceMileageOverride] = useState(String(item.compliance?.lastServiceMileageOverride ?? ""));
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
-  const complianceItems = buildComplianceItems({
-    roadTaxRenewalDate: item.compliance?.roadTaxRenewalDate || roadTaxRenewalDate,
-    motExpiryDate: item.compliance?.motExpiryDate || motExpiryDate
-  });
   const mileageItem = buildServiceMileageItem(item.compliance);
+  const meta = TYPE_META.SERVICE;
+  const Icon = meta.icon;
 
   useEffect(() => {
-    setRoadTaxRenewalDate(item.compliance?.roadTaxRenewalDate || "");
-    setMotExpiryDate(item.compliance?.motExpiryDate || "");
-    setNotes(item.compliance?.notes || "");
     setServiceIntervalMiles(String(item.compliance?.serviceIntervalMiles ?? ""));
     setLastServiceMileageOverride(String(item.compliance?.lastServiceMileageOverride ?? ""));
     setError("");
@@ -322,12 +323,140 @@ function CompliancePreview({ item, onSaved }: { item: VanDriverRecordItem; onSav
     setError("");
     try {
       const compliance = await saveVanCompliance(item.vanRegistration, {
+        roadTaxRenewalDate: item.compliance?.roadTaxRenewalDate || "",
+        motExpiryDate: item.compliance?.motExpiryDate || "",
+        insuranceExpiryDate: item.compliance?.insuranceExpiryDate || "",
+        notes: item.compliance?.notes || "",
+        serviceIntervalMiles: interval,
+        lastServiceMileageOverride: override
+      });
+      onSaved(compliance);
+      setEditing(false);
+    } catch (err: any) {
+      setError(err?.message || "Failed to save service settings.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="bg-white rounded-module border border-admin-line overflow-hidden">
+      <div className="flex items-center justify-between gap-3 p-4">
+        <div className={`inline-flex items-center gap-1.5 rounded-control border px-2.5 py-1 text-[12px] font-semibold ${meta.className}`}>
+          <Icon className="w-3.5 h-3.5" /> Service
+        </div>
+        <button
+          type="button"
+          onClick={() => setEditing(value => !value)}
+          className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-admin-surface text-admin-muted transition hover:bg-admin-line/40 hover:text-admin-ink"
+          title={editing ? "Close editor" : "Edit service interval"}
+          aria-label={editing ? "Close service settings editor" : "Edit service interval"}
+        >
+          {editing ? <X className="h-4 w-4" /> : <Pencil className="h-4 w-4" />}
+        </button>
+      </div>
+
+      <div className="px-4 pb-4">
+        <div className="text-[18px] font-bold text-admin-ink">{recordDetail(item.latestService, "SERVICE")}</div>
+        <div className="mt-1 text-[12px] text-admin-muted">
+          {item.latestService ? formatLondonDateTime(item.latestService.submittedAt) : "Not uploaded"}
+        </div>
+        {item.latestService?.photoUrl ? (
+          <a href={item.latestService.photoUrl} target="_blank" rel="noreferrer" className="mt-4 block">
+            <img
+              src={item.latestService.photoUrl}
+              alt="Service"
+              className="w-full aspect-[4/3] object-contain rounded-card bg-admin-surface border border-admin-line"
+            />
+          </a>
+        ) : (
+          <div className="mt-4 aspect-[4/3] rounded-card bg-admin-surface border border-dashed border-admin-line flex items-center justify-center text-admin-muted">
+            <Camera className="w-5 h-5" />
+          </div>
+        )}
+      </div>
+
+      <div className="border-t border-admin-line px-4">
+        <ServiceMileageStatus item={mileageItem} />
+      </div>
+
+      {editing && (
+        <div className="space-y-3 border-t border-admin-line bg-admin-surface px-4 py-4">
+          <label className="block">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-admin-muted">Service interval (miles)</span>
+            <input
+              type="number"
+              min="1"
+              inputMode="numeric"
+              value={serviceIntervalMiles}
+              onChange={event => setServiceIntervalMiles(event.target.value)}
+              placeholder="e.g. 8000"
+              className="mt-1 h-9 w-full rounded-card border border-admin-line bg-white px-3 text-[13px] font-semibold text-admin-ink outline-none focus:border-admin-brand"
+            />
+          </label>
+          <label className="block">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-admin-muted">Override last service mileage</span>
+            <input
+              type="number"
+              min="0"
+              inputMode="numeric"
+              value={lastServiceMileageOverride}
+              onChange={event => setLastServiceMileageOverride(event.target.value)}
+              placeholder="Leave blank to use the driver's most recent Service log"
+              className="mt-1 h-9 w-full rounded-card border border-admin-line bg-white px-3 text-[13px] font-semibold text-admin-ink outline-none focus:border-admin-brand"
+            />
+            <span className="mt-1 block text-[11px] text-admin-muted">
+              Only needed to correct a bad log entry -- clear it to go back to automatic.
+            </span>
+          </label>
+          {error && <div className="text-[12px] font-semibold text-admin-status-red">{error}</div>}
+          <button
+            type="button"
+            disabled={!item.vanRegistration || saving}
+            onClick={() => void handleSave()}
+            className="h-9 w-full rounded-card bg-admin-brand px-3 text-[13px] font-bold text-white transition hover:bg-admin-brand/90 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {saving ? "Saving..." : "Save service settings"}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function CompliancePreview({ item, onSaved }: { item: VanDriverRecordItem; onSaved: (compliance: VanComplianceItem) => void }) {
+  const [roadTaxRenewalDate, setRoadTaxRenewalDate] = useState(item.compliance?.roadTaxRenewalDate || "");
+  const [motExpiryDate, setMotExpiryDate] = useState(item.compliance?.motExpiryDate || "");
+  const [notes, setNotes] = useState(item.compliance?.notes || "");
+  const [editing, setEditing] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const complianceItems = buildComplianceItems({
+    roadTaxRenewalDate: item.compliance?.roadTaxRenewalDate || roadTaxRenewalDate,
+    motExpiryDate: item.compliance?.motExpiryDate || motExpiryDate
+  });
+
+  useEffect(() => {
+    setRoadTaxRenewalDate(item.compliance?.roadTaxRenewalDate || "");
+    setMotExpiryDate(item.compliance?.motExpiryDate || "");
+    setNotes(item.compliance?.notes || "");
+    setError("");
+  }, [item.compliance]);
+
+  async function handleSave() {
+    if (!item.vanRegistration || saving) return;
+    setSaving(true);
+    setError("");
+    try {
+      // Service interval/override live in ServicePreview now, but this save still
+      // round-trips the whole compliance document -- pass them through unchanged.
+      const compliance = await saveVanCompliance(item.vanRegistration, {
         roadTaxRenewalDate,
         motExpiryDate,
         insuranceExpiryDate: item.compliance?.insuranceExpiryDate || "",
         notes,
-        serviceIntervalMiles: interval,
-        lastServiceMileageOverride: override
+        serviceIntervalMiles: item.compliance?.serviceIntervalMiles ?? null,
+        lastServiceMileageOverride: item.compliance?.lastServiceMileageOverride ?? null
       });
       onSaved(compliance);
       setEditing(false);
@@ -362,7 +491,6 @@ function CompliancePreview({ item, onSaved }: { item: VanDriverRecordItem; onSav
       </div>
 
       <div className="divide-y divide-admin-line px-4">
-        <ServiceMileageStatus item={mileageItem} />
         {complianceItems.map(complianceItem => (
           <ComplianceStatus key={complianceItem.key} item={complianceItem} />
         ))}
@@ -377,33 +505,6 @@ function CompliancePreview({ item, onSaved }: { item: VanDriverRecordItem; onSav
 
       {editing && (
         <div className="space-y-3 border-t border-admin-line bg-admin-surface px-4 py-4">
-          <label className="block">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-admin-muted">Service interval (miles)</span>
-            <input
-              type="number"
-              min="1"
-              inputMode="numeric"
-              value={serviceIntervalMiles}
-              onChange={event => setServiceIntervalMiles(event.target.value)}
-              placeholder="e.g. 8000"
-              className="mt-1 h-9 w-full rounded-card border border-admin-line bg-white px-3 text-[13px] font-semibold text-admin-ink outline-none focus:border-admin-brand"
-            />
-          </label>
-          <label className="block">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-admin-muted">Override last service mileage</span>
-            <input
-              type="number"
-              min="0"
-              inputMode="numeric"
-              value={lastServiceMileageOverride}
-              onChange={event => setLastServiceMileageOverride(event.target.value)}
-              placeholder="Leave blank to use the driver's most recent Service log"
-              className="mt-1 h-9 w-full rounded-card border border-admin-line bg-white px-3 text-[13px] font-semibold text-admin-ink outline-none focus:border-admin-brand"
-            />
-            <span className="mt-1 block text-[11px] text-admin-muted">
-              Only needed to correct a bad log entry -- clear it to go back to automatic.
-            </span>
-          </label>
           <ComplianceInput label="Road tax renewal" value={roadTaxRenewalDate} onChange={setRoadTaxRenewalDate} />
           <ComplianceInput label="MOT expiry" value={motExpiryDate} onChange={setMotExpiryDate} />
           <label className="block">
