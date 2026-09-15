@@ -29,6 +29,12 @@ export type { ProfileMenuProps } from "./ProfileMenu";
 export { FeaturedJobCard } from "./FeaturedJobCard";
 export type { FeaturedJobCardProps } from "./FeaturedJobCard";
 
+export { BookingWindowHeader } from "./BookingWindowHeader";
+export type { BookingWindowHeaderProps } from "./BookingWindowHeader";
+
+export { UpcomingJobCard, UpcomingJobCardSkeleton } from "./UpcomingJobCard";
+export type { UpcomingJobCardProps } from "./UpcomingJobCard";
+
 export { JobDetailsPanel } from "./JobDetailsPanel";
 export type { JobDetailsPanelProps } from "./JobDetailsPanel";
 
@@ -63,9 +69,6 @@ export type { JobProgressProps } from "./JobProgress";
 
 export { ScheduleSection } from "./ScheduleSection";
 export type { ScheduleSectionProps } from "./ScheduleSection";
-
-export { ScheduleRow, ScheduleRowSkeleton } from "./ScheduleRow";
-export type { ScheduleRowProps } from "./ScheduleRow";
 
 export { StatusIndicator, JobStatusChip, jobStatusMeta } from "./JobStatusChip";
 export type { StatusIndicatorProps, JobStatusChipProps, JobBucket } from "./JobStatusChip";

@@ -13,8 +13,8 @@ export interface ScheduleSectionProps {
 
 /**
  * A block of the schedule: a section label, an optional mono count, then rows.
- * Each row is its own white, shadowed card (see ScheduleRow) with a gap between --
- * there's no enclosing card or divider list here, the rows carry their own.
+ * Each row is its own card (see UpcomingJobCard) with a gap between -- there's no
+ * enclosing card or divider list here, the rows carry their own.
  */
 export function ScheduleSection({ title, meta, tone = "default", children, className }: ScheduleSectionProps) {
   return (

@@ -7,12 +7,11 @@ import { AppShell } from "../app/AppShell";
 import { OfflineBanner } from "../app/OfflineBanner";
 import {
   FeaturedJobCard,
-  JobDetailsPanel,
   JobFilterBar,
   MobileHeader,
-  ScheduleRow,
-  ScheduleRowSkeleton,
   ScheduleSection,
+  UpcomingJobCard,
+  UpcomingJobCardSkeleton,
   type HomeFilter
 } from "../components/driver";
 import { Alert, Button, EmptyState } from "../ui";
@@ -195,9 +194,9 @@ export function JobListScreen({ driver, onOpenJob }: JobListScreenProps) {
         <div className="px-4 pb-4 pt-5 scroll-pb-nav">
           {loading ? (
             <div className="flex flex-col gap-2.5">
-              <ScheduleRowSkeleton />
-              <ScheduleRowSkeleton />
-              <ScheduleRowSkeleton />
+              <UpcomingJobCardSkeleton />
+              <UpcomingJobCardSkeleton />
+              <UpcomingJobCardSkeleton />
             </div>
           ) : error ? (
             <Alert
@@ -301,10 +300,11 @@ function TodayJobsList({ job, onOpenJob }: TodayJobsListProps) {
 }
 
 /**
- * Upcoming (later today onward) jobs. Not actionable yet -- there's no Start Job, so
- * tapping a row just expands a read-only <JobDetailsPanel> under it (name/email/
- * phone + the rest of the booking behind "More details"), no route/navigate section
- * and no footer button. Purely local: nothing here ever opens another screen.
+ * Upcoming (later today onward) jobs, styled the same as Today's <FeaturedJobCard>
+ * -- each is an <UpcomingJobCard>, collapsed to just its booking-window header until
+ * tapped, expanding to the same customer + raw-booking-details content Today's card
+ * always shows. Not actionable yet -- there's no Start Job footer. Purely local:
+ * nothing here ever opens another screen.
  */
 /** "Later today" / "Tomorrow" / "Day after tomorrow" for the next few days, then
  *  the plain formatted date beyond that -- relative names stop being useful once
@@ -331,15 +331,13 @@ function UpcomingJobsList({ groups }: { groups: ReturnType<typeof groupJobsByDat
           meta={jobsLabel(group.jobs.length)}
         >
           {group.jobs.map((job, i) => (
-            <div key={job.jobId} className="flex flex-col gap-2">
-              <ScheduleRow
-                job={job}
-                bucket="next"
-                index={i}
-                onOpen={() => setExpandedJobId(id => (id === job.jobId ? null : job.jobId))}
-              />
-              {expandedJobId === job.jobId && <JobDetailsPanel job={job} />}
-            </div>
+            <UpcomingJobCard
+              key={job.jobId}
+              job={job}
+              index={i}
+              expanded={expandedJobId === job.jobId}
+              onToggle={() => setExpandedJobId(id => (id === job.jobId ? null : job.jobId))}
+            />
           ))}
         </ScheduleSection>
       ))}
