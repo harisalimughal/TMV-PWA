@@ -14,6 +14,8 @@ const TYPE_META: Record<VanRecordType, { label: string; icon: React.ComponentTyp
 };
 const COMPLIANCE_ALERT_DAYS = 30;
 const COMPLIANCE_RING_ORANGE = "#ff8a00";
+const COMPLIANCE_RING_GREEN = "#16A34A";
+const COMPLIANCE_RING_RED = "#DC2626";
 const COMPLIANCE_RING_TRACK = "#d6d6d6";
 const DAY_MS = 24 * 60 * 60 * 1000;
 // Miles-remaining threshold that turns the service gauge amber, mirroring
@@ -563,7 +565,7 @@ function buildComplianceItem(key: ComplianceStatusItem["key"], label: string, ra
       ? 100
       : dueSoon
         ? Math.max(8, Math.round(((COMPLIANCE_ALERT_DAYS - daysRemaining) / COMPLIANCE_ALERT_DAYS) * 100))
-        : 0;
+        : 100; // "ok" -- full ring, same always-on style as the Service panel's mileage gauge
 
   return {
     key,
@@ -579,7 +581,8 @@ function buildComplianceItem(key: ComplianceStatusItem["key"], label: string, ra
 }
 
 function ComplianceStatus({ item }: { item: ComplianceStatusItem }) {
-  const showRing = item.tone === "warning" || item.tone === "danger";
+  const showRing = item.tone !== "empty";
+  const ringColor = item.tone === "danger" ? COMPLIANCE_RING_RED : item.tone === "warning" ? COMPLIANCE_RING_ORANGE : COMPLIANCE_RING_GREEN;
   return (
     <div className="flex flex-col items-center gap-3 py-5 text-center">
       <div>
@@ -593,7 +596,7 @@ function ComplianceStatus({ item }: { item: ComplianceStatusItem }) {
         <div
           className="grid h-[132px] w-[132px] place-items-center rounded-full"
           style={{
-            background: `conic-gradient(${COMPLIANCE_RING_ORANGE} ${item.ringPercent}%, ${COMPLIANCE_RING_TRACK} 0)`
+            background: `conic-gradient(${ringColor} ${item.ringPercent}%, ${COMPLIANCE_RING_TRACK} 0)`
           }}
         >
           <div className="grid h-[110px] w-[110px] place-items-center rounded-full bg-white">

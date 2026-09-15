@@ -598,7 +598,8 @@ function ServiceMileageStatus({ item }: { item: ServiceMileageStatusItem }) {
 }
 
 function ComplianceStatus({ item }: { item: ComplianceStatusItem }) {
-  const ringColor = item.tone === "empty" ? "rgb(var(--line-strong))" : COMPLIANCE_RING_ORANGE;
+  const ringColor =
+    item.tone === "danger" ? "rgb(var(--danger-fg))" : item.tone === "warning" ? COMPLIANCE_RING_ORANGE : "rgb(var(--success-fg))";
   const statusLabel =
     item.tone === "danger"
       ? item.alertLabel
@@ -607,7 +608,7 @@ function ComplianceStatus({ item }: { item: ComplianceStatusItem }) {
         : item.tone === "ok"
           ? "Status: OK"
           : "Add date";
-  const showRing = item.tone === "warning" || item.tone === "danger";
+  const showRing = item.tone !== "empty";
 
   return (
     <div
