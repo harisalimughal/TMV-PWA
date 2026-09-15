@@ -92,11 +92,11 @@ describe("VanScreen", () => {
     expect(screen.getByLabelText(`MOT: ${motDate.formatted}, Status: OK`)).toBeInTheDocument();
     expect(screen.queryByText("Insurance renewal")).not.toBeInTheDocument();
     expect(screen.queryByText(insuranceDate.formatted)).not.toBeInTheDocument();
-    // Inside the 30-day alert window -- red, not the orange baseline.
+    // Road tax is the first item, so it's the one that gets a ring -- inside the
+    // 30-day alert window, that ring is red, not the orange baseline.
     expect(screen.getByLabelText(`Road tax: ${roadTaxDate.formatted}, due in 23 days`).querySelector("[data-compliance-ring]")).toHaveAttribute("data-ring-color", "rgb(var(--danger-fg))");
-    // MOT is well outside the 30-day alert window, but the ring is now always
-    // visible (orange baseline) rather than only appearing near/at the deadline.
-    expect(screen.getByLabelText(`MOT: ${motDate.formatted}, Status: OK`).querySelector("[data-compliance-ring]")).toHaveAttribute("data-ring-color", "#ff8a00");
+    // MOT is the second item -- plain green/red text, no ring at all.
+    expect(screen.getByLabelText(`MOT: ${motDate.formatted}, Status: OK`).querySelector("[data-compliance-ring]")).toBeNull();
     expect(screen.getByText("AB12 CDE Next road tax renewal due in 23 days")).toBeInTheDocument();
     expect(screen.getByText(/Alerts show when 30 days or less remain\./)).toBeInTheDocument();
   });

@@ -393,8 +393,8 @@ function ComplianceCard({ driver }: { driver: DriverProfile }) {
           </Alert>
         )}
         <div className="divide-y divide-line">
-          {items.map(item => (
-            <ComplianceStatus key={item.key} item={item} />
+          {items.map((item, index) => (
+            <ComplianceStatus key={item.key} item={item} showRing={index === 0} />
           ))}
         </div>
 
@@ -597,11 +597,13 @@ function ServiceMileageStatus({ item }: { item: ServiceMileageStatusItem }) {
   );
 }
 
-function ComplianceStatus({ item }: { item: ComplianceStatusItem }) {
-  // Orange baseline, red once inside the 30-day alert window or overdue -- no green
-  // "all clear" state.
+function ComplianceStatus({ item, showRing = true }: { item: ComplianceStatusItem; showRing?: boolean }) {
+  // Orange baseline, red once inside the 30-day alert window or overdue, for the
+  // ringed item. The ring-less item below it has no ring to carry that baseline, so
+  // it reads as plain green-or-red text instead.
   const urgent = item.tone === "warning" || item.tone === "danger";
   const ringColor = urgent ? "rgb(var(--danger-fg))" : COMPLIANCE_RING_ORANGE;
+  const textTone = urgent ? "text-danger" : showRing ? "text-warning" : "text-success";
   const statusLabel =
     item.tone === "danger"
       ? item.alertLabel
@@ -610,7 +612,7 @@ function ComplianceStatus({ item }: { item: ComplianceStatusItem }) {
         : item.tone === "ok"
           ? "Status: OK"
           : "Add date";
-  const showRing = item.tone !== "empty";
+  const hasRing = showRing && item.tone !== "empty";
 
   return (
     <div
@@ -620,12 +622,10 @@ function ComplianceStatus({ item }: { item: ComplianceStatusItem }) {
     >
       <div>
         <h3 className="text-heading font-semibold uppercase text-fg">{item.label}</h3>
-        <p className={cx("mt-1 text-title", urgent ? "text-danger" : item.tone === "ok" ? "text-warning" : "text-fg")}>
-          {item.formattedDate}
-        </p>
+        <p className={cx("mt-1 text-title", item.tone === "empty" ? "text-fg" : textTone)}>{item.formattedDate}</p>
       </div>
 
-      {showRing && (
+      {hasRing && (
         <div
           data-compliance-ring
           data-ring-color={ringColor}
@@ -645,7 +645,7 @@ function ComplianceStatus({ item }: { item: ComplianceStatusItem }) {
 
       <p className={cx(
         "text-label font-semibold uppercase",
-        urgent ? "text-danger" : item.tone === "ok" ? "text-warning" : "text-fg-muted"
+        item.tone === "empty" ? "text-fg-muted" : textTone
       )}>
         {statusLabel}
       </p>

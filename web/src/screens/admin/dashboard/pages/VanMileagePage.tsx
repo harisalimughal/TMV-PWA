@@ -492,8 +492,8 @@ function CompliancePreview({ item, onSaved }: { item: VanDriverRecordItem; onSav
       </div>
 
       <div className="divide-y divide-admin-line px-4">
-        {complianceItems.map(complianceItem => (
-          <ComplianceStatus key={complianceItem.key} item={complianceItem} />
+        {complianceItems.map((complianceItem, index) => (
+          <ComplianceStatus key={complianceItem.key} item={complianceItem} showRing={index === 0} />
         ))}
       </div>
 
@@ -579,22 +579,22 @@ function buildComplianceItem(key: ComplianceStatusItem["key"], label: string, ra
   };
 }
 
-function ComplianceStatus({ item }: { item: ComplianceStatusItem }) {
-  const showRing = item.tone !== "empty";
+function ComplianceStatus({ item, showRing = true }: { item: ComplianceStatusItem; showRing?: boolean }) {
+  const hasRing = showRing && item.tone !== "empty";
   // Orange baseline, red once inside the 30-day alert window or overdue -- no green
-  // "all clear" state.
+  // "all clear" state for the ringed item. The ring-less item below it has no ring
+  // to carry that baseline, so it reads as plain green-or-red text instead.
   const urgent = item.tone === "warning" || item.tone === "danger";
   const ringColor = urgent ? COMPLIANCE_RING_RED : COMPLIANCE_RING_ORANGE;
+  const textColor = urgent ? "text-admin-status-red" : showRing ? "text-admin-status-amber" : "text-admin-status-green";
   return (
-    <div className="flex flex-col items-center gap-3 py-5 text-center">
+    <div className={`flex flex-col items-center gap-3 text-center ${showRing ? "py-5" : "py-4"}`}>
       <div>
         <h4 className="text-[14px] font-bold uppercase text-admin-ink">{item.label}</h4>
-        <p className={`mt-1 text-[22px] font-extrabold ${urgent ? "text-admin-status-red" : "text-admin-status-amber"}`}>
-          {item.formattedDate}
-        </p>
+        <p className={`mt-1 text-[22px] font-extrabold ${textColor}`}>{item.formattedDate}</p>
       </div>
 
-      {showRing && (
+      {hasRing && (
         <div
           className="grid h-[132px] w-[132px] place-items-center rounded-full"
           style={{
@@ -609,7 +609,7 @@ function ComplianceStatus({ item }: { item: ComplianceStatusItem }) {
         </div>
       )}
 
-      <p className={`text-[13px] font-extrabold uppercase ${urgent ? "text-admin-status-red" : item.tone === "ok" ? "text-admin-status-amber" : "text-admin-muted"}`}>
+      <p className={`text-[13px] font-extrabold uppercase ${item.tone === "empty" ? "text-admin-muted" : textColor}`}>
         {item.statusLabel}
       </p>
     </div>
