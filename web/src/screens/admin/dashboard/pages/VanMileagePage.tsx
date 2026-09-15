@@ -14,7 +14,6 @@ const TYPE_META: Record<VanRecordType, { label: string; icon: React.ComponentTyp
 };
 const COMPLIANCE_ALERT_DAYS = 30;
 const COMPLIANCE_RING_ORANGE = "#ff8a00";
-const COMPLIANCE_RING_GREEN = "#16A34A";
 const COMPLIANCE_RING_RED = "#DC2626";
 const COMPLIANCE_RING_TRACK = "#d6d6d6";
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -582,12 +581,15 @@ function buildComplianceItem(key: ComplianceStatusItem["key"], label: string, ra
 
 function ComplianceStatus({ item }: { item: ComplianceStatusItem }) {
   const showRing = item.tone !== "empty";
-  const ringColor = item.tone === "danger" ? COMPLIANCE_RING_RED : item.tone === "warning" ? COMPLIANCE_RING_ORANGE : COMPLIANCE_RING_GREEN;
+  // Orange baseline, red once inside the 30-day alert window or overdue -- no green
+  // "all clear" state.
+  const urgent = item.tone === "warning" || item.tone === "danger";
+  const ringColor = urgent ? COMPLIANCE_RING_RED : COMPLIANCE_RING_ORANGE;
   return (
     <div className="flex flex-col items-center gap-3 py-5 text-center">
       <div>
         <h4 className="text-[14px] font-bold uppercase text-admin-ink">{item.label}</h4>
-        <p className={`mt-1 text-[22px] font-extrabold ${item.tone === "ok" ? "text-admin-status-green" : "text-admin-ink"}`}>
+        <p className={`mt-1 text-[22px] font-extrabold ${urgent ? "text-admin-status-red" : "text-admin-status-amber"}`}>
           {item.formattedDate}
         </p>
       </div>
@@ -600,22 +602,14 @@ function ComplianceStatus({ item }: { item: ComplianceStatusItem }) {
           }}
         >
           <div className="grid h-[110px] w-[110px] place-items-center rounded-full bg-white">
-            <span className={`px-2 text-[16px] font-extrabold ${item.tone === "danger" ? "text-admin-status-red" : "text-admin-ink"}`}>
+            <span className={`px-2 text-[16px] font-extrabold ${urgent ? "text-admin-status-red" : "text-admin-ink"}`}>
               {item.centerLabel}
             </span>
           </div>
         </div>
       )}
 
-      <p className={`text-[13px] font-extrabold uppercase ${
-        item.tone === "danger"
-          ? "text-admin-status-red"
-          : item.tone === "warning"
-            ? "text-admin-status-amber"
-            : item.tone === "ok"
-              ? "text-admin-status-green"
-              : "text-admin-muted"
-      }`}>
+      <p className={`text-[13px] font-extrabold uppercase ${urgent ? "text-admin-status-red" : item.tone === "ok" ? "text-admin-status-amber" : "text-admin-muted"}`}>
         {item.statusLabel}
       </p>
     </div>

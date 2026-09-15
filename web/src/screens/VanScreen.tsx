@@ -598,8 +598,10 @@ function ServiceMileageStatus({ item }: { item: ServiceMileageStatusItem }) {
 }
 
 function ComplianceStatus({ item }: { item: ComplianceStatusItem }) {
-  const ringColor =
-    item.tone === "danger" ? "rgb(var(--danger-fg))" : item.tone === "warning" ? COMPLIANCE_RING_ORANGE : "rgb(var(--success-fg))";
+  // Orange baseline, red once inside the 30-day alert window or overdue -- no green
+  // "all clear" state.
+  const urgent = item.tone === "warning" || item.tone === "danger";
+  const ringColor = urgent ? "rgb(var(--danger-fg))" : COMPLIANCE_RING_ORANGE;
   const statusLabel =
     item.tone === "danger"
       ? item.alertLabel
@@ -618,7 +620,9 @@ function ComplianceStatus({ item }: { item: ComplianceStatusItem }) {
     >
       <div>
         <h3 className="text-heading font-semibold uppercase text-fg">{item.label}</h3>
-        <p className={cx("mt-1 text-title", item.tone === "ok" ? "text-success" : "text-fg")}>{item.formattedDate}</p>
+        <p className={cx("mt-1 text-title", urgent ? "text-danger" : item.tone === "ok" ? "text-warning" : "text-fg")}>
+          {item.formattedDate}
+        </p>
       </div>
 
       {showRing && (
@@ -632,7 +636,7 @@ function ComplianceStatus({ item }: { item: ComplianceStatusItem }) {
           aria-hidden
         >
           <div className="grid size-[110px] place-items-center rounded-full bg-surface">
-            <span className={cx("px-2 text-center text-heading", item.tone === "danger" ? "text-danger" : "text-fg")}>
+            <span className={cx("px-2 text-center text-heading", urgent ? "text-danger" : "text-fg")}>
               {item.centerLabel}
             </span>
           </div>
@@ -641,7 +645,7 @@ function ComplianceStatus({ item }: { item: ComplianceStatusItem }) {
 
       <p className={cx(
         "text-label font-semibold uppercase",
-        item.tone === "danger" ? "text-danger" : item.tone === "warning" ? "text-warning" : item.tone === "ok" ? "text-success" : "text-fg-muted"
+        urgent ? "text-danger" : item.tone === "ok" ? "text-warning" : "text-fg-muted"
       )}>
         {statusLabel}
       </p>
