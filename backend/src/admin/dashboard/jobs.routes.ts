@@ -246,7 +246,11 @@ export function dashboardJobsRoutes(): Router {
         log.error("reassign: failed to write driver initials back to Calendar", calendarError, { job_id: jobId });
         const status = statusOf(calendarError);
         const isPermissionError = status === 401 || status === 403;
-        return res.status(502).json({
+        // 409, not 502 -- apiFetch (web/src/screens/admin/dashboard/api.ts) treats any
+        // 5xx as "our infrastructure is broken" and replaces the body with a generic
+        // "having a problem" message before this one ever reaches the admin. Only a 4xx
+        // keeps the specific reason, which is the whole point of writing one.
+        return res.status(409).json({
           error: {
             code: "CALENDAR_WRITE_FAILED",
             message: isPermissionError
@@ -302,7 +306,8 @@ export function dashboardJobsRoutes(): Router {
           log.error("delete job: failed to delete Calendar event", calendarError, { job_id: jobId });
           const status = statusOf(calendarError);
           const isPermissionError = status === 401 || status === 403;
-          return res.status(502).json({
+          // 409, not 502 -- see the matching comment on the reassign route above.
+          return res.status(409).json({
             error: {
               code: "CALENDAR_WRITE_FAILED",
               message: isPermissionError
