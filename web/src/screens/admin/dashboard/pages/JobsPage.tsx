@@ -49,7 +49,7 @@ export function JobsPage() {
   const FETCH_LIMIT = 500;
   
   // Sorting
-  const [sortConfig, setSortConfig] = useState<{ key: string, direction: "asc" | "desc" } | null>({ key: "Timing", direction: "desc" });
+  const [sortConfig, setSortConfig] = useState<{ key: string, direction: "asc" | "desc" } | null>({ key: "Timing", direction: "asc" });
 
   // Selection
   const [selectedRows, setSelectedRows] = useState<Set<string>>(new Set());
