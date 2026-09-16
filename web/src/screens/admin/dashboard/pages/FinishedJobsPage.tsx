@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   ChevronDown,
@@ -81,26 +81,16 @@ export function FinishedJobsPage() {
           </select>
           <DateRangePicker from={from} to={to} onChange={(f, t) => { setFrom(f); setTo(t); setPage(1); }} />
           <div className="hidden sm:block w-px h-6 bg-admin-line mx-2 shrink-0" />
-          <button
-            onClick={() => {
+          <ExportMenu
+            onExportCsv={() => {
               const params = new URLSearchParams({ status: "COMPLETED" });
               if (driverFilter) params.set("driver", driverFilter);
               if (from) params.set("from", from);
               if (to) params.set("to", to);
               window.location.href = `/api/admin/jobs/export.csv?${params.toString()}`;
             }}
-            className="shrink-0 whitespace-nowrap h-10 px-2.5 sm:px-4 rounded-control border border-line-strong bg-surface hover:bg-surface-sunken text-fg text-button shadow-sm transition flex items-center gap-2"
-          >
-            <Download className="w-4 h-4" /> <span className="hidden sm:inline">Export </span>CSV
-          </button>
-          {/* Was dead. The print stylesheet already formats this table for paper, so
-              the browser's own Save-as-PDF is a genuine export. */}
-          <button
-            onClick={() => window.print()}
-            className="shrink-0 whitespace-nowrap h-10 px-2.5 sm:px-4 rounded-control border border-line-strong bg-surface hover:bg-surface-sunken text-fg text-button shadow-sm transition flex items-center gap-2"
-          >
-            <Printer className="w-4 h-4" /> <span className="hidden sm:inline">Print / </span>PDF
-          </button>
+            onPrintPdf={() => window.print()}
+          />
         </div>
       </div>
 
@@ -379,6 +369,54 @@ export function FinishedJobsPage() {
           hasNext={data?.items ? data.items.findIndex((j: any) => j.jobId === previewJob.jobId) < data.items.length - 1 : false}
           hasPrev={data?.items ? data.items.findIndex((j: any) => j.jobId === previewJob.jobId) > 0 : false}
         />
+      )}
+    </div>
+  );
+}
+
+/** Single Export button offering CSV and Print/PDF, replacing what used to be two
+ *  separate buttons taking up toolbar space for the same underlying action. */
+function ExportMenu({ onExportCsv, onPrintPdf }: { onExportCsv: () => void; onPrintPdf: () => void }) {
+  const [isOpen, setIsOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+    if (isOpen) document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [isOpen]);
+
+  return (
+    <div className="relative inline-block text-left shrink-0" ref={dropdownRef}>
+      <button
+        onClick={() => setIsOpen(o => !o)}
+        className="whitespace-nowrap h-10 px-2.5 sm:px-4 rounded-control border border-line-strong bg-surface hover:bg-surface-sunken text-fg text-button shadow-sm transition flex items-center gap-2"
+      >
+        <Download className="w-4 h-4" /> Export
+        <ChevronDown className={`w-3.5 h-3.5 transition-transform ${isOpen ? "rotate-180" : ""}`} />
+      </button>
+
+      {isOpen && (
+        <div className="absolute right-0 mt-2 w-44 rounded-card bg-white border border-admin-line shadow-[0_8px_30px_rgb(0,0,0,0.12)] z-50 py-1 overflow-hidden animate-in fade-in slide-in-from-top-2">
+          <button
+            onClick={() => { setIsOpen(false); onExportCsv(); }}
+            className="w-full text-left px-4 py-2.5 text-label font-semibold text-fg hover:bg-admin-surface transition flex items-center gap-2"
+          >
+            <Download className="w-4 h-4 text-admin-muted" /> Export CSV
+          </button>
+          {/* The print stylesheet already formats this table for paper, so the
+              browser's own Save-as-PDF is a genuine export. */}
+          <button
+            onClick={() => { setIsOpen(false); onPrintPdf(); }}
+            className="w-full text-left px-4 py-2.5 text-label font-semibold text-fg hover:bg-admin-surface transition flex items-center gap-2"
+          >
+            <Printer className="w-4 h-4 text-admin-muted" /> Print / PDF
+          </button>
+        </div>
       )}
     </div>
   );
