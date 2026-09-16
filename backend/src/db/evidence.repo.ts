@@ -40,6 +40,16 @@ export async function listAllEvidence(): Promise<EvidenceRecord[]> {
   return docs.map(({ _id, ...record }: any) => record as EvidenceRecord);
 }
 
+/** Scoped version of listAllEvidence -- backs jobs.routes.ts's paginated Jobs Archive
+ *  (listJobsPage), which only needs evidence for the one page of jobs it's returning,
+ *  not the whole collection. Uses the existing evidence.jobId index. */
+export async function listEvidenceForJobs(jobIds: string[]): Promise<EvidenceRecord[]> {
+  if (jobIds.length === 0) return [];
+  const col = await evidenceCollection();
+  const docs = await col.find({ jobId: { $in: jobIds } }).toArray();
+  return docs.map(({ _id, ...record }: any) => record as EvidenceRecord);
+}
+
 /** Same contract as google/sheets.ts's readEvidenceSummary -- counts per evidence type,
  * bucketed by status, plus whether a signature exists. workflow.engine.ts's
  * assertCompletionGate() is unchanged and reads this shape directly.

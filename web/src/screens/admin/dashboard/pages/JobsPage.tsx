@@ -46,39 +46,43 @@ export function JobsPage() {
   
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
-  // How many rows to pull from the server for the chosen date range. Search, status
-  // filtering and sorting all run client-side over this set, so the server has to
-  // hand back the whole range rather than one page of it -- see the query below.
-  const FETCH_LIMIT = 500;
-  
+
   // Sorting
   const [sortConfig, setSortConfig] = useState<{ key: string, direction: "asc" | "desc" } | null>({ key: "Timing", direction: "asc" });
 
   // Selection
   const [selectedRows, setSelectedRows] = useState<Set<string>>(new Set());
 
+  // Maps the UI's sort column to a raw Mongo field jobs.repo.ts's listJobsPage can
+  // actually sort on. "Punctuality" (delayMinutes) has no raw equivalent -- it's only
+  // computed after normalizing -- so it's left unsent and the server falls back to its
+  // own default (bookedStart); the client-side sort pass below still honours it
+  // correctly for whichever page comes back.
+  const SORT_FIELD_MAP: Record<string, string> = { Timing: "bookedStart", Total: "amountCharged", Status: "status" };
+  const serverSort = sortConfig ? SORT_FIELD_MAP[sortConfig.key] : undefined;
+  const serverStatus = statusFilter === "In Progress" ? "IN_PROGRESS" : undefined;
+
   /**
-   * Pagination was broken in three compounding ways before this:
+   * Real server-side pagination. This used to pull up to 500 rows -- the whole
+   * company's job history, with evidence/activity/etc. joined in via the shared
+   * dashboard dataset cache -- on every request, then filter/sort/paginate all of it
+   * client-side, just to show 25 rows. Measured live in production: fetching everything
+   * took 9-11s; a genuinely limited, filtered Mongo query (jobs.routes.ts's GET /, now
+   * backed by listJobsPage) takes well under 1s, because the cost was proportional to
+   * how many documents came back, not a fixed per-request tax.
    *
-   *  - `page` wasn't in the query key, so React Query served the cached first page
-   *    forever and changing page never refetched;
-   *  - the server's 25-row response was then sliced *again* client-side, so page 2 was
-   *    always empty;
-   *  - `totalPages` was computed from the current page's length rather than the
-   *    server's `pagination.total`, which was fetched and discarded.
-   *
-   * The net effect was a Jobs Archive that could only ever show the first 25 jobs.
-   *
-   * Search is also sent to the server. Otherwise the dashboard only searched inside
-   * the first FETCH_LIMIT rows, so an existing booking could show in the driver app
-   * but stay hidden from admin search when it sat beyond that archive slice.
+   * `page` is in the query key so changing it actually refetches (a jobs.routes.ts
+   * fix from earlier this migration -- see that route's own comments); search/status/
+   * sort are sent to the server rather than filtered from an oversized local batch, so
+   * a job doesn't have to be in the first N rows to be found or correctly ordered.
    */
   const { data, isLoading, isError, error, refetch, isFetching } = useQuery({
-    queryKey: ["jobs", from, to, debouncedSearch, FETCH_LIMIT],
-    queryFn: () => fetchJobs({ page: 1, pageSize: FETCH_LIMIT, from, to, q: debouncedSearch || undefined })
+    queryKey: ["jobs", from, to, debouncedSearch, serverStatus, page, pageSize, serverSort, sortConfig?.direction],
+    queryFn: () => fetchJobs({
+      page, pageSize, from, to, q: debouncedSearch || undefined, status: serverStatus,
+      sort: serverSort, dir: sortConfig?.direction
+    })
   });
-
-  const truncated = Boolean(data?.pagination?.hasMore);
 
   // Debounce search
   useEffect(() => {
@@ -89,70 +93,43 @@ export function JobsPage() {
     return () => clearTimeout(handler);
   }, [searchQuery]);
 
-  // Client-side filtering & sorting for the mockup experience
-  const processedData = useMemo(() => {
-    if (!data?.items) return [];
-    
-    let filtered = [...data.items];
-    
-    // Status Filter
-    if (statusFilter === "In Progress") {
-      filtered = filtered.filter(j => j.status === "IN_PROGRESS");
-    }
+  // Final client-side sort pass over just the current page (cheap -- pageSize rows,
+  // not the whole company) so every sort column behaves identically regardless of
+  // whether the server could also sort on it (see SORT_FIELD_MAP's Punctuality note).
+  const sortedItems = useMemo(() => {
+    const items = data?.items ? [...data.items] : [];
+    if (!sortConfig) return items;
+    items.sort((a, b) => {
+      let valA: any = 0;
+      let valB: any = 0;
 
-    // Search Filter
-    if (debouncedSearch) {
-      filtered = filtered.filter(j => {
-        const d = resolveDriver(j.driverName, j.driverInitials);
-        return (
-          j.jobId.toLowerCase().includes(debouncedSearch) ||
-          (j.customerName || "").toLowerCase().includes(debouncedSearch) ||
-          (j.customerPhone || "").toLowerCase().includes(debouncedSearch) ||
-          (j.customerEmail || "").toLowerCase().includes(debouncedSearch) ||
-          (j.pickup || "").toLowerCase().includes(debouncedSearch) ||
-          (j.dropoff || "").toLowerCase().includes(debouncedSearch) ||
-          (d.name || "").toLowerCase().includes(debouncedSearch) ||
-          (j.driverInitials || "").toLowerCase().includes(debouncedSearch)
-        );
-      });
-    }
+      if (sortConfig.key === "Timing") {
+        valA = new Date(a.bookedStart || 0).getTime();
+        valB = new Date(b.bookedStart || 0).getTime();
+      } else if (sortConfig.key === "Total") {
+        valA = a.amountCharged || 0;
+        valB = b.amountCharged || 0;
+      } else if (sortConfig.key === "Status") {
+        valA = a.status;
+        valB = b.status;
+      } else if (sortConfig.key === "Punctuality") {
+        valA = a.delayMinutes || 0;
+        valB = b.delayMinutes || 0;
+      }
 
-    // Sort
-    if (sortConfig) {
-      filtered.sort((a, b) => {
-        let valA: any = 0;
-        let valB: any = 0;
-        
-        if (sortConfig.key === "Timing") {
-          valA = new Date(a.bookedStart || 0).getTime();
-          valB = new Date(b.bookedStart || 0).getTime();
-        } else if (sortConfig.key === "Total") {
-          valA = a.amountCharged || 0;
-          valB = b.amountCharged || 0;
-        } else if (sortConfig.key === "Status") {
-          valA = a.status;
-          valB = b.status;
-        } else if (sortConfig.key === "Punctuality") {
-          valA = a.delayMinutes || 0;
-          valB = b.delayMinutes || 0;
-        }
+      if (valA < valB) return sortConfig.direction === "asc" ? -1 : 1;
+      if (valA > valB) return sortConfig.direction === "asc" ? 1 : -1;
+      return 0;
+    });
+    return items;
+  }, [data?.items, sortConfig]);
 
-        if (valA < valB) return sortConfig.direction === "asc" ? -1 : 1;
-        if (valA > valB) return sortConfig.direction === "asc" ? 1 : -1;
-        return 0;
-      });
-    }
-
-    return filtered;
-  }, [data?.items, debouncedSearch, statusFilter, sortConfig]);
-
-  // Pagination slice -- over the fully filtered set, so page 2 now contains page 2.
-  const totalPages = Math.max(1, Math.ceil(processedData.length / pageSize));
+  const total = data?.pagination?.total ?? 0;
+  const totalPages = Math.max(1, data?.pagination?.totalPages ?? 1);
   const safePage = Math.min(page, totalPages);
-  const paginatedData = processedData.slice((safePage - 1) * pageSize, safePage * pageSize);
 
-  // Filtering can shrink the result set beneath the current page; snap back rather
-  // than stranding the user on an empty page with no way to tell why.
+  // A new filter/search can shrink the result set beneath the current page; snap back
+  // rather than stranding the user on an empty page with no way to tell why.
   useEffect(() => {
     if (page > totalPages) setPage(totalPages);
   }, [page, totalPages]);
@@ -164,7 +141,17 @@ export function JobsPage() {
       }
       return { key, direction: "desc" };
     });
+    setPage(1);
   };
+
+  function exportFilteredCsv() {
+    const params = new URLSearchParams();
+    if (from) params.set("from", from);
+    if (to) params.set("to", to);
+    if (debouncedSearch) params.set("q", debouncedSearch);
+    if (serverStatus) params.set("status", serverStatus);
+    window.location.href = `/api/admin/jobs/export.csv?${params.toString()}`;
+  }
 
   const toPounds = (cents: number | undefined) => (cents || 0) / 100;
 
@@ -189,10 +176,10 @@ export function JobsPage() {
   }
 
   const toggleAll = () => {
-    if (selectedRows.size === paginatedData.length) {
+    if (selectedRows.size === sortedItems.length) {
       setSelectedRows(new Set());
     } else {
-      setSelectedRows(new Set(paginatedData.map(j => j.jobId)));
+      setSelectedRows(new Set(sortedItems.map(j => j.jobId)));
     }
   };
 
@@ -229,7 +216,7 @@ export function JobsPage() {
                 <UserPlus className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Bulk Reassign</span>
               </button>
               <button
-                onClick={() => exportRows(processedData.filter(j => selectedRows.has(j.jobId)), "selection")}
+                onClick={() => exportRows(sortedItems.filter(j => selectedRows.has(j.jobId)), "selection")}
                 className="shrink-0 whitespace-nowrap px-2.5 sm:px-3 py-1.5 rounded-full text-[12px] font-semibold hover:bg-white/10 transition flex items-center gap-1.5"
               >
                 <Download className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Export Selection</span>
@@ -303,7 +290,7 @@ export function JobsPage() {
         <DateRangePicker from={from} to={to} onChange={(f, t) => { setFrom(f); setTo(t); setPage(1); }} />
 
         <span className="shrink-0 text-label font-medium text-fg-muted px-2 whitespace-nowrap sm:min-w-[120px] sm:text-right">
-          {isLoading || isFetching ? "Updating..." : `${processedData.length} moves`}
+          {isLoading || isFetching ? "Updating..." : `${total} moves`}
         </span>
 
         <button
@@ -314,10 +301,10 @@ export function JobsPage() {
           <RefreshCw className={`w-4 h-4 ${isFetching ? 'animate-spin' : ''}`} />
         </button>
         <button
-          onClick={() => exportRows(processedData, "filtered")}
-          disabled={processedData.length === 0}
+          onClick={exportFilteredCsv}
+          disabled={total === 0}
           className="shrink-0 w-10 h-10 rounded-card flex items-center justify-center bg-admin-surface border border-admin-line/50 hover:bg-admin-line/40 text-admin-muted hover:text-admin-ink transition disabled:opacity-40"
-          title={`Export ${processedData.length} rows as CSV`}
+          title={`Export ${total} rows as CSV`}
           aria-label="Export filtered jobs as CSV"
         >
           <Download className="w-4 h-4" />
@@ -337,7 +324,7 @@ export function JobsPage() {
                     <input 
                       type="checkbox" 
                       onChange={toggleAll}
-                      checked={paginatedData.length > 0 && selectedRows.size === paginatedData.length}
+                      checked={sortedItems.length > 0 && selectedRows.size === sortedItems.length}
                       className="rounded text-admin-brand cursor-pointer" 
                     />
                   </th>
@@ -389,7 +376,7 @@ export function JobsPage() {
                        </td>
                     </tr>
                   ))
-                ) : paginatedData.length === 0 ? (
+                ) : sortedItems.length === 0 ? (
                   // Empty State
                   <tr>
                     <td colSpan={13} className="py-16 text-center">
@@ -398,8 +385,8 @@ export function JobsPage() {
                       </div>
                       <h3 className="text-card text-fg mb-1">No jobs match your filters</h3>
                       <p className="text-[13px] text-admin-muted mb-4">Try adjusting your search or clearing filters.</p>
-                      <button 
-                        onClick={() => { setSearchQuery(""); setStatusFilter("All"); setFrom(undefined); setTo(undefined); }}
+                      <button
+                        onClick={() => { setSearchQuery(""); setStatusFilter("All"); setFrom(undefined); setTo(undefined); setPage(1); }}
                         className="px-4 py-2 bg-admin-surface hover:bg-admin-line text-admin-ink text-[13px] font-semibold rounded-card transition"
                       >
                         Clear all filters
@@ -407,7 +394,7 @@ export function JobsPage() {
                     </td>
                   </tr>
                 ) : (
-                  paginatedData.map((job: NormalizedJob, index: number) => {
+                  sortedItems.map((job: NormalizedJob, index: number) => {
                     const rowNumber = (safePage - 1) * pageSize + index + 1;
                     const formattedTime = formatLondonDateTime(job.bookedStart);
                     const amountPounds = toPounds(job.amountCharged);
@@ -532,7 +519,7 @@ export function JobsPage() {
           </div>
 
           {/* PAGINATION FOOTER */}
-          {paginatedData.length > 0 && (
+          {sortedItems.length > 0 && (
             <div className="px-4 sm:px-6 py-4 border-t border-admin-line bg-white flex flex-wrap items-center justify-between gap-3">
                <div className="flex items-center gap-2 text-[13px] text-admin-muted">
                  Show
@@ -576,7 +563,7 @@ export function JobsPage() {
 
       {!isError && viewMode === "cards" && (
         <JobCardList
-          jobs={paginatedData}
+          jobs={sortedItems}
           isLoading={isLoading}
           selected={selectedRows}
           onToggle={toggleRow}

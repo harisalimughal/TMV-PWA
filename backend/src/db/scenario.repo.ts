@@ -43,6 +43,17 @@ export async function listAllScenarioSubmissions(): Promise<ScenarioSubmissionDo
   return col.find({}).sort({ submittedAt: -1 }).toArray();
 }
 
+/** Scoped version of listAllScenarioSubmissions -- backs jobs.routes.ts's paginated
+ *  Jobs Archive (listJobsPage), which only needs submissions for the one page of jobs
+ *  it's returning. No index on jobId alone yet (the collection has none, and this
+ *  scoped query is new), but scenario submission volume is small enough (dozens, not
+ *  thousands -- see the doc_count diagnostics from this session) that a scan is cheap. */
+export async function listScenarioSubmissionsForJobs(jobIds: string[]): Promise<ScenarioSubmissionDoc[]> {
+  if (jobIds.length === 0) return [];
+  const col = await scenarioSubmissions();
+  return col.find({ jobId: { $in: jobIds } }).toArray();
+}
+
 /** One scenario kind's submissions across every job, paginated -- backs
  * scenarios.route.ts's GET /:kind list endpoint. */
 export async function listScenarioSubmissionsByKind(

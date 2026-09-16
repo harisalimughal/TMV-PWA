@@ -45,3 +45,12 @@ export async function listExceptions(): Promise<ExceptionDoc[]> {
   const col = await exceptionsCollection();
   return col.find({}).sort({ timestamp: -1 }).toArray();
 }
+
+/** Scoped version of listExceptions -- backs jobs.routes.ts's paginated Jobs Archive
+ *  (listJobsPage), which only needs exceptions for the one page of jobs it's returning.
+ *  Uses the (jobId, type) index ensureExceptionsIndexes() already creates. */
+export async function listExceptionsForJobs(jobIds: string[]): Promise<ExceptionDoc[]> {
+  if (jobIds.length === 0) return [];
+  const col = await exceptionsCollection();
+  return col.find({ jobId: { $in: jobIds } }).toArray();
+}
