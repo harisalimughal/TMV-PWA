@@ -34,12 +34,7 @@ export function JobsPage() {
   const [viewMode, setViewMode] = useState<"table" | "cards">("cards");
   const [reassignOpen, setReassignOpen] = useState(false);
   const [cardReassignJob, setCardReassignJob] = useState<NormalizedJob | null>(null);
-  // Delete is disabled here for now -- Calendar write access isn't enabled yet, so
-  // every delete attempt just fails with "No permission" (same dependency as
-  // Reassign). Still live on Finished Jobs (same shared BulkDeleteModal/endpoint).
-  // Re-enable by uncommenting this line and the two JSX blocks below once Calendar
-  // write access is confirmed working.
-  // const [deleteJobIds, setDeleteJobIds] = useState<string[] | null>(null);
+  const [deleteJobIds, setDeleteJobIds] = useState<string[] | null>(null);
   const [drawerJob, setDrawerJob] = useState<NormalizedJob | null>(null);
   
   // Filtering & Pagination
@@ -239,13 +234,13 @@ export function JobsPage() {
               >
                 <Download className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Export Selection</span>
               </button>
-              {/* Delete disabled for now -- see the deleteJobIds state comment above. */}
-              {/* <button
+              <button
                 onClick={() => setDeleteJobIds(Array.from(selectedRows))}
+                title="Deleting a job also cancels its linked Calendar event -- this currently fails with a permission error until Calendar write access is enabled."
                 className="shrink-0 whitespace-nowrap px-2.5 sm:px-3 py-1.5 rounded-full text-[12px] font-semibold text-red-300 hover:bg-white/10 hover:text-red-200 transition flex items-center gap-1.5"
               >
                 <Trash2 className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Delete</span>
-              </button> */}
+              </button>
               <button
                 onClick={() => setSelectedRows(new Set())}
                 className="shrink-0 px-2.5 py-1.5 rounded-full text-[12px] font-semibold hover:bg-white/10 transition"
@@ -626,7 +621,7 @@ export function JobsPage() {
         />
       )}
 
-      {/* {deleteJobIds && (
+      {deleteJobIds && (
         <BulkDeleteModal
           jobIds={deleteJobIds}
           onClose={() => setDeleteJobIds(null)}
@@ -636,7 +631,7 @@ export function JobsPage() {
             void refetch();
           }}
         />
-      )} */}
+      )}
     </div>
   );
 }
