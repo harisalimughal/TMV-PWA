@@ -7,6 +7,16 @@ services:
       - "127.0.0.1:8081:8080"
     env_file:
       - .env.production
+    environment:
+      # libuv's default threadpool (size 4) is shared by every TLS handshake and DNS
+      # lookup in the process. readMongoDataset() fires 5 concurrent collection reads
+      # (admin/dashboard/read.ts) -- if more than 4 of them need a fresh TLS connection
+      # at once, the extras queue behind that pool, one thread at a time. Diagnosed live
+      # in production: per-collection timing on the same readMongoDataset() call showed
+      # a consistent staircase (two sub-1.1s reads, then ~2.5s, ~9.4s, ~10-14s) across
+      # separate occurrences, ruling out collection size as the cause -- the smallest
+      # collection (exceptions) was consistently the slowest, not the largest.
+      - UV_THREADPOOL_SIZE=8
     # The VPS prefers IPv6 outbound, but MongoDB Atlas's Network Access list only
     # allow-lists the IPv4 address. Node's own dns.setDefaultResultOrder("ipv4first")
     # (src/server.ts) didn't reliably stop the mongodb driver from still attempting
