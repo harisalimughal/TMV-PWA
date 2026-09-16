@@ -17,14 +17,10 @@ import {
   Edit2,
   Save,
   Loader2,
-  ChevronDown,
-  ChevronRight,
-  Info,
   FileText
 } from "lucide-react";
 import { NormalizedJob, DriverSummaryItem } from "../types";
 import { Button } from "../../../../ui";
-import { formatLondonDateTime } from "../utils/date";
 import { htmlToPlainText } from "../../../../lib/htmlText";
 import { RawBookingText } from "../../../../components/driver/RawBookingText";
 import { JobStatusBadge } from "./StatusBadge";
@@ -72,9 +68,6 @@ export function JobDetailDrawer({ job: initialJob, isOpen, onClose, onUpdated }:
     if (!isReassigning || roster.length) return;
     fetchDrivers().then(({ drivers }) => setRoster(drivers.filter(d => d.active && d.hasAccount))).catch(() => {});
   }, [isReassigning, roster.length]);
-
-  // Timeline State
-  const [expandedStages, setExpandedStages] = useState<Set<number>>(new Set());
 
   // PDF Generation
   const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
@@ -163,13 +156,6 @@ export function JobDetailDrawer({ job: initialJob, isOpen, onClose, onUpdated }:
     } finally {
       setReassigning(false);
     }
-  };
-
-  const toggleStage = (i: number) => {
-    const next = new Set(expandedStages);
-    if (next.has(i)) next.delete(i);
-    else next.add(i);
-    setExpandedStages(next);
   };
 
   const isInvalidAddress = (addr?: string) => {
@@ -462,74 +448,6 @@ export function JobDetailDrawer({ job: initialJob, isOpen, onClose, onUpdated }:
             <p className="text-[14px] font-semibold text-admin-ink whitespace-pre-wrap break-words">
               {valueOrDash(bookingDetails.inventory)}
             </p>
-          </div>
-
-          {/* Audit Lifecycle Timeline */}
-          <div className="bg-white rounded-module border border-admin-line shadow-[0_2px_10px_rgb(0,0,0,0.02)] flex flex-col overflow-hidden">
-            <div className="p-5 border-b border-admin-line">
-              <h4 className="text-[12px] font-bold text-admin-muted uppercase tracking-wider flex items-center gap-1.5">
-                <Clock className="w-4 h-4 text-admin-brand" /> Audit Lifecycle Timeline
-              </h4>
-            </div>
-            
-            <div className="relative p-5 max-h-[280px] overflow-y-auto custom-scrollbar">
-              <div className="absolute left-[27px] top-6 bottom-6 w-0.5 bg-admin-line" />
-              
-              <div className="space-y-6 relative z-10">
-                {job.activity.length === 0 ? (
-                  <div className="relative flex items-start text-[13px]">
-                    <div className="w-3 h-3 mt-1 mr-4 rounded-full border-2 border-admin-muted bg-white ring-4 ring-white shrink-0" />
-                    <div>
-                      <span className="font-bold text-admin-muted">No activity recorded yet</span>
-                      <span className="text-[11px] text-admin-muted block mt-0.5 font-medium">
-                        Driver actions will appear here as the job moves through the app.
-                      </span>
-                    </div>
-                  </div>
-                ) : job.activity.map((entry, i) => {
-                  const expanded = expandedStages.has(i);
-
-                  return (
-                    <div 
-                      key={i} 
-                      className="relative flex items-start justify-between gap-4 text-[13px] group cursor-pointer"
-                      onClick={() => toggleStage(i)}
-                    >
-                      <div className="w-3 h-3 mt-1 mr-4 rounded-full border-2 border-admin-status-green bg-admin-status-green ring-4 ring-white shrink-0" />
-                      
-                      <div className="flex-1 min-w-0">
-                        <span className="font-bold flex items-center gap-1 text-admin-ink group-hover:text-admin-brand transition">
-                          {entry.action.replace(/_/g, " ")}
-                          {expanded ? <ChevronDown className="w-3 h-3 text-admin-muted" /> : <ChevronRight className="w-3 h-3 text-admin-muted" />}
-                        </span>
-                        
-                        {expanded && (
-                          <div className="mt-2 p-3 rounded-card bg-admin-surface border border-admin-line text-[12px] text-admin-ink shadow-inner animate-in fade-in slide-in-from-top-1">
-                             <div className="flex items-center gap-2 mb-1"><User className="w-3 h-3 text-admin-muted" /> <span className="font-semibold text-admin-muted">Actor:</span> {entry.driver}</div>
-                             {(entry.fromState || entry.toState) && (
-                               <div className="flex items-center gap-2 mb-1"><Info className="w-3 h-3 text-admin-muted" /> <span className="font-semibold text-admin-muted">State:</span> {entry.fromState || "-"} &rarr; {entry.toState || "-"}</div>
-                             )}
-                             <div className="flex items-center gap-2"><Info className="w-3 h-3 text-admin-muted" /> <span className="font-semibold text-admin-muted">Detail:</span> {entry.detail || "No additional detail"}</div>
-                          </div>
-                        )}
-                        {!expanded && (
-                           <span className="text-[11px] text-admin-muted block mt-0.5 font-medium">
-                             {entry.driver}
-                           </span>
-                        )}
-                      </div>
-                      
-                      <span className="text-[11px] font-mono font-semibold text-admin-muted text-right shrink-0">
-                        {formatLondonDateTime(entry.timestamp)}
-                      </span>
-                    </div>
-                  );
-                })}
-              </div>
-              
-              {/* Fade gradient at bottom inside scroll */}
-              <div className="sticky bottom-0 left-0 right-0 h-10 bg-gradient-to-t from-white to-transparent pointer-events-none" />
-            </div>
           </div>
 
           {/* Photographic Evidence Grid */}
