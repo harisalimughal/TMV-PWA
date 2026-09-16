@@ -3,7 +3,7 @@ import { useQuery, keepPreviousData } from "@tanstack/react-query";
 import { fetchDrivers, fetchJobs, reassignJob } from "../api";
 import { NormalizedJob } from "../types";
 import { JobDetailDrawer } from "../components/JobDetailDrawer";
-import { JobStatusBadge, DelayBandBadge } from "../components/StatusBadge";
+import { JobStatusBadge } from "../components/StatusBadge";
 import { DateRangePicker } from "../components/DateRangePicker";
 import { ApiErrorState } from "../components/ApiErrorState";
 import { BulkDeleteModal } from "../components/BulkDeleteModal";
@@ -54,10 +54,7 @@ export function JobsPage() {
   const [selectedRows, setSelectedRows] = useState<Set<string>>(new Set());
 
   // Maps the UI's sort column to a raw Mongo field jobs.repo.ts's listJobsPage can
-  // actually sort on. "Punctuality" (delayMinutes) has no raw equivalent -- it's only
-  // computed after normalizing -- so it's left unsent and the server falls back to its
-  // own default (bookedStart); the client-side sort pass below still honours it
-  // correctly for whichever page comes back.
+  // actually sort on.
   const SORT_FIELD_MAP: Record<string, string> = { Timing: "bookedStart", Total: "amountCharged", Status: "status" };
   const serverSort = sortConfig ? SORT_FIELD_MAP[sortConfig.key] : undefined;
   const serverStatus = statusFilter === "In Progress" ? "IN_PROGRESS" : undefined;
@@ -103,7 +100,7 @@ export function JobsPage() {
 
   // Final client-side sort pass over just the current page (cheap -- pageSize rows,
   // not the whole company) so every sort column behaves identically regardless of
-  // whether the server could also sort on it (see SORT_FIELD_MAP's Punctuality note).
+  // whether the server could also sort on it.
   const sortedItems = useMemo(() => {
     const items = data?.items ? [...data.items] : [];
     if (!sortConfig) return items;
@@ -120,9 +117,6 @@ export function JobsPage() {
       } else if (sortConfig.key === "Status") {
         valA = a.status;
         valB = b.status;
-      } else if (sortConfig.key === "Punctuality") {
-        valA = a.delayMinutes || 0;
-        valB = b.delayMinutes || 0;
       }
 
       if (valA < valB) return sortConfig.direction === "asc" ? -1 : 1;
@@ -355,12 +349,6 @@ export function JobsPage() {
                   >
                     Status <SortIcon column="Status" />
                   </th>
-                  <th 
-                    className="py-4 px-4 font-semibold text-eyebrow text-fg-subtle tracking-[0.03em] uppercase tracking-[0.03em] group cursor-pointer hover:text-admin-ink transition select-none"
-                    onClick={() => handleSort("Punctuality")}
-                  >
-                    Punctuality <SortIcon column="Punctuality" />
-                  </th>
                   <th className="py-4 px-4 font-semibold text-eyebrow text-fg-subtle tracking-[0.03em] uppercase tracking-[0.03em] text-center">Photos</th>
                   <th 
                     className="py-4 px-6 font-semibold text-eyebrow text-fg-subtle tracking-[0.03em] uppercase tracking-[0.03em] text-right group cursor-pointer hover:text-admin-ink transition select-none"
@@ -379,7 +367,7 @@ export function JobsPage() {
                   // Skeleton Rows
                   Array.from({ length: 8 }).map((_, i) => (
                     <tr key={i} className="h-[64px]">
-                       <td colSpan={13} className="px-4">
+                       <td colSpan={12} className="px-4">
                          <div className="h-4 bg-admin-line/40 rounded w-full animate-pulse"></div>
                        </td>
                     </tr>
@@ -387,7 +375,7 @@ export function JobsPage() {
                 ) : sortedItems.length === 0 ? (
                   // Empty State
                   <tr>
-                    <td colSpan={13} className="py-16 text-center">
+                    <td colSpan={12} className="py-16 text-center">
                       <div className="w-12 h-12 bg-admin-surface text-admin-muted rounded-full flex items-center justify-center mx-auto mb-3">
                         <Search className="w-5 h-5" />
                       </div>
@@ -407,7 +395,6 @@ export function JobsPage() {
                     const formattedTime = formatLondonDateTime(job.bookedStart);
                     const amountPounds = toPounds(job.amountCharged);
                     const totalPounds = toPounds(job.totalCharges);
-                    const isCancelled = job.status === "CANCELLED";
                     const photoCount = job.evidenceItems?.filter(e => (e.thumbProxyUrl || e.driveUrl)).length || 0;
                     
                     const resolvedDriver = resolveDriver(job.driverName, job.driverInitials);
@@ -479,14 +466,6 @@ export function JobsPage() {
 
                         <td className="px-4 whitespace-nowrap">
                           <JobStatusBadge status={job.status} />
-                        </td>
-
-                        <td className="px-4 whitespace-nowrap">
-                          {isCancelled ? (
-                            <span className="text-[14px] font-normal text-[#B0B0B0] italic">-</span>
-                          ) : (
-                            <DelayBandBadge band={job.delayBand} minutes={job.delayMinutes} />
-                          )}
                         </td>
 
                         <td className="px-4 text-center">
@@ -726,8 +705,8 @@ function JobCardList({
                   <p className="text-card text-fg mt-1.5 truncate">
                     {job.customerName || "Not recorded"}
                   </p>
-                  <p className="text-[13px] text-admin-muted mt-1 leading-snug">
-                    {job.pickup || "—"} <span className="text-admin-line-strong">→</span> {job.dropoff || "—"}
+                  <p className="text-[13px] text-admin-muted mt-1 truncate">
+                    {job.rawTitle || "—"}
                   </p>
                   <div className="flex items-center justify-between gap-3 mt-3 pt-3 border-t border-admin-line">
                     <span className="flex items-center gap-2 min-w-0">
@@ -736,8 +715,13 @@ function JobCardList({
                       >
                         {driver.code}
                       </span>
-                      <span className="text-[13px] text-admin-muted truncate">
-                        {formatLondonDateTime(job.bookedStart) || "Not scheduled"}
+                      <span className="min-w-0 leading-tight">
+                        <span className="text-[13px] text-admin-ink font-medium truncate block">
+                          {driver.name}
+                        </span>
+                        <span className="text-[11px] text-admin-muted truncate block">
+                          {formatLondonDateTime(job.bookedStart) || "Not scheduled"}
+                        </span>
                       </span>
                     </span>
                     <span className="flex shrink-0 flex-col items-end gap-0.5 font-mono tabular-nums">
