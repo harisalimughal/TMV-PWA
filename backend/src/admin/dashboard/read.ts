@@ -26,15 +26,29 @@ export interface MongoDataset {
 
 const LATENCY_BUDGET_MS = 1000;
 
+/** TEMPORARY: times each of the 5 parallel reads individually so a slow
+ *  readMongoDataset() pass says which collection actually caused it, instead of just
+ *  the aggregate duration -- the connection-pool/heartbeat diagnostics in db/mongo.ts
+ *  ruled out a dropped/re-established connection as the cause (none fired alongside
+ *  three separate live ~10.1-10.4s stalls), so the delay is inside query execution
+ *  itself, not connection setup. Remove once root-caused. */
+async function timedRead<T>(name: string, fn: () => Promise<T>): Promise<T> {
+  const started = Date.now();
+  const result = await fn();
+  const duration_ms = Date.now() - started;
+  if (duration_ms > 500) log.warn("dashboard mongo collection read was slow", { collection: name, duration_ms });
+  return result;
+}
+
 export async function readMongoDataset(): Promise<MongoDataset> {
   const started = Date.now();
 
   const [jobs, evidence, activity, scenarioSubmissions, exceptions] = await Promise.all([
-    listJobs(),
-    listAllEvidence(),
-    listAllActivity(),
-    listAllScenarioSubmissions(),
-    listExceptions()
+    timedRead("jobs", listJobs),
+    timedRead("evidence", listAllEvidence),
+    timedRead("activity", listAllActivity),
+    timedRead("scenarioSubmissions", listAllScenarioSubmissions),
+    timedRead("exceptions", listExceptions)
   ]);
 
   const durationMs = Date.now() - started;
