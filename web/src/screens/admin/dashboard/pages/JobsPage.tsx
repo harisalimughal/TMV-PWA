@@ -325,14 +325,6 @@ export function JobsPage() {
       {!isError && viewMode === "table" && (
         <div className="bg-white rounded-module shadow-sm overflow-hidden border border-admin-line">
           <div className="overflow-x-auto relative min-h-[400px]">
-            {isFetching && !isLoading && (
-              <div className="absolute inset-0 z-20 bg-white/70 backdrop-blur-[1px] flex items-center justify-center">
-                <div className="flex items-center gap-2 px-4 py-2 rounded-card bg-white border border-admin-line shadow-sm text-[13px] font-medium text-admin-muted">
-                  <RefreshCw className="w-4 h-4 animate-spin text-admin-brand" />
-                  Loading…
-                </div>
-              </div>
-            )}
             <table className="w-full text-left text-[14px] border-collapse relative">
               <thead className="bg-white sticky top-0 z-10 shadow-[0_1px_0_rgba(0,0,0,0.05)]">
                 <tr className="border-b border-admin-line">
@@ -383,7 +375,7 @@ export function JobsPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-admin-line/60">
-                {isLoading ? (
+                {isLoading || isFetching ? (
                   // Skeleton Rows
                   Array.from({ length: 8 }).map((_, i) => (
                     <tr key={i} className="h-[64px]">
@@ -674,7 +666,7 @@ function JobCardList({
   totalPages,
   onPageChange
 }: JobCardListProps) {
-  if (isLoading) {
+  if (isLoading || isFetching) {
     return (
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
         {Array.from({ length: 6 }).map((_, i) => (
@@ -694,15 +686,7 @@ function JobCardList({
   }
 
   return (
-    <div className="space-y-4 relative">
-      {isFetching && (
-        <div className="absolute inset-0 z-20 -m-2 bg-white/70 backdrop-blur-[1px] flex items-center justify-center rounded-module">
-          <div className="flex items-center gap-2 px-4 py-2 rounded-card bg-white border border-admin-line shadow-sm text-[13px] font-medium text-admin-muted">
-            <RefreshCw className="w-4 h-4 animate-spin text-admin-brand" />
-            Loading…
-          </div>
-        </div>
-      )}
+    <div className="space-y-4">
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
         {jobs.map(job => {
           const driver = resolveDriver(job.driverName, job.driverInitials);
