@@ -10,7 +10,7 @@ const SERVER_ERROR_STATUS = new Set([500, 502, 503, 504]);
 
 export type RetryPolicy = "idempotent" | "rate-limit-only";
 
-function statusOf(error: unknown): number | undefined {
+export function statusOf(error: unknown): number | undefined {
   const candidate = error as { code?: unknown; status?: unknown; response?: { status?: unknown } };
   const raw = candidate?.response?.status ?? candidate?.status ?? candidate?.code;
   const parsed = typeof raw === "string" ? Number(raw) : raw;

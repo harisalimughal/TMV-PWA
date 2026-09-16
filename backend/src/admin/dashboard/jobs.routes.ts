@@ -10,13 +10,14 @@ import { Router } from "express";
 import { DateTime } from "luxon";
 import { env } from "../../config/env";
 import { getDriverProfileByInitials } from "../../auth/driver-account.service";
-import { createCalendarEvent } from "../../google/calendar";
-import { parseCalendarEvent, syncBookingsForDate } from "../../jobs/booking.service";
+import { createCalendarEvent, getCalendarEvent, updateCalendarEvent } from "../../google/calendar";
+import { parseCalendarEvent, syncBookingsForDate, withReassignedInitials } from "../../jobs/booking.service";
 import { getJob, upsertJob } from "../../db/jobs.repo";
 import { appendActivity } from "../../db/activity.repo";
 import { JobStatus } from "../../jobs/job.types";
 import { WorkflowState } from "../../workflow/workflow.states";
 import { log } from "../../utils/logger";
+import { statusOf } from "../../utils/retry";
 import { formatGBP, toPounds } from "../../utils/money";
 import { formatLondonDate } from "./timezone";
 import { NormalizedJob } from "./types";
@@ -213,8 +214,51 @@ export function dashboardJobsRoutes(): Router {
       if (!existing) {
         return res.status(404).json({ error: { code: "JOB_NOT_FOUND", message: `Job ${jobId} not found.` } });
       }
+      if (!existing.calendarEventId) {
+        return res.status(409).json({
+          error: { code: "NO_CALENDAR_EVENT", message: "This job has no linked Calendar event, so it can't be reassigned." }
+        });
+      }
+
+      // Jobs are a live mirror of Calendar (see the POST "/" handler above), and the
+      // background sync re-parses every event's title every ~2 minutes and treats it
+      // as the source of truth for driverInitials -- writing the new driver into Mongo
+      // alone would just get silently reverted on the next pass. So Calendar has to be
+      // updated *first*: fetch the live title (not the possibly-stale rawTitle already
+      // in Mongo), rewrite just its initials segment, and only touch Mongo once that
+      // write has actually landed.
+      const event = await getCalendarEvent(existing.calendarEventId).catch(() => null);
+      const currentTitle = event?.summary || existing.rawTitle;
+      const newTitle = currentTitle ? withReassignedInitials(currentTitle, driverInitials) : null;
+
+      if (!newTitle) {
+        return res.status(409).json({
+          error: {
+            code: "CALENDAR_TITLE_UNRECOGNISED",
+            message: "Couldn't update the Calendar event -- its title doesn't match the expected format, so the driver initials can't be safely rewritten there."
+          }
+        });
+      }
+
+      try {
+        await updateCalendarEvent(existing.calendarEventId, { summary: newTitle });
+      } catch (calendarError) {
+        log.error("reassign: failed to write driver initials back to Calendar", calendarError, { job_id: jobId });
+        const status = statusOf(calendarError);
+        const isPermissionError = status === 401 || status === 403;
+        return res.status(502).json({
+          error: {
+            code: "CALENDAR_WRITE_FAILED",
+            message: isPermissionError
+              ? "No permission to change the Calendar event. Please enable Calendar write access for this app and try again."
+              : "Failed to update the Calendar event, so the reassignment was not saved. Please try again."
+          }
+        });
+      }
+
       const fromInitials = existing.driverInitials || "Unassigned";
       existing.driverInitials = driverInitials;
+      existing.rawTitle = newTitle;
       existing.updatedAt = new Date().toISOString();
       await upsertJob(existing);
 

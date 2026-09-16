@@ -93,3 +93,24 @@ export async function createCalendarEvent(event: calendar_v3.Schema$Event): Prom
   );
   return response.data;
 }
+
+/**
+ * Used by the admin panel's Reassign action to update the driver initials actually
+ * written into the event's title, not just in Mongo -- see jobs.routes.ts's
+ * "/:jobId/reassign". Without this, the background Calendar sync (booking.service.ts's
+ * syncBookingsForDate, re-parses every job's title every ~2 minutes) would silently
+ * revert the reassignment the next time it ran, since it treats Calendar as the source
+ * of truth for driverInitials and previously had no way to know the dashboard had
+ * changed it. patch (not update) so only the given fields change -- this always passes
+ * just `summary`, leaving the rest of the event untouched.
+ */
+export async function updateCalendarEvent(
+  eventId: string,
+  patch: calendar_v3.Schema$Event
+): Promise<calendar_v3.Schema$Event> {
+  const calendar = await writeClient();
+  const response = await withRetry("calendar.events.patch", () =>
+    calendar.events.patch({ calendarId: env.calendarId, eventId, requestBody: patch })
+  );
+  return response.data;
+}

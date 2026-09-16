@@ -168,7 +168,10 @@ function parseTitle(title: string): { crewSize: number; price: number; paidOnlin
   // (there's no upfront paid/unpaid distinction to make -- see invoice-jobs memory) --
   // both count as confirmed so the job still syncs; only "Y" counts as paid online.
   const tag = title.match(/\/\s*(Y|N|INV)(?:\s*-|\b)/i)?.[1]?.toUpperCase() ?? "";
-  const driverInitials = title.match(/\/\s*(?:Y|N|INV)\s*-\s*([A-Z]{1,2})/i)?.[1]?.toUpperCase() ?? "";
+  // 1-5 letters, matching the validation the admin dashboard's Add Job / Reassign
+  // actions already enforce (jobs.routes.ts) -- this used to cap at 2, silently
+  // truncating a longer initials code on the next sync.
+  const driverInitials = title.match(/\/\s*(?:Y|N|INV)\s*-\s*([A-Z]{1,5})/i)?.[1]?.toUpperCase() ?? "";
   return { crewSize: crew, price, paidOnline: tag === "Y", confirmed: tag === "Y" || tag === "INV", driverInitials };
 }
 
@@ -251,6 +254,20 @@ export function parseCalendarEvent(event: calendar_v3.Schema$Event): ParsedCalen
     // htmlToText's own comment for the live bug this fixed).
     rawDescription: htmlToText(description)
   };
+}
+
+/** Swaps the driver-initials segment of a booking title (the "-XX" after the Y/N/INV
+ *  confirmation tag), leaving everything else -- crew size, price, the tag itself --
+ *  unchanged. Used by the admin dashboard's Reassign action so the change lands in the
+ *  actual Calendar event (see google/calendar.ts's updateCalendarEvent), not just
+ *  Mongo; otherwise the next background sync re-parses the untouched title and
+ *  silently reverts the reassignment. Returns null when the title doesn't contain a
+ *  recognisable "/ Y|N|INV" tag at all -- an unrecognised/legacy title shape the caller
+ *  should surface as an error rather than rewrite blindly. */
+export function withReassignedInitials(title: string, newInitials: string): string | null {
+  const TAG_RE = /\/\s*(Y|N|INV)(?:\s*-\s*[A-Z]{1,5})?/i;
+  if (!TAG_RE.test(title)) return null;
+  return title.replace(TAG_RE, (_match, tag: string) => `/ ${tag.toUpperCase()}-${newInitials}`);
 }
 
 function jobIdForEvent(eventId: string): string {
