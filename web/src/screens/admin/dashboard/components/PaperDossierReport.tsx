@@ -63,14 +63,14 @@ export function PaperDossierReport({ job, isPreview = false }: Props) {
   const PhotoSection = ({ title, src }: { title: string, src: string | null }) => {
     const [failed, setFailed] = useState(false);
     return (
-      <div className="flex-1 flex flex-col mb-8 min-h-0">
+      <div className="flex flex-col mb-8">
         <h2 className="text-[14px] font-semibold text-[#1F2937] mb-3">{title}</h2>
-        <div className="flex-1 w-full bg-[#F3F4F6] rounded-card border border-[#E5E7EB] shadow-sm overflow-hidden flex items-center justify-center p-2">
+        <div className="w-full h-[360px] bg-[#F3F4F6] rounded-card border border-[#E5E7EB] shadow-sm overflow-hidden flex items-center justify-center p-2">
            {src && !failed ? (
              <img
                src={src}
                alt={title}
-               className="max-w-full max-h-[100%] rounded-control object-contain shadow-[0_2px_8px_rgba(0,0,0,0.08)] bg-white"
+               className="max-w-full max-h-full rounded-control object-contain shadow-[0_2px_8px_rgba(0,0,0,0.08)] bg-white"
                onError={() => setFailed(true)}
              />
            ) : (
