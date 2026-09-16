@@ -193,9 +193,6 @@ export function FinishedJobsPage() {
                         {job.reconciled ? "Reconciled" : "Check total"}
                       </span>
                     </div>
-                    <div className="mt-2 text-[12px] font-semibold text-admin-muted">
-                      Review: <span className="text-admin-ink">{job.managerReviewStatus || "Pending"}</span>
-                    </div>
                     <p className="text-card text-fg mt-1.5 truncate">
                       {job.customerName || "Not recorded"}
                     </p>
@@ -318,9 +315,6 @@ export function FinishedJobsPage() {
                                 Test
                               </span>
                             )}
-                          </div>
-                          <div className="mt-1 text-[11px] font-semibold text-admin-muted">
-                            Review: <span className="text-admin-ink">{job.managerReviewStatus || "Pending"}</span>
                           </div>
                         </td>
 

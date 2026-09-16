@@ -394,7 +394,6 @@ export function SubmissionDetailDrawer({ job: initialJob, isOpen, onClose, onNav
           <label className="text-[13px] font-semibold text-admin-muted block mb-4">Driver submitted details</label>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <DetailRow label="Booked crew" value={`${normalizedJob.crewSize} crew`} />
-            <DetailRow label="Paid online" value={normalizedJob.paidOnline ? "Yes" : "No"} />
             <DetailRow
               label="Extra charges selected"
               value={
