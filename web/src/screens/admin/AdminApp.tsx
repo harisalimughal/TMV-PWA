@@ -13,11 +13,9 @@ import { NotificationsPage } from "./dashboard/pages/NotificationsPage";
 import { DriversPage } from "./dashboard/pages/DriversPage";
 import { ScenariosPage } from "./dashboard/pages/ScenariosPage";
 import { ParkingLiabilityPage } from "./dashboard/pages/ParkingLiabilityPage";
-import { ActivityPage } from "./dashboard/pages/ActivityPage";
 import { ReportsPage } from "./dashboard/pages/ReportsPage";
 import { MessagingPage } from "./dashboard/pages/MessagingPage";
 import { PricingSettingsPage } from "./dashboard/pages/PricingSettingsPage";
-import { ApiSettingsPage } from "./dashboard/pages/ApiSettingsPage";
 import { usePushNotifications } from "../../lib/pwa/usePushNotifications";
 import { useServiceWorkerUpdate } from "../pwa-settings/hooks/useServiceWorkerUpdate";
 
@@ -132,8 +130,6 @@ export function AdminApp() {
       {activeSection === "liability" && <ScenariosPage kind="liability" />}
       {activeSection === "drivers" && <DriversPage />}
       {activeSection === "pricing" && <PricingSettingsPage />}
-      {activeSection === "api" && <ApiSettingsPage />}
-      {activeSection === "activity" && <ActivityPage />}
       {activeSection === "reports" && <ReportsPage />}
       {activeSection === "messaging" && <MessagingPage />}
     </Layout>

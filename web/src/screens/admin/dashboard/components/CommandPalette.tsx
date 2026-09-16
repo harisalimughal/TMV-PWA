@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from "react";
 import {
   Search, LayoutDashboard, Truck, CheckSquare, LogIn, LogOut, Users, Banknote,
-  AlertTriangle, FileSpreadsheet, RefreshCw, Download, History, ShieldAlert, ArrowRight
+  AlertTriangle, FileSpreadsheet, RefreshCw, Download, ShieldAlert, ArrowRight, X
 } from "lucide-react";
 
 interface Props {
@@ -23,7 +23,6 @@ const PALETTE_ITEMS = [
   { id: "liability", label: "Liability Report", section: "liability", icon: ShieldAlert, category: "Scenarios" },
   { id: "drivers", label: "Drivers", section: "drivers", icon: Users, category: "Management" },
   { id: "finance", label: "Finance", section: "finance", icon: Banknote, category: "Management" },
-  { id: "activity", label: "Activity Log", section: "activity", icon: History, category: "Management" },
   { id: "reports", label: "Reports", section: "reports", icon: FileSpreadsheet, category: "Management" },
   { id: "act_refresh", label: "Sync Live Sheets Data", action: "refresh", icon: RefreshCw, category: "Actions" },
   { id: "act_export", label: "Export Jobs to CSV", action: "export", icon: Download, category: "Actions" }
@@ -67,13 +66,18 @@ export function CommandPalette({ isOpen, onClose, onSelectSection, onRefreshData
             type="text"
             value={search}
             onChange={e => { setSearch(e.target.value); setSelectedIndex(0); }}
-            placeholder="Search jobs, customers, postcodes... (Esc to close)"
+            placeholder="Search jobs, customers, postcodes..."
             autoFocus
             className="w-full bg-transparent text-sm text-admin-ink placeholder:text-admin-muted focus:outline-none"
           />
-          <kbd className="hidden sm:inline-block px-1.5 py-0.5 text-[10px] font-mono text-admin-muted bg-white border border-admin-line rounded">
-            ESC
-          </kbd>
+          <button
+            onClick={onClose}
+            title="Close (Esc)"
+            aria-label="Close search"
+            className="shrink-0 p-1 rounded text-admin-muted hover:bg-admin-line/50 hover:text-admin-ink transition"
+          >
+            <X className="w-4 h-4" />
+          </button>
         </div>
 
         <div className="max-h-72 overflow-y-auto p-1.5 space-y-0.5">

@@ -8,7 +8,7 @@
  * slightly (password not pwaPassword; settings carry `type` not `description`).
  */
 import {
-  DriverSummaryItem, ExceptionItem, FinanceSummaryResponse, NormalizedJob, ScenarioItem, SummaryResponse, VanComplianceItem, VanDriverRecordItem, VanRecordItem
+  DriverSummaryItem, FinanceSummaryResponse, NormalizedJob, ScenarioItem, SummaryResponse, VanComplianceItem, VanDriverRecordItem, VanRecordItem
 } from "./types";
 import { SERVER_ERROR_MESSAGE } from "../../../lib/apiErrors";
 
@@ -128,20 +128,6 @@ export async function fetchFinance(from?: string, to?: string, groupBy = "day"):
   return res.json();
 }
 
-export async function fetchExceptions(type?: string, from?: string, to?: string, badge?: boolean): Promise<{
-  total: number; unfilteredTotal: number; activeBadgeCount?: number;
-  items: ExceptionItem[]; types: Array<{ type: string; count: number }>;
-}> {
-  const params = new URLSearchParams();
-  if (type) params.set("type", type);
-  if (from) params.set("from", from);
-  if (to) params.set("to", to);
-  if (badge) params.set("badge", "true");
-  const res = await apiFetch(`/api/admin/exceptions?${params.toString()}`);
-  if (!res.ok) throw await apiError(res, "Failed to load exceptions");
-  return res.json();
-}
-
 export async function fetchScenarios(kind: string, page = 1): Promise<{ kind: string; items: ScenarioItem[]; pagination: PaginationMeta }> {
   const res = await apiFetch(`/api/admin/scenarios/${encodeURIComponent(kind)}?page=${page}`);
   if (!res.ok) throw await apiError(res, `Failed to load scenario ${kind}`);
@@ -183,21 +169,6 @@ export async function saveVanCompliance(
   if (!res.ok) throw await apiError(res, "Failed to save van compliance");
   const data = await res.json();
   return data.compliance;
-}
-
-export async function fetchActivity(page = 1, from?: string, to?: string): Promise<{
-  items: Array<{
-    id: string; timestamp: string; jobId: string; driver: string; action: string;
-    fromState?: string; toState?: string; detail?: string;
-  }>;
-  pagination: PaginationMeta;
-}> {
-  const params = new URLSearchParams({ page: String(page) });
-  if (from) params.set("from", from);
-  if (to) params.set("to", to);
-  const res = await apiFetch(`/api/admin/activity?${params.toString()}`);
-  if (!res.ok) throw await apiError(res, "Failed to load activity logs");
-  return res.json();
 }
 
 export async function triggerDatasetRefresh(): Promise<void> {

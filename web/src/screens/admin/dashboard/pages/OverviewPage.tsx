@@ -15,9 +15,9 @@ import {
   Tooltip,
   ResponsiveContainer
 } from "recharts";
-import { fetchSummary, fetchExceptions } from "../api";
+import { fetchSummary } from "../api";
 import { DateRangePicker } from "../components/DateRangePicker";
-import { formatLondonDate, formatLondonDateTime } from "../utils/date";
+import { formatLondonDate } from "../utils/date";
 import { completionRate } from "../utils/kpi";
 import { GenerateReportModal } from "../components/GenerateReportModal";
 import { Button, Spinner } from "../../../../ui";
@@ -34,11 +34,6 @@ export function OverviewPage({ onSelectSection }: Props) {
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: ["summary", from, to],
     queryFn: () => fetchSummary(from, to)
-  });
-
-  const { data: exceptionsData } = useQuery({
-    queryKey: ["exceptions_activity"],
-    queryFn: () => fetchExceptions("ALL")
   });
 
   if (isLoading) {
@@ -67,7 +62,6 @@ export function OverviewPage({ onSelectSection }: Props) {
   // null when there are no jobs in range -- rendered as "N/A", never a stand-in number.
   const completionPct = completionRate(kpis.completed, kpis.totalJobs);
   const totalRevenue = kpis.revenuePounds || 0;
-  const activityFeed = exceptionsData?.items.slice(0, 5) || [];
   const delayTone =
     kpis.avgDelayMinutes <= 0
       ? { label: "On time", className: "text-admin-status-green", chip: "bg-admin-status-green/10" }
@@ -90,12 +84,12 @@ export function OverviewPage({ onSelectSection }: Props) {
         </div>
       </div>
 
-      {/* 2-COLUMN MAIN LAYOUT */}
+      {/* TOP ROW: Stats (wider) + Top Drivers (narrower) */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        
-        {/* LEFT COLUMN: Wider (Stats + Chart) */}
+
+        {/* LEFT COLUMN: Wider (Stats) */}
         <div className="lg:col-span-2 space-y-6">
-          
+
           {/* STATS GRID */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
             
@@ -162,42 +156,11 @@ export function OverviewPage({ onSelectSection }: Props) {
             </div>
 
           </div>
-
-          {/* MAIN CHART CARD */}
-          <div className="bg-white p-8 rounded-module shadow-[0_8px_30px_rgb(0,0,0,0.03)]">
-            <div className="flex items-center justify-between mb-8">
-              <div>
-                <h3 className="text-heading text-fg">Revenue Velocity</h3>
-                <p className="text-[14px] text-admin-muted mt-1">Daily billed move turnover</p>
-              </div>
-            </div>
-            <div className="h-[300px] w-full">
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={charts.revenueOverTime}>
-                  <defs>
-                    <linearGradient id="revGrad" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#111827" stopOpacity={0.2} />
-                      <stop offset="95%" stopColor="#111827" stopOpacity={0.0} />
-                    </linearGradient>
-                  </defs>
-                  <XAxis dataKey="date" tick={{ fontSize: 12, fill: "#6B7280" }} tickFormatter={formatLondonDate} axisLine={false} tickLine={false} dy={10} />
-                  <YAxis tick={{ fontSize: 12, fill: "#6B7280" }} tickFormatter={v => `£${v}`} axisLine={false} tickLine={false} dx={-10} />
-                  <Tooltip
-                    formatter={(val: number) => [`£${val.toFixed(0)}`, "Revenue"]}
-                    contentStyle={{ backgroundColor: "#111827", borderColor: "transparent", color: "#FFFFFF", borderRadius: 12, boxShadow: "0 10px 25px rgba(0,0,0,.20)" }}
-                    itemStyle={{ color: "#FFFFFF", fontSize: "14px", fontWeight: 600 }}
-                    labelStyle={{ color: "#9CA3AF", fontSize: "13px", marginBottom: "4px" }}
-                  />
-                  <Area type="monotone" dataKey="revenuePounds" stroke="#111827" strokeWidth={3} fillOpacity={1} fill="url(#revGrad)" />
-                </AreaChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
         </div>
 
-        {/* RIGHT COLUMN: Narrower (Ranked List + Feed) */}
+        {/* RIGHT COLUMN: Narrower (Ranked List) */}
         <div className="lg:col-span-1 space-y-6">
-          
+
           {/* RANKED LIST CARD */}
           <div className="bg-white p-8 rounded-module shadow-[0_8px_30px_rgb(0,0,0,0.03)]">
             <div className="flex items-center justify-between mb-6">
@@ -228,35 +191,39 @@ export function OverviewPage({ onSelectSection }: Props) {
             </div>
           </div>
 
-          {/* ACTIVITY FEED CARD */}
-          <div className="bg-white p-8 rounded-module shadow-[0_8px_30px_rgb(0,0,0,0.03)]">
-            <div className="flex items-center justify-between mb-6">
-              <h3 className="text-heading text-fg">Recent Activity</h3>
-              <span className="w-2 h-2 rounded-full bg-admin-status-green animate-pulse"></span>
-            </div>
-            <div className="space-y-6">
-              {activityFeed.map((ex: any, i: number) => (
-                <div key={ex.id || i} className="flex gap-4">
-                  <div className="w-2 h-2 rounded-full bg-admin-ink mt-1.5 shrink-0" />
-                  <div>
-                    <div className="text-[14px] text-admin-ink leading-tight mb-1">
-                      <span className="font-semibold">{ex.driverName}</span> logged <span className="font-medium text-admin-status-red">{ex.type}</span>
-                    </div>
-                    <div className="text-[13px] text-admin-muted line-clamp-1">{ex.detail}</div>
-                    <div className="text-[12px] font-medium text-admin-muted mt-2 tracking-wide uppercase">
-                      {formatLondonDateTime(ex.timestamp)}
-                    </div>
-                  </div>
-                </div>
-              ))}
-              {activityFeed.length === 0 && (
-                <div className="text-[14px] text-admin-muted text-center py-4">No recent activity.</div>
-              )}
-            </div>
-          </div>
-
         </div>
 
+      </div>
+
+      {/* MAIN CHART CARD -- full width now that the Recent Activity card is gone */}
+      <div className="bg-white p-8 rounded-module shadow-[0_8px_30px_rgb(0,0,0,0.03)]">
+        <div className="flex items-center justify-between mb-8">
+          <div>
+            <h3 className="text-heading text-fg">Revenue Velocity</h3>
+            <p className="text-[14px] text-admin-muted mt-1">Daily billed move turnover</p>
+          </div>
+        </div>
+        <div className="h-[340px] w-full">
+          <ResponsiveContainer width="100%" height="100%">
+            <AreaChart data={charts.revenueOverTime}>
+              <defs>
+                <linearGradient id="revGrad" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="#111827" stopOpacity={0.2} />
+                  <stop offset="95%" stopColor="#111827" stopOpacity={0.0} />
+                </linearGradient>
+              </defs>
+              <XAxis dataKey="date" tick={{ fontSize: 12, fill: "#6B7280" }} tickFormatter={formatLondonDate} axisLine={false} tickLine={false} dy={10} />
+              <YAxis tick={{ fontSize: 12, fill: "#6B7280" }} tickFormatter={v => `£${v}`} axisLine={false} tickLine={false} dx={-10} />
+              <Tooltip
+                formatter={(val: number) => [`£${val.toFixed(0)}`, "Revenue"]}
+                contentStyle={{ backgroundColor: "#111827", borderColor: "transparent", color: "#FFFFFF", borderRadius: 12, boxShadow: "0 10px 25px rgba(0,0,0,.20)" }}
+                itemStyle={{ color: "#FFFFFF", fontSize: "14px", fontWeight: 600 }}
+                labelStyle={{ color: "#9CA3AF", fontSize: "13px", marginBottom: "4px" }}
+              />
+              <Area type="monotone" dataKey="revenuePounds" stroke="#111827" strokeWidth={3} fillOpacity={1} fill="url(#revGrad)" />
+            </AreaChart>
+          </ResponsiveContainer>
+        </div>
       </div>
       <GenerateReportModal isOpen={isReportModalOpen} onClose={() => setIsReportModalOpen(false)} initialFrom={from} initialTo={to} />
     </div>

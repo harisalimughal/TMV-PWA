@@ -83,6 +83,19 @@ export async function fetchAdminSession(): Promise<boolean> {
   }
 }
 
+/** The dropdown in Layout.tsx's header shows this alongside Settings/Log out --
+ *  best-effort only (returns null rather than throwing on any failure), since it's
+ *  cosmetic and the session-gate above already handles the "not logged in" case. */
+export async function fetchAdminProfile(): Promise<{ email: string } | null> {
+  try {
+    const res = await fetch("/api/admin/me", { credentials: "same-origin" });
+    if (!res.ok) return null;
+    return await res.json();
+  } catch {
+    return null;
+  }
+}
+
 export async function adminLogin(password: string): Promise<void> {
   await request("/api/admin/login", { method: "POST", body: JSON.stringify({ password }) });
 }

@@ -7,16 +7,18 @@
  * there's no per-user account model here (single shared admin password, see
  * auth/admin-session.ts), so it never meant anything real even in the source.
  */
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   LayoutDashboard, Navigation, Truck, CheckSquare, LogIn, LogOut, AlertCircle, ShieldAlert,
-  Users, Banknote, History, FileSpreadsheet, RefreshCw, KeyRound,
-  ChevronLeft, ChevronRight, Search, Command, MessageSquare, Bell, Menu, X
+  Users, Banknote, FileSpreadsheet, RefreshCw,
+  ChevronLeft, ChevronRight, ChevronDown, Search, Command, MessageSquare, Bell, Menu, X, Settings
 } from "lucide-react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { triggerDatasetRefresh } from "./api";
+import { fetchAdminProfile } from "../../../api/admin";
 import { CommandPalette } from "./components/CommandPalette";
 import { ShortcutsModal } from "./components/ShortcutsModal";
+import { ApiSettingsPage } from "./pages/ApiSettingsPage";
 import { formatLondonTimeOnly } from "./utils/date";
 import { NotificationBell } from "../../../components/driver/NotificationBell";
 
@@ -59,8 +61,6 @@ const NAV_CONFIG: NavSectionItem[] = [
   { type: "header", label: "Management" },
   { id: "drivers", label: "Drivers", icon: Users, desc: "Driver scorecards, revenue handled and punctuality metrics" },
   { id: "pricing", label: "Pricing Settings", icon: Banknote, desc: "Configure crew rates, packing service pricing, and overtime rules" },
-  { id: "api", label: "API", icon: KeyRound, desc: "Firetext and GPSLive credentials -- changes apply immediately, no redeploy" },
-  { id: "activity", label: "Activity Log", icon: History, desc: "Chronological audit records directly from the activity log" },
   { id: "reports", label: "Reports", icon: FileSpreadsheet, desc: "Downloadable operational datasets and certified export files" },
   { id: "messaging", label: "Messaging Content", icon: MessageSquare, desc: "Manage automated customer and driver communication templates" }
 ];
@@ -80,8 +80,35 @@ export function Layout({ activeSection, onSelectSection, onLogout, children }: P
   const effectiveCollapsed = collapsed && !isMobile;
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  const [profileOpen, setProfileOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const profileRef = useRef<HTMLDivElement>(null);
   const [londonClock, setLondonClock] = useState(formatLondonTimeOnly(new Date().toISOString()));
   const queryClient = useQueryClient();
+
+  const { data: adminProfile } = useQuery({
+    queryKey: ["admin_profile"],
+    queryFn: fetchAdminProfile,
+    staleTime: Infinity
+  });
+
+  // Click-outside + Escape close the profile dropdown, same pattern the mobile nav
+  // drawer already uses below.
+  useEffect(() => {
+    if (!profileOpen) return;
+    const onPointerDown = (e: MouseEvent) => {
+      if (profileRef.current && !profileRef.current.contains(e.target as Node)) setProfileOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setProfileOpen(false);
+    };
+    document.addEventListener("mousedown", onPointerDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onPointerDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [profileOpen]);
 
   useEffect(() => {
     const timer = setInterval(() => setLondonClock(formatLondonTimeOnly(new Date().toISOString())), 10000);
@@ -324,7 +351,44 @@ export function Layout({ activeSection, onSelectSection, onLogout, children }: P
               <Command className="w-4 h-4" />
             </button>
             <NotificationBell />
-            <img src="/tmv-logo.png" alt="" className="w-9 h-9 rounded-full object-cover border-2 border-white shadow-primary" />
+
+            <div className="relative" ref={profileRef}>
+              <button
+                onClick={() => setProfileOpen(prev => !prev)}
+                className="flex items-center gap-1 rounded-full hover:bg-admin-surface p-0.5 pr-1.5 transition"
+                title="Account"
+                aria-label="Account menu"
+                aria-expanded={profileOpen}
+              >
+                <img src="/tmv-logo.png" alt="" className="w-9 h-9 rounded-full object-cover border-2 border-white shadow-primary" />
+                <ChevronDown className={`w-3.5 h-3.5 text-admin-muted transition-transform ${profileOpen ? "rotate-180" : ""}`} />
+              </button>
+
+              {profileOpen && (
+                <div className="absolute right-0 top-full mt-2 w-64 bg-white border border-admin-line rounded-card shadow-elevated overflow-hidden z-30">
+                  <div className="px-4 py-3 border-b border-admin-line">
+                    <div className="text-[13px] font-semibold text-admin-ink truncate">Administrator</div>
+                    <div className="text-[12px] text-admin-muted truncate">{adminProfile?.email || "—"}</div>
+                  </div>
+                  <div className="p-1.5">
+                    <button
+                      onClick={() => { setProfileOpen(false); setSettingsOpen(true); }}
+                      className="w-full flex items-center gap-2.5 px-3 py-2 rounded-card text-[13px] font-medium text-admin-ink-2 hover:bg-admin-surface transition text-left"
+                    >
+                      <Settings className="w-4 h-4 text-admin-muted" /> Settings
+                    </button>
+                    {onLogout && (
+                      <button
+                        onClick={() => { setProfileOpen(false); onLogout(); }}
+                        className="w-full flex items-center gap-2.5 px-3 py-2 rounded-card text-[13px] font-medium text-admin-status-red hover:bg-admin-status-red-bg transition text-left"
+                      >
+                        <LogOut className="w-4 h-4" /> Log out
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         </header>
 
@@ -335,6 +399,26 @@ export function Layout({ activeSection, onSelectSection, onLogout, children }: P
 
       <CommandPalette isOpen={paletteOpen} onClose={() => setPaletteOpen(false)} onSelectSection={onSelectSection} onRefreshData={() => refreshMutation.mutate()} />
       <ShortcutsModal isOpen={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
+
+      {settingsOpen && (
+        <div className="fixed inset-0 z-50 flex items-start justify-center pt-10 md:pt-16 bg-admin-ink/30 backdrop-blur-xs p-4 overflow-y-auto">
+          <div className="w-full max-w-[960px] bg-admin-bg border border-admin-line rounded-module shadow-elevated flex flex-col max-h-[calc(100vh-5rem)]">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-admin-line bg-white shrink-0">
+              <h2 className="text-heading text-fg">Settings</h2>
+              <button
+                onClick={() => setSettingsOpen(false)}
+                aria-label="Close settings"
+                className="p-1.5 rounded text-admin-muted hover:bg-admin-surface hover:text-admin-ink transition"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="overflow-y-auto p-6">
+              <ApiSettingsPage />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
