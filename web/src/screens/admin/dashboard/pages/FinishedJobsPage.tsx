@@ -8,7 +8,9 @@ import {
   Camera,
   AlertTriangle,
   ArrowRight,
-  Trash2
+  Trash2,
+  List,
+  LayoutGrid
 } from "lucide-react";
 import { SubmissionDetailDrawer } from "../components/SubmissionDetailDrawer";
 import { FolderActionDropdown } from "../components/FolderActionDropdown";
@@ -20,11 +22,12 @@ import { NormalizedJob, formatGBP, toPounds } from "../types";
 import { DateRangePicker } from "../components/DateRangePicker";
 import { ApiErrorState } from "../components/ApiErrorState";
 import { formatLondonDateTime } from "../utils/date";
-import { DelayBandBadge } from "../components/StatusBadge";
+import { DelayBandBadge, JobStatusBadge } from "../components/StatusBadge";
 const isTestOrIncomplete = (job: any) => { return job.customerName === "hh" || String(job.pickup).includes("test") || String(job.dropoff).includes("test"); };
 import { resolveDriver, formatVanReg } from "../utils/drivers";
 
 export function FinishedJobsPage() {
+  const [viewMode, setViewMode] = useState<"table" | "cards">("cards");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
   const [from, setFrom] = useState<string | undefined>();
@@ -115,6 +118,22 @@ export function FinishedJobsPage() {
         <h1 className="text-title text-fg">Finished Jobs</h1>
 
         <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
+          <div className="hidden md:flex items-center p-1 bg-admin-surface rounded-card border border-admin-line/50 shrink-0">
+            <button
+              onClick={() => setViewMode("table")}
+              title="Table view"
+              className={`p-1.5 rounded-control transition ${viewMode === "table" ? "bg-white shadow-sm text-admin-ink" : "text-admin-muted hover:text-admin-ink"}`}
+            >
+              <List className="w-4 h-4" />
+            </button>
+            <button
+              onClick={() => setViewMode("cards")}
+              title="Card view"
+              className={`p-1.5 rounded-control transition ${viewMode === "cards" ? "bg-white shadow-sm text-admin-ink" : "text-admin-muted hover:text-admin-ink"}`}
+            >
+              <LayoutGrid className="w-4 h-4" />
+            </button>
+          </div>
           <select
             value={driverFilter}
             onChange={e => { setDriverFilter(e.target.value); setPage(1); }}
@@ -153,77 +172,96 @@ export function FinishedJobsPage() {
       {/* Main Table View */}
       {!isLoading && !error && (
         <div className="bg-white rounded-module shadow-[0_4px_20px_rgb(0,0,0,0.03)] border border-admin-line overflow-hidden">
-          {/* Mobile: cards. An 11-column table behind a horizontal scrollbar is not a
-              usable phone layout, so below md the same rows render as cards showing
-              the four fields that actually matter on a small screen. */}
-          <ul className="md:hidden list-none m-0 p-3 space-y-3">
+          {/* Same card shape as the Jobs Archive tab's card view (JobsPage.tsx's
+              JobCardList) -- checkbox, top-right action, Job ID + status, customer
+              name, a secondary line, then a divider footer split driver+time /
+              amount+total. Content swapped for what's relevant to a *finished* job:
+              route instead of the booking title, actual finish time instead of
+              booked, and the folder actions (preview/download/open) instead of
+              Reassign. Below md, cards show regardless of viewMode -- an 11-column
+              table behind a horizontal scrollbar has nowhere to go on a phone. */}
+          <div className={`grid gap-3 p-3 sm:grid-cols-2 xl:grid-cols-3 ${viewMode === "cards" ? "" : "md:hidden"}`}>
             {items.map((job: NormalizedJob) => {
               const driver = resolveDriver(job.driverName, job.driverInitials);
               const amount = toPounds(job.amountCharged);
               const total = totalCharges(job);
-              const photoCount =
-                job.evidenceItems?.filter((e: any) => e.type === "IMAGE" && (e.thumbProxyUrl || e.driveUrl)).length || 0;
               const isSelected = selectedRows.has(job.jobId);
+              const finishedTime = job.actualFinish ? formatLondonDateTime(job.actualFinish) : (job.actualStart ? formatLondonDateTime(job.actualStart) : "Not recorded");
               return (
-                <li key={job.jobId} className="flex items-start gap-2">
-                  <input
-                    type="checkbox"
-                    checked={isSelected}
-                    onChange={() => toggleRow(job.jobId)}
-                    className="mt-5 w-4 h-4 rounded accent-admin-brand cursor-pointer shrink-0"
-                    aria-label={`Select job ${job.jobId}`}
-                  />
-                  <button
-                    onClick={() => setPreviewJob(job)}
-                    className={`flex-1 min-w-0 text-left rounded-module border bg-white p-4 active:bg-admin-surface transition ${
-                      isSelected ? "border-admin-brand ring-2 ring-admin-brand/20" : "border-admin-line"
-                    }`}
-                  >
-                    <div className="flex items-center justify-between gap-3">
-                      <span className="font-semibold text-admin-brand text-[14px]">{job.jobId}</span>
-                      <span className="font-mono text-[14px] font-bold tabular-nums">
-                        {amount === 0 ? "—" : `£${amount.toLocaleString("en-GB", { minimumFractionDigits: 2 })}`}
-                      </span>
+                <article
+                  key={job.jobId}
+                  className={`rounded-module bg-white border p-4 transition ${
+                    isSelected ? "border-admin-brand ring-2 ring-admin-brand/20" : "border-admin-line"
+                  }`}
+                >
+                  <div className="flex items-start gap-3">
+                    <input
+                      type="checkbox"
+                      checked={isSelected}
+                      onChange={() => toggleRow(job.jobId)}
+                      className="mt-1 w-4 h-4 rounded accent-admin-brand cursor-pointer shrink-0"
+                      aria-label={`Select job ${job.jobId}`}
+                    />
+                    {/* Sibling of the onOpen button below, not nested inside it -- a
+                        <button> inside a <button> is invalid HTML. */}
+                    <div className="order-3 shrink-0" onClick={e => e.stopPropagation()}>
+                      <FolderActionDropdown
+                        hasFolderUrl={!!job.driveFolderUrl}
+                        onOpenFolder={() => window.open(job.driveFolderUrl, "_blank")}
+                        onPreview={() => { setAutoDownloadJobId(null); setPreviewJob(job); }}
+                        onDownload={() => { setAutoDownloadJobId(job.jobId); setPreviewJob(job); }}
+                      />
                     </div>
-                    <div className="mt-2 flex items-center justify-between gap-3 rounded-card bg-admin-surface px-3 py-2 text-[12px]">
-                      <span className="text-admin-muted">
-                        Total Charges {formatGBP(total)}
-                      </span>
-                      <span className={job.reconciled ? "font-semibold text-admin-status-green" : "font-semibold text-admin-status-red"}>
-                        {job.reconciled ? "Reconciled" : "Check total"}
-                      </span>
-                    </div>
-                    <p className="text-card text-fg mt-1.5 truncate">
-                      {job.customerName || "Not recorded"}
-                    </p>
-                    <p className="text-[13px] text-admin-muted mt-1 leading-snug">
-                      {job.pickup || "—"} <span className="text-admin-line-strong">→</span> {job.dropoff || "—"}
-                    </p>
-                    <div className="flex items-center gap-2 mt-3 pt-3 border-t border-admin-line text-[12px] text-admin-muted">
-                      <span
-                        className={`w-6 h-6 rounded-full flex items-center justify-center font-bold text-[10px] shrink-0 ${driver.color}`}
-                      >
-                        {driver.code}
-                      </span>
-                      <span className="truncate">{driver.name}</span>
-                      <span className="ml-auto shrink-0 flex items-center gap-2">
-                        <span>{photoCount} photo{photoCount === 1 ? "" : "s"}</span>
-                        {job.signatureUrl && <span className="text-admin-status-green font-semibold">Signed</span>}
-                      </span>
-                    </div>
-                  </button>
-                </li>
+                    <button onClick={() => setPreviewJob(job)} className="order-2 flex-1 min-w-0 text-left">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-semibold text-admin-brand text-[14px]">{job.jobId}</span>
+                        <JobStatusBadge status={job.status} />
+                      </div>
+                      <p className="text-card text-fg mt-1.5 truncate">
+                        {job.customerName || "Not recorded"}
+                      </p>
+                      <p className="text-[13px] text-admin-muted mt-1 truncate">
+                        {job.pickup || "—"} <span className="text-admin-line-strong">→</span> {job.dropoff || "—"}
+                      </p>
+                      <div className="flex items-center justify-between gap-3 mt-3 pt-3 border-t border-admin-line">
+                        <span className="flex items-center gap-2 min-w-0">
+                          <span
+                            className={`w-6 h-6 rounded-full flex items-center justify-center font-bold text-[10px] shrink-0 ${driver.color}`}
+                          >
+                            {driver.code}
+                          </span>
+                          <span className="min-w-0 leading-tight">
+                            <span className="text-[13px] text-admin-ink font-medium truncate block">
+                              {driver.name}
+                            </span>
+                            <span className="text-[11px] text-admin-muted truncate block">
+                              {finishedTime}
+                            </span>
+                          </span>
+                        </span>
+                        <span className="flex shrink-0 flex-col items-end gap-0.5 font-mono tabular-nums">
+                          <span className="text-[14px] font-bold text-admin-ink">
+                            {amount === 0 ? "—" : `£${amount.toLocaleString("en-GB", { minimumFractionDigits: 2 })}`}
+                          </span>
+                          <span className="text-[11px] font-semibold text-admin-muted">
+                            Total {formatGBP(total)}
+                          </span>
+                        </span>
+                      </div>
+                    </button>
+                  </div>
+                </article>
               );
             })}
             {items.length === 0 && (
-              <li className="text-center py-12">
+              <div className="col-span-full text-center py-12">
                 <p className="text-card text-fg">No finished jobs in this range</p>
                 <p className="text-[13px] text-admin-muted mt-1">Try widening the dates.</p>
-              </li>
+              </div>
             )}
-          </ul>
+          </div>
 
-          <div className="hidden md:block overflow-x-auto custom-scrollbar">
+          <div className={`overflow-x-auto custom-scrollbar ${viewMode === "table" ? "hidden md:block" : "hidden"}`}>
             <table className="w-full text-left text-[14px] border-collapse whitespace-nowrap">
               <thead>
                 <tr className="border-b border-admin-line bg-[#F7F7F7]/50">
