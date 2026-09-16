@@ -20,6 +20,19 @@ export async function getJob(jobId: string): Promise<Job | null> {
   return job as Job;
 }
 
+/** Only safe to call after the linked Calendar event is already gone (see
+ *  admin/dashboard/jobs.routes.ts's DELETE /:jobId) -- deleting the Mongo doc alone
+ *  would just have the next background sync recreate it from the still-live Calendar
+ *  event, the same resurrection bug Reassign had before it was fixed to write back to
+ *  Calendar first. Evidence/activity/exceptions rows for this jobId are left in place
+ *  (same conservative-deletion approach as deleting a driver: history isn't orphaned
+ *  or corrupted, just no longer reachable through a job that no longer exists). */
+export async function deleteJob(jobId: string): Promise<boolean> {
+  const col = await jobsCollection();
+  const result = await col.deleteOne({ _id: jobId } as any);
+  return result.deletedCount > 0;
+}
+
 /**
  * `filter.driverInitials`, when given, is pushed down into the Mongo query itself
  * (using the {driverInitials, status} index from ensureIndexes) instead of pulling

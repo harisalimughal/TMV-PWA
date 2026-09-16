@@ -6,6 +6,7 @@ import { JobDetailDrawer } from "../components/JobDetailDrawer";
 import { JobStatusBadge, DelayBandBadge } from "../components/StatusBadge";
 import { DateRangePicker } from "../components/DateRangePicker";
 import { ApiErrorState } from "../components/ApiErrorState";
+import { BulkDeleteModal } from "../components/BulkDeleteModal";
 import { formatLondonDateTime } from "../utils/date";
 import { downloadCsv, stampForFilename, toCsv } from "../utils/csv";
 import { resolveDriver, formatVanReg } from "../utils/drivers";
@@ -21,7 +22,8 @@ import {
   Camera,
   RefreshCw,
   AlertTriangle,
-  UserPlus
+  UserPlus,
+  Trash2
 } from "lucide-react";
 
 export function JobsPage() {
@@ -32,6 +34,7 @@ export function JobsPage() {
   const [viewMode, setViewMode] = useState<"table" | "cards">("cards");
   const [reassignOpen, setReassignOpen] = useState(false);
   const [cardReassignJob, setCardReassignJob] = useState<NormalizedJob | null>(null);
+  const [deleteJobIds, setDeleteJobIds] = useState<string[] | null>(null);
   const [drawerJob, setDrawerJob] = useState<NormalizedJob | null>(null);
   
   // Filtering & Pagination
@@ -230,6 +233,12 @@ export function JobsPage() {
                 className="shrink-0 whitespace-nowrap px-2.5 sm:px-3 py-1.5 rounded-full text-[12px] font-semibold hover:bg-white/10 transition flex items-center gap-1.5"
               >
                 <Download className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Export Selection</span>
+              </button>
+              <button
+                onClick={() => setDeleteJobIds(Array.from(selectedRows))}
+                className="shrink-0 whitespace-nowrap px-2.5 sm:px-3 py-1.5 rounded-full text-[12px] font-semibold text-red-300 hover:bg-white/10 hover:text-red-200 transition flex items-center gap-1.5"
+              >
+                <Trash2 className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Delete</span>
               </button>
               <button
                 onClick={() => setSelectedRows(new Set())}
@@ -606,6 +615,18 @@ export function JobsPage() {
           onClose={() => setCardReassignJob(null)}
           onDone={() => {
             setCardReassignJob(null);
+            void refetch();
+          }}
+        />
+      )}
+
+      {deleteJobIds && (
+        <BulkDeleteModal
+          jobIds={deleteJobIds}
+          onClose={() => setDeleteJobIds(null)}
+          onDone={() => {
+            setDeleteJobIds(null);
+            setSelectedRows(new Set());
             void refetch();
           }}
         />

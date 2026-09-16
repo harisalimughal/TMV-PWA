@@ -1,6 +1,6 @@
 import { google, calendar_v3 } from "googleapis";
 import { createGoogleAuth, env, SCOPES } from "../config/env";
-import { withRetry } from "../utils/retry";
+import { withRetry, statusOf } from "../utils/retry";
 
 let clientPromise: Promise<calendar_v3.Calendar> | null = null;
 
@@ -113,4 +113,26 @@ export async function updateCalendarEvent(
     calendar.events.patch({ calendarId: env.calendarId, eventId, requestBody: patch })
   );
   return response.data;
+}
+
+/**
+ * Used by the admin panel's Delete Job action. Jobs mirror Calendar (see the POST "/"
+ * handler's comment in jobs.routes.ts) -- deleting only the Mongo doc would leave the
+ * event live, and the next background sync would recreate the job right back from it,
+ * the same resurrection bug Reassign had before it wrote back to Calendar. This has to
+ * succeed (or the event already be gone) before jobs.repo.ts's deleteJob runs.
+ * Google returns 410 Gone for an event already deleted -- treated as success, not an
+ * error, since the end state (no live event) is exactly what the caller wants.
+ */
+export async function deleteCalendarEvent(eventId: string): Promise<void> {
+  const calendar = await writeClient();
+  try {
+    await withRetry("calendar.events.delete", () =>
+      calendar.events.delete({ calendarId: env.calendarId, eventId })
+    );
+  } catch (error) {
+    const status = statusOf(error);
+    if (status === 410 || status === 404) return;
+    throw error;
+  }
 }

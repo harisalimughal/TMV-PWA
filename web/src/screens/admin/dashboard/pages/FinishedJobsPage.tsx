@@ -7,11 +7,13 @@ import {
   FolderOpen,
   Camera,
   AlertTriangle,
-  ArrowRight
+  ArrowRight,
+  Trash2
 } from "lucide-react";
 import { SubmissionDetailDrawer } from "../components/SubmissionDetailDrawer";
 import { FolderActionDropdown } from "../components/FolderActionDropdown";
 import { PaperDossierReport } from "../components/PaperDossierReport";
+import { BulkDeleteModal } from "../components/BulkDeleteModal";
 import { FileText } from "lucide-react";
 import { fetchJobs, fetchDrivers } from "../api";
 import { NormalizedJob, formatGBP, toPounds } from "../types";
@@ -30,6 +32,8 @@ export function FinishedJobsPage() {
   const [driverFilter, setDriverFilter] = useState<string>("");
   const [expandedJobId, setExpandedJobId] = useState<string | null>(null);
   const [previewJob, setPreviewJob] = useState<NormalizedJob | null>(null);
+  const [selectedRows, setSelectedRows] = useState<Set<string>>(new Set());
+  const [deleteJobIds, setDeleteJobIds] = useState<string[] | null>(null);
   /** Set right before opening the drawer from the row-level "Download" action, so the
    *  drawer knows to run its own download flow immediately on open (see
    *  SubmissionDetailDrawer's autoDownload prop) instead of just sitting on Preview. */
@@ -66,8 +70,46 @@ export function FinishedJobsPage() {
   const totalCharges = (job: NormalizedJob) =>
     job.totalCharges || job.calculatedTotalCharges || job.basePrice + job.extraCharges + job.overtimeCharge;
 
+  const items = data?.items || [];
+  const toggleRow = (id: string) => {
+    const next = new Set(selectedRows);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    setSelectedRows(next);
+  };
+  const toggleAll = () => {
+    if (selectedRows.size === items.length && items.length > 0) setSelectedRows(new Set());
+    else setSelectedRows(new Set(items.map(j => j.jobId)));
+  };
+
   return (
-    <div className="space-y-6 max-w-[1440px] mx-auto">
+    <div className="space-y-6 max-w-[1440px] mx-auto relative">
+      {/* BULK ACTION BAR (Floating) */}
+      {selectedRows.size > 0 && (
+        <div className="fixed bottom-4 sm:bottom-6 left-4 right-4 sm:left-1/2 sm:right-auto sm:-translate-x-1/2 z-50 animate-in slide-in-from-bottom-5 flex justify-center">
+          <div className="bg-admin-ink text-white rounded-full shadow-2xl px-4 sm:px-5 py-3 flex items-center gap-3 sm:gap-6 max-w-full overflow-x-auto">
+            <span className="text-[13px] font-bold whitespace-nowrap shrink-0">
+              {selectedRows.size} job{selectedRows.size > 1 ? "s" : ""} selected
+            </span>
+            <div className="h-4 w-px bg-white/20 shrink-0" />
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                onClick={() => setDeleteJobIds(Array.from(selectedRows))}
+                className="shrink-0 whitespace-nowrap px-2.5 sm:px-3 py-1.5 rounded-full text-[12px] font-semibold text-red-300 hover:bg-white/10 hover:text-red-200 transition flex items-center gap-1.5"
+              >
+                <Trash2 className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Delete</span>
+              </button>
+              <button
+                onClick={() => setSelectedRows(new Set())}
+                className="shrink-0 px-2.5 py-1.5 rounded-full text-[12px] font-semibold hover:bg-white/10 transition"
+              >
+                Clear
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* PAGE HEADER */}
       <div className="flex flex-wrap items-center justify-between gap-y-3 gap-x-3 px-2">
         <h1 className="text-title text-fg">Finished Jobs</h1>
@@ -115,17 +157,27 @@ export function FinishedJobsPage() {
               usable phone layout, so below md the same rows render as cards showing
               the four fields that actually matter on a small screen. */}
           <ul className="md:hidden list-none m-0 p-3 space-y-3">
-            {(data?.items || []).map((job: NormalizedJob) => {
+            {items.map((job: NormalizedJob) => {
               const driver = resolveDriver(job.driverName, job.driverInitials);
               const amount = toPounds(job.amountCharged);
               const total = totalCharges(job);
               const photoCount =
                 job.evidenceItems?.filter((e: any) => e.type === "IMAGE" && (e.thumbProxyUrl || e.driveUrl)).length || 0;
+              const isSelected = selectedRows.has(job.jobId);
               return (
-                <li key={job.jobId}>
+                <li key={job.jobId} className="flex items-start gap-2">
+                  <input
+                    type="checkbox"
+                    checked={isSelected}
+                    onChange={() => toggleRow(job.jobId)}
+                    className="mt-5 w-4 h-4 rounded accent-admin-brand cursor-pointer shrink-0"
+                    aria-label={`Select job ${job.jobId}`}
+                  />
                   <button
                     onClick={() => setPreviewJob(job)}
-                    className="w-full text-left rounded-module border border-admin-line bg-white p-4 active:bg-admin-surface transition"
+                    className={`flex-1 min-w-0 text-left rounded-module border bg-white p-4 active:bg-admin-surface transition ${
+                      isSelected ? "border-admin-brand ring-2 ring-admin-brand/20" : "border-admin-line"
+                    }`}
                   >
                     <div className="flex items-center justify-between gap-3">
                       <span className="font-semibold text-admin-brand text-[14px]">{job.jobId}</span>
@@ -166,7 +218,7 @@ export function FinishedJobsPage() {
                 </li>
               );
             })}
-            {(data?.items || []).length === 0 && (
+            {items.length === 0 && (
               <li className="text-center py-12">
                 <p className="text-card text-fg">No finished jobs in this range</p>
                 <p className="text-[13px] text-admin-muted mt-1">Try widening the dates.</p>
@@ -178,6 +230,15 @@ export function FinishedJobsPage() {
             <table className="w-full text-left text-[14px] border-collapse whitespace-nowrap">
               <thead>
                 <tr className="border-b border-admin-line bg-[#F7F7F7]/50">
+                  <th className="py-4 pl-4 pr-2 w-10 text-center">
+                    <input
+                      type="checkbox"
+                      checked={items.length > 0 && selectedRows.size === items.length}
+                      onChange={toggleAll}
+                      className="w-4 h-4 rounded accent-admin-brand cursor-pointer"
+                      aria-label="Select all"
+                    />
+                  </th>
                   <th className="py-4 px-4 w-12 text-center font-semibold text-eyebrow text-fg-subtle tracking-[0.03em]">#</th>
                   <th className="py-4 px-4 font-semibold text-eyebrow text-fg-subtle tracking-[0.03em]">Driver</th>
                   <th className="py-4 px-4 font-semibold text-eyebrow text-fg-subtle tracking-[0.03em]">Customer</th>
@@ -194,32 +255,42 @@ export function FinishedJobsPage() {
               </thead>
 
               <tbody className="divide-y divide-admin-line">
-                {data?.items.map((job: NormalizedJob, index: number) => {
+                {items.map((job: NormalizedJob, index: number) => {
                   const isExpanded = expandedJobId === job.jobId;
                   const amountPounds = toPounds(job.amountCharged);
                   const total = totalCharges(job);
                   const rowNumber = (page - 1) * pageSize + index + 1;
-                  
+
                   const startedTime = job.actualStart ? formatLondonDateTime(job.actualStart) : "—";
                   const finishedTime = job.actualFinish ? formatLondonDateTime(job.actualFinish) : "—";
-                  
+
                   const p = job.pickup || <span className="text-[14px] font-normal text-[#B0B0B0] italic">Not recorded</span>;
                   const d = job.dropoff || <span className="text-[14px] font-normal text-[#B0B0B0] italic">Not recorded</span>;
                   const routeSummary = `${p} → ${d}`;
-                  
+
                   const photos = job.evidenceItems?.filter((e: any) => e.type === "IMAGE" && (e.thumbProxyUrl || e.driveUrl)) || [];
                   const isTest = isTestOrIncomplete(job);
                   const resolvedDriver = resolveDriver(job.driverName, job.driverInitials);
                   const isUnassigned = resolvedDriver.code === "UN";
+                  const isSelected = selectedRows.has(job.jobId);
 
                   return (
                     <React.Fragment key={job.jobId}>
                       <tr
                         onClick={() => setPreviewJob(job)}
                         className={`h-[64px] group cursor-pointer transition select-none ${
-                          isExpanded ? "bg-admin-surface/50" : "hover:bg-[#F9FAFB]"
+                          isSelected ? "bg-admin-brand-soft/10" : isExpanded ? "bg-admin-surface/50" : "hover:bg-[#F9FAFB]"
                         } ${isTest ? "opacity-70" : ""} ${resolvedDriver.needsReassignment ? 'bg-[#FFFBEB]/50' : ''}`}
                       >
+                        <td className="pl-4 pr-2 text-center" onClick={e => e.stopPropagation()}>
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={() => toggleRow(job.jobId)}
+                            className="w-4 h-4 rounded accent-admin-brand cursor-pointer"
+                            aria-label={`Select job ${job.jobId}`}
+                          />
+                        </td>
                         <td className="px-4 text-center font-mono text-[14px] font-bold text-admin-muted tabular-nums">{rowNumber}</td>
 
                         <td className="px-4">
@@ -372,6 +443,18 @@ export function FinishedJobsPage() {
           }}
           hasNext={data?.items ? data.items.findIndex((j: any) => j.jobId === previewJob.jobId) < data.items.length - 1 : false}
           hasPrev={data?.items ? data.items.findIndex((j: any) => j.jobId === previewJob.jobId) > 0 : false}
+        />
+      )}
+
+      {deleteJobIds && (
+        <BulkDeleteModal
+          jobIds={deleteJobIds}
+          onClose={() => setDeleteJobIds(null)}
+          onDone={() => {
+            setDeleteJobIds(null);
+            setSelectedRows(new Set());
+            void refetch();
+          }}
         />
       )}
     </div>

@@ -10,9 +10,9 @@ import { Router } from "express";
 import { DateTime } from "luxon";
 import { env } from "../../config/env";
 import { getDriverProfileByInitials } from "../../auth/driver-account.service";
-import { createCalendarEvent, getCalendarEvent, updateCalendarEvent } from "../../google/calendar";
+import { createCalendarEvent, deleteCalendarEvent, getCalendarEvent, updateCalendarEvent } from "../../google/calendar";
 import { parseCalendarEvent, syncBookingsForDate, withReassignedInitials } from "../../jobs/booking.service";
-import { getJob, upsertJob } from "../../db/jobs.repo";
+import { getJob, upsertJob, deleteJob } from "../../db/jobs.repo";
 import { appendActivity } from "../../db/activity.repo";
 import { JobStatus } from "../../jobs/job.types";
 import { WorkflowState } from "../../workflow/workflow.states";
@@ -278,6 +278,52 @@ export function dashboardJobsRoutes(): Router {
     } catch (error) {
       log.error("dashboard reassign driver failed", error, { job_id: jobId });
       return res.status(500).json({ error: { code: "REASSIGN_FAILED", message: "Failed to reassign driver." } });
+    }
+  });
+
+  // Permanently deletes a job. Jobs mirror Calendar (see the POST "/" handler above and
+  // updateCalendarEvent's own comment) -- deleting only the Mongo doc would leave the
+  // Calendar event live, and the next background sync would recreate the job right back
+  // from it. So the Calendar event is deleted *first*, and Mongo is only touched once
+  // that's confirmed gone (or was already gone).
+  router.delete("/:jobId", async (req, res) => {
+    const jobId = String(req.params.jobId || "").trim();
+
+    try {
+      const existing = await getJob(jobId);
+      if (!existing) {
+        return res.status(404).json({ error: { code: "JOB_NOT_FOUND", message: `Job ${jobId} not found.` } });
+      }
+
+      if (existing.calendarEventId) {
+        try {
+          await deleteCalendarEvent(existing.calendarEventId);
+        } catch (calendarError) {
+          log.error("delete job: failed to delete Calendar event", calendarError, { job_id: jobId });
+          const status = statusOf(calendarError);
+          const isPermissionError = status === 401 || status === 403;
+          return res.status(502).json({
+            error: {
+              code: "CALENDAR_WRITE_FAILED",
+              message: isPermissionError
+                ? "No permission to delete the Calendar event. Please enable Calendar write access for this app and try again."
+                : "Failed to delete the Calendar event, so the job was not deleted. Please try again."
+            }
+          });
+        }
+      }
+
+      await deleteJob(jobId);
+      await appendActivity({
+        jobId, driver: "admin dashboard", action: "DELETED",
+        detail: `${existing.customerName || "Job"} (${existing.status})`
+      });
+      invalidateDashboardDataset();
+
+      return res.status(200).json({ ok: true });
+    } catch (error) {
+      log.error("dashboard delete job failed", error, { job_id: jobId });
+      return res.status(500).json({ error: { code: "DELETE_FAILED", message: "Failed to delete job." } });
     }
   });
 

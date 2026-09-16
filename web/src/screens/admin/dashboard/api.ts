@@ -91,6 +91,12 @@ export async function reassignJob(jobId: string, driverInitials: string): Promis
   return res.json();
 }
 
+export async function deleteJob(jobId: string): Promise<{ ok: true }> {
+  const res = await apiFetch(`/api/admin/jobs/${encodeURIComponent(jobId)}`, { method: "DELETE" });
+  if (!res.ok) throw await apiError(res, "Failed to delete job");
+  return res.json();
+}
+
 export async function saveJobReview(
   jobId: string,
   payload: { status: "Pending" | "Approved" | "Flagged"; note: string }
