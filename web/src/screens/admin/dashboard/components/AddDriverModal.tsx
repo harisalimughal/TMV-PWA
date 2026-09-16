@@ -87,8 +87,9 @@ export function AddDriverModal({ isOpen, onClose, driverToEdit }: Props) {
     setSaveWarning("");
     setIsSaving(true);
     try {
+      const initials = code.toUpperCase();
       const result = await saveDriver({
-        initials: code.toUpperCase(),
+        initials,
         fullName: name,
         email,
         active,
@@ -98,6 +99,47 @@ export function AddDriverModal({ isOpen, onClose, driverToEdit }: Props) {
         // Omitted (not sent empty) when blank, so editing a driver without touching
         // this field never resets/clears their existing app password.
         ...(pwaPassword ? { password: pwaPassword } : {})
+      });
+
+      // The save itself is fast -- it only touches driver_accounts. What's slow is
+      // /api/admin/drivers/summary's own refetch, since it also recomputes every
+      // driver's job stats from the full dataset (jobs/evidence/activity/...), which
+      // can take several seconds regardless of what actually changed here. Patch the
+      // fields we just saved into the cache directly so the roster reflects the edit
+      // immediately instead of the UI sitting on stale data until that slow refetch
+      // lands -- invalidateQueries below still runs in the background to pick up
+      // anything the optimistic patch can't know (e.g. a brand-new driver's real
+      // job stats), it just no longer blocks what the admin sees right now.
+      // setQueriesData (not setQueryData) -- DriversPage.tsx's own query key is
+      // ["drivers_summary", from, to] (it has its own date-range filter), not the bare
+      // ["drivers_summary"] every other caller here uses. A single-key setQueryData
+      // would miss it entirely, patching everywhere except the one page an admin is
+      // actually looking at while editing.
+      queryClient.setQueriesData<{ drivers: DriverSummaryItem[] } | undefined>({ queryKey: ["drivers_summary"] }, old => {
+        if (!old?.drivers) return old;
+        const patch: Partial<DriverSummaryItem> = {
+          initials, fullName: name, email, phone, vanRegistration: vehicleReg, imei, active, hasAccount: true
+        };
+        const idx = old.drivers.findIndex(d => d.hasAccount && d.initials === initials);
+        if (idx >= 0) {
+          const drivers = [...old.drivers];
+          drivers[idx] = { ...drivers[idx], ...patch };
+          return { ...old, drivers };
+        }
+        // Brand-new driver: seed zeroed stats so it shows up right away; the
+        // background refetch fills in real numbers once it lands.
+        return {
+          ...old,
+          drivers: [
+            ...old.drivers,
+            {
+              ...patch,
+              assigned: 0, completed: 0, cancelled: 0, completionRate: 0,
+              avgDurationMinutes: 0, avgDelayMinutes: 0, revenuePounds: 0, revenueFormatted: "£0.00",
+              cashCollectedPounds: 0, missingEvidenceCount: 0, overtimeCount: 0
+            } as DriverSummaryItem
+          ]
+        };
       });
       queryClient.invalidateQueries({ queryKey: ["drivers_summary"] });
       if (result.warning) {
