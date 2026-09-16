@@ -43,13 +43,20 @@ async function timedRead<T>(name: string, fn: () => Promise<T>): Promise<T> {
 export async function readMongoDataset(): Promise<MongoDataset> {
   const started = Date.now();
 
-  const [jobs, evidence, activity, scenarioSubmissions, exceptions] = await Promise.all([
-    timedRead("jobs", listJobs),
-    timedRead("evidence", listAllEvidence),
-    timedRead("activity", listAllActivity),
-    timedRead("scenarioSubmissions", listAllScenarioSubmissions),
-    timedRead("exceptions", listExceptions)
-  ]);
+  // Sequential, not Promise.all. Live per-collection timing (see timedRead) showed the
+  // same staircase twice: durations climbing the more of these 5 reads were in flight
+  // at once, with whichever one landed last taking 10-14s regardless of which
+  // collection it was (the smallest collection, exceptions, was consistently the
+  // slowest) -- and neither a warmer connection pool (minPoolSize) nor more libuv
+  // threads (UV_THREADPOOL_SIZE) changed that at all. That points at the concurrency
+  // itself, not any one query, being what this backend can't absorb. Running one at a
+  // time trades a small increase in the typical-case total for eliminating the
+  // unpredictable double-digit-second spikes.
+  const jobs = await timedRead("jobs", listJobs);
+  const evidence = await timedRead("evidence", listAllEvidence);
+  const activity = await timedRead("activity", listAllActivity);
+  const scenarioSubmissions = await timedRead("scenarioSubmissions", listAllScenarioSubmissions);
+  const exceptions = await timedRead("exceptions", listExceptions);
 
   const durationMs = Date.now() - started;
   if (durationMs > LATENCY_BUDGET_MS) {

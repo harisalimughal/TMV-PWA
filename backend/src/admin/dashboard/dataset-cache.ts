@@ -9,10 +9,13 @@
  * read+normalize itself needs to happen at most once per short window, shared across
  * every tab, with each route just filtering the already-built in-memory array.
  *
- * TTL is short enough that no admin should ever notice stale data (a driver's photo
- * upload or status change shows up within 15s), but long enough to collapse a normal
- * "click through Overview -> Jobs -> Finance" browsing burst -- and React Query's
- * refetchOnWindowFocus -- into a single Mongo round-trip + normalize pass.
+ * TTL is long enough to absorb a full session of tab-switching on this backend without
+ * re-paying the read (see read.ts's own comment: this now runs the 5 reads
+ * sequentially, since concurrency -- not any one query -- was what a constrained
+ * backend couldn't absorb, which makes a cache MISS relatively more expensive and a
+ * cache HIT proportionally more valuable). 45s means a driver's photo upload or status
+ * change can take up to that long to show up on the dashboard -- an acceptable
+ * trade-off for an ops dashboard, not a live status feed.
  */
 import { readMongoDataset, MongoDataset } from "./read";
 import { normalizeMongoDataset } from "./normalize";
@@ -23,7 +26,7 @@ export interface DashboardDataset {
   jobs: NormalizedJob[];
 }
 
-const TTL_MS = 15_000;
+const TTL_MS = 45_000;
 
 let cached: { at: number; value: DashboardDataset } | null = null;
 // Collapses concurrent cache-miss requests (e.g. several dashboard widgets fetching at
