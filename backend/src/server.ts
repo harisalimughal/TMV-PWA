@@ -25,10 +25,8 @@ import { pushRoutes } from "./push/push.routes";
 import { gpsLiveWebhookRoutes } from "./integrations/gpslive-webhook.routes";
 import { runScheduledCalendarSync } from "./jobs/jobs.service";
 import { sweepJobReminders } from "./jobs/reminder.service";
-import { dashboardActivityRoutes } from "./admin/dashboard/activity.routes";
 import { dashboardAlertsRoutes } from "./admin/dashboard/alerts.routes";
 import { dashboardDriversSummaryRoutes } from "./admin/dashboard/drivers-summary.routes";
-import { dashboardExceptionsRoutes } from "./admin/dashboard/exceptions.routes";
 import { dashboardFinanceRoutes } from "./admin/dashboard/finance.routes";
 import { dashboardFleetRoutes } from "./admin/dashboard/fleet.routes";
 import { dashboardJobsRoutes } from "./admin/dashboard/jobs.routes";
@@ -54,19 +52,16 @@ app.use("/api/push", pushRoutes());
 // gpslive-webhook.routes.ts's own doc comment.
 app.use("/api/webhooks/gpslive", gpsLiveWebhookRoutes());
 
-// The ported admin dashboard (Overview/Jobs/Live Fleet/Exceptions/Reports/Activity/
-// Messaging/Scenarios/Finance/driver performance stats) -- same requireAdminAuth
-// session as adminRoutes() above, just a different set of (mostly read-only) endpoints.
-// See admin/dashboard/*.
+// The ported admin dashboard (Overview/Jobs/Live Fleet/Reports/Messaging/Scenarios/
+// Finance/driver performance stats) -- same requireAdminAuth session as adminRoutes()
+// above, just a different set of (mostly read-only) endpoints. See admin/dashboard/*.
 app.use("/api/admin/jobs", requireAdminAuth, dashboardJobsRoutes());
 app.use("/api/admin/drivers", requireAdminAuth, dashboardDriversSummaryRoutes());
 app.use("/api/admin/summary", requireAdminAuth, dashboardSummaryRoutes());
 app.use("/api/admin/finance", requireAdminAuth, dashboardFinanceRoutes());
-app.use("/api/admin/exceptions", requireAdminAuth, dashboardExceptionsRoutes());
 app.use("/api/admin/fleet", requireAdminAuth, dashboardFleetRoutes());
 app.use("/api/admin/scenarios", requireAdminAuth, dashboardScenariosRoutes());
 app.use("/api/admin/van", requireAdminAuth, dashboardVanRoutes());
-app.use("/api/admin/activity", requireAdminAuth, dashboardActivityRoutes());
 app.use("/api/admin/alerts", requireAdminAuth, dashboardAlertsRoutes());
 app.use("/api/admin/notifications", requireAdminAuth, dashboardNotificationsRoutes());
 

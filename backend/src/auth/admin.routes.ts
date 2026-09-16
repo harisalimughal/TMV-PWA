@@ -71,7 +71,7 @@ export function adminRoutes(): Router {
   });
 
   router.get("/me", requireAdminAuth, (_req: Request, res: Response) => {
-    res.status(200).json({ ok: true });
+    res.status(200).json({ ok: true, email: env.adminEmail });
   });
 
   // ---------------------------------------------------------------------------

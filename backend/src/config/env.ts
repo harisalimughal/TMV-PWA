@@ -172,6 +172,7 @@ export const env = {
    * means every /admin request is refused with "not configured", not "always allow".
    */
   adminPassword: process.env.TMV_ADMIN_PASSWORD?.trim() || "",
+  adminEmail: process.env.TMV_ADMIN_EMAIL?.trim() || "admin@themanvan.co.uk",
 
   /**
    * Evidence photos (arrival/loaded/empty-van/signature) upload here instead of Google
