@@ -97,7 +97,15 @@ let clientPromise: Promise<MongoClient> | null = null;
 
 async function getClient(): Promise<MongoClient> {
   if (!clientPromise) {
-    const client = new MongoClient(env.mongoUri);
+    // minPoolSize keeps this many connections alive in the background at all times,
+    // maintained by the driver's own pool-maintenance loop -- without it (default 0)
+    // an idle gap between requests lets the pool drop to zero connections (Atlas's
+    // free/shared M0 tier closes idle connections aggressively), and the *next* query
+    // then has to open a fresh connection on the request path and wait for the driver's
+    // topology monitor to confirm it's healthy -- a wait bounded by heartbeatFrequencyMS
+    // (10s default), which is exactly the ~10.1s stall this was causing on whichever
+    // dashboard request happened to land after such a gap.
+    const client = new MongoClient(env.mongoUri, { minPoolSize: 2 });
     clientPromise = client.connect().catch(error => {
       clientPromise = null; // never cache a failed connection
       throw error;
