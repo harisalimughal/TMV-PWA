@@ -126,7 +126,7 @@ export function AlertsPage() {
       {/* TOOLBAR */}
       <div className="p-2 bg-white rounded-module shadow-sm border border-admin-line flex flex-wrap items-center gap-4">
         <div className="flex items-center gap-1 bg-admin-surface p-1 rounded-card">
-          {(["All", "congestion", "tunnel", "other"] as const).map(c => (
+          {(["All", "congestion", "tunnel"] as const).map(c => (
             <button
               key={c}
               onClick={() => setCategoryFilter(c)}
