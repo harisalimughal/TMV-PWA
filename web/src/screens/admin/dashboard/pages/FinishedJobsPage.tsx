@@ -13,7 +13,7 @@ import { SubmissionDetailDrawer } from "../components/SubmissionDetailDrawer";
 import { FolderActionDropdown } from "../components/FolderActionDropdown";
 import { PaperDossierReport } from "../components/PaperDossierReport";
 import { FileText } from "lucide-react";
-import { fetchJobs } from "../api";
+import { fetchJobs, fetchDrivers } from "../api";
 import { NormalizedJob, formatGBP, toPounds } from "../types";
 import { DateRangePicker } from "../components/DateRangePicker";
 import { ApiErrorState } from "../components/ApiErrorState";
@@ -27,6 +27,7 @@ export function FinishedJobsPage() {
   const [pageSize, setPageSize] = useState(25);
   const [from, setFrom] = useState<string | undefined>();
   const [to, setTo] = useState<string | undefined>();
+  const [driverFilter, setDriverFilter] = useState<string>("");
   const [expandedJobId, setExpandedJobId] = useState<string | null>(null);
   const [previewJob, setPreviewJob] = useState<NormalizedJob | null>(null);
   /** Set right before opening the drawer from the row-level "Download" action, so the
@@ -35,9 +36,16 @@ export function FinishedJobsPage() {
   const [autoDownloadJobId, setAutoDownloadJobId] = useState<string | null>(null);
 
   const { data, isLoading, error, refetch } = useQuery({
-    queryKey: ["jobs", "COMPLETED", page, pageSize, from, to],
-    queryFn: () => fetchJobs({ status: "COMPLETED", page, pageSize, from, to })
+    queryKey: ["jobs", "COMPLETED", page, pageSize, from, to, driverFilter],
+    queryFn: () => fetchJobs({ status: "COMPLETED", page, pageSize, from, to, driver: driverFilter || undefined })
   });
+
+  // Every driver who's ever done a job, not just currently-active ones -- this filters
+  // historical finished jobs, and a deactivated driver can still have completed some.
+  const { data: driversData } = useQuery({ queryKey: ["drivers_summary"], queryFn: () => fetchDrivers() });
+  const driverOptions = (driversData?.drivers || [])
+    .filter(d => d.initials && d.initials !== "UNASSIGNED")
+    .sort((a, b) => (a.fullName || a.initials).localeCompare(b.fullName || b.initials));
 
   const isTestOrIncomplete = (job: NormalizedJob) => {
     const cust = (job.customerName || "").toLowerCase();
@@ -61,10 +69,26 @@ export function FinishedJobsPage() {
         <h1 className="text-title text-fg">Finished Jobs</h1>
 
         <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
+          <select
+            value={driverFilter}
+            onChange={e => { setDriverFilter(e.target.value); setPage(1); }}
+            className="shrink-0 h-10 px-3 rounded-control border border-line-strong bg-surface text-fg text-button shadow-sm outline-none focus:border-admin-brand"
+          >
+            <option value="">All drivers</option>
+            {driverOptions.map(d => (
+              <option key={d.initials} value={d.initials}>{d.fullName || d.initials}</option>
+            ))}
+          </select>
           <DateRangePicker from={from} to={to} onChange={(f, t) => { setFrom(f); setTo(t); setPage(1); }} />
           <div className="hidden sm:block w-px h-6 bg-admin-line mx-2 shrink-0" />
           <button
-            onClick={() => { window.location.href = "/api/admin/jobs/export.csv?status=COMPLETED"; }}
+            onClick={() => {
+              const params = new URLSearchParams({ status: "COMPLETED" });
+              if (driverFilter) params.set("driver", driverFilter);
+              if (from) params.set("from", from);
+              if (to) params.set("to", to);
+              window.location.href = `/api/admin/jobs/export.csv?${params.toString()}`;
+            }}
             className="shrink-0 whitespace-nowrap h-10 px-2.5 sm:px-4 rounded-control border border-line-strong bg-surface hover:bg-surface-sunken text-fg text-button shadow-sm transition flex items-center gap-2"
           >
             <Download className="w-4 h-4" /> <span className="hidden sm:inline">Export </span>CSV
