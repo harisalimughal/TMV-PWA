@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, keepPreviousData } from "@tanstack/react-query";
 import { fetchDrivers, fetchJobs, reassignJob } from "../api";
 import { NormalizedJob } from "../types";
 import { JobDetailDrawer } from "../components/JobDetailDrawer";
@@ -81,7 +81,15 @@ export function JobsPage() {
     queryFn: () => fetchJobs({
       page, pageSize, from, to, q: debouncedSearch || undefined, status: serverStatus,
       sort: serverSort, dir: sortConfig?.direction
-    })
+    }),
+    // Without this, `data` (and its pagination.totalPages) goes to undefined the
+    // instant `page` changes, before the new page has even loaded. That made
+    // totalPages fall back to its default of 1, which the "snap back to a valid page"
+    // effect below then read as "page 2 is out of range" and immediately reverted to
+    // page 1 -- so Next looked like it silently did nothing. Keeping the previous
+    // page's data on screen during the fetch avoids that false-positive entirely, and
+    // is also just better UX (no flash to a loading/empty state on every page change).
+    placeholderData: keepPreviousData
   });
 
   // Debounce search
