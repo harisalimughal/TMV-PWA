@@ -40,11 +40,15 @@ export function FinishedJobsPage() {
     queryFn: () => fetchJobs({ status: "COMPLETED", page, pageSize, from, to, driver: driverFilter || undefined })
   });
 
-  // Every driver who's ever done a job, not just currently-active ones -- this filters
-  // historical finished jobs, and a deactivated driver can still have completed some.
+  // Same roster the Drivers tab shows (DriversPage.tsx's own `roster` filter) -- every
+  // driver with a real account, active or deactivated, so a deactivated driver's
+  // historical completed jobs are still filterable. hasAccount excludes both
+  // "UNASSIGNED" and any driverInitials code that only exists because it's typed on a
+  // job (or a deleted driver's old jobs) with no actual driver_accounts doc behind it
+  // -- those aren't in the Drivers tab, so they shouldn't be selectable here either.
   const { data: driversData } = useQuery({ queryKey: ["drivers_summary"], queryFn: () => fetchDrivers() });
   const driverOptions = (driversData?.drivers || [])
-    .filter(d => d.initials && d.initials !== "UNASSIGNED")
+    .filter(d => d.initials && d.initials !== "UNASSIGNED" && d.hasAccount)
     .sort((a, b) => (a.fullName || a.initials).localeCompare(b.fullName || b.initials));
 
   const isTestOrIncomplete = (job: NormalizedJob) => {
