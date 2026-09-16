@@ -97,15 +97,28 @@ let clientPromise: Promise<MongoClient> | null = null;
 
 async function getClient(): Promise<MongoClient> {
   if (!clientPromise) {
-    // minPoolSize keeps this many connections alive in the background at all times,
-    // maintained by the driver's own pool-maintenance loop -- without it (default 0)
-    // an idle gap between requests lets the pool drop to zero connections (Atlas's
-    // free/shared M0 tier closes idle connections aggressively), and the *next* query
-    // then has to open a fresh connection on the request path and wait for the driver's
-    // topology monitor to confirm it's healthy -- a wait bounded by heartbeatFrequencyMS
-    // (10s default), which is exactly the ~10.1s stall this was causing on whichever
-    // dashboard request happened to land after such a gap.
     const client = new MongoClient(env.mongoUri, { minPoolSize: 2 });
+    // TEMPORARY diagnostic instrumentation (remove once the ~10s dashboard-read stalls
+    // are root-caused): minPoolSize alone didn't fix it -- the stalls recurred, if
+    // anything more often. These are the driver's own connection-pool/heartbeat events,
+    // which will say definitively whether a connection is being silently dropped
+    // (reason on connectionClosed), a heartbeat is failing (serverHeartbeatFailed), or
+    // something else entirely.
+    client.on("connectionClosed", event =>
+      log.warn("mongo connectionClosed", { reason: event.reason, connection_id: event.connectionId, address: event.address })
+    );
+    client.on("connectionCheckOutFailed", event =>
+      log.warn("mongo connectionCheckOutFailed", { reason: event.reason, address: event.address })
+    );
+    client.on("serverHeartbeatFailed", event =>
+      log.warn("mongo serverHeartbeatFailed", { server: event.connectionId, duration_ms: event.duration, failure: String(event.failure) })
+    );
+    client.on("serverHeartbeatSucceeded", event => {
+      if (event.duration > 1000) log.warn("mongo serverHeartbeatSucceeded but slow", { server: event.connectionId, duration_ms: event.duration });
+    });
+    client.on("connectionCreated", event => log.debug("mongo connectionCreated", { connection_id: event.connectionId, address: event.address }));
+    client.on("connectionPoolCleared", event => log.warn("mongo connectionPoolCleared", { address: event.address, service_id: String((event as any).serviceId) }));
+
     clientPromise = client.connect().catch(error => {
       clientPromise = null; // never cache a failed connection
       throw error;
