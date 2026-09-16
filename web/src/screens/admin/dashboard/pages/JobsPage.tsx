@@ -25,13 +25,13 @@ import {
 } from "lucide-react";
 
 export function JobsPage() {
-  // The table is 12 columns wide. On a phone it was previously the default and lived
-  // behind a horizontal scrollbar, which is close to unusable -- so below the md
-  // breakpoint the card view is the default instead.
-  const [viewMode, setViewMode] = useState<"table" | "cards">(() =>
-    typeof window !== "undefined" && window.matchMedia("(max-width: 767px)").matches ? "cards" : "table"
-  );
+  // The table is 12 columns wide and lives behind a horizontal scrollbar on anything
+  // narrower than a desktop -- close to unusable there. Cards are the default view on
+  // every screen size now; table is still available via the toggle for anyone who
+  // wants the denser, sortable layout.
+  const [viewMode, setViewMode] = useState<"table" | "cards">("cards");
   const [reassignOpen, setReassignOpen] = useState(false);
+  const [cardReassignJob, setCardReassignJob] = useState<NormalizedJob | null>(null);
   const [drawerJob, setDrawerJob] = useState<NormalizedJob | null>(null);
   
   // Filtering & Pagination
@@ -571,6 +571,7 @@ export function JobsPage() {
           selected={selectedRows}
           onToggle={toggleRow}
           onOpen={setDrawerJob}
+          onReassign={setCardReassignJob}
           toPounds={toPounds}
           page={safePage}
           totalPages={totalPages}
@@ -598,6 +599,17 @@ export function JobsPage() {
           }}
         />
       )}
+
+      {cardReassignJob && (
+        <BulkReassignModal
+          jobIds={[cardReassignJob.jobId]}
+          onClose={() => setCardReassignJob(null)}
+          onDone={() => {
+            setCardReassignJob(null);
+            void refetch();
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -610,6 +622,7 @@ interface JobCardListProps {
   selected: Set<string>;
   onToggle: (id: string) => void;
   onOpen: (job: NormalizedJob) => void;
+  onReassign: (job: NormalizedJob) => void;
   toPounds: (pence: number | undefined) => number;
   page: number;
   totalPages: number;
@@ -627,6 +640,7 @@ function JobCardList({
   selected,
   onToggle,
   onOpen,
+  onReassign,
   toPounds,
   page,
   totalPages,
@@ -674,7 +688,17 @@ function JobCardList({
                   className="mt-1 w-4 h-4 rounded accent-admin-brand cursor-pointer shrink-0"
                   aria-label={`Select job ${job.jobId}`}
                 />
-                <button onClick={() => onOpen(job)} className="flex-1 min-w-0 text-left">
+                {/* Sibling of the onOpen button below, not nested inside it -- a <button>
+                    inside a <button> is invalid HTML and browsers handle it unpredictably. */}
+                <button
+                  onClick={() => onReassign(job)}
+                  title="Reassign driver"
+                  aria-label={`Reassign driver for job ${job.jobId}`}
+                  className="order-3 shrink-0 mt-0.5 p-1.5 rounded-full text-admin-muted hover:bg-admin-brand hover:text-white transition"
+                >
+                  <UserPlus className="w-4 h-4" />
+                </button>
+                <button onClick={() => onOpen(job)} className="order-2 flex-1 min-w-0 text-left">
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className="font-semibold text-admin-brand text-[14px]">{job.jobId}</span>
                     <JobStatusBadge status={job.status} />
@@ -794,7 +818,9 @@ function BulkReassignModal({
           Reassign {jobIds.length} job{jobIds.length === 1 ? "" : "s"}
         </h2>
         <p className="text-[13px] text-admin-muted mt-1">
-          Every selected job moves to this driver. The drivers involved are not notified automatically.
+          {jobIds.length === 1
+            ? "This job moves to the selected driver, who will be notified, and the linked Calendar event is updated."
+            : "Every selected job moves to the selected driver, who will be notified for each one, and their linked Calendar events are updated."}
         </p>
 
         <label className="block mt-5">
