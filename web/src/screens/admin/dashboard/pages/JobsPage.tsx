@@ -779,7 +779,7 @@ function BulkReassignModal({
   onClose: () => void;
   onDone: () => void;
 }) {
-  const { data } = useQuery({ queryKey: ["drivers_summary"], queryFn: () => fetchDrivers() });
+  const { data, isLoading: driversLoading } = useQuery({ queryKey: ["drivers_summary"], queryFn: () => fetchDrivers() });
   const [initials, setInitials] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -825,19 +825,24 @@ function BulkReassignModal({
 
         <label className="block mt-5">
           <span className="text-label font-semibold text-fg">Assign to</span>
-          <select
-            value={initials}
-            onChange={e => setInitials(e.target.value)}
-            disabled={busy}
-            className="mt-1.5 w-full h-11 px-3 rounded-card border border-admin-line bg-admin-surface outline-none focus:border-admin-brand"
-          >
-            <option value="">Choose a driver…</option>
-            {drivers.map(driver => (
-              <option key={driver.initials} value={driver.initials}>
-                {driver.fullName || driver.initials} ({driver.initials})
-              </option>
-            ))}
-          </select>
+          <div className="relative mt-1.5">
+            <select
+              value={initials}
+              onChange={e => setInitials(e.target.value)}
+              disabled={busy || driversLoading}
+              className="w-full h-11 px-3 pr-9 rounded-card border border-admin-line bg-admin-surface outline-none focus:border-admin-brand disabled:opacity-70"
+            >
+              <option value="">{driversLoading ? "Loading drivers…" : "Choose a driver…"}</option>
+              {!driversLoading && drivers.map(driver => (
+                <option key={driver.initials} value={driver.initials}>
+                  {driver.fullName || driver.initials} ({driver.initials})
+                </option>
+              ))}
+            </select>
+            {driversLoading && (
+              <RefreshCw className="w-4 h-4 text-admin-muted animate-spin absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+            )}
+          </div>
         </label>
 
         {busy && (
