@@ -133,6 +133,10 @@ export interface NormalizedJob {
   /** Verbatim Calendar event title this job was synced from -- lets ops see exactly
    *  what the booking's title says, not just the already-parsed fields. */
   rawTitle: string;
+  /** Verbatim Calendar event description (HTML, same as the driver app's
+   *  JobDetailsPanel renders) -- lets ops fall back to the office's own wording when
+   *  a parsed field (e.g. pickup/dropoff address) failed to extract cleanly. */
+  rawDescription: string;
   created: string;
   updated: string;
 }

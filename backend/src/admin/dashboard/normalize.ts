@@ -242,6 +242,7 @@ export async function normalizeMongoDataset(dataset: MongoDataset): Promise<Norm
       exceptions,
       bookingDetails: parseBookingDetails(job),
       rawTitle: job.rawTitle || "",
+      rawDescription: job.rawDescription || "",
       created: toUtcIso(job.createdAt),
       updated: toUtcIso(job.updatedAt)
     });

@@ -19,11 +19,14 @@ import {
   Loader2,
   ChevronDown,
   ChevronRight,
-  Info
+  Info,
+  FileText
 } from "lucide-react";
 import { NormalizedJob, DriverSummaryItem } from "../types";
 import { Button } from "../../../../ui";
 import { formatLondonDateTime } from "../utils/date";
+import { htmlToPlainText } from "../../../../lib/htmlText";
+import { RawBookingText } from "../../../../components/driver/RawBookingText";
 import { JobStatusBadge } from "./StatusBadge";
 import { DelayBandBadge } from "./StatusBadge";
 import { EvidenceCompletenessPill } from "./EvidenceCompletenessPill";
@@ -258,6 +261,20 @@ export function JobDetailDrawer({ job: initialJob, isOpen, onClose, onUpdated }:
 
         {/* 2. Scrollable Body Content */}
         <div className="flex-1 overflow-y-auto p-6 space-y-6 text-[13px] text-admin-ink relative">
+
+          {/* Verbatim Calendar description -- same source the driver app's
+              JobDetailsPanel shows. A parsed field (pickup/dropoff address, van size,
+              etc.) can fail to extract cleanly from an oddly-worded booking; this is
+              the office's own wording to fall back on when that happens, instead of
+              just a "not properly recorded" dead end. */}
+          {job.rawDescription && (
+            <div className="bg-white p-5 rounded-module border border-admin-line shadow-[0_2px_10px_rgb(0,0,0,0.02)]">
+              <h4 className="text-[12px] font-bold text-admin-muted uppercase tracking-wider flex items-center gap-1.5 mb-4">
+                <FileText className="w-4 h-4 text-admin-brand" /> Booking Description
+              </h4>
+              <RawBookingText text={htmlToPlainText(job.rawDescription)} />
+            </div>
+          )}
 
           <div className="bg-white p-5 rounded-module border border-admin-line shadow-[0_2px_10px_rgb(0,0,0,0.02)]">
             <h4 className="text-[12px] font-bold text-admin-muted uppercase tracking-wider flex items-center gap-1.5 mb-4">

@@ -106,6 +106,10 @@ export interface NormalizedJob {
   evidenceItems: NormalizedEvidenceItem[];
   /** Verbatim Calendar event title this job was synced from. */
   rawTitle: string;
+  /** Verbatim Calendar event description -- same source the driver app's
+   *  JobDetailsPanel shows, useful as a fallback when a parsed field didn't extract
+   *  cleanly (e.g. pickup/dropoff address). */
+  rawDescription: string;
   bookingDetails: BookingDetails;
   clientConfirmedName?: string;
   signatureUrl?: string;
