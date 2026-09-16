@@ -1,7 +1,7 @@
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { defineConfig } from "vite";
+import { defineConfig, loadEnv } from "vite";
 import react from "@vitejs/plugin-react";
 import { VitePWA } from "vite-plugin-pwa";
 
@@ -26,6 +26,14 @@ function resolveBuildId(): string {
     return new Date().toISOString().slice(0, 10);
   }
 }
+
+// Point the dev server's /api proxy at a remote backend instead of running one
+// locally: set BACKEND_TARGET in web/.env.local (gitignored), e.g.
+// BACKEND_TARGET=https://chat.themanvan.co.uk
+// Defaults to the local backend on :8090 when unset.
+const localEnv = loadEnv("development", process.cwd(), "BACKEND_TARGET");
+const BACKEND_TARGET = localEnv.BACKEND_TARGET || "http://localhost:8090";
+const isRemoteBackend = BACKEND_TARGET.startsWith("https://");
 
 export default defineConfig({
   define: {
@@ -140,11 +148,27 @@ export default defineConfig({
     port: 3001,
     proxy: {
       "/api": {
-        target: "http://localhost:8090",
-        changeOrigin: true
+        target: BACKEND_TARGET,
+        changeOrigin: true,
+        // The remote backend runs with NODE_ENV=production, so it sets its session
+        // cookie with `Secure`. This dev server is plain http://localhost, and browsers
+        // silently refuse to store a Secure cookie over http -- so login would appear to
+        // "not stick". Strip the flag on the way back through the proxy only.
+        ...(isRemoteBackend && {
+          configure: (proxy) => {
+            proxy.on("proxyRes", (proxyRes) => {
+              const setCookie = proxyRes.headers["set-cookie"];
+              if (setCookie) {
+                proxyRes.headers["set-cookie"] = setCookie.map((cookie) =>
+                  cookie.replace(/;\s*Secure/gi, "")
+                );
+              }
+            });
+          }
+        })
       },
       "/healthz": {
-        target: "http://localhost:8090",
+        target: BACKEND_TARGET,
         changeOrigin: true
       }
     }
