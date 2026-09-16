@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-import { X, Download, Eye, Maximize2, ZoomIn, ZoomOut, Check, ChevronLeft, ChevronRight, RefreshCw, Save } from "lucide-react";
+import { X, Download, Eye, Maximize2, ZoomIn, ZoomOut, Check, ChevronLeft, ChevronRight, RefreshCw, Save, FileText } from "lucide-react";
 import { IconButton } from "../../../../ui";
 import { PaperDossierReport } from "./PaperDossierReport";
 import { PaperScenarioReport } from "./PaperScenarioReport";
@@ -10,6 +10,8 @@ import { waitForPrintImages } from "../utils/printReady";
 import { resolveDriver } from "../utils/drivers";
 import { saveJobReview } from "../api";
 import { formatCapturedTime, formatLocationLabel, mapsUrlForLocation } from "../../../../lib/geo";
+import { htmlToPlainText } from "../../../../lib/htmlText";
+import { RawBookingText } from "../../../../components/driver/RawBookingText";
 
 type ScenarioKind = "checkin" | "checkout" | "parking" | "liability";
 
@@ -327,7 +329,10 @@ export function SubmissionDetailDrawer({ job: initialJob, isOpen, onClose, onNav
   const FormAnswersView = () => (
     <div className={`mx-auto space-y-6 w-full py-6 sm:py-8 px-4 sm:px-6 ${isScenario ? "max-w-2xl" : "max-w-4xl"}`}>
       <div className="bg-white rounded-module p-4 sm:p-6 shadow-sm border border-admin-line">
-         <label className="text-[13px] font-semibold text-admin-muted block mb-2">Customer & Details</label>
+         <label className="text-[13px] font-semibold text-admin-muted mb-2 flex items-center gap-1.5">
+           {!isScenario && <FileText className="w-3.5 h-3.5 text-admin-brand" />}
+           {isScenario ? "Customer & Details" : "Booking Description"}
+         </label>
          {isScenario ? (
            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
              <div>
@@ -367,25 +372,10 @@ export function SubmissionDetailDrawer({ job: initialJob, isOpen, onClose, onNav
                </div>
              )}
            </div>
+         ) : (job as NormalizedJob).rawDescription ? (
+           <RawBookingText text={htmlToPlainText((job as NormalizedJob).rawDescription)} />
          ) : (
-           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-             <div>
-               <span className="text-[11px] uppercase text-admin-muted font-semibold tracking-wider">Customer Name</span>
-               <div className="text-[14px] font-medium text-admin-ink mt-1">{(job as NormalizedJob).customerName || "N/A"}</div>
-             </div>
-             <div>
-               <span className="text-[11px] uppercase text-admin-muted font-semibold tracking-wider">Confirmed By</span>
-               <div className="text-[14px] font-medium text-admin-ink mt-1">{(job as NormalizedJob).clientConfirmedName || "N/A"}</div>
-             </div>
-             <div className="sm:col-span-2">
-               <span className="text-[11px] uppercase text-admin-muted font-semibold tracking-wider">Pickup</span>
-               <div className="text-[14px] font-medium text-admin-ink mt-1">{(job as NormalizedJob).pickup || "N/A"}</div>
-             </div>
-             <div className="sm:col-span-2">
-               <span className="text-[11px] uppercase text-admin-muted font-semibold tracking-wider">Dropoff</span>
-               <div className="text-[14px] font-medium text-admin-ink mt-1">{(job as NormalizedJob).dropoff || "N/A"}</div>
-             </div>
-           </div>
+           <p className="text-[13px] text-admin-muted">No booking description recorded.</p>
          )}
       </div>
 
