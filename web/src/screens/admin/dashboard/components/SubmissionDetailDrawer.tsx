@@ -325,7 +325,7 @@ export function SubmissionDetailDrawer({ job: initialJob, isOpen, onClose, onNav
   );
 
   const FormAnswersView = () => (
-    <div className="max-w-2xl mx-auto space-y-6 w-full py-6 sm:py-8 px-4 sm:px-6">
+    <div className={`mx-auto space-y-6 w-full py-6 sm:py-8 px-4 sm:px-6 ${isScenario ? "max-w-2xl" : "max-w-4xl"}`}>
       <div className="bg-white rounded-module p-4 sm:p-6 shadow-sm border border-admin-line">
          <label className="text-[13px] font-semibold text-admin-muted block mb-2">Customer & Details</label>
          {isScenario ? (
@@ -565,8 +565,9 @@ export function SubmissionDetailDrawer({ job: initialJob, isOpen, onClose, onNav
         {/* BODY -- stacked columns below lg, side-by-side panels at lg+ */}
         <div className="flex-1 flex flex-col lg:flex-row overflow-y-auto lg:overflow-hidden">
           
-          {/* Manager Sidebar */}
-          {(!isPreviewing || !isFullscreen) && <SidebarLeft />}
+          {/* Manager Sidebar -- finished jobs (not scenario submissions) drop this
+              entirely and let the center content use the freed width instead. */}
+          {isScenario && (!isPreviewing || !isFullscreen) && <SidebarLeft />}
 
           {/* Center Content */}
           <div className="flex-1 overflow-y-auto relative bg-[#F5F5F5] custom-scrollbar">
@@ -617,8 +618,8 @@ export function SubmissionDetailDrawer({ job: initialJob, isOpen, onClose, onNav
              )}
           </div>
 
-          {/* Activity Sidebar */}
-          {(!isPreviewing || !isFullscreen) && <SidebarRight />}
+          {/* Activity/Comments Sidebar -- same as SidebarLeft, scenario-only now. */}
+          {isScenario && (!isPreviewing || !isFullscreen) && <SidebarRight />}
         </div>
       </div>
       
