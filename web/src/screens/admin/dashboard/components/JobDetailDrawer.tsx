@@ -1,37 +1,29 @@
 import React, { useState, useEffect } from "react";
-import { 
-  X, 
-  MapPin, 
-  Clock, 
-  DollarSign, 
-  User, 
-  Camera, 
-  Copy, 
-  Check, 
-  Download, 
-  AlertTriangle,
-  Mail,
-  Phone,
-  Truck,
-  Package,
-  Edit2,
-  Save,
+import {
+  X,
+  Clock,
+  DollarSign,
+  User,
+  Camera,
+  Copy,
+  Check,
+  Download,
   Loader2,
   FileText
 } from "lucide-react";
-import { NormalizedJob, DriverSummaryItem } from "../types";
+import { NormalizedJob } from "../types";
 import { Button } from "../../../../ui";
+import { formatLondonDateTime } from "../utils/date";
 import { htmlToPlainText } from "../../../../lib/htmlText";
 import { RawBookingText } from "../../../../components/driver/RawBookingText";
+import { fetchDrivers as fetchDriverRoster, type AdminDriver } from "../../../../api/admin";
 import { JobStatusBadge } from "./StatusBadge";
-import { DelayBandBadge } from "./StatusBadge";
-import { EvidenceCompletenessPill } from "./EvidenceCompletenessPill";
 import { PdfPreviewModal } from "./PdfPreviewModal";
 import { waitForPrintImages } from "../utils/printReady";
 import { PhotoModal } from "./PhotoModal";
 import { ThumbnailPreview } from "./ThumbnailPreview";
 import { resolveDriver, formatVanReg, getAvatarColor } from "../utils/drivers";
-import { fetchDrivers, reassignJob } from "../api";
+import { reassignJob } from "../api";
 import { formatCapturedTime, formatLocationLabel, mapsUrlForLocation } from "../../../../lib/geo";
 
 interface Props {
@@ -49,24 +41,22 @@ export function JobDetailDrawer({ job: initialJob, isOpen, onClose, onUpdated }:
   const [activePhoto, setActivePhoto] = useState<{title: string, url: string, driveUrl?: string} | null>(null);
   const [toast, setToast] = useState<string | null>(null);
 
-  // Edit Mode State
-  const [isEditing, setIsEditing] = useState(false);
-  const [editData, setEditData] = useState({
-    pickup: "",
-    dropoff: "",
-    billed: "",
-    crew: ""
-  });
-
   // Reassign Mode State -- real roster (not utils/drivers.ts's old localStorage mock)
   // and a real backend call, see handleReassign below.
   const [isReassigning, setIsReassigning] = useState(false);
-  const [roster, setRoster] = useState<DriverSummaryItem[]>([]);
+  const [roster, setRoster] = useState<AdminDriver[]>([]);
   const [reassigning, setReassigning] = useState(false);
 
+  // The Reassign dropdown only ever needs the roster (initials/fullName/vanReg) --
+  // it used to pull this from /api/admin/drivers/summary, which also computes every
+  // driver's per-job performance stats via the same full-dataset rebuild that made
+  // the Jobs list slow before pagination (see jobs.repo.ts's listJobsPage). That
+  // dataset build was the entire reason opening Reassign felt slow; the lightweight
+  // /api/admin/drivers (just the roster, no stats) is what DriversPage's Add/Edit
+  // Driver modal already uses for the same reason.
   useEffect(() => {
     if (!isReassigning || roster.length) return;
-    fetchDrivers().then(({ drivers }) => setRoster(drivers.filter(d => d.active && d.hasAccount))).catch(() => {});
+    fetchDriverRoster().then(list => setRoster(list.filter(d => d.active))).catch(() => {});
   }, [isReassigning, roster.length]);
 
   // PDF Generation
@@ -75,21 +65,8 @@ export function JobDetailDrawer({ job: initialJob, isOpen, onClose, onUpdated }:
 
   useEffect(() => {
     setJob(initialJob);
-    setIsEditing(false);
     setIsReassigning(false);
   }, [initialJob]);
-
-  // Sync to Edit Form
-  useEffect(() => {
-    if (isEditing) {
-      setEditData({
-        pickup: job.pickup || "",
-        dropoff: job.dropoff || "",
-        billed: ((job.amountCharged || 0) / 100).toFixed(2),
-        crew: String(job.crewSize || 2)
-      });
-    }
-  }, [isEditing, job]);
 
   if (!isOpen) return null;
 
@@ -121,27 +98,6 @@ export function JobDetailDrawer({ job: initialJob, isOpen, onClose, onUpdated }:
     setTimeout(() => setToast(null), 3000);
   };
 
-  const handleSaveEdit = () => {
-    const valBilled = parseFloat(editData.billed);
-    const valCrew = parseInt(editData.crew, 10);
-    
-    if (isNaN(valBilled) || valBilled < 0 || isNaN(valCrew) || valCrew < 1) {
-      showToast("Invalid numeric values");
-      return;
-    }
-
-    setJob({
-      ...job,
-      pickup: editData.pickup,
-      dropoff: editData.dropoff,
-      amountCharged: valBilled * 100,
-      crewSize: valCrew
-    });
-    
-    setIsEditing(false);
-    showToast("Job Details Updated");
-  };
-
   const handleReassign = async (driverInitials: string) => {
     if (reassigning) return;
     setReassigning(true);
@@ -158,33 +114,7 @@ export function JobDetailDrawer({ job: initialJob, isOpen, onClose, onUpdated }:
     }
   };
 
-  const isInvalidAddress = (addr?: string) => {
-    if (!addr) return true;
-    const lower = addr.toLowerCase().trim();
-    if (lower.length < 8) return true; 
-    if (["hhh", "test", "not recorded"].includes(lower)) return true;
-    if (!/\s/.test(lower)) return true; // Flags completely spaceless strings like '2Multan-pak'
-    return false;
-  };
-
-  const isCancelled = job.status === "CANCELLED";
   const totalPounds = (job.totalCharges || job.calculatedTotalCharges || 0) / 100;
-  const amountChargedPounds = (job.amountCharged || 0) / 100;
-  const bookingDetails = job.bookingDetails ?? {};
-  const valueOrDash = (value?: string | null) => {
-    const trimmed = String(value ?? "").trim();
-    return trimmed && trimmed.toLowerCase() !== "not recorded" ? trimmed : "-";
-  };
-  // Booked duration comes from the Calendar event's own start/end time
-  // (job.bookedMinutes), never from free-text in the event description -- a
-  // "Duration:" line there can say anything and drift from the actual booked slot.
-  const bookedDuration = (() => {
-    const minutes = job.bookedMinutes;
-    if (!minutes) return "-";
-    const hrs = Math.floor(minutes / 60);
-    const mins = minutes % 60;
-    return [hrs ? `${hrs}h` : "", mins ? `${mins}m` : ""].filter(Boolean).join(" ") || "0m";
-  })();
 
   return (
     <div className="fixed inset-0 z-[100] overflow-hidden bg-admin-ink/70 backdrop-blur-sm flex items-center justify-center p-3 sm:p-6">
@@ -248,6 +178,46 @@ export function JobDetailDrawer({ job: initialJob, isOpen, onClose, onUpdated }:
         {/* 2. Scrollable Body Content */}
         <div className="flex-1 overflow-y-auto p-6 space-y-6 text-[13px] text-admin-ink relative">
 
+          {/* Top Metrics -- Total Charges, Time, Driver. Amount Charged and
+              Punctuality used to sit here too; Amount Charged was dropped along with
+              Route Corridors/Move Details/Inventory below, and Punctuality now only
+              shows on the Finished Jobs tab (a delay band only means something once a
+              job has actually run). */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className="bg-white p-4 rounded-module border border-admin-line shadow-[0_2px_10px_rgb(0,0,0,0.02)] flex flex-col justify-between">
+              <span className="text-[11px] uppercase text-admin-muted font-bold tracking-wider flex items-center gap-1.5 mb-2">
+                <DollarSign className="w-3 h-3" /> Total Charges
+              </span>
+              <span className="text-[20px] font-bold font-mono text-admin-ink">£{totalPounds.toFixed(2)}</span>
+            </div>
+
+            <div className="bg-white p-4 rounded-module border border-admin-line shadow-[0_2px_10px_rgb(0,0,0,0.02)] flex flex-col justify-between">
+              <span className="text-[11px] uppercase text-admin-muted font-bold tracking-wider flex items-center gap-1.5 mb-2">
+                <Clock className="w-3 h-3" /> Time
+              </span>
+              <span className="text-[14px] font-bold text-admin-ink truncate block">
+                {job.bookedStart ? formatLondonDateTime(job.bookedStart) : "Not scheduled"}
+              </span>
+            </div>
+
+            <div className="bg-white p-4 rounded-module border border-admin-line shadow-[0_2px_10px_rgb(0,0,0,0.02)] flex flex-col justify-between">
+              <span className="text-[11px] uppercase text-admin-muted font-bold tracking-wider flex items-center gap-1.5 mb-2">
+                <User className="w-3 h-3" /> Driver
+              </span>
+              <span className="text-[14px] font-bold text-admin-ink truncate block">
+                {job.driverName || "Unassigned"}
+              </span>
+              <div className="flex items-center justify-between mt-2">
+                <span className="text-[12px] text-admin-muted">{job.crewSize} Crew</span>
+                {job.driverName && job.driverName !== "Unassigned" && (
+                  <span className="px-1.5 py-0.5 rounded-control bg-admin-status-green-bg text-admin-status-green font-bold text-[9px] uppercase tracking-wider">
+                    Sent (SMS)
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
+
           {/* Verbatim Calendar description -- same source the driver app's
               JobDetailsPanel shows. A parsed field (pickup/dropoff address, van size,
               etc.) can fail to extract cleanly from an oddly-worded booking; this is
@@ -261,88 +231,6 @@ export function JobDetailDrawer({ job: initialJob, isOpen, onClose, onUpdated }:
               <RawBookingText text={htmlToPlainText(job.rawDescription)} />
             </div>
           )}
-
-          <div className="bg-white p-5 rounded-module border border-admin-line shadow-[0_2px_10px_rgb(0,0,0,0.02)]">
-            <h4 className="text-[12px] font-bold text-admin-muted uppercase tracking-wider flex items-center gap-1.5 mb-4">
-              <User className="w-4 h-4 text-admin-brand" /> Client Details
-            </h4>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <div className="min-w-0">
-                <span className="block text-[10px] font-bold uppercase tracking-wider text-admin-muted">Name</span>
-                <span className="mt-1 block text-[14px] font-semibold text-admin-ink break-words">{valueOrDash(job.customerName)}</span>
-              </div>
-              <div className="min-w-0">
-                <span className="block text-[10px] font-bold uppercase tracking-wider text-admin-muted flex items-center gap-1">
-                  <Mail className="w-3 h-3" /> Email
-                </span>
-                <span className="mt-1 block text-[14px] font-semibold text-admin-ink break-words">{valueOrDash(job.customerEmail)}</span>
-              </div>
-              <div className="min-w-0">
-                <span className="block text-[10px] font-bold uppercase tracking-wider text-admin-muted flex items-center gap-1">
-                  <Phone className="w-3 h-3" /> Phone
-                </span>
-                <span className="mt-1 block text-[14px] font-semibold text-admin-ink break-words">{valueOrDash(job.customerPhone)}</span>
-              </div>
-            </div>
-          </div>
-          
-          {/* Key Metrics Strip */}
-          <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">
-            <div className="bg-white p-4 rounded-module border border-admin-line shadow-[0_2px_10px_rgb(0,0,0,0.02)] flex flex-col justify-between">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-[11px] uppercase text-admin-muted font-bold tracking-wider flex items-center gap-1.5">
-                  <DollarSign className="w-3 h-3" /> Total Charges
-                </span>
-              </div>
-              <span className="text-[20px] font-bold font-mono text-admin-ink">£{totalPounds.toFixed(2)}</span>
-            </div>
-
-            <div className="bg-white p-4 rounded-module border border-admin-line shadow-[0_2px_10px_rgb(0,0,0,0.02)] flex flex-col justify-between transition-all">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-[11px] uppercase text-admin-muted font-bold tracking-wider flex items-center gap-1.5">
-                  <DollarSign className="w-3 h-3" /> Amount Charged
-                </span>
-              </div>
-              {isEditing ? (
-                <div className="relative mt-1">
-                  <span className="absolute left-2 top-1/2 -translate-y-1/2 text-admin-muted font-bold text-[14px]">£</span>
-                  <input type="number" className="w-full h-8 pl-6 pr-2 rounded-control border border-admin-line text-[14px] font-bold font-mono outline-none focus:border-admin-brand" value={editData.billed} onChange={e => setEditData({...editData, billed: e.target.value})} />
-                </div>
-              ) : (
-                <span className="text-[20px] font-bold font-mono text-admin-ink">£{amountChargedPounds.toFixed(2)}</span>
-              )}
-            </div>
-            
-            <div className="bg-white p-4 rounded-module border border-admin-line shadow-[0_2px_10px_rgb(0,0,0,0.02)] flex flex-col justify-between">
-              <span className="text-[11px] uppercase text-admin-muted font-bold tracking-wider flex items-center gap-1.5 mb-2">
-                <User className="w-3 h-3" /> Driver
-              </span>
-              <span className="text-[14px] font-bold text-admin-ink truncate block">
-                {job.driverName || "Unassigned"}
-              </span>
-              <div className="flex items-center justify-between mt-2">
-                {isEditing ? (
-                   <input type="number" className="w-12 h-6 px-1 rounded-control border border-admin-line text-[12px] text-center outline-none focus:border-admin-brand" value={editData.crew} onChange={e => setEditData({...editData, crew: e.target.value})} />
-                ) : (
-                   <span className="text-[12px] text-admin-muted">{job.crewSize} Crew</span>
-                )}
-                {job.driverName && job.driverName !== "Unassigned" && (
-                  <span className="px-1.5 py-0.5 rounded-control bg-admin-status-green-bg text-admin-status-green font-bold text-[9px] uppercase tracking-wider">
-                    Sent (SMS)
-                  </span>
-                )}
-              </div>
-            </div>
-            
-            <div className="bg-white p-4 rounded-module border border-admin-line shadow-[0_2px_10px_rgb(0,0,0,0.02)] flex flex-col justify-between">
-              <span className="text-[11px] uppercase text-admin-muted font-bold tracking-wider flex items-center gap-1.5 mb-2">
-                <Clock className="w-3 h-3" /> Punctuality
-              </span>
-              <div className="mt-1">
-                {isCancelled ? <span className="text-admin-muted/50 font-mono">-</span> : <DelayBandBadge band={job.delayBand} minutes={job.delayMinutes} />}
-              </div>
-            </div>
-          </div>
 
           {/* Reassign Modal / Dropdown (Inline) */}
           {isReassigning && (
@@ -374,99 +262,20 @@ export function JobDetailDrawer({ job: initialJob, isOpen, onClose, onUpdated }:
              </div>
           )}
 
-          {/* Route Corridors */}
-          <div className="space-y-3">
-            <h4 className="text-[12px] font-bold text-admin-muted uppercase tracking-wider flex items-center gap-1.5 mb-2">
-              <MapPin className="w-4 h-4 text-admin-brand" /> Route Corridors
-            </h4>
-            
-            <div className="bg-white rounded-module border border-admin-line border-l-4 border-l-admin-status-green shadow-[0_2px_10px_rgb(0,0,0,0.02)] p-4">
-              <span className="text-[10px] font-bold text-admin-status-green uppercase tracking-wider block mb-1">Pickup</span>
-              {isEditing ? (
-                 <input type="text" className="w-full h-8 px-2 rounded-control border border-admin-line text-[13px] outline-none focus:border-admin-brand" value={editData.pickup} onChange={e => setEditData({...editData, pickup: e.target.value})} placeholder="Search address..." />
-              ) : isInvalidAddress(job.pickup) ? (
-                 <div className="flex items-center gap-1.5 text-admin-muted/70 text-[13px]"><AlertTriangle className="w-3.5 h-3.5" /> Address not properly recorded</div>
-              ) : (
-                 <span className="font-medium text-admin-ink block">{job.pickup}</span>
-              )}
-              {!isEditing && job.floorFrom && (
-                <span className="mt-1.5 block text-[12px] font-medium text-admin-muted">Floor: {job.floorFrom}</span>
-              )}
-            </div>
-
-            <div className="bg-white rounded-module border border-admin-line border-l-4 border-l-[#2563EB] shadow-[0_2px_10px_rgb(0,0,0,0.02)] p-4">
-              <span className="text-[10px] font-bold text-[#2563EB] uppercase tracking-wider block mb-1">Dropoff</span>
-              {isEditing ? (
-                 <input type="text" className="w-full h-8 px-2 rounded-control border border-admin-line text-[13px] outline-none focus:border-admin-brand" value={editData.dropoff} onChange={e => setEditData({...editData, dropoff: e.target.value})} placeholder="Search address..." />
-              ) : isInvalidAddress(job.dropoff) ? (
-                 <div className="flex items-center gap-1.5 text-admin-muted/70 text-[13px]"><AlertTriangle className="w-3.5 h-3.5" /> Address not properly recorded</div>
-              ) : (
-                 <span className="font-medium text-admin-ink block">{job.dropoff}</span>
-              )}
-              {!isEditing && job.floorTo && (
-                <span className="mt-1.5 block text-[12px] font-medium text-admin-muted">Floor: {job.floorTo}</span>
-              )}
-            </div>
-          </div>
-
-          <div className="bg-white p-5 rounded-module border border-admin-line shadow-[0_2px_10px_rgb(0,0,0,0.02)]">
-            <h4 className="text-[12px] font-bold text-admin-muted uppercase tracking-wider flex items-center gap-1.5 mb-4">
-              <Truck className="w-4 h-4 text-admin-brand" /> Move Details
-            </h4>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <div>
-                <span className="block text-[10px] font-bold uppercase tracking-wider text-admin-muted">Van size</span>
-                <span className="mt-1 block text-[14px] font-semibold text-admin-ink break-words">{valueOrDash(bookingDetails.vanSize)}</span>
-              </div>
-              <div>
-                <span className="block text-[10px] font-bold uppercase tracking-wider text-admin-muted">Duration</span>
-                <span className="mt-1 block text-[14px] font-semibold text-admin-ink break-words">{bookedDuration}</span>
-              </div>
-              {bookingDetails.hireDuration && (
-                <div>
-                  <span className="block text-[10px] font-bold uppercase tracking-wider text-admin-muted">Hire time (booked)</span>
-                  <span className="mt-1 block text-[14px] font-semibold text-admin-ink break-words">{bookingDetails.hireDuration}</span>
-                </div>
-              )}
-              {bookingDetails.extraChargeText && (
-                <div>
-                  <span className="block text-[10px] font-bold uppercase tracking-wider text-admin-muted">Overtime rate</span>
-                  <span className="mt-1 block text-[14px] font-semibold text-admin-ink break-words">{bookingDetails.extraChargeText}</span>
-                </div>
-              )}
-              <div>
-                <span className="block text-[10px] font-bold uppercase tracking-wider text-admin-muted">Notes</span>
-                <span className="mt-1 block text-[14px] font-semibold text-admin-ink whitespace-pre-wrap break-words">{valueOrDash(bookingDetails.notes)}</span>
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-white p-5 rounded-module border border-admin-line shadow-[0_2px_10px_rgb(0,0,0,0.02)]">
-            <h4 className="text-[12px] font-bold text-admin-muted uppercase tracking-wider flex items-center gap-1.5 mb-3">
-              <Package className="w-4 h-4 text-admin-brand" /> Inventory
-            </h4>
-            <p className="text-[14px] font-semibold text-admin-ink whitespace-pre-wrap break-words">
-              {valueOrDash(bookingDetails.inventory)}
-            </p>
-          </div>
-
           {/* Photographic Evidence Grid */}
           <div className="bg-white p-5 rounded-module border border-admin-line shadow-[0_2px_10px_rgb(0,0,0,0.02)] space-y-4">
-            <div className="flex items-center justify-between">
-              <h4 className="text-[12px] font-bold text-admin-muted uppercase tracking-wider flex items-center gap-1.5">
-                <Camera className="w-4 h-4 text-admin-brand" /> Evidence Photographs
-              </h4>
-              <EvidenceCompletenessPill completeness={job.evidenceCompleteness} />
-            </div>
+            <h4 className="text-[12px] font-bold text-admin-muted uppercase tracking-wider flex items-center gap-1.5">
+              <Camera className="w-4 h-4 text-admin-brand" /> Evidence Photographs
+            </h4>
 
             {job.evidenceItems?.length ? (
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                 {job.evidenceItems.map((ev, i) => {
                   const thumbUrl = ev.thumbProxyUrl || ev.driveUrl;
                   const fullUrl = ev.driveUrl || ev.thumbProxyUrl;
                   const capturedTime = ev.capturedAt ? formatCapturedTime(ev.capturedAt) : "";
                   return (
-                    <div key={ev.id || i} className="p-2 bg-admin-surface rounded-card border border-admin-line text-center space-y-2">
+                    <div key={ev.id || i} className="p-1.5 bg-admin-surface rounded-card border border-admin-line text-center space-y-1.5">
                       <span className="text-[11px] font-semibold text-admin-muted block truncate">{ev.category}</span>
                       <ThumbnailPreview
                         src={thumbUrl}
@@ -529,25 +338,9 @@ export function JobDetailDrawer({ job: initialJob, isOpen, onClose, onUpdated }:
               <span>{isGeneratingPdf ? "Generating..." : "Download PDF"}</span>
             </button>
 
-            {!isEditing ? (
-              <>
-                <Button variant="secondary" onClick={() => setIsReassigning(!isReassigning)} iconLeft={<User />}>
-                  Reassign
-                </Button>
-                <Button variant="secondary" onClick={() => setIsEditing(true)} iconLeft={<Edit2 />}>
-                  Edit
-                </Button>
-              </>
-            ) : (
-              <>
-                <Button onClick={handleSaveEdit} iconLeft={<Save />}>
-                  Save
-                </Button>
-                <Button variant="secondary" onClick={() => setIsEditing(false)}>
-                  Cancel
-                </Button>
-              </>
-            )}
+            <Button variant="secondary" onClick={() => setIsReassigning(!isReassigning)} iconLeft={<User />}>
+              Reassign
+            </Button>
           </div>
 
           <button
