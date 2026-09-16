@@ -62,7 +62,7 @@ export function dashboardNotificationsRoutes(): Router {
             actualStart: job.actualStart || "", email, sms
           };
         })
-        .sort((a, b) => (b.actualStart || "").localeCompare(a.actualStart || ""));
+        .sort((a, b) => (a.actualStart || "").localeCompare(b.actualStart || ""));
 
       res.status(200).json({ rows });
     } catch (error) {

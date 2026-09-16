@@ -30,6 +30,6 @@ export async function insertVanRecord(doc: VanRecordDoc): Promise<VanRecordDoc> 
 
 export async function listVanRecords(): Promise<VanRecordDoc[]> {
   const col = await vanRecordsCollection();
-  const docs = await col.find({}).sort({ submittedAt: -1 }).toArray();
+  const docs = await col.find({}).sort({ submittedAt: 1 }).toArray();
   return docs.map(doc => ({ ...doc, type: doc.type ?? "MILEAGE" }));
 }

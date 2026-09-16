@@ -382,7 +382,9 @@ export function dashboardJobsRoutes(): Router {
       const filtered = applyFilters(allJobs, req.query);
 
       const sort = typeof req.query.sort === "string" ? req.query.sort : "bookedStart";
-      const dir = req.query.dir === "asc" ? "asc" : "desc";
+      // Earliest-first by default (Finished Jobs and report generation rely on this;
+      // JobsPage.tsx re-sorts client-side regardless, so this doesn't affect it).
+      const dir = req.query.dir === "desc" ? "desc" : "asc";
 
       // applyFilters() returns the same shared cached array by reference when no filter
       // query params are given (the common default view) -- copy before sorting so this

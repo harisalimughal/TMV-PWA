@@ -190,9 +190,9 @@ export function dashboardVanRoutes(): Router {
       }
 
       const allItems = Array.from(grouped.values())
-        .map(item => ({ ...item, records: item.records.sort((a, b) => b.submittedAt.localeCompare(a.submittedAt)) }))
+        .map(item => ({ ...item, records: item.records.sort((a, b) => a.submittedAt.localeCompare(b.submittedAt)) }))
         .sort((a, b) => {
-          if (a.latestSubmittedAt || b.latestSubmittedAt) return b.latestSubmittedAt.localeCompare(a.latestSubmittedAt);
+          if (a.latestSubmittedAt || b.latestSubmittedAt) return a.latestSubmittedAt.localeCompare(b.latestSubmittedAt);
           return (a.driverName || a.driverEmail).localeCompare(b.driverName || b.driverEmail);
         });
       const total = allItems.length;

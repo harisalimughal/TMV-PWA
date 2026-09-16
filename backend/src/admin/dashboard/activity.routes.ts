@@ -21,7 +21,7 @@ export function dashboardActivityRoutes(): Router {
         fromState: a.fromState || undefined,
         toState: a.toState || undefined,
         detail: a.detail || undefined
-      })).sort((a, b) => a.timestamp.localeCompare(b.timestamp)).reverse();
+      })).sort((a, b) => a.timestamp.localeCompare(b.timestamp));
 
       if (from) list = list.filter(a => a.timestamp >= from);
       if (to) list = list.filter(a => a.timestamp <= to);

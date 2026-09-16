@@ -96,7 +96,7 @@ export function dashboardScenariosRoutes(): Router {
           })),
           signature: r.signatureUrl ? { fileId: r.signatureUrl, thumbUrl: toThumbnailUrl(r.signatureUrl) } : null
         };
-      }).reverse(); // latest events first
+      }); // earliest events first, matching every other dashboard list
 
       const total = formattedRows.length;
       const totalPages = Math.ceil(total / pageSize);
