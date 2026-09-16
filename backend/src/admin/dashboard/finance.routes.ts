@@ -1,8 +1,7 @@
 /** Ported from TMV-Chat-bot's dashboard/server/routes/finance.route.ts. */
 import { Router } from "express";
 import { addPence, formatGBP, pence, toPounds } from "../../utils/money";
-import { normalizeMongoDataset } from "./normalize";
-import { readMongoDataset } from "./read";
+import { getDashboardDataset } from "./dataset-cache";
 
 export function dashboardFinanceRoutes(): Router {
   const router = Router();
@@ -13,8 +12,8 @@ export function dashboardFinanceRoutes(): Router {
       const to = typeof req.query.to === "string" ? req.query.to : undefined;
       const groupBy = req.query.groupBy === "month" ? "month" : req.query.groupBy === "week" ? "week" : "day";
 
-      const dataset = await readMongoDataset();
-      let jobs = await normalizeMongoDataset(dataset);
+      const { dataset, jobs: allJobs } = await getDashboardDataset();
+      let jobs = allJobs;
 
       if (from) jobs = jobs.filter(j => (j.actualStart || j.bookedStart) >= from);
       if (to) jobs = jobs.filter(j => (j.actualStart || j.bookedStart) <= to);

@@ -18,11 +18,10 @@ import { JobStatus } from "../../jobs/job.types";
 import { WorkflowState } from "../../workflow/workflow.states";
 import { log } from "../../utils/logger";
 import { formatGBP, toPounds } from "../../utils/money";
-import { normalizeMongoDataset } from "./normalize";
 import { formatLondonDate } from "./timezone";
 import { NormalizedJob } from "./types";
 import { generateJobPdf } from "./pdf-generator";
-import { readMongoDataset } from "./read";
+import { getDashboardDataset, invalidateDashboardDataset } from "./dataset-cache";
 import { sendPushToDriver } from "../../push/push.service";
 
 function escapeCsvField(val: unknown): string {
@@ -168,6 +167,7 @@ export function dashboardJobsRoutes(): Router {
           rawTitle: title, rawDescription: description
         }).catch(err => log.warn("failed to mirror new job into Mongo (background sync will pick it up shortly)", { error: String(err) }));
       }
+      invalidateDashboardDataset();
 
       // Only the reassign endpoint below used to fire this -- a job that had a driver
       // picked right at creation never got a push at all until the driver happened to
@@ -222,6 +222,7 @@ export function dashboardJobsRoutes(): Router {
         jobId, driver: "admin dashboard", action: "REASSIGNED",
         detail: `${fromInitials} -> ${driverInitials}`
       });
+      invalidateDashboardDataset();
 
       sendPushToDriver(driverInitials, {
         title: "New Job Assigned",
@@ -270,9 +271,11 @@ export function dashboardJobsRoutes(): Router {
         action: "MANAGER_REVIEW_UPDATED",
         detail: note ? `${status}: ${note}` : status
       });
+      // Invalidate before re-reading so this response reflects the review just saved,
+      // instead of a cached pre-review snapshot.
+      invalidateDashboardDataset();
 
-      const dataset = await readMongoDataset();
-      const jobs = await normalizeMongoDataset(dataset);
+      const { jobs } = await getDashboardDataset();
       const job = jobs.find(j => j.jobId.toUpperCase() === jobId.toUpperCase());
 
       return res.status(200).json({
@@ -291,9 +294,8 @@ export function dashboardJobsRoutes(): Router {
 
   router.get("/export.csv", async (req, res) => {
     try {
-      const dataset = await readMongoDataset();
-      let jobs = await normalizeMongoDataset(dataset);
-      jobs = applyFilters(jobs, req.query);
+      const { jobs: allJobs } = await getDashboardDataset();
+      const jobs = applyFilters(allJobs, req.query);
 
       const headers = [
         "Job ID", "Calendar Event ID", "Driver", "Customer", "Phone", "Pickup", "Dropoff",
@@ -345,8 +347,7 @@ export function dashboardJobsRoutes(): Router {
   router.get("/:jobId", async (req, res) => {
     try {
       const jobId = String(req.params.jobId || "").trim();
-      const dataset = await readMongoDataset();
-      const jobs = await normalizeMongoDataset(dataset);
+      const { dataset, jobs } = await getDashboardDataset();
       const job = jobs.find(j => j.jobId.toUpperCase() === jobId.toUpperCase());
 
       if (!job) return res.status(404).json({ error: { code: "JOB_NOT_FOUND", message: `Job ${jobId} not found.` } });
@@ -360,8 +361,7 @@ export function dashboardJobsRoutes(): Router {
   router.get("/:jobId/report.pdf", async (req, res) => {
     try {
       const jobId = String(req.params.jobId || "").trim();
-      const dataset = await readMongoDataset();
-      const jobs = await normalizeMongoDataset(dataset);
+      const { jobs } = await getDashboardDataset();
       const job = jobs.find(j => j.jobId.toUpperCase() === jobId.toUpperCase());
 
       if (!job) return res.status(404).json({ error: { code: "JOB_NOT_FOUND", message: `Job ${jobId} not found.` } });
@@ -378,14 +378,16 @@ export function dashboardJobsRoutes(): Router {
 
   router.get("/", async (req, res) => {
     try {
-      const dataset = await readMongoDataset();
-      let jobs = await normalizeMongoDataset(dataset);
-      jobs = applyFilters(jobs, req.query);
+      const { dataset, jobs: allJobs } = await getDashboardDataset();
+      const filtered = applyFilters(allJobs, req.query);
 
       const sort = typeof req.query.sort === "string" ? req.query.sort : "bookedStart";
       const dir = req.query.dir === "asc" ? "asc" : "desc";
 
-      jobs.sort((a, b) => {
+      // applyFilters() returns the same shared cached array by reference when no filter
+      // query params are given (the common default view) -- copy before sorting so this
+      // never mutates the order every other route/request reads out of the cache.
+      const jobs = [...filtered].sort((a, b) => {
         let valA: any = (a as any)[sort];
         let valB: any = (b as any)[sort];
         if (valA === undefined || valA === null) valA = "";

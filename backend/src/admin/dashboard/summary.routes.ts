@@ -1,8 +1,7 @@
 /** Ported from TMV-Chat-bot's dashboard/server/routes/summary.route.ts. */
 import { Router } from "express";
 import { addPence, formatGBP, pence, toPounds } from "../../utils/money";
-import { normalizeMongoDataset } from "./normalize";
-import { readMongoDataset } from "./read";
+import { getDashboardDataset } from "./dataset-cache";
 
 export function dashboardSummaryRoutes(): Router {
   const router = Router();
@@ -12,8 +11,8 @@ export function dashboardSummaryRoutes(): Router {
       const from = typeof req.query.from === "string" ? req.query.from : undefined;
       const to = typeof req.query.to === "string" ? req.query.to : undefined;
 
-      const dataset = await readMongoDataset();
-      let jobs = await normalizeMongoDataset(dataset);
+      const { dataset, jobs: allJobs } = await getDashboardDataset();
+      let jobs = allJobs;
 
       if (from) jobs = jobs.filter(j => (j.actualStart || j.bookedStart) >= from);
       if (to) jobs = jobs.filter(j => (j.actualStart || j.bookedStart) <= to);

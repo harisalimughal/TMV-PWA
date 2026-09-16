@@ -8,8 +8,7 @@
 import { Router } from "express";
 import { formatGBP, pence, toPounds } from "../../utils/money";
 import { listDriverProfiles } from "../../auth/driver-account.service";
-import { normalizeMongoDataset } from "./normalize";
-import { readMongoDataset } from "./read";
+import { getDashboardDataset } from "./dataset-cache";
 
 interface DriverStat {
   initials: string;
@@ -45,8 +44,8 @@ export function dashboardDriversSummaryRoutes(): Router {
       const from = typeof req.query.from === "string" ? req.query.from : undefined;
       const to = typeof req.query.to === "string" ? req.query.to : undefined;
 
-      const [drivers, dataset] = await Promise.all([listDriverProfiles(), readMongoDataset()]);
-      let jobs = await normalizeMongoDataset(dataset);
+      const [drivers, { dataset, jobs: allJobs }] = await Promise.all([listDriverProfiles(), getDashboardDataset()]);
+      let jobs = allJobs;
 
       if (from) jobs = jobs.filter(j => (j.actualStart || j.bookedStart) >= from);
       if (to) jobs = jobs.filter(j => (j.actualStart || j.bookedStart) <= to);

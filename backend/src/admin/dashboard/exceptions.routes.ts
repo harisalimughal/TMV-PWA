@@ -1,7 +1,6 @@
 /** Ported from TMV-Chat-bot's dashboard/server/routes/exceptions.route.ts. */
 import { Router } from "express";
-import { normalizeMongoDataset } from "./normalize";
-import { readMongoDataset } from "./read";
+import { getDashboardDataset } from "./dataset-cache";
 
 export function dashboardExceptionsRoutes(): Router {
   const router = Router();
@@ -12,8 +11,8 @@ export function dashboardExceptionsRoutes(): Router {
       const from = typeof req.query.from === "string" ? req.query.from : undefined;
       const to = typeof req.query.to === "string" ? req.query.to : undefined;
 
-      const dataset = await readMongoDataset();
-      const jobs = await normalizeMongoDataset(dataset);
+      const { dataset, jobs } = await getDashboardDataset();
+      const jobsById = new Map(jobs.map(j => [j.jobId, j]));
 
       const items: Array<{
         id: string; jobId: string; type: string; severity: "CRITICAL" | "WARNING" | "INFO";
@@ -25,7 +24,7 @@ export function dashboardExceptionsRoutes(): Router {
       for (let i = 0; i < dataset.exceptions.length; i++) {
         const ex = dataset.exceptions[i];
         const jobId = ex.jobId || "UNKNOWN";
-        const matchingJob = jobs.find(j => j.jobId === jobId);
+        const matchingJob = jobsById.get(jobId);
         items.push({
           id: `ex-${i}`, jobId, type: ex.type || "SYSTEM_EXCEPTION", severity: "CRITICAL",
           detail: ex.detail || "Recorded system exception", timestamp: ex.timestamp || dataset.fetchedAt,
