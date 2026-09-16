@@ -14,6 +14,7 @@ import { env, warmupAuth } from "./config/env";
 dns.setDefaultResultOrder("ipv4first");
 import { log } from "./utils/logger";
 import { ensureIndexes } from "./db/mongo";
+import { ensureExceptionsIndexes } from "./db/exceptions.repo";
 import { authRoutes } from "./auth/auth.routes";
 import { adminRoutes } from "./auth/admin.routes";
 import { requireAdminAuth } from "./auth/require-admin-auth";
@@ -174,7 +175,7 @@ function startReminderSweep(): void {
  */
 function ensureIndexesWithRetry(): void {
   const RETRY_MS = 30_000;
-  ensureIndexes()
+  Promise.all([ensureIndexes(), ensureExceptionsIndexes()])
     .then(() => log.info("mongo indexes verified"))
     .catch(error => {
       log.warn("ensureIndexes failed; retrying", { error: String(error), retry_in_ms: RETRY_MS });
