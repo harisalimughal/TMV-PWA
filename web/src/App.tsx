@@ -212,9 +212,25 @@ export function App() {
     if (autoPushPromptedRef.current) return;
     if (!pushSupported || pushPermission !== "default") return;
     autoPushPromptedRef.current = true;
-    const timer = setTimeout(() => void subscribeToPush(), 1200);
+    const timer = setTimeout(() => {
+      void subscribeToPush().then(success => {
+        if (success) {
+          toast.success("Push notifications enabled!");
+        } else if (Notification.permission === "denied") {
+          toast.info("Notifications were blocked in settings.");
+        } else {
+          // Permission was granted but the subscribe/save step itself failed
+          // (e.g. no service worker yet, or /api/push/subscribe rejected the
+          // request) -- this used to fail with zero visible trace, so a driver's
+          // device could sit un-subscribed indefinitely with nothing in the UI or
+          // logs pointing at why. Settings > PWA Settings still has the manual
+          // "Enable Push Notifications" retry button for this case.
+          toast.error("Couldn't enable push notifications. Try again from Settings.");
+        }
+      });
+    }, 1200);
     return () => clearTimeout(timer);
-  }, [isAdmin, view, pushSupported, pushPermission, subscribeToPush]);
+  }, [isAdmin, view, pushSupported, pushPermission, subscribeToPush, toast]);
 
   useEffect(() => {
     if (isAdmin) return;
