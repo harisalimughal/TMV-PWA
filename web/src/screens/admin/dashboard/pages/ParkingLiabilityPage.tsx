@@ -204,6 +204,7 @@ export function ParkingLiabilityPage() {
         statusColor="green"
         search={search}
         onSearchChange={setSearch}
+        searchPlaceholder="Search address, client, or driver..."
         driverFilter={driverFilter}
         onDriverFilterChange={v => { setDriverFilter(v); setPage(1); }}
         driverOptions={driverOptions}

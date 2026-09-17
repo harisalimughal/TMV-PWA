@@ -107,7 +107,7 @@ export function SubmissionPageTemplate({
               </select>
             )}
 
-            <div className="relative w-full sm:w-64">
+            <div className="relative flex-1 min-w-[200px]">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-admin-muted" />
               <input
                 type="text"
