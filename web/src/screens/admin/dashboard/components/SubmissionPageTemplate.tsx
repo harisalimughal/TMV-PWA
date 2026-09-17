@@ -1,9 +1,10 @@
 import React from "react";
 import {
   Search,
-  Download, Printer, RefreshCw, ChevronLeft, ChevronRight
+  Download, RefreshCw, ChevronLeft, ChevronRight
 } from "lucide-react";
 import { DateRangePicker } from "./DateRangePicker";
+import { Button } from "../../../../ui";
 
 interface Props {
   title: string;
@@ -84,6 +85,17 @@ export function SubmissionPageTemplate({
             pill never moved off 0/4, so the whole cluster was decoration that read as
             functionality. Removed rather than stubbed -- an honest toolbar with three
             working controls beats a rich one where half do nothing. */}
+        {onExportCsv && (
+          <Button
+            variant="secondary"
+            onClick={onExportCsv}
+            iconLeft={<Download />}
+            aria-label="Export CSV"
+            className="shrink-0"
+          >
+            <span className="hidden sm:inline">Export CSV</span>
+          </Button>
+        )}
       </div>
 
       {/* MAIN CARD CONTAINER */}
@@ -124,43 +136,17 @@ export function SubmissionPageTemplate({
           </div>
 
           {/* Row 2: Secondary Controls */}
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="flex items-center gap-3 shrink-0">
-              <span className="text-label font-medium text-fg-muted whitespace-nowrap">
-                {itemCount} record{itemCount !== 1 ? 's' : ''}
-              </span>
-              <button
-                onClick={onRefresh}
-                className="w-8 h-8 shrink-0 rounded-full border border-admin-line bg-admin-surface hover:bg-white text-admin-muted hover:text-admin-ink transition flex items-center justify-center shadow-sm"
-                title="Refresh Data"
-              >
-                <RefreshCw className={`w-3.5 h-3.5 ${isFetching ? 'animate-spin text-admin-brand' : ''}`} />
-              </button>
-            </div>
-
-            {/* Standardized Export Controls (Icon+Text Pair) */}
-            <div className="flex items-center bg-admin-surface border border-admin-line rounded-card overflow-hidden shrink-0">
-              {onExportCsv && (
-                <button
-                  onClick={onExportCsv}
-                  disabled={itemCount === 0}
-                  className="whitespace-nowrap px-3 h-9 text-[12px] font-medium text-admin-ink hover:bg-white transition border-r border-admin-line flex items-center gap-1.5 disabled:opacity-40"
-                  title={`Export ${itemCount} records as CSV`}
-                >
-                  <Download className="w-3.5 h-3.5 text-admin-muted" /> CSV
-                </button>
-              )}
-              {/* "PDF" now prints. The print stylesheet in index.css already lays the
-                  table out for paper, so the browser's own Save-as-PDF is a real
-                  export rather than a placeholder. */}
-              <button
-                onClick={() => window.print()}
-                className="whitespace-nowrap px-3 h-9 text-[12px] font-medium text-admin-ink hover:bg-white transition flex items-center gap-1.5"
-                title="Print or save as PDF"
-              >
-                <Printer className="w-3.5 h-3.5 text-admin-muted" /> PDF
-              </button>
-            </div>
+          <div className="flex items-center gap-3">
+            <span className="text-label font-medium text-fg-muted whitespace-nowrap">
+              {itemCount} record{itemCount !== 1 ? 's' : ''}
+            </span>
+            <button
+              onClick={onRefresh}
+              className="w-8 h-8 shrink-0 rounded-full border border-admin-line bg-admin-surface hover:bg-white text-admin-muted hover:text-admin-ink transition flex items-center justify-center shadow-sm"
+              title="Refresh Data"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${isFetching ? 'animate-spin text-admin-brand' : ''}`} />
+            </button>
           </div>
         </div>
 

@@ -220,6 +220,9 @@ export function ParkingLiabilityPage() {
         onPageChange={setPage}
         tableHeader={tableHeader}
         tableBody={tableBody}
+        onExportCsv={() => {
+          window.location.href = "/api/admin/scenarios/parking/export.csv";
+        }}
       />
       {selectedSubmission && (
         <SubmissionDetailDrawer
