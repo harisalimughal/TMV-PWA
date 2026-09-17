@@ -86,6 +86,7 @@ export default {
         "admin-brand": c("--brand"),
         "admin-brand-soft": c("--brand-subtle"),
         "admin-brand-dark": c("--brand-active"),
+        "admin-sidebar": c("--sidebar-bg"),
         "admin-status-green": c("--success-fg"),
         "admin-status-green-bg": c("--success-subtle"),
         "admin-status-amber": c("--warning-fg"),
