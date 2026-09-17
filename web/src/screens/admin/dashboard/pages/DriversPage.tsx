@@ -212,7 +212,7 @@ export function DriversPage() {
                 <span className="text-admin-muted block text-[12px] mb-1">Completed Jobs</span>
                 <div className="flex items-baseline gap-2">
                   <span className="font-bold text-admin-ink text-[18px] tabular-nums leading-none">
-                    {driver.completed} / {driver.assigned}
+                    {driver.completed}
                   </span>
                 </div>
               </div>
