@@ -1,6 +1,6 @@
 import React from "react";
 import {
-  Table as TableIcon, Inbox, Search,
+  Search,
   Download, Printer, RefreshCw, ChevronLeft, ChevronRight
 } from "lucide-react";
 import { DateRangePicker } from "./DateRangePicker";
@@ -10,17 +10,16 @@ interface Props {
   icon: React.ElementType;
   status?: string;
   statusColor?: "green" | "amber" | "gray";
-  
-  // Tabs
-  activeTab: string;
-  onTabChange: (tab: string) => void;
-  
+
   // Toolbar
-  viewMode: "table" | "inbox";
-  onViewModeChange: (mode: "table" | "inbox") => void;
   search: string;
   onSearchChange: (s: string) => void;
   searchPlaceholder?: string;
+  /** Same roster + filter pattern as Finished Jobs' driver filter. Optional so pages
+   *  that haven't wired it up yet don't need a stub. */
+  driverFilter?: string;
+  onDriverFilterChange?: (initials: string) => void;
+  driverOptions?: Array<{ initials: string; fullName?: string }>;
   from?: string;
   to?: string;
   onDateChange: (f?: string, t?: string) => void;
@@ -49,8 +48,8 @@ interface Props {
 
 export function SubmissionPageTemplate({
   title, icon: Icon, status = "Published", statusColor = "green",
-  activeTab, onTabChange,
-  viewMode, onViewModeChange, search, onSearchChange, searchPlaceholder = "Search...",
+  search, onSearchChange, searchPlaceholder = "Search...",
+  driverFilter, onDriverFilterChange, driverOptions,
   from, to, onDateChange, groupBy, onGroupByChange,
   itemCount, isFetching, onRefresh,
   page, pageSize, totalItems, onPageChange,
@@ -91,38 +90,12 @@ export function SubmissionPageTemplate({
 
       {/* MAIN CARD CONTAINER */}
       <div className="bg-white rounded-module shadow-[0_4px_24px_rgb(0,0,0,0.04)] border border-admin-line overflow-hidden flex flex-col">
-        
-        {/* STANDARD TAB NAVIGATION -- horizontal scroll fallback so tabs never wrap/compress */}
-        <div className="flex items-center px-4 sm:px-6 border-b border-admin-line overflow-x-auto custom-scrollbar">
-          {["Submissions", "Users", "Summary", "Activity"].map(tab => (
-            <button
-              key={tab}
-              onClick={() => onTabChange(tab)}
-              className={`shrink-0 whitespace-nowrap px-3 sm:px-4 py-4 text-[13px] font-semibold border-b-[3px] transition-colors ${
-                activeTab === tab
-                  ? 'border-admin-brand text-admin-ink'
-                  : 'border-transparent text-admin-muted hover:text-admin-ink hover:border-admin-line'
-              }`}
-            >
-              {tab}
-            </button>
-          ))}
-        </div>
 
         {/* STANDARD TOOLBAR */}
         <div className="p-4 flex flex-col gap-4 bg-[#FAFAFA] border-b border-admin-line">
 
           {/* Row 1: Core Controls */}
           <div className="flex flex-wrap items-center gap-3">
-            <div className="flex items-center gap-1 p-1 bg-admin-surface border border-admin-line rounded-card shrink-0">
-              <button onClick={() => onViewModeChange("table")} className={`shrink-0 whitespace-nowrap flex items-center gap-1.5 px-3 py-1.5 rounded-control text-[13px] font-medium transition ${viewMode === 'table' ? 'bg-white shadow-sm text-admin-ink' : 'text-admin-muted hover:text-admin-ink'}`}>
-                <TableIcon className="w-4 h-4" /> Table
-              </button>
-              <button onClick={() => onViewModeChange("inbox")} className={`shrink-0 whitespace-nowrap flex items-center gap-1.5 px-3 py-1.5 rounded-control text-[13px] font-medium transition ${viewMode === 'inbox' ? 'bg-white shadow-sm text-admin-ink' : 'text-admin-muted hover:text-admin-ink'}`}>
-                <Inbox className="w-4 h-4" /> Inbox
-              </button>
-            </div>
-
             <div className="relative w-full sm:w-64 order-last sm:order-none">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-admin-muted" />
               <input
@@ -133,6 +106,19 @@ export function SubmissionPageTemplate({
                 className="w-full pl-9 pr-4 h-9 rounded-full bg-admin-surface border border-admin-line text-[13px] text-admin-ink focus:border-admin-brand outline-none transition"
               />
             </div>
+
+            {onDriverFilterChange && (
+              <select
+                value={driverFilter || ""}
+                onChange={e => onDriverFilterChange(e.target.value)}
+                className="shrink-0 h-9 px-3 rounded-card bg-admin-surface border border-admin-line text-[13px] font-medium text-admin-ink outline-none focus:border-admin-brand"
+              >
+                <option value="">All drivers</option>
+                {(driverOptions || []).map(d => (
+                  <option key={d.initials} value={d.initials}>{d.fullName || d.initials}</option>
+                ))}
+              </select>
+            )}
 
             <div className="hidden sm:block w-px h-6 bg-admin-line mx-1 shrink-0" />
 

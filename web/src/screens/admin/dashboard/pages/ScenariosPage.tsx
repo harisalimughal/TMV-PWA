@@ -16,7 +16,7 @@ import { SubmissionDetailDrawer } from "../components/SubmissionDetailDrawer";
 import { Button } from "../../../../ui";
 import { PaperDossierReport } from "../components/PaperDossierReport";
 import { NormalizedJob } from "../types";
-import { fetchScenarios } from "../api";
+import { fetchScenarios, fetchDrivers } from "../api";
 import { PaperScenarioReport } from "../components/PaperScenarioReport";
 import { formatLondonDateTime } from "../utils/date";
 import { DateRangePicker } from "../components/DateRangePicker";
@@ -85,12 +85,22 @@ export function ScenariosPage({ kind }: Props) {
    *  autoDownload prop. */
   const [autoDownloadId, setAutoDownloadId] = useState<string | null>(null);
   const [isConfigOpen, setIsConfigOpen] = useState(false);
+  const [driverFilter, setDriverFilter] = useState<string>("");
 
   const { data, isLoading, isError, error, refetch } = useQuery({
-    queryKey: ["scenarios", kind, page, from, to],
-    queryFn: () => fetchScenarios(kind, page),
+    queryKey: ["scenarios", kind, page, from, to, driverFilter],
+    queryFn: () => fetchScenarios(kind, page, driverFilter || undefined),
     retry: 1
   });
+
+  // Same roster + filter pattern as FinishedJobsPage's driver filter -- every driver
+  // with a real account, resolved server-side against driver_accounts (see
+  // scenarios.routes.ts's resolveDriverInitials), not the free-text `driver` field a
+  // submission was stamped with.
+  const { data: driversData } = useQuery({ queryKey: ["drivers_summary"], queryFn: () => fetchDrivers() });
+  const driverOptions = (driversData?.drivers || [])
+    .filter(d => d.initials && d.initials !== "UNASSIGNED" && d.hasAccount)
+    .sort((a, b) => (a.fullName || a.initials).localeCompare(b.fullName || b.initials));
 
   useEffect(() => {
     setPage(1);
@@ -184,6 +194,20 @@ export function ScenariosPage({ kind }: Props) {
             className="w-full h-9 pl-9 pr-3 rounded-full border border-admin-line bg-admin-surface text-[13px] outline-none focus:border-admin-brand focus:ring-1 focus:ring-admin-brand focus:bg-white transition"
           />
         </div>
+
+        <div className="w-[1px] h-6 bg-admin-line mx-2" />
+
+        {/* Driver filter -- same roster + behaviour as Finished Jobs' driver filter. */}
+        <select
+          value={driverFilter}
+          onChange={e => { setDriverFilter(e.target.value); setPage(1); }}
+          className="shrink-0 h-9 px-3 rounded-control border border-admin-line bg-admin-surface text-[13px] font-medium text-admin-ink outline-none focus:border-admin-brand"
+        >
+          <option value="">All drivers</option>
+          {driverOptions.map(d => (
+            <option key={d.initials} value={d.initials}>{d.fullName || d.initials}</option>
+          ))}
+        </select>
 
         <div className="w-[1px] h-6 bg-admin-line mx-2" />
 

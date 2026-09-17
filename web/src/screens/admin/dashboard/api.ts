@@ -136,8 +136,10 @@ export async function fetchFinance(from?: string, to?: string, groupBy = "day"):
   return res.json();
 }
 
-export async function fetchScenarios(kind: string, page = 1): Promise<{ kind: string; items: ScenarioItem[]; pagination: PaginationMeta }> {
-  const res = await apiFetch(`/api/admin/scenarios/${encodeURIComponent(kind)}?page=${page}`);
+export async function fetchScenarios(kind: string, page = 1, driver?: string): Promise<{ kind: string; items: ScenarioItem[]; pagination: PaginationMeta }> {
+  const params = new URLSearchParams({ page: String(page) });
+  if (driver) params.set("driver", driver);
+  const res = await apiFetch(`/api/admin/scenarios/${encodeURIComponent(kind)}?${params.toString()}`);
   if (!res.ok) throw await apiError(res, `Failed to load scenario ${kind}`);
   return res.json();
 }

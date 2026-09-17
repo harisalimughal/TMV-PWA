@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { fetchScenarios } from "../api";
+import { fetchScenarios, fetchDrivers } from "../api";
 import { formatLondonDateTime } from "../utils/date";
 import { resolveDriver } from "../utils/drivers";
 import { evidencePhotoCount } from "../utils/evidence";
@@ -10,22 +10,28 @@ import { ApiErrorState } from "../components/ApiErrorState";
 import { ClipboardList, Search } from "lucide-react";
 
 export function ParkingLiabilityPage() {
-  const [activeTab, setActiveTab] = useState("Submissions");
-  const [viewMode, setViewMode] = useState<"table" | "inbox">("table");
   const [search, setSearch] = useState("");
   const [from, setFrom] = useState<string | undefined>();
   const [to, setTo] = useState<string | undefined>();
   const [groupBy, setGroupBy] = useState("None");
-  
+  const [driverFilter, setDriverFilter] = useState<string>("");
+
   const [page, setPage] = useState(1);
   const pageSize = 25;
 
   const [selectedSubmission, setSelectedSubmission] = useState<any>(null);
 
   const { data: response, isLoading, isError, error, refetch, isFetching } = useQuery({
-    queryKey: ["scenarios", "parking", page, from, to],
-    queryFn: () => fetchScenarios("parking", page)
+    queryKey: ["scenarios", "parking", page, from, to, driverFilter],
+    queryFn: () => fetchScenarios("parking", page, driverFilter || undefined)
   });
+
+  // Same roster + filter pattern as Finished Jobs' driver filter -- resolved
+  // server-side against driver_accounts (see scenarios.routes.ts).
+  const { data: driversData } = useQuery({ queryKey: ["drivers_summary"], queryFn: () => fetchDrivers() });
+  const driverOptions = (driversData?.drivers || [])
+    .filter(d => d.initials && d.initials !== "UNASSIGNED" && d.hasAccount)
+    .sort((a, b) => (a.fullName || a.initials).localeCompare(b.fullName || b.initials));
 
   const processedData = useMemo(() => {
     if (!response?.items) return [];
@@ -193,12 +199,11 @@ export function ParkingLiabilityPage() {
         icon={ClipboardList}
         status="Active"
         statusColor="green"
-        activeTab={activeTab}
-        onTabChange={setActiveTab}
-        viewMode={viewMode}
-        onViewModeChange={setViewMode}
         search={search}
         onSearchChange={setSearch}
+        driverFilter={driverFilter}
+        onDriverFilterChange={v => { setDriverFilter(v); setPage(1); }}
+        driverOptions={driverOptions}
         from={from}
         to={to}
         onDateChange={(f, t) => { setFrom(f); setTo(t); setPage(1); }}

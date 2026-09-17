@@ -2,8 +2,30 @@
 import { Router } from "express";
 import { listAllScenarioSubmissions, listScenarioSubmissionsByKind, ScenarioSubmissionDoc } from "../../db/scenario.repo";
 import { toThumbnailUrl } from "../../storage/cloudinary";
+import { listDriverProfiles } from "../../auth/driver-account.service";
 
 const VALID_KINDS = new Set(["checkin", "checkout", "parking", "liability"]);
+
+/** A submission's `driver` field is whatever scenario.service.ts stamped it with at
+ *  submit time -- `driver.email || driver.chatUserName`, so almost always an email,
+ *  occasionally a raw chat username, and never the driver's initials. Filtering by
+ *  driver needs real initials, so every row is resolved against the actual
+ *  driver_accounts roster (the same source of truth jobs.routes.ts's own driver
+ *  filter uses), once per request rather than once per row. */
+async function buildDriverInitialsResolver(): Promise<(raw: string) => string> {
+  const profiles = await listDriverProfiles();
+  const byEmail = new Map(profiles.map(p => [p.email.toLowerCase(), p.initials]));
+  const byInitials = new Set(profiles.map(p => p.initials));
+  return (raw: string) => {
+    const value = (raw || "").trim();
+    if (!value) return "";
+    const emailMatch = byEmail.get(value.toLowerCase());
+    if (emailMatch) return emailMatch;
+    const asInitials = value.toUpperCase();
+    if (byInitials.has(asInitials)) return asInitials;
+    return "";
+  };
+}
 
 function escapeCsvField(val: unknown): string {
   if (val === null || val === undefined) return "";
@@ -60,13 +82,20 @@ export function dashboardScenariosRoutes(): Router {
 
       const page = Math.max(1, Number(req.query.page) || 1);
       const pageSize = Math.min(100, Math.max(1, Number(req.query.pageSize) || 25));
+      const driverFilter = typeof req.query.driver === "string" && req.query.driver
+        ? req.query.driver.trim().toUpperCase()
+        : undefined;
 
       // listScenarioSubmissionsByKind returns newest-first already; the source built
       // the "event N of M" labelling off an oldest-first pass, so pull everything for
       // that computation and paginate after -- scenario volume per kind is small
       // enough that this isn't a real cost.
       const { items: allForKind } = await listScenarioSubmissionsByKind(kind, 1, 1_000_000);
-      const rows = [...allForKind].reverse(); // oldest first, matching the source
+      const resolveInitials = await buildDriverInitialsResolver();
+      let rows = [...allForKind].reverse(); // oldest first, matching the source
+      if (driverFilter) {
+        rows = rows.filter(r => resolveInitials(r.driver) === driverFilter);
+      }
 
       const jobCounts = new Map<string, number>();
       for (const r of rows) jobCounts.set(r.jobId, (jobCounts.get(r.jobId) || 0) + 1);
@@ -83,6 +112,7 @@ export function dashboardScenariosRoutes(): Router {
           eventLabel: totalEventsForJob > 1 ? `Event ${currentEventIdx} of ${totalEventsForJob}` : undefined,
           totalEventsForJob, eventIndex: currentEventIdx,
           timestamp: r.submittedAt, driver: r.driver || "—",
+          driverInitials: resolveInitials(r.driver) || undefined,
           clientName: r.fields.client_name || "—", clientPhone: r.fields.client_phone || "",
           clientEmail: r.fields.client_email || "", containerNumber: r.fields.container_number || "—",
           address: r.fields.address || "", damageCategories: r.fields.damage_categories || "",
