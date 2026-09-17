@@ -97,6 +97,14 @@ export async function deleteJob(jobId: string): Promise<{ ok: true }> {
   return res.json();
 }
 
+/** Purely our own storage (Mongo + Cloudinary) -- no Calendar involvement, so this
+ *  is a plain delete with no reassign/delete-job-style permission dance beforehand. */
+export async function deleteEvidencePhoto(jobId: string, evidenceId: string): Promise<{ ok: true }> {
+  const res = await apiFetch(`/api/admin/jobs/${encodeURIComponent(jobId)}/evidence/${encodeURIComponent(evidenceId)}`, { method: "DELETE" });
+  if (!res.ok) throw await apiError(res, "Failed to delete photo");
+  return res.json();
+}
+
 export async function saveJobReview(
   jobId: string,
   payload: { status: "Pending" | "Approved" | "Flagged"; note: string }

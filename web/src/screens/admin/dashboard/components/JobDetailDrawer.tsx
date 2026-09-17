@@ -9,7 +9,8 @@ import {
   Check,
   Download,
   Loader2,
-  FileText
+  FileText,
+  Trash2
 } from "lucide-react";
 import { NormalizedJob } from "../types";
 import { Button } from "../../../../ui";
@@ -24,7 +25,7 @@ import { waitForPrintImages } from "../utils/printReady";
 import { PhotoModal } from "./PhotoModal";
 import { ThumbnailPreview } from "./ThumbnailPreview";
 import { resolveDriver, formatVanReg, getAvatarColor } from "../utils/drivers";
-import { reassignJob } from "../api";
+import { reassignJob, deleteEvidencePhoto } from "../api";
 import { formatCapturedTime, formatLocationLabel, mapsUrlForLocation } from "../../../../lib/geo";
 
 interface Props {
@@ -41,6 +42,7 @@ export function JobDetailDrawer({ job: initialJob, isOpen, onClose, onUpdated }:
   const [copiedId, setCopiedId] = useState(false);
   const [activePhoto, setActivePhoto] = useState<{title: string, url: string, driveUrl?: string} | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+  const [deletingPhotoId, setDeletingPhotoId] = useState<string | null>(null);
 
   // Reassign Mode State -- real roster (not utils/drivers.ts's old localStorage mock)
   // and a real backend call, see handleReassign below.
@@ -112,6 +114,24 @@ export function JobDetailDrawer({ job: initialJob, isOpen, onClose, onUpdated }:
       showToast(error?.message || "Couldn't reassign this job. Try again.");
     } finally {
       setReassigning(false);
+    }
+  };
+
+  // Purely our own storage (Mongo + Cloudinary), no Calendar involved -- unlike
+  // Reassign/Delete there's no permission dance, just a confirm and a plain delete.
+  const handleDeleteEvidence = async (evidenceId: string) => {
+    if (deletingPhotoId) return;
+    if (!window.confirm("Delete this photo? This can't be undone.")) return;
+    setDeletingPhotoId(evidenceId);
+    try {
+      await deleteEvidencePhoto(job.jobId, evidenceId);
+      setJob({ ...job, evidenceItems: job.evidenceItems.filter(e => e.id !== evidenceId) });
+      showToast("Photo deleted");
+      onUpdated?.();
+    } catch (error: any) {
+      showToast(error?.message || "Couldn't delete photo. Try again.");
+    } finally {
+      setDeletingPhotoId(null);
     }
   };
 
@@ -277,24 +297,46 @@ export function JobDetailDrawer({ job: initialJob, isOpen, onClose, onUpdated }:
                   const thumbUrl = ev.thumbProxyUrl || ev.driveUrl;
                   const fullUrl = ev.driveUrl || ev.thumbProxyUrl;
                   const capturedTime = ev.capturedAt ? formatCapturedTime(ev.capturedAt) : "";
+                  // Signature (lives on job.signatureUrl, not the evidence collection)
+                  // and Documents (scenario submission photos) don't have a real
+                  // evidence.repo.ts row behind their synthetic id -- only the four
+                  // step categories below do, so only those get a delete button.
+                  const isDeletable = ev.category !== "Signature" && ev.category !== "Documents";
                   return (
                     <div key={ev.id || i} className="space-y-1">
-                      <ThumbnailPreview
-                        src={thumbUrl}
-                        alt={`${ev.category} photo`}
-                        category={ev.category}
-                        state={ev.state}
-                        size="full"
-                        onClick={() => {
-                          if (fullUrl) {
-                            setActivePhoto({
-                              title: `${job.jobId} - ${ev.category}`,
-                              url: fullUrl,
-                              driveUrl: ev.driveUrl
-                            });
-                          }
-                        }}
-                      />
+                      <div className="relative group/photo">
+                        <ThumbnailPreview
+                          src={thumbUrl}
+                          alt={`${ev.category} photo`}
+                          category={ev.category}
+                          state={ev.state}
+                          size="full"
+                          onClick={() => {
+                            if (fullUrl) {
+                              setActivePhoto({
+                                title: `${job.jobId} - ${ev.category}`,
+                                url: fullUrl,
+                                driveUrl: ev.driveUrl
+                              });
+                            }
+                          }}
+                        />
+                        {isDeletable && ev.state === "COMPLETED" && (
+                          <button
+                            onClick={e => { e.stopPropagation(); handleDeleteEvidence(ev.id); }}
+                            disabled={deletingPhotoId === ev.id}
+                            title="Delete photo"
+                            aria-label={`Delete ${ev.category} photo`}
+                            className="absolute top-1 right-1 z-10 p-1 rounded-full bg-white/90 text-admin-status-red opacity-0 group-hover/photo:opacity-100 hover:bg-admin-status-red hover:text-white transition shadow-sm disabled:opacity-60"
+                          >
+                            {deletingPhotoId === ev.id ? (
+                              <Loader2 className="w-3 h-3 animate-spin" />
+                            ) : (
+                              <Trash2 className="w-3 h-3" />
+                            )}
+                          </button>
+                        )}
+                      </div>
                       {/* Proof of place -- where/when the driver's device says this
                           was actually taken. Absent on older evidence. */}
                       {(capturedTime || ev.location) && (

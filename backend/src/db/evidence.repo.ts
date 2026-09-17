@@ -17,6 +17,13 @@ export async function deleteEvidence(evidenceId: string): Promise<void> {
   await col.deleteOne({ _id: evidenceId } as any);
 }
 
+/** Used when a job is deleted -- see jobs.routes.ts's DELETE /:jobId, which deletes
+ *  each record's Cloudinary asset first (deleteJobArtifacts) and calls this after. */
+export async function deleteEvidenceForJob(jobId: string): Promise<void> {
+  const col = await evidenceCollection();
+  await col.deleteMany({ jobId } as any);
+}
+
 export async function getEvidence(evidenceId: string): Promise<EvidenceRecord | null> {
   const col = await evidenceCollection();
   const doc = await col.findOne({ _id: evidenceId } as any);

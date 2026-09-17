@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-import { X, Download, Eye, Maximize2, ZoomIn, ZoomOut, Check, ChevronLeft, ChevronRight, RefreshCw, Save, FileText } from "lucide-react";
+import { X, Download, Eye, Maximize2, ZoomIn, ZoomOut, Check, ChevronLeft, ChevronRight, RefreshCw, Save, FileText, Trash2, Loader2 } from "lucide-react";
 import { IconButton } from "../../../../ui";
 import { PaperDossierReport } from "./PaperDossierReport";
 import { PaperScenarioReport } from "./PaperScenarioReport";
@@ -8,7 +8,7 @@ import { NormalizedJob, ScenarioItem, formatGBP } from "../types";
 import { formatLondonDateTime } from "../utils/date";
 import { waitForPrintImages } from "../utils/printReady";
 import { resolveDriver } from "../utils/drivers";
-import { saveJobReview } from "../api";
+import { saveJobReview, deleteEvidencePhoto } from "../api";
 import { formatCapturedTime, formatLocationLabel, mapsUrlForLocation } from "../../../../lib/geo";
 import { htmlToPlainText } from "../../../../lib/htmlText";
 import { RawBookingText } from "../../../../components/driver/RawBookingText";
@@ -83,6 +83,7 @@ export function SubmissionDetailDrawer({ job: initialJob, isOpen, onClose, onNav
   const [managerStatus, setManagerStatus] = useState<"Pending" | "Approved" | "Flagged">("Pending");
   const [managerNote, setManagerNote] = useState("");
   const [savingReview, setSavingReview] = useState(false);
+  const [deletingPhotoId, setDeletingPhotoId] = useState<string | null>(null);
 
   // handleDownload is defined further down (it needs job-derived values that only
   // make sense once job is known non-null), but the autoDownload effect has to sit
@@ -219,6 +220,26 @@ export function SubmissionDetailDrawer({ job: initialJob, isOpen, onClose, onNav
       showToast(error?.message || "Couldn't save manager review");
     } finally {
       setSavingReview(false);
+    }
+  };
+
+  // Purely our own storage (Mongo + Cloudinary), no Calendar involved -- unlike
+  // Reassign/Delete elsewhere in the admin, there's no permission dance, just a
+  // confirm and a plain delete. Scenario submissions (isScenario) have no evidence
+  // photos to delete here -- their photos aren't in the evidence collection.
+  const handleDeleteEvidence = async (evidenceId: string) => {
+    if (!normalizedJob || deletingPhotoId) return;
+    if (!window.confirm("Delete this photo? This can't be undone.")) return;
+    setDeletingPhotoId(evidenceId);
+    try {
+      await deleteEvidencePhoto(normalizedJob.jobId, evidenceId);
+      setJob({ ...normalizedJob, evidenceItems: normalizedJob.evidenceItems.filter(e => e.id !== evidenceId) });
+      showToast("Photo deleted");
+      onUpdated?.();
+    } catch (error: any) {
+      showToast(error?.message || "Couldn't delete photo. Try again.");
+    } finally {
+      setDeletingPhotoId(null);
     }
   };
 
@@ -438,19 +459,39 @@ export function SubmissionDetailDrawer({ job: initialJob, isOpen, onClose, onNav
                const capturedTime = p.capturedAt ? formatCapturedTime(p.capturedAt) : "";
                return (
                  <div key={p.key} className="space-y-1">
-                   <a
-                     href={p.href}
-                     target="_blank" rel="noreferrer"
-                     className="aspect-square rounded-card bg-admin-surface overflow-hidden border border-admin-line shadow-sm hover:ring-2 hover:ring-admin-brand/50 transition cursor-pointer block relative group"
-                   >
-                     <img src={p.thumbSrc} className="w-full h-full object-cover" alt={p.category} />
-                     <div className="absolute inset-0 bg-admin-ink/50 opacity-0 group-hover:opacity-100 transition flex items-center justify-center">
-                        <Maximize2 className="w-5 h-5 text-white" />
-                     </div>
-                     <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-admin-ink/80 to-transparent p-2 text-[9px] text-white font-bold truncate">
-                        {p.category}
-                     </div>
-                   </a>
+                   <div className="relative group/photo">
+                     <a
+                       href={p.href}
+                       target="_blank" rel="noreferrer"
+                       className="aspect-square rounded-card bg-admin-surface overflow-hidden border border-admin-line shadow-sm hover:ring-2 hover:ring-admin-brand/50 transition cursor-pointer block relative group"
+                     >
+                       <img src={p.thumbSrc} className="w-full h-full object-cover" alt={p.category} />
+                       <div className="absolute inset-0 bg-admin-ink/50 opacity-0 group-hover:opacity-100 transition flex items-center justify-center">
+                          <Maximize2 className="w-5 h-5 text-white" />
+                       </div>
+                       <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-admin-ink/80 to-transparent p-2 text-[9px] text-white font-bold truncate">
+                          {p.category}
+                       </div>
+                     </a>
+                     {/* Scenario submission photos (Check In/Out/Liability) aren't in
+                         the evidence collection -- only a finished job's own evidence
+                         photos are deletable from here. */}
+                     {!isScenario && (
+                       <button
+                         onClick={e => { e.preventDefault(); e.stopPropagation(); handleDeleteEvidence(p.key); }}
+                         disabled={deletingPhotoId === p.key}
+                         title="Delete photo"
+                         aria-label="Delete photo"
+                         className="absolute top-1 right-1 z-10 p-1 rounded-full bg-white/90 text-admin-status-red opacity-0 group-hover/photo:opacity-100 hover:bg-admin-status-red hover:text-white transition shadow-sm disabled:opacity-60"
+                       >
+                         {deletingPhotoId === p.key ? (
+                           <Loader2 className="w-3 h-3 animate-spin" />
+                         ) : (
+                           <Trash2 className="w-3 h-3" />
+                         )}
+                       </button>
+                     )}
+                   </div>
                    {/* Proof of place -- where/when the driver's device says this was
                        actually taken. Absent on older submissions. */}
                    {(capturedTime || p.location) && (

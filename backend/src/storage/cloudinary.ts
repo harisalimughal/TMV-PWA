@@ -86,6 +86,23 @@ export async function destroyEvidenceImage(publicId: string): Promise<void> {
 }
 
 /**
+ * Recovers the public_id Cloudinary needs for destroy() from a delivery URL, for the
+ * assets that never had their public_id persisted separately (job.signatureUrl,
+ * scenario_submissions' photoUrls/signatureUrl, van_mileage_records' photoUrl --
+ * unlike EvidenceRecord.cloudinaryPublicId, which is stored and should be used
+ * directly instead of round-tripping through this). Cloudinary delivery URLs are
+ * `.../upload/<transformations?>/v<version>/<public_id>.<ext>`; the public_id is
+ * everything between the last `/v<digits>/` and the final extension. Returns null for
+ * anything that doesn't match (already-deleted asset, a non-Cloudinary URL, etc.) --
+ * callers treat that the same as "nothing to destroy" rather than throwing.
+ */
+export function publicIdFromCloudinaryUrl(url: string | undefined | null): string | null {
+  if (!url) return null;
+  const match = url.match(/\/upload\/(?:[^/]+\/)*v\d+\/(.+)\.[a-zA-Z0-9]+(?:[?#].*)?$/);
+  return match ? match[1] : null;
+}
+
+/**
  * Cloudinary delivery URLs support transformations via a segment inserted right after
  * `/upload/` -- no extra API call or storage; the CDN transforms and caches the result
  * on first request. `thumbProxyUrl` (db/mongo.ts normalization, admin/dashboard/

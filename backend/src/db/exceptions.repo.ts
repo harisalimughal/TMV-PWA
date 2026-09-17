@@ -54,3 +54,9 @@ export async function listExceptionsForJobs(jobIds: string[]): Promise<Exception
   const col = await exceptionsCollection();
   return col.find({ jobId: { $in: jobIds } }).toArray();
 }
+
+/** Used when a job is deleted -- see jobs.routes.ts's DELETE /:jobId. */
+export async function deleteExceptionsForJob(jobId: string): Promise<void> {
+  const col = await exceptionsCollection();
+  await col.deleteMany({ jobId });
+}

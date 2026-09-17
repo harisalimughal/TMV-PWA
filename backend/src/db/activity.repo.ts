@@ -35,3 +35,11 @@ export async function listActivityForJobs(jobIds: string[]): Promise<ActivityDoc
   const col = await activityCollection();
   return col.find({ jobId: { $in: jobIds } }).toArray();
 }
+
+/** Used when a job is deleted -- see jobs.routes.ts's DELETE /:jobId, which deletes
+ *  the job's older activity history with this and then appends one final "DELETED"
+ *  entry afterwards, so the deletion itself stays on record. */
+export async function deleteActivityForJob(jobId: string): Promise<void> {
+  const col = await activityCollection();
+  await col.deleteMany({ jobId } as any);
+}

@@ -13,10 +13,12 @@ import { getDriverProfileByInitials, listDriverProfiles } from "../../auth/drive
 import { createCalendarEvent, deleteCalendarEvent, getCalendarEvent, updateCalendarEvent } from "../../google/calendar";
 import { parseCalendarEvent, syncBookingsForDate, withReassignedInitials } from "../../jobs/booking.service";
 import { getJob, upsertJob, deleteJob, listJobsPage } from "../../db/jobs.repo";
-import { appendActivity } from "../../db/activity.repo";
-import { listEvidenceForJobs } from "../../db/evidence.repo";
-import { listScenarioSubmissionsForJobs } from "../../db/scenario.repo";
-import { JobStatus } from "../../jobs/job.types";
+import { appendActivity, deleteActivityForJob } from "../../db/activity.repo";
+import { listEvidenceForJob, listEvidenceForJobs, deleteEvidenceForJob, getEvidence, deleteEvidence } from "../../db/evidence.repo";
+import { listScenarioSubmissionsForJob, listScenarioSubmissionsForJobs, deleteScenarioSubmissionsForJob } from "../../db/scenario.repo";
+import { deleteExceptionsForJob } from "../../db/exceptions.repo";
+import { destroyEvidenceImage, publicIdFromCloudinaryUrl } from "../../storage/cloudinary";
+import { JobStatus, Job } from "../../jobs/job.types";
 import { WorkflowState } from "../../workflow/workflow.states";
 import { log } from "../../utils/logger";
 import { statusOf } from "../../utils/retry";
@@ -34,6 +36,45 @@ function escapeCsvField(val: unknown): string {
   if (/^[=+\-@]/.test(str)) str = `'${str}`;
   if (/[",\n\r]/.test(str)) str = `"${str.replace(/"/g, '""')}"`;
   return str;
+}
+
+/**
+ * Deleting a job used to only remove the `jobs` doc itself -- evidence, scenario
+ * submissions, exceptions and activity rows for that jobId (and their Cloudinary
+ * photos/signatures) were silently left behind, leaking storage on every delete.
+ * Called from DELETE /:jobId after the Calendar event is confirmed gone, before the
+ * job doc itself is deleted. Cloudinary deletes are best-effort (destroyEvidenceImage
+ * never throws, just logs) so a transient Cloudinary error never blocks the actual
+ * job deletion the admin asked for.
+ */
+async function deleteJobArtifacts(jobId: string, job: Job): Promise<void> {
+  const [evidenceRecords, scenarioSubmissions] = await Promise.all([
+    listEvidenceForJob(jobId),
+    listScenarioSubmissionsForJob(jobId)
+  ]);
+
+  const destroyTasks: Promise<void>[] = [];
+  for (const record of evidenceRecords) {
+    if (record.cloudinaryPublicId) destroyTasks.push(destroyEvidenceImage(record.cloudinaryPublicId));
+  }
+  const signaturePublicId = publicIdFromCloudinaryUrl(job.signatureUrl);
+  if (signaturePublicId) destroyTasks.push(destroyEvidenceImage(signaturePublicId));
+  for (const submission of scenarioSubmissions) {
+    for (const url of submission.photoUrls) {
+      const publicId = publicIdFromCloudinaryUrl(url);
+      if (publicId) destroyTasks.push(destroyEvidenceImage(publicId));
+    }
+    const submissionSignatureId = publicIdFromCloudinaryUrl(submission.signatureUrl);
+    if (submissionSignatureId) destroyTasks.push(destroyEvidenceImage(submissionSignatureId));
+  }
+  await Promise.all(destroyTasks);
+
+  await Promise.all([
+    deleteEvidenceForJob(jobId),
+    deleteScenarioSubmissionsForJob(jobId),
+    deleteExceptionsForJob(jobId),
+    deleteActivityForJob(jobId)
+  ]);
 }
 
 export function dashboardJobsRoutes(): Router {
@@ -321,6 +362,7 @@ export function dashboardJobsRoutes(): Router {
         }
       }
 
+      await deleteJobArtifacts(jobId, existing);
       await deleteJob(jobId);
       await appendActivity({
         jobId, driver: "admin dashboard", action: "DELETED",
@@ -332,6 +374,31 @@ export function dashboardJobsRoutes(): Router {
     } catch (error) {
       log.error("dashboard delete job failed", error, { job_id: jobId });
       return res.status(500).json({ error: { code: "DELETE_FAILED", message: "Failed to delete job." } });
+    }
+  });
+
+  // Deletes one evidence photo (or signature-carrying record) -- Cloudinary asset
+  // first, then the Mongo row, same order/best-effort behaviour as deleteJobArtifacts.
+  // Purely our own storage, no Calendar involvement, so unlike job delete/reassign
+  // there's nothing else to coordinate first.
+  router.delete("/:jobId/evidence/:evidenceId", async (req, res) => {
+    const jobId = String(req.params.jobId || "").trim();
+    const evidenceId = String(req.params.evidenceId || "").trim();
+
+    try {
+      const record = await getEvidence(evidenceId);
+      if (!record || record.jobId !== jobId) {
+        return res.status(404).json({ error: { code: "EVIDENCE_NOT_FOUND", message: "Evidence photo not found." } });
+      }
+
+      if (record.cloudinaryPublicId) await destroyEvidenceImage(record.cloudinaryPublicId);
+      await deleteEvidence(evidenceId);
+      invalidateDashboardDataset();
+
+      return res.status(200).json({ ok: true });
+    } catch (error) {
+      log.error("dashboard delete evidence photo failed", error, { job_id: jobId, evidence_id: evidenceId });
+      return res.status(500).json({ error: { code: "DELETE_FAILED", message: "Failed to delete photo." } });
     }
   });
 

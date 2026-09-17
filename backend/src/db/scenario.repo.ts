@@ -35,6 +35,14 @@ export async function listScenarioSubmissionsForJob(jobId: string): Promise<Scen
   return col.find({ jobId }).sort({ submittedAt: 1 }).toArray();
 }
 
+/** Used when a job is deleted -- see jobs.routes.ts's DELETE /:jobId, which deletes
+ *  each submission's Cloudinary photos/signature first (deleteJobArtifacts) and calls
+ *  this after. */
+export async function deleteScenarioSubmissionsForJob(jobId: string): Promise<void> {
+  const col = await scenarioSubmissions();
+  await col.deleteMany({ jobId });
+}
+
 /** Every scenario submission across every job -- backs the admin dashboard's
  * Check In/Check Out/Parking Liability/Liability Report pages and the cross-job join
  * in the normalize layer. */
