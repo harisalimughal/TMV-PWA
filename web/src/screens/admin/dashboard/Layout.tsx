@@ -194,8 +194,12 @@ export function Layout({ activeSection, onSelectSection, onLogout, children }: P
       >
         <div className="flex flex-col min-h-0">
           <div className="pt-6 pb-4 px-6 flex items-center justify-between bg-transparent">
-            <div className={`flex items-center overflow-hidden ${collapsed ? "md:hidden" : ""}`}>
-              <img src="/tmv-logo.png" alt="The Man Van" className="h-14 w-auto object-contain flex-shrink-0 rounded-card" />
+            <div className={`flex items-center gap-2.5 overflow-hidden ${collapsed ? "md:hidden" : ""}`}>
+              <img src="/tmv-logo.png" alt="" className="h-11 w-auto object-contain flex-shrink-0 rounded-card" />
+              <div className="flex flex-col leading-none min-w-0">
+                <span className="text-[10px] font-semibold tracking-[0.2em] text-admin-brand uppercase">The</span>
+                <span className="text-[19px] font-bold text-admin-ink tracking-tight -mt-0.5 truncate">Man Van</span>
+              </div>
             </div>
             {collapsed && (
               <img
