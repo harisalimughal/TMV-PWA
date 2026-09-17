@@ -60,3 +60,14 @@ export async function deleteExceptionsForJob(jobId: string): Promise<void> {
   const col = await exceptionsCollection();
   await col.deleteMany({ jobId });
 }
+
+/** Used by the admin Factory Reset action (maintenance.routes.ts). Note this only
+ *  clears history -- recordException()'s upsert means any job still genuinely
+ *  started-but-never-completed will re-surface its exception on the next background
+ *  sync pass (booking.service.ts's reconcileDisappeared), same as it already does
+ *  every ~2 minutes today. That's correct: it's a live problem, not stale data. */
+export async function deleteAllExceptions(): Promise<number> {
+  const col = await exceptionsCollection();
+  const result = await col.deleteMany({});
+  return result.deletedCount ?? 0;
+}

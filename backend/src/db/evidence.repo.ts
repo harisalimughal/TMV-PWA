@@ -47,6 +47,15 @@ export async function listAllEvidence(): Promise<EvidenceRecord[]> {
   return docs.map(({ _id, ...record }: any) => record as EvidenceRecord);
 }
 
+/** Used by the admin Factory Reset action (maintenance.routes.ts) -- deletes every
+ *  evidence record. Cloudinary assets must be destroyed by the caller first (via
+ *  listAllEvidence's cloudinaryPublicId, the same order deleteJobArtifacts uses). */
+export async function deleteAllEvidence(): Promise<number> {
+  const col = await evidenceCollection();
+  const result = await col.deleteMany({});
+  return result.deletedCount ?? 0;
+}
+
 /** Scoped version of listAllEvidence -- backs jobs.routes.ts's paginated Jobs Archive
  *  (listJobsPage), which only needs evidence for the one page of jobs it's returning,
  *  not the whole collection. Uses the existing evidence.jobId index. */

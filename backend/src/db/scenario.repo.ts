@@ -51,6 +51,16 @@ export async function listAllScenarioSubmissions(): Promise<ScenarioSubmissionDo
   return col.find({}).sort({ submittedAt: -1 }).toArray();
 }
 
+/** Used by the admin Factory Reset action (maintenance.routes.ts) -- deletes every
+ *  submission. Cloudinary photos/signature must be destroyed by the caller first (via
+ *  listAllScenarioSubmissions's photoUrls/signatureUrl), same order deleteJobArtifacts
+ *  uses for a single job. */
+export async function deleteAllScenarioSubmissions(): Promise<number> {
+  const col = await scenarioSubmissions();
+  const result = await col.deleteMany({});
+  return result.deletedCount ?? 0;
+}
+
 /** Scoped version of listAllScenarioSubmissions -- backs jobs.routes.ts's paginated
  *  Jobs Archive (listJobsPage), which only needs submissions for the one page of jobs
  *  it's returning. No index on jobId alone yet (the collection has none, and this

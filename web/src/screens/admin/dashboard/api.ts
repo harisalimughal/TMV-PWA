@@ -374,3 +374,27 @@ export async function fetchAlerts(): Promise<{ rows: AlertRow[] }> {
   if (!res.ok) throw await apiError(res, "Failed to load GPSLive alerts");
   return res.json();
 }
+
+export interface FactoryResetSummary {
+  evidence: number;
+  activity: number;
+  scenarioSubmissions: number;
+  vanRecords: number;
+  vanCompliance: number;
+  exceptions: number;
+  pushSubscriptions: number;
+  cloudinaryAssetsDestroyed: number;
+}
+
+/** Wipes every app-generated record (evidence, activity, scenario submissions, van
+ *  records/compliance, exceptions, push subscriptions) and their Cloudinary photos --
+ *  jobs, driver accounts and settings are untouched. See maintenance.routes.ts. */
+export async function factoryReset(): Promise<{ ok: true; deleted: FactoryResetSummary }> {
+  const res = await apiFetch("/api/admin/maintenance/factory-reset", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ confirm: "RESET" })
+  });
+  if (!res.ok) throw await apiError(res, "Factory reset failed");
+  return res.json();
+}

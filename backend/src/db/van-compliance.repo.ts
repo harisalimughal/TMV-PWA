@@ -55,3 +55,11 @@ export async function saveVanCompliance(
   await col.updateOne({ vanRegistration: normalized }, { $set: doc }, { upsert: true });
   return (await col.findOne({ vanRegistration: normalized })) ?? doc;
 }
+
+/** Used by the admin Factory Reset action (maintenance.routes.ts). No Cloudinary
+ *  assets -- compliance rows are just dates/notes per van registration. */
+export async function deleteAllVanCompliance(): Promise<number> {
+  const col = await vanComplianceCollection();
+  const result = await col.deleteMany({});
+  return result.deletedCount ?? 0;
+}

@@ -43,3 +43,11 @@ export async function deleteActivityForJob(jobId: string): Promise<void> {
   const col = await activityCollection();
   await col.deleteMany({ jobId } as any);
 }
+
+/** Used by the admin Factory Reset action (maintenance.routes.ts). No Cloudinary
+ *  assets to clean up first -- activity rows are plain text. */
+export async function deleteAllActivity(): Promise<number> {
+  const col = await activityCollection();
+  const result = await col.deleteMany({});
+  return result.deletedCount ?? 0;
+}

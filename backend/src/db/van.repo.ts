@@ -44,3 +44,13 @@ export async function deleteVanRecord(id: string): Promise<void> {
   const col = await vanRecordsCollection();
   await col.deleteOne({ _id: id } as any);
 }
+
+/** Used by the admin Factory Reset action (maintenance.routes.ts) -- deletes every
+ *  Mileage/Fuel/Service record. Each record's Cloudinary photo must be destroyed by
+ *  the caller first (via listVanRecords's photoUrl), same as the single-record delete
+ *  route (van.routes.ts's DELETE /records/:id) already does per-record. */
+export async function deleteAllVanRecords(): Promise<number> {
+  const col = await vanRecordsCollection();
+  const result = await col.deleteMany({});
+  return result.deletedCount ?? 0;
+}

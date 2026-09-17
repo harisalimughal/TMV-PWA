@@ -30,6 +30,7 @@ import { dashboardDriversSummaryRoutes } from "./admin/dashboard/drivers-summary
 import { dashboardFinanceRoutes } from "./admin/dashboard/finance.routes";
 import { dashboardFleetRoutes } from "./admin/dashboard/fleet.routes";
 import { dashboardJobsRoutes } from "./admin/dashboard/jobs.routes";
+import { dashboardMaintenanceRoutes } from "./admin/dashboard/maintenance.routes";
 import { dashboardNotificationsRoutes } from "./admin/dashboard/notifications.routes";
 import { dashboardScenariosRoutes } from "./admin/dashboard/scenarios.routes";
 import { dashboardSummaryRoutes } from "./admin/dashboard/summary.routes";
@@ -64,6 +65,7 @@ app.use("/api/admin/scenarios", requireAdminAuth, dashboardScenariosRoutes());
 app.use("/api/admin/van", requireAdminAuth, dashboardVanRoutes());
 app.use("/api/admin/alerts", requireAdminAuth, dashboardAlertsRoutes());
 app.use("/api/admin/notifications", requireAdminAuth, dashboardNotificationsRoutes());
+app.use("/api/admin/maintenance", requireAdminAuth, dashboardMaintenanceRoutes());
 
 app.use("/api", (_req, res) => {
   res.status(404).json({ error: { code: "API_ROUTE_NOT_FOUND", message: "API route not found." } });

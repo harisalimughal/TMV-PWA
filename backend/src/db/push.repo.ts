@@ -86,6 +86,16 @@ export async function getDriverPushSubscriptions(): Promise<PushSubscriptionDoc[
   return collection.find({ role: { $ne: "admin" } }).toArray();
 }
 
+/** Used by the admin Factory Reset action (maintenance.routes.ts). Every device --
+ *  admin and driver alike -- re-subscribes on its own next app load/login (App.tsx's
+ *  auto-prompt for drivers, the manual Enable button for admins); nothing needs to be
+ *  re-created here. */
+export async function deleteAllPushSubscriptions(): Promise<number> {
+  const collection = await pushSubscriptionsCollection();
+  const result = await collection.deleteMany({});
+  return result.deletedCount ?? 0;
+}
+
 export async function countActiveSubscriptions(): Promise<{ total: number; drivers: number }> {
   const collection = await pushSubscriptionsCollection();
   const [total, driverInitialsList] = await Promise.all([
