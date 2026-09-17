@@ -43,7 +43,7 @@ export function ParkingLiabilityPage() {
         const raw = item.rawRecord || item;
         const address = (item.address || raw["Address"] || "").toLowerCase();
         const client = (item.clientName || raw["Client Full Name"] || "").toLowerCase();
-        const driver = resolveDriver(item.driver || raw["Driver"]).name.toLowerCase();
+        const driver = resolveDriver(item.driverName || item.driver || raw["Driver"], item.driverInitials).name.toLowerCase();
         return address.includes(q) || client.includes(q) || driver.includes(q);
       });
     }
@@ -106,8 +106,12 @@ export function ParkingLiabilityPage() {
       paginatedData.map((item: any, index: number) => {
         const raw = item.rawRecord || item;
         const rowNumber = (page - 1) * pageSize + index + 1;
-        const driverStr = item.driver || raw["Driver"] || "N/A";
-        const resolvedDriver = resolveDriver(driverStr);
+        // Prefer the backend's resolution against the real driver_accounts roster
+        // (item.driverName/driverInitials) -- the raw item.driver field is almost
+        // always the driver's email, which used to show up as the "name" for every
+        // row that resolveDriver's substring fallback couldn't recognise.
+        const driverStr = item.driverName || item.driver || raw["Driver"] || "N/A";
+        const resolvedDriver = resolveDriver(driverStr, item.driverInitials);
         const dateStr = item.timestamp || raw["Timestamp"] || raw["Date"] || "";
         const formattedTime = formatLondonDateTime(dateStr);
         const rawAddress = item.address || raw["Address"] || "Not recorded";

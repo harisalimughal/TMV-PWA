@@ -259,9 +259,16 @@ export function ScenariosPage({ kind }: Props) {
                   const isExpanded = expandedId === item.id;
                   const raw = item.rawRecord || item;
                   
-                  // Driver mapping
+                  // Driver mapping -- prefer the backend's own resolution against the
+                  // real driver_accounts roster (item.driverName/driverInitials, added
+                  // once the driver filter needed real initials to match against);
+                  // mapDriver's hardcoded first-name guessing is only a fallback for
+                  // rows with no matching account, which used to show the raw stored
+                  // value (almost always the driver's email) for every row.
                   const rawDriverStr = item.driver || raw["Driver"] || "N/A";
-                  const { name: driverName, initials: driverInitials } = mapDriver(rawDriverStr);
+                  const { name: driverName, initials: driverInitials } = item.driverName
+                    ? { name: item.driverName, initials: item.driverInitials || item.driverName.substring(0, 2).toUpperCase() }
+                    : mapDriver(rawDriverStr);
                   
                   // Job ID mapping
                   const jobId = item.jobId || raw["Job ID"] || "—";

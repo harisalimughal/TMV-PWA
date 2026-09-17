@@ -8,22 +8,25 @@ const VALID_KINDS = new Set(["checkin", "checkout", "parking", "liability"]);
 
 /** A submission's `driver` field is whatever scenario.service.ts stamped it with at
  *  submit time -- `driver.email || driver.chatUserName`, so almost always an email,
- *  occasionally a raw chat username, and never the driver's initials. Filtering by
- *  driver needs real initials, so every row is resolved against the actual
- *  driver_accounts roster (the same source of truth jobs.routes.ts's own driver
- *  filter uses), once per request rather than once per row. */
-async function buildDriverInitialsResolver(): Promise<(raw: string) => string> {
+ *  occasionally a raw chat username, and never the driver's initials or full name.
+ *  The dashboard table used to show that raw email straight in the Driver column
+ *  (the frontend's own name-guessing only recognised a handful of hardcoded first
+ *  names and fell back to the raw string otherwise). Every row is now resolved once
+ *  per request against the actual driver_accounts roster -- the same source of truth
+ *  jobs.routes.ts's own driver filter uses -- to get both real initials and the
+ *  driver's actual name. */
+async function buildDriverResolver(): Promise<(raw: string) => { initials: string; name: string }> {
   const profiles = await listDriverProfiles();
-  const byEmail = new Map(profiles.map(p => [p.email.toLowerCase(), p.initials]));
-  const byInitials = new Set(profiles.map(p => p.initials));
+  const byEmail = new Map(profiles.map(p => [p.email.toLowerCase(), p]));
+  const byInitials = new Map(profiles.map(p => [p.initials, p]));
   return (raw: string) => {
     const value = (raw || "").trim();
-    if (!value) return "";
+    if (!value) return { initials: "", name: "" };
     const emailMatch = byEmail.get(value.toLowerCase());
-    if (emailMatch) return emailMatch;
-    const asInitials = value.toUpperCase();
-    if (byInitials.has(asInitials)) return asInitials;
-    return "";
+    if (emailMatch) return { initials: emailMatch.initials, name: emailMatch.fullName };
+    const initialsMatch = byInitials.get(value.toUpperCase());
+    if (initialsMatch) return { initials: initialsMatch.initials, name: initialsMatch.fullName };
+    return { initials: "", name: "" };
   };
 }
 
@@ -91,10 +94,10 @@ export function dashboardScenariosRoutes(): Router {
       // that computation and paginate after -- scenario volume per kind is small
       // enough that this isn't a real cost.
       const { items: allForKind } = await listScenarioSubmissionsByKind(kind, 1, 1_000_000);
-      const resolveInitials = await buildDriverInitialsResolver();
+      const resolveDriver = await buildDriverResolver();
       let rows = [...allForKind].reverse(); // oldest first, matching the source
       if (driverFilter) {
-        rows = rows.filter(r => resolveInitials(r.driver) === driverFilter);
+        rows = rows.filter(r => resolveDriver(r.driver).initials === driverFilter);
       }
 
       const jobCounts = new Map<string, number>();
@@ -105,6 +108,7 @@ export function dashboardScenariosRoutes(): Router {
         const totalEventsForJob = jobCounts.get(r.jobId) || 1;
         const currentEventIdx = (jobRunningIndex.get(r.jobId) || 0) + 1;
         jobRunningIndex.set(r.jobId, currentEventIdx);
+        const resolvedDriver = resolveDriver(r.driver);
 
         return {
           id: `${kind}-${index}`,
@@ -112,7 +116,8 @@ export function dashboardScenariosRoutes(): Router {
           eventLabel: totalEventsForJob > 1 ? `Event ${currentEventIdx} of ${totalEventsForJob}` : undefined,
           totalEventsForJob, eventIndex: currentEventIdx,
           timestamp: r.submittedAt, driver: r.driver || "—",
-          driverInitials: resolveInitials(r.driver) || undefined,
+          driverInitials: resolvedDriver.initials || undefined,
+          driverName: resolvedDriver.name || undefined,
           clientName: r.fields.client_name || "—", clientPhone: r.fields.client_phone || "",
           clientEmail: r.fields.client_email || "", containerNumber: r.fields.container_number || "—",
           address: r.fields.address || "", damageCategories: r.fields.damage_categories || "",
