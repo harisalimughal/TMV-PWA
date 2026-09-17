@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { DateTime } from "luxon";
-import { Bell, Search, ShieldAlert, Car, HelpCircle, LogIn, LogOut, Activity } from "lucide-react";
+import { Search, ShieldAlert, Car, HelpCircle, LogIn, LogOut, Activity } from "lucide-react";
 import { fetchAlerts, AlertCategory } from "../api";
 import { ApiErrorState } from "../components/ApiErrorState";
 import { getAvatarColor } from "../utils/drivers";
@@ -107,19 +107,15 @@ export function AlertsPage() {
   return (
     <div className="space-y-6 max-w-[1440px] mx-auto">
       {/* PAGE HEADER */}
-      <div className="flex flex-wrap items-center justify-between gap-3 px-2">
-        <div className="flex items-center gap-3">
-          <Bell className="w-6 h-6 text-admin-brand" />
-          <h1 className="text-title text-fg">Alerts</h1>
-        </div>
-        {congestionCount > 0 && (
+      {congestionCount > 0 && (
+        <div className="flex flex-wrap items-center justify-end gap-3 px-2">
           <span className="px-2.5 py-1 rounded-full text-[11px] font-bold bg-admin-status-red-bg text-admin-status-red">
             {congestionCount} congestion zone event{congestionCount === 1 ? "" : "s"}
           </span>
-        )}
-      </div>
+        </div>
+      )}
 
-      <p className="px-2 -mt-4 text-[13px] text-admin-muted">
+      <p className="px-2 text-[13px] text-admin-muted">
         The fleet's last 50 alerts from GPSLive -- every alert type on the account, not just congestion.
       </p>
 

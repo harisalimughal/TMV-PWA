@@ -113,10 +113,9 @@ export function FinishedJobsPage() {
         </div>
       )}
 
-      {/* PAGE HEADER */}
-      <div className="flex flex-wrap items-center justify-between gap-y-3 gap-x-3 px-2">
-        <h1 className="text-title text-fg">Finished Jobs</h1>
-
+      {/* PAGE HEADER -- the title itself now lives in Layout.tsx's top header bar, so
+          this row is just the toolbar controls that used to sit to its right. */}
+      <div className="flex flex-wrap items-center gap-y-3 gap-x-3 px-2">
         <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
           <div className="hidden md:flex items-center p-1 bg-admin-surface rounded-card border border-admin-line/50 shrink-0">
             <button

@@ -115,16 +115,6 @@ export function NotificationsPage() {
 
   return (
     <div className="space-y-6 max-w-[1440px] mx-auto">
-      {/* PAGE HEADER */}
-      <div className="flex flex-wrap items-center justify-between gap-3 px-2">
-        <div className="flex items-center gap-3">
-          <Bell className="w-6 h-6 text-admin-brand" />
-          <h1 className="text-title text-fg">Notifications & Web Push</h1>
-        </div>
-
-        <div />
-      </div>
-
       {/* PWA & PUSH NOTIFICATION DASHBOARD CARD */}
       <div className="p-5 bg-white rounded-module border border-admin-line shadow-sm flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
         <div className="flex items-start gap-4">

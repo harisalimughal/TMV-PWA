@@ -75,7 +75,6 @@ export function OverviewPage({ onSelectSection }: Props) {
       {/* HEADER SECTION */}
       <div className="flex flex-wrap items-center justify-between gap-4 px-2">
         <div className="space-y-1">
-          <h2 className="text-title text-fg">Analytics Overview</h2>
           <p className="text-body text-fg-muted">Real-time performance and financial metrics.</p>
         </div>
         <div className="flex items-center gap-3">

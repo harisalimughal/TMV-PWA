@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Camera, Download, Fuel, Loader2, Pencil, RefreshCw, Search, ShieldCheck, Trash2, Truck, Wrench, X } from "lucide-react";
+import { Camera, Download, Fuel, Loader2, Pencil, RefreshCw, Search, ShieldCheck, Trash2, Wrench, X } from "lucide-react";
 import { DateRangePicker } from "../components/DateRangePicker";
 import { ApiErrorState } from "../components/ApiErrorState";
 import { fetchVanDriverRecords, saveVanCompliance, deleteVanRecord } from "../api";
@@ -95,13 +95,7 @@ export function VanMileagePage() {
 
   return (
     <div className="space-y-6 max-w-[1440px] mx-auto">
-      <div className="flex flex-wrap items-center justify-between gap-y-2 gap-x-3 px-2">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 shrink-0 rounded-card bg-admin-brand text-white flex items-center justify-center shadow-sm">
-            <Truck className="w-5 h-5" />
-          </div>
-          <h1 className="text-title text-fg truncate">Van</h1>
-        </div>
+      <div className="flex flex-wrap items-center justify-end gap-y-2 gap-x-3 px-2">
         <button
           onClick={() => { window.location.href = "/api/admin/van/records/export.csv"; }}
           className="h-9 px-3 rounded-card border border-admin-line bg-white text-[13px] font-medium text-admin-ink hover:bg-admin-surface transition flex items-center gap-2"

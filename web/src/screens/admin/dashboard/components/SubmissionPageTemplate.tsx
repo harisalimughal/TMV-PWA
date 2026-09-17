@@ -66,20 +66,10 @@ export function SubmissionPageTemplate({
   return (
     <div className="max-w-[1440px] mx-auto space-y-6 pb-12">
       
-      {/* STANDARD PAGE HEADER */}
-      <div className="flex flex-wrap items-center justify-between gap-y-3 gap-x-2 px-2">
-        <div className="flex items-center gap-4 min-w-0">
-          <div className="w-10 h-10 shrink-0 rounded-card bg-admin-brand text-white flex items-center justify-center shadow-sm">
-            <Icon className="w-5 h-5" />
-          </div>
-          <div className="flex items-center gap-3 min-w-0">
-            <h1 className="text-title text-fg truncate">{title}</h1>
-            <span className={`shrink-0 px-2 py-0.5 rounded-control text-[11px] font-bold uppercase tracking-wider ${statusColors[statusColor]}`}>
-              {status}
-            </span>
-          </div>
-        </div>
-
+      {/* STANDARD PAGE HEADER -- the title itself now lives in Layout.tsx's top header
+          bar, so this row (when there's an export button at all) is just that button,
+          right-aligned. */}
+      <div className="flex flex-wrap items-center justify-end gap-y-3 gap-x-2 px-2">
         {/* The Preview / Edit Form / Settings / overflow buttons and a hardcoded
             "0/4" progress pill used to live here. None of them had a handler and the
             pill never moved off 0/4, so the whole cluster was decoration that read as

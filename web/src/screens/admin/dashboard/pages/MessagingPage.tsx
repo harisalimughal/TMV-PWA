@@ -95,7 +95,6 @@ export function MessagingPage() {
     <div className="space-y-6 max-w-[1440px] mx-auto pb-12">
       {/* Header Card */}
       <div className="bg-white p-6 rounded-module border border-admin-line shadow-sm">
-        <h2 className="text-title text-fg mb-1">Content / Messaging Management</h2>
         <p className="text-[14px] text-admin-muted max-w-3xl">
           Edit the customer-facing text the Start Job workflow actually sends. Changes save immediately and
           take effect on the driver's very next job -- no deploy required.

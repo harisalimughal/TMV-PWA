@@ -125,8 +125,7 @@ export function ScenariosPage({ kind }: Props) {
   return (
     <div className="space-y-6 max-w-[1440px] mx-auto">
       {/* PAGE HEADER */}
-      <div className="flex flex-wrap items-center justify-between gap-y-2 gap-x-3 px-2">
-        <h1 className="text-title text-fg truncate">{config.title}</h1>
+      <div className="flex flex-wrap items-center justify-end gap-y-2 gap-x-3 px-2">
         <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
           {kind === "liability" && (
             <>

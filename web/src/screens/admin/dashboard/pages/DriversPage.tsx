@@ -95,7 +95,6 @@ export function DriversPage() {
     <div className="space-y-6 max-w-[1440px] mx-auto pb-12">
       <div className="flex items-center justify-between px-2">
         <div>
-          <h2 className="text-title text-fg">Drivers</h2>
           <p className="text-[13px] text-admin-muted mt-0.5">
             {isLoading ? "..." : `${roster.filter(d => d.active).length} active drivers`}
           </p>

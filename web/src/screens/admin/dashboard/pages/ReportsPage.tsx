@@ -17,8 +17,7 @@ export function ReportsPage() {
   return (
     <div className="mx-auto max-w-4xl space-y-6">
       <div>
-        <h2 className="text-title text-fg">Reports</h2>
-        <p className="mt-0.5 text-label font-normal text-fg-muted">
+        <p className="text-label font-normal text-fg-muted">
           Downloadable operational datasets and certified export files
         </p>
       </div>

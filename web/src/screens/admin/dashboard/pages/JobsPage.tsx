@@ -249,11 +249,6 @@ export function JobsPage() {
         </div>
       )}
 
-      {/* HEADER SECTION */}
-      <div className="flex items-center justify-between px-2">
-        <h2 className="text-title text-fg">Jobs Archive</h2>
-      </div>
-
       {/* CONSOLIDATED TOOLBAR CARD -- date range on its own row up top, everything
           else (including the driver filter) on a second row below. */}
       <div className="p-2 bg-white rounded-module shadow-sm border border-transparent flex flex-col gap-3">

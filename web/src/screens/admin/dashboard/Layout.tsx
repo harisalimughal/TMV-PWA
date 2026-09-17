@@ -64,6 +64,13 @@ const NAV_CONFIG: NavSectionItem[] = [
   { id: "messaging", label: "Messaging Content", icon: MessageSquare, desc: "Manage automated customer and driver communication templates" }
 ];
 
+/** Sections reachable without a sidebar entry (Data Maintenance, opened from the
+ *  profile dropdown) still need a title/icon for the header bar -- looked up here
+ *  after NAV_CONFIG comes up empty, instead of silently falling back to Overview's. */
+const EXTRA_NAV_TITLES: Record<string, NavItem> = {
+  maintenance: { id: "maintenance", label: "Data Maintenance", icon: Trash2 }
+};
+
 export function Layout({ activeSection, onSelectSection, onLogout, children }: Props) {
   const [collapsed, setCollapsed] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
@@ -177,7 +184,9 @@ export function Layout({ activeSection, onSelectSection, onLogout, children }: P
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [onSelectSection, refreshMutation, paletteOpen, shortcutsOpen]);
 
-  const currentNav = NAV_CONFIG.find(n => (n as NavItem).id === activeSection) as NavItem || NAV_CONFIG[1] as NavItem;
+  const currentNav = (NAV_CONFIG.find(n => (n as NavItem).id === activeSection) as NavItem)
+    || EXTRA_NAV_TITLES[activeSection]
+    || (NAV_CONFIG[1] as NavItem);
 
   return (
     <div className="flex min-h-screen bg-admin-bg text-admin-ink selection:bg-admin-brand-soft selection:text-admin-brand font-sans antialiased">
@@ -271,7 +280,7 @@ export function Layout({ activeSection, onSelectSection, onLogout, children }: P
       </aside>
 
       <div className="flex-1 flex flex-col min-w-0">
-        <header className="h-[56px] bg-white border-b border-admin-line px-4 md:px-6 flex items-center justify-between sticky top-0 z-20">
+        <header className="h-[56px] bg-admin-brand-soft border-b border-brand-line px-4 md:px-6 flex items-center justify-between sticky top-0 z-20">
           <div className="flex items-center gap-3 min-w-0">
             <button
               onClick={() => setMobileNavOpen(true)}

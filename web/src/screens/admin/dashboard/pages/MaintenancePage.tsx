@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { AlertTriangle, Loader2, ShieldAlert, Trash2 } from "lucide-react";
+import { AlertTriangle, Loader2, Trash2 } from "lucide-react";
 import { factoryReset, type FactoryResetSummary } from "../api";
 import { Button } from "../../../../ui";
 import { useToast } from "../../../../components/ui/Toast";
@@ -49,10 +49,7 @@ export function MaintenancePage() {
   return (
     <div className="space-y-6 max-w-[900px] mx-auto pb-12">
       <div className="px-2">
-        <h1 className="text-title text-fg flex items-center gap-2">
-          <ShieldAlert className="w-5 h-5 text-admin-status-red" /> Data Maintenance
-        </h1>
-        <p className="text-[13px] text-admin-muted mt-1">
+        <p className="text-[13px] text-admin-muted">
           A one-time cleanup for handing this app to a new client -- clears every job-generated
           record so it starts from zero, without touching jobs, drivers or settings.
         </p>

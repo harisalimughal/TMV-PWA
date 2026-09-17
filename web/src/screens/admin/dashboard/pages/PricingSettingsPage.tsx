@@ -110,7 +110,6 @@ export function PricingSettingsPage() {
     <div className="space-y-6 max-w-[1440px] mx-auto pb-24">
       <div className="bg-white p-6 rounded-module border border-admin-line shadow-sm flex items-start justify-between">
         <div>
-          <h2 className="text-title text-fg mb-1">Pricing Settings</h2>
           <p className="text-[14px] text-admin-muted max-w-3xl">
             Configure crew rates, packing service pricing, and overtime rules. Changes apply to all new jobs
             immediately — no developer or redeployment required.
