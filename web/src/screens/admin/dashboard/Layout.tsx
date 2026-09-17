@@ -19,7 +19,6 @@ import { fetchAdminProfile } from "../../../api/admin";
 import { CommandPalette } from "./components/CommandPalette";
 import { ShortcutsModal } from "./components/ShortcutsModal";
 import { ApiSettingsPage } from "./pages/ApiSettingsPage";
-import { formatLondonTimeOnly } from "./utils/date";
 import { NotificationBell } from "../../../components/driver/NotificationBell";
 
 interface Props {
@@ -83,7 +82,6 @@ export function Layout({ activeSection, onSelectSection, onLogout, children }: P
   const [profileOpen, setProfileOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const profileRef = useRef<HTMLDivElement>(null);
-  const [londonClock, setLondonClock] = useState(formatLondonTimeOnly(new Date().toISOString()));
   const queryClient = useQueryClient();
 
   const { data: adminProfile } = useQuery({
@@ -109,11 +107,6 @@ export function Layout({ activeSection, onSelectSection, onLogout, children }: P
       document.removeEventListener("keydown", onKey);
     };
   }, [profileOpen]);
-
-  useEffect(() => {
-    const timer = setInterval(() => setLondonClock(formatLondonTimeOnly(new Date().toISOString())), 10000);
-    return () => clearInterval(timer);
-  }, []);
 
   // Mobile nav drawer: Escape closes it, and the page behind it stops scrolling.
   useEffect(() => {
@@ -228,7 +221,7 @@ export function Layout({ activeSection, onSelectSection, onLogout, children }: P
             </button>
           </div>
 
-          <nav className="px-4 pb-4 space-y-1 overflow-y-auto flex-1">
+          <nav className="px-4 pb-4 space-y-1 overflow-y-auto flex-1 custom-scrollbar">
             {NAV_CONFIG.map((item, idx) => {
               if ((item as NavHeader).type === "header") {
                 if (effectiveCollapsed) return <div key={idx} className="my-4 border-t border-white/10" />;
@@ -270,31 +263,6 @@ export function Layout({ activeSection, onSelectSection, onLogout, children }: P
               );
             })}
           </nav>
-        </div>
-
-        <div className="p-3 border-t border-admin-line bg-white flex items-center justify-between text-xs text-admin-ink-2">
-          {!effectiveCollapsed ? (
-            <>
-              <div className="flex items-center gap-2 overflow-hidden">
-                <img src="/tmv-logo.png" alt="" className="w-6 h-6 rounded-full object-cover border border-admin-line" />
-                <div className="overflow-hidden">
-                  <span className="font-medium text-admin-ink truncate block text-xs">Operations</span>
-                  <span className="text-[10px] text-admin-muted block font-mono">London &bull; {londonClock}</span>
-                </div>
-              </div>
-              {onLogout && (
-                <button onClick={onLogout} className="text-xs text-admin-muted hover:text-admin-status-red font-medium transition" title="Sign out">
-                  Log out
-                </button>
-              )}
-            </>
-          ) : (
-            onLogout && (
-              <button onClick={onLogout} className="w-full py-1 text-center text-admin-muted hover:text-admin-status-red" title="Log out">
-                <LogOut className="w-4 h-4 mx-auto" />
-              </button>
-            )
-          )}
         </div>
       </aside>
 
