@@ -195,7 +195,7 @@ export function Layout({ activeSection, onSelectSection, onLogout, children }: P
       <aside
         aria-label="Main navigation"
         aria-hidden={isMobile && !mobileNavOpen}
-        className={`bg-admin-bg text-admin-ink flex flex-col justify-between transition-all duration-300 z-40 fixed inset-y-0 left-0 h-screen md:sticky md:top-0 md:z-30 w-[260px] ${
+        className={`bg-admin-brand-soft text-admin-ink flex flex-col justify-between transition-all duration-300 z-40 fixed inset-y-0 left-0 h-screen md:sticky md:top-0 md:z-30 w-[260px] ${
           collapsed ? "md:w-16" : "md:w-[260px]"
         } ${mobileNavOpen ? "translate-x-0" : "-translate-x-full"} md:translate-x-0`}
       >
