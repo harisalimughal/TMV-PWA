@@ -621,6 +621,7 @@ type ServiceMileageStatusItem = {
   hasBaseline: boolean;
   currentMileage: number | null;
   milesRemaining: number | null;
+  serviceIntervalMiles: number | null;
   tone: "ok" | "warning" | "danger" | "empty";
   ringPercent: number;
   centerLabel: string;
@@ -649,6 +650,7 @@ function buildServiceMileageItem(compliance?: VanComplianceItem | null): Service
       hasBaseline,
       currentMileage,
       milesRemaining: null,
+      serviceIntervalMiles,
       tone: "empty",
       ringPercent: 0,
       centerLabel: "Missing",
@@ -670,6 +672,7 @@ function buildServiceMileageItem(compliance?: VanComplianceItem | null): Service
     hasBaseline,
     currentMileage,
     milesRemaining,
+    serviceIntervalMiles,
     tone,
     ringPercent,
     centerLabel: overdue ? `${Math.abs(milesRemaining).toLocaleString()} mi over` : `${milesRemaining.toLocaleString()} mi`,
@@ -708,6 +711,12 @@ function ServiceMileageStatus({ item }: { item: ServiceMileageStatusItem }) {
       >
         {item.statusLabel}
       </p>
+
+      {item.hasInterval && (
+        <p className="text-[11px] font-semibold text-admin-muted">
+          Service interval: every {item.serviceIntervalMiles!.toLocaleString()} mi
+        </p>
+      )}
     </div>
   );
 }
