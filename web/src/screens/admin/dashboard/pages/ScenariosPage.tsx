@@ -156,54 +156,57 @@ export function ScenariosPage({ kind }: Props) {
         </div>
       </div>
 
-      {/* TOOLBAR */}
-      <div className="p-2 bg-white rounded-module shadow-sm border border-admin-line flex flex-wrap items-center gap-4">
-        {/* Driver filter -- same roster + behaviour as Finished Jobs' driver filter. */}
-        <select
-          value={driverFilter}
-          onChange={e => { setDriverFilter(e.target.value); setPage(1); }}
-          className="shrink-0 h-9 px-3 rounded-control border border-admin-line bg-admin-surface text-[13px] font-medium text-admin-ink outline-none focus:border-admin-brand"
-        >
-          <option value="">All drivers</option>
-          {driverOptions.map(d => (
-            <option key={d.initials} value={d.initials}>{d.fullName || d.initials}</option>
-          ))}
-        </select>
+      {/* TOOLBAR -- same two-row shape as Parking Liability's SubmissionPageTemplate:
+          filters on their own row, count/refresh on a second, so neither wraps mid-row
+          on a typical desktop width the way one long flex-wrap row of driver+search+
+          date-range+count+refresh used to. */}
+      <div className="p-3 bg-white rounded-module shadow-sm border border-admin-line flex flex-col gap-3">
+        <div className="flex flex-wrap items-center gap-3">
+          {/* Driver filter -- same roster + behaviour as Finished Jobs' driver filter. */}
+          <select
+            value={driverFilter}
+            onChange={e => { setDriverFilter(e.target.value); setPage(1); }}
+            className="shrink-0 h-9 px-3 rounded-control border border-admin-line bg-admin-surface text-[13px] font-medium text-admin-ink outline-none focus:border-admin-brand"
+          >
+            <option value="">All drivers</option>
+            {driverOptions.map(d => (
+              <option key={d.initials} value={d.initials}>{d.fullName || d.initials}</option>
+            ))}
+          </select>
 
-        <div className="w-[1px] h-6 bg-admin-line mx-2" />
+          {/* Search */}
+          <div className="relative flex-1 min-w-[200px]">
+            <Search className="w-4 h-4 text-admin-muted absolute left-3 top-2.5" />
+            <input
+              type="text"
+              placeholder="Search reference, job, or user..."
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+              className="w-full h-9 pl-9 pr-3 rounded-full border border-admin-line bg-admin-surface text-[13px] outline-none focus:border-admin-brand focus:ring-1 focus:ring-admin-brand focus:bg-white transition"
+            />
+          </div>
 
-        {/* Search */}
-        <div className="relative flex-1 min-w-[200px]">
-          <Search className="w-4 h-4 text-admin-muted absolute left-3 top-2.5" />
-          <input 
-            type="text" 
-            placeholder="Search reference, job, or user..." 
-            value={searchQuery}
-            onChange={e => setSearchQuery(e.target.value)}
-            className="w-full h-9 pl-9 pr-3 rounded-full border border-admin-line bg-admin-surface text-[13px] outline-none focus:border-admin-brand focus:ring-1 focus:ring-admin-brand focus:bg-white transition"
-          />
+          <div className="hidden sm:block w-[1px] h-6 bg-admin-line mx-1" />
+
+          {/* DateRangePicker already renders its own All Time/Today/7 Days/30 Days
+              preset chips alongside the calendar inputs -- a second, separately-driven
+              set of the same four chips used to sit here too. */}
+          <DateRangePicker from={from} to={to} onChange={(f, t) => { setFrom(f); setTo(t); setPage(1); }} />
         </div>
 
-        <div className="w-[1px] h-6 bg-admin-line mx-2" />
+        <div className="flex items-center justify-between gap-3">
+          <span className="text-[13px] text-admin-muted font-medium">
+            {isLoading ? "..." : `${filteredItems.length} submission${filteredItems.length === 1 ? "" : "s"}`}
+          </span>
 
-        {/* DateRangePicker already renders its own All Time/Today/7 Days/30 Days
-            preset chips alongside the calendar inputs -- a second, separately-driven
-            set of the same four chips used to sit here too. */}
-        <DateRangePicker from={from} to={to} onChange={(f, t) => { setFrom(f); setTo(t); setPage(1); }} />
-
-        <div className="w-[1px] h-6 bg-admin-line mx-2" />
-        
-        <span className="text-[13px] text-admin-muted font-medium pr-2">
-          {isLoading ? "..." : `${filteredItems.length} submission${filteredItems.length === 1 ? "" : "s"}`}
-        </span>
-
-        <button 
-          onClick={() => refetch()}
-          className="w-9 h-9 flex items-center justify-center rounded-full hover:bg-admin-surface text-admin-muted hover:text-admin-ink transition"
-          title="Refresh"
-        >
-          <RefreshCw className={`w-4 h-4 ${isLoading ? "animate-spin" : ""}`} />
-        </button>
+          <button
+            onClick={() => refetch()}
+            className="w-9 h-9 shrink-0 flex items-center justify-center rounded-full hover:bg-admin-surface text-admin-muted hover:text-admin-ink transition"
+            title="Refresh"
+          >
+            <RefreshCw className={`w-4 h-4 ${isLoading ? "animate-spin" : ""}`} />
+          </button>
+        </div>
       </div>
 
       {isLoading && (
