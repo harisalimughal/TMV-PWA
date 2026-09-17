@@ -43,6 +43,7 @@ export function JobsPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("All"); // All, In Progress
+  const [driverFilter, setDriverFilter] = useState<string>("");
   
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
@@ -74,10 +75,10 @@ export function JobsPage() {
    * a job doesn't have to be in the first N rows to be found or correctly ordered.
    */
   const { data, isLoading, isError, error, refetch, isFetching } = useQuery({
-    queryKey: ["jobs", from, to, debouncedSearch, serverStatus, page, pageSize, serverSort, sortConfig?.direction],
+    queryKey: ["jobs", from, to, debouncedSearch, serverStatus, driverFilter, page, pageSize, serverSort, sortConfig?.direction],
     queryFn: () => fetchJobs({
       page, pageSize, from, to, q: debouncedSearch || undefined, status: serverStatus,
-      sort: serverSort, dir: sortConfig?.direction
+      driver: driverFilter || undefined, sort: serverSort, dir: sortConfig?.direction
     }),
     // Without this, `data` (and its pagination.totalPages) goes to undefined the
     // instant `page` changes, before the new page has even loaded. That made
@@ -88,6 +89,13 @@ export function JobsPage() {
     // is also just better UX (no flash to a loading/empty state on every page change).
     placeholderData: keepPreviousData
   });
+
+  // Same roster + filter pattern as Finished Jobs' driver filter -- every driver with
+  // a real account, resolved server-side by jobs.routes.ts's own driver filter.
+  const { data: driversData } = useQuery({ queryKey: ["drivers_summary"], queryFn: () => fetchDrivers() });
+  const driverOptions = (driversData?.drivers || [])
+    .filter(d => d.initials && d.initials !== "UNASSIGNED" && d.hasAccount)
+    .sort((a, b) => (a.fullName || a.initials).localeCompare(b.fullName || b.initials));
 
   // Debounce search
   useEffect(() => {
@@ -246,71 +254,88 @@ export function JobsPage() {
         <h2 className="text-title text-fg">Jobs Archive</h2>
       </div>
 
-      {/* CONSOLIDATED TOOLBAR CARD */}
-      <div className="p-2 bg-white rounded-module shadow-sm border border-transparent flex flex-wrap items-center gap-3">
+      {/* CONSOLIDATED TOOLBAR CARD -- date range on its own row up top, everything
+          else (including the driver filter) on a second row below. */}
+      <div className="p-2 bg-white rounded-module shadow-sm border border-transparent flex flex-col gap-3">
 
-        <div className="flex items-center p-1 bg-admin-surface rounded-card border border-admin-line/50 shrink-0">
-          <button
-            onClick={() => setViewMode("table")}
-            className={`p-1.5 rounded-control transition ${viewMode === 'table' ? 'bg-white shadow-sm text-admin-ink' : 'text-admin-muted hover:text-admin-ink'}`}
-          >
-            <List className="w-4 h-4" />
-          </button>
-          <button
-            onClick={() => setViewMode("cards")}
-            className={`p-1.5 rounded-control transition ${viewMode === 'cards' ? 'bg-white shadow-sm text-admin-ink' : 'text-admin-muted hover:text-admin-ink'}`}
-          >
-            <LayoutGrid className="w-4 h-4" />
-          </button>
+        <div className="flex flex-wrap items-center gap-3">
+          <DateRangePicker from={from} to={to} onChange={(f, t) => { setFrom(f); setTo(t); setPage(1); }} />
+
+          <span className="shrink-0 text-label font-medium text-fg-muted px-2 whitespace-nowrap sm:min-w-[120px] sm:text-right ml-auto">
+            {isLoading || isFetching ? "Updating..." : `${total} moves`}
+          </span>
         </div>
 
-        <div className="relative w-full sm:w-64 order-last sm:order-none">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-admin-muted" />
-          <input
-            type="text"
-            placeholder="Search ID, customer, route..."
-            value={searchQuery}
-            onChange={e => setSearchQuery(e.target.value)}
-            className="w-full pl-9 pr-4 h-10 rounded-card bg-admin-surface border border-admin-line/50 text-[13px] text-admin-ink focus:border-admin-brand focus:ring-1 focus:ring-admin-brand outline-none transition"
-          />
-        </div>
-
-        <div className="flex items-center bg-admin-surface p-1 rounded-card border border-admin-line/50 shrink-0">
-          {["All", "In Progress"].map(status => (
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="flex items-center p-1 bg-admin-surface rounded-card border border-admin-line/50 shrink-0">
             <button
-              key={status}
-              onClick={() => { setStatusFilter(status); setPage(1); }}
-              className={`shrink-0 whitespace-nowrap px-3 py-1.5 rounded-control text-[13px] font-medium transition ${statusFilter === status ? 'bg-white text-admin-ink shadow-sm' : 'text-admin-muted hover:text-admin-ink'}`}
+              onClick={() => setViewMode("table")}
+              className={`p-1.5 rounded-control transition ${viewMode === 'table' ? 'bg-white shadow-sm text-admin-ink' : 'text-admin-muted hover:text-admin-ink'}`}
             >
-              {status}
+              <List className="w-4 h-4" />
             </button>
-          ))}
+            <button
+              onClick={() => setViewMode("cards")}
+              className={`p-1.5 rounded-control transition ${viewMode === 'cards' ? 'bg-white shadow-sm text-admin-ink' : 'text-admin-muted hover:text-admin-ink'}`}
+            >
+              <LayoutGrid className="w-4 h-4" />
+            </button>
+          </div>
+
+          <div className="relative w-full sm:w-64 order-last sm:order-none">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-admin-muted" />
+            <input
+              type="text"
+              placeholder="Search ID, customer, route..."
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+              className="w-full pl-9 pr-4 h-10 rounded-card bg-admin-surface border border-admin-line/50 text-[13px] text-admin-ink focus:border-admin-brand focus:ring-1 focus:ring-admin-brand outline-none transition"
+            />
+          </div>
+
+          <div className="flex items-center bg-admin-surface p-1 rounded-card border border-admin-line/50 shrink-0">
+            {["All", "In Progress"].map(status => (
+              <button
+                key={status}
+                onClick={() => { setStatusFilter(status); setPage(1); }}
+                className={`shrink-0 whitespace-nowrap px-3 py-1.5 rounded-control text-[13px] font-medium transition ${statusFilter === status ? 'bg-white text-admin-ink shadow-sm' : 'text-admin-muted hover:text-admin-ink'}`}
+              >
+                {status}
+              </button>
+            ))}
+          </div>
+
+          {/* Driver filter -- same roster + behaviour as Finished Jobs' driver filter. */}
+          <select
+            value={driverFilter}
+            onChange={e => { setDriverFilter(e.target.value); setPage(1); }}
+            className="shrink-0 h-10 px-3 rounded-card border border-admin-line/50 bg-admin-surface text-[13px] font-medium text-admin-ink outline-none focus:border-admin-brand"
+          >
+            <option value="">All drivers</option>
+            {driverOptions.map(d => (
+              <option key={d.initials} value={d.initials}>{d.fullName || d.initials}</option>
+            ))}
+          </select>
+
+          <div className="hidden sm:block w-px h-6 bg-admin-line mx-1 shrink-0" />
+
+          <button
+            onClick={() => refetch()}
+            className="shrink-0 w-10 h-10 rounded-card flex items-center justify-center bg-admin-surface border border-admin-line/50 hover:bg-admin-line/40 text-admin-muted hover:text-admin-ink transition"
+            title="Refresh Data"
+          >
+            <RefreshCw className={`w-4 h-4 ${isFetching ? 'animate-spin' : ''}`} />
+          </button>
+          <button
+            onClick={exportFilteredCsv}
+            disabled={total === 0}
+            className="shrink-0 w-10 h-10 rounded-card flex items-center justify-center bg-admin-surface border border-admin-line/50 hover:bg-admin-line/40 text-admin-muted hover:text-admin-ink transition disabled:opacity-40"
+            title={`Export ${total} rows as CSV`}
+            aria-label="Export filtered jobs as CSV"
+          >
+            <Download className="w-4 h-4" />
+          </button>
         </div>
-
-        <div className="hidden sm:block w-px h-6 bg-admin-line mx-1 shrink-0" />
-
-        <DateRangePicker from={from} to={to} onChange={(f, t) => { setFrom(f); setTo(t); setPage(1); }} />
-
-        <span className="shrink-0 text-label font-medium text-fg-muted px-2 whitespace-nowrap sm:min-w-[120px] sm:text-right">
-          {isLoading || isFetching ? "Updating..." : `${total} moves`}
-        </span>
-
-        <button
-          onClick={() => refetch()}
-          className="shrink-0 w-10 h-10 rounded-card flex items-center justify-center bg-admin-surface border border-admin-line/50 hover:bg-admin-line/40 text-admin-muted hover:text-admin-ink transition"
-          title="Refresh Data"
-        >
-          <RefreshCw className={`w-4 h-4 ${isFetching ? 'animate-spin' : ''}`} />
-        </button>
-        <button
-          onClick={exportFilteredCsv}
-          disabled={total === 0}
-          className="shrink-0 w-10 h-10 rounded-card flex items-center justify-center bg-admin-surface border border-admin-line/50 hover:bg-admin-line/40 text-admin-muted hover:text-admin-ink transition disabled:opacity-40"
-          title={`Export ${total} rows as CSV`}
-          aria-label="Export filtered jobs as CSV"
-        >
-          <Download className="w-4 h-4" />
-        </button>
       </div>
 
       {isError && <ApiErrorState message={(error as Error)?.message} onRetry={() => refetch()} />}
