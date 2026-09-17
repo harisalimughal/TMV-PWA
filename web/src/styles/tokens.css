@@ -43,9 +43,13 @@
   --brand-subtle: 234 239 253;  /* rgba(47,99,239,.1) flattened */
   --brand-subtle-fg: 30 74 199;
   --brand-line: 191 214 252;
-  /* Admin sidebar ground -- one step darker than --brand-subtle so the nav chrome
-     reads as its own surface, not just a lighter smear of the page background. */
-  --sidebar-bg: 213 227 253;
+  /* Admin sidebar ground -- fixed navy chrome (doesn't follow the light/dark toggle;
+     the admin dashboard is pinned to [data-theme="light"] anyway, see this file's own
+     top comment) with its own readable-on-dark text tokens, since --admin-ink/-muted/
+     -fg-subtle are all tuned for a light background. */
+  --sidebar-bg: 15 27 51;        /* #0F1B33 */
+  --sidebar-fg: 237 242 250;     /* #EDF2FA */
+  --sidebar-muted: 148 163 194;  /* #94A3C2 */
 
   /* ---- status tints ----------------------------------------------------- */
   --success-fg: 23 138 81;       /* #178A51 */
@@ -160,7 +164,9 @@
   --brand-subtle: 30 42 66;    /* rgba(91,140,255,.15) flattened */
   --brand-subtle-fg: 154 184 255;
   --brand-line: 44 66 110;
-  --sidebar-bg: 37 54 88;
+  --sidebar-bg: 15 27 51;        /* #0F1B33 -- same fixed navy as light mode */
+  --sidebar-fg: 237 242 250;
+  --sidebar-muted: 148 163 194;
 
   /* ---- status — brighter signals, deep tinted grounds ---------------- */
   --success-fg: 74 196 134;      /* #4AC486 */
