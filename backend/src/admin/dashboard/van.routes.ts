@@ -1,9 +1,9 @@
 import { Request, Response, Router } from "express";
-import { listVanRecords, VanRecordType } from "../../db/van.repo";
+import { listVanRecords, getVanRecord, deleteVanRecord, VanRecordType } from "../../db/van.repo";
 import { listVanCompliance, saveVanCompliance } from "../../db/van-compliance.repo";
 import { toVanComplianceItem, VanComplianceItem } from "../../jobs/van-mileage.service";
 import { listDriverProfiles } from "../../auth/driver-account.service";
-import { toThumbnailUrl } from "../../storage/cloudinary";
+import { toThumbnailUrl, destroyEvidenceImage, publicIdFromCloudinaryUrl } from "../../storage/cloudinary";
 
 type VanRecordApiItem = {
   id: string;
@@ -74,6 +74,26 @@ function vanRecordItem(r: Awaited<ReturnType<typeof listVanRecords>>[number]): V
 
 export function dashboardVanRoutes(): Router {
   const router = Router();
+
+  // Deletes one Mileage/Fuel/Service submission -- purely our own storage (Mongo +
+  // Cloudinary), no Calendar involvement, so it's a plain confirm-and-delete like the
+  // evidence-photo delete on jobs.routes.ts.
+  router.delete("/records/:id", async (req: Request, res: Response) => {
+    try {
+      const id = String(req.params.id || "").trim();
+      const record = await getVanRecord(id);
+      if (!record) {
+        res.status(404).json({ error: { code: "VAN_RECORD_NOT_FOUND", message: "Van record not found." } });
+        return;
+      }
+      const publicId = publicIdFromCloudinaryUrl(record.photoUrl);
+      if (publicId) await destroyEvidenceImage(publicId);
+      await deleteVanRecord(id);
+      res.status(200).json({ ok: true });
+    } catch {
+      res.status(500).json({ error: { code: "VAN_RECORD_DELETE_FAILED", message: "Failed to delete van record." } });
+    }
+  });
 
   router.post("/compliance/:vanRegistration", async (req: Request, res: Response) => {
     try {

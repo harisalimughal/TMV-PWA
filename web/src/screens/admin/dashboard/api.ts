@@ -179,6 +179,13 @@ export async function saveVanCompliance(
   return data.compliance;
 }
 
+/** Purely our own storage (Mongo + Cloudinary) -- no Calendar involvement. */
+export async function deleteVanRecord(id: string): Promise<{ ok: true }> {
+  const res = await apiFetch(`/api/admin/van/records/${encodeURIComponent(id)}`, { method: "DELETE" });
+  if (!res.ok) throw await apiError(res, "Failed to delete van record");
+  return res.json();
+}
+
 export async function triggerDatasetRefresh(): Promise<void> {
   // No dedicated /refresh endpoint here (Mongo reads have no cache to invalidate,
   // unlike the source's Sheets-backed sheetCache) -- kept as a no-op resolve so the

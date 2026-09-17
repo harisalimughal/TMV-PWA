@@ -33,3 +33,14 @@ export async function listVanRecords(): Promise<VanRecordDoc[]> {
   const docs = await col.find({}).sort({ submittedAt: 1 }).toArray();
   return docs.map(doc => ({ ...doc, type: doc.type ?? "MILEAGE" }));
 }
+
+export async function getVanRecord(id: string): Promise<VanRecordDoc | null> {
+  const col = await vanRecordsCollection();
+  const doc = await col.findOne({ _id: id } as any);
+  return doc ? { ...doc, type: doc.type ?? "MILEAGE" } : null;
+}
+
+export async function deleteVanRecord(id: string): Promise<void> {
+  const col = await vanRecordsCollection();
+  await col.deleteOne({ _id: id } as any);
+}

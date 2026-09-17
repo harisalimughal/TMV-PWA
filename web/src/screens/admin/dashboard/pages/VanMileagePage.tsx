@@ -1,9 +1,9 @@
 import React, { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Camera, Download, Fuel, Pencil, RefreshCw, Search, ShieldCheck, Truck, Wrench, X } from "lucide-react";
+import { Camera, Download, Fuel, Loader2, Pencil, RefreshCw, Search, ShieldCheck, Trash2, Truck, Wrench, X } from "lucide-react";
 import { DateRangePicker } from "../components/DateRangePicker";
 import { ApiErrorState } from "../components/ApiErrorState";
-import { fetchVanDriverRecords, saveVanCompliance } from "../api";
+import { fetchVanDriverRecords, saveVanCompliance, deleteVanRecord } from "../api";
 import { VanComplianceItem, VanDriverRecordItem, VanRecordItem, VanRecordType } from "../types";
 import { formatLondonDate, formatLondonDateTime } from "../utils/date";
 
@@ -207,13 +207,51 @@ export function VanMileagePage() {
             setSelected(current => current ? { ...current, compliance: updated } : current);
             void refetch();
           }}
+          onRecordDeleted={recordId => {
+            setSelected(current => current ? {
+              ...current,
+              records: current.records.filter(r => r.id !== recordId),
+              latestMileage: current.latestMileage?.id === recordId ? null : current.latestMileage,
+              latestFuel: current.latestFuel?.id === recordId ? null : current.latestFuel,
+              latestService: current.latestService?.id === recordId ? null : current.latestService
+            } : current);
+            void refetch();
+          }}
         />
       )}
     </div>
   );
 }
 
-function VanDriverModal({ item, onClose, onSaved }: { item: VanDriverRecordItem; onClose: () => void; onSaved: (compliance: VanComplianceItem) => void }) {
+function VanDriverModal({
+  item,
+  onClose,
+  onSaved,
+  onRecordDeleted
+}: {
+  item: VanDriverRecordItem;
+  onClose: () => void;
+  onSaved: (compliance: VanComplianceItem) => void;
+  onRecordDeleted: (recordId: string) => void;
+}) {
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  // Purely our own storage (Mongo + Cloudinary), no Calendar involved -- a plain
+  // confirm and delete, same pattern as the evidence-photo delete on Jobs.
+  async function handleDeleteRecord(recordId: string) {
+    if (deletingId) return;
+    if (!window.confirm("Delete this photo record? This can't be undone.")) return;
+    setDeletingId(recordId);
+    try {
+      await deleteVanRecord(recordId);
+      onRecordDeleted(recordId);
+    } catch (err: any) {
+      window.alert(err?.message || "Failed to delete van record.");
+    } finally {
+      setDeletingId(null);
+    }
+  }
+
   return (
     <div className="fixed inset-0 z-[100] overflow-hidden bg-admin-ink/70 backdrop-blur-sm flex items-center justify-center p-3 sm:p-6">
       <div className="absolute inset-0 cursor-pointer" onClick={onClose} />
@@ -234,8 +272,19 @@ function VanDriverModal({ item, onClose, onSaved }: { item: VanDriverRecordItem;
         </div>
         <div className="p-6 overflow-y-auto space-y-5">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <RecordPreview title="Fuel" item={item.latestFuel} type="FUEL" />
-            <ServicePreview item={item} onSaved={onSaved} />
+            <RecordPreview
+              title="Fuel"
+              item={item.latestFuel}
+              type="FUEL"
+              onDelete={item.latestFuel ? () => handleDeleteRecord(item.latestFuel!.id) : undefined}
+              deleting={deletingId === item.latestFuel?.id}
+            />
+            <ServicePreview
+              item={item}
+              onSaved={onSaved}
+              onDelete={item.latestService ? () => handleDeleteRecord(item.latestService!.id) : undefined}
+              deleting={deletingId === item.latestService?.id}
+            />
             <CompliancePreview item={item} onSaved={onSaved} />
           </div>
 
@@ -243,13 +292,24 @@ function VanDriverModal({ item, onClose, onSaved }: { item: VanDriverRecordItem;
             <div className="px-4 py-3 border-b border-admin-line text-[12px] font-bold text-admin-muted uppercase tracking-wider">All van submissions</div>
             <div className="divide-y divide-admin-line">
               {item.records.map(record => (
-                <a key={record.id} href={record.photoUrl} target="_blank" rel="noreferrer" className="flex items-center gap-4 px-4 py-3 hover:bg-admin-surface transition">
-                  <img src={record.thumbUrl || record.photoUrl} alt={TYPE_META[record.type].label} className="w-14 h-14 rounded-card object-cover border border-admin-line bg-admin-surface" />
-                  <div className="min-w-0 flex-1">
-                    <div className="text-[13px] font-semibold text-admin-ink">{TYPE_META[record.type].label} · {recordDetail(record, record.type)}</div>
-                    <div className="text-[12px] text-admin-muted">{formatLondonDateTime(record.submittedAt)}</div>
-                  </div>
-                </a>
+                <div key={record.id} className="relative group/rec flex items-center gap-4 px-4 py-3 hover:bg-admin-surface transition">
+                  <a href={record.photoUrl} target="_blank" rel="noreferrer" className="flex items-center gap-4 flex-1 min-w-0">
+                    <img src={record.thumbUrl || record.photoUrl} alt={TYPE_META[record.type].label} className="w-14 h-14 rounded-card object-cover border border-admin-line bg-admin-surface" />
+                    <div className="min-w-0 flex-1">
+                      <div className="text-[13px] font-semibold text-admin-ink">{TYPE_META[record.type].label} · {recordDetail(record, record.type)}</div>
+                      <div className="text-[12px] text-admin-muted">{formatLondonDateTime(record.submittedAt)}</div>
+                    </div>
+                  </a>
+                  <button
+                    onClick={() => handleDeleteRecord(record.id)}
+                    disabled={deletingId === record.id}
+                    title="Delete record"
+                    aria-label="Delete van record"
+                    className="shrink-0 p-1.5 rounded-full text-admin-muted opacity-0 group-hover/rec:opacity-100 hover:bg-admin-status-red hover:text-white transition disabled:opacity-60"
+                  >
+                    {deletingId === record.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                  </button>
+                </div>
               ))}
               {item.records.length === 0 && <div className="px-4 py-8 text-center text-admin-muted">No submissions found.</div>}
             </div>
@@ -260,7 +320,12 @@ function VanDriverModal({ item, onClose, onSaved }: { item: VanDriverRecordItem;
   );
 }
 
-function RecordPreview({ title, item, type }: { title: string; item: VanRecordItem | null; type: VanRecordType }) {
+function RecordPreview({
+  title, item, type, onDelete, deleting
+}: {
+  title: string; item: VanRecordItem | null; type: VanRecordType;
+  onDelete?: () => void; deleting?: boolean;
+}) {
   const meta = TYPE_META[type];
   const Icon = meta.icon;
   return (
@@ -271,9 +336,22 @@ function RecordPreview({ title, item, type }: { title: string; item: VanRecordIt
       <div className="mt-3 text-[18px] font-bold text-admin-ink">{recordDetail(item, type)}</div>
       <div className="mt-1 text-[12px] text-admin-muted">{item ? formatLondonDateTime(item.submittedAt) : "Not uploaded"}</div>
       {item?.photoUrl ? (
-        <a href={item.photoUrl} target="_blank" rel="noreferrer" className="mt-4 block">
-          <img src={item.photoUrl} alt={title} className="w-full aspect-[4/3] object-contain rounded-card bg-admin-surface border border-admin-line" />
-        </a>
+        <div className="relative group/photo mt-4">
+          <a href={item.photoUrl} target="_blank" rel="noreferrer" className="block">
+            <img src={item.photoUrl} alt={title} className="w-full aspect-[4/3] object-contain rounded-card bg-admin-surface border border-admin-line" />
+          </a>
+          {onDelete && (
+            <button
+              onClick={onDelete}
+              disabled={deleting}
+              title="Delete photo"
+              aria-label={`Delete ${title} photo`}
+              className="absolute top-1.5 right-1.5 z-10 p-1 rounded-full bg-white/90 text-admin-status-red opacity-0 group-hover/photo:opacity-100 hover:bg-admin-status-red hover:text-white transition shadow-sm disabled:opacity-60"
+            >
+              {deleting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
+            </button>
+          )}
+        </div>
       ) : (
         <div className="mt-4 aspect-[4/3] rounded-card bg-admin-surface border border-dashed border-admin-line flex items-center justify-center text-admin-muted">
           <Camera className="w-5 h-5" />
@@ -292,7 +370,12 @@ function RecordPreview({ title, item, type }: { title: string; item: VanRecordIt
  * the *whole* compliance document (see saveVanCompliance), so it passes through the
  * current road-tax/MOT/insurance/notes values unchanged rather than clearing them.
  */
-function ServicePreview({ item, onSaved }: { item: VanDriverRecordItem; onSaved: (compliance: VanComplianceItem) => void }) {
+function ServicePreview({
+  item, onSaved, onDelete, deleting
+}: {
+  item: VanDriverRecordItem; onSaved: (compliance: VanComplianceItem) => void;
+  onDelete?: () => void; deleting?: boolean;
+}) {
   const [serviceIntervalMiles, setServiceIntervalMiles] = useState(String(item.compliance?.serviceIntervalMiles ?? ""));
   const [lastServiceMileageOverride, setLastServiceMileageOverride] = useState(String(item.compliance?.lastServiceMileageOverride ?? ""));
   const [editing, setEditing] = useState(false);
@@ -363,13 +446,26 @@ function ServicePreview({ item, onSaved }: { item: VanDriverRecordItem; onSaved:
           {item.latestService ? formatLondonDateTime(item.latestService.submittedAt) : "Not uploaded"}
         </div>
         {item.latestService?.photoUrl ? (
-          <a href={item.latestService.photoUrl} target="_blank" rel="noreferrer" className="mt-4 block">
-            <img
-              src={item.latestService.photoUrl}
-              alt="Service"
-              className="w-full aspect-[4/3] object-contain rounded-card bg-admin-surface border border-admin-line"
-            />
-          </a>
+          <div className="relative group/photo mt-4">
+            <a href={item.latestService.photoUrl} target="_blank" rel="noreferrer" className="block">
+              <img
+                src={item.latestService.photoUrl}
+                alt="Service"
+                className="w-full aspect-[4/3] object-contain rounded-card bg-admin-surface border border-admin-line"
+              />
+            </a>
+            {onDelete && (
+              <button
+                onClick={onDelete}
+                disabled={deleting}
+                title="Delete photo"
+                aria-label="Delete Service photo"
+                className="absolute top-1.5 right-1.5 z-10 p-1 rounded-full bg-white/90 text-admin-status-red opacity-0 group-hover/photo:opacity-100 hover:bg-admin-status-red hover:text-white transition shadow-sm disabled:opacity-60"
+              >
+                {deleting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
+              </button>
+            )}
+          </div>
         ) : (
           <div className="mt-4 aspect-[4/3] rounded-card bg-admin-surface border border-dashed border-admin-line flex items-center justify-center text-admin-muted">
             <Camera className="w-5 h-5" />
