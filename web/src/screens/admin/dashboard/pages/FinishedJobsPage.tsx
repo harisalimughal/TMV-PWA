@@ -169,9 +169,11 @@ export function FinishedJobsPage() {
         <ApiErrorState message={(error as Error)?.message} onRetry={() => refetch()} />
       )}
 
-      {/* Main Table View */}
+      {/* Main View -- cards sit directly on the page background exactly like the
+          Jobs Archive tab (no extra white/bordered wrapper around them); the table
+          keeps its own bordered card container since it needs that framing. */}
       {!isLoading && !error && (
-        <div className="bg-white rounded-module shadow-[0_4px_20px_rgb(0,0,0,0.03)] border border-admin-line overflow-hidden">
+        <>
           {/* Same card shape as the Jobs Archive tab's card view (JobsPage.tsx's
               JobCardList) -- checkbox, top-right action, Job ID + status, customer
               name, a secondary line, then a divider footer split driver+time /
@@ -180,7 +182,7 @@ export function FinishedJobsPage() {
               booked, and the folder actions (preview/download/open) instead of
               Reassign. Below md, cards show regardless of viewMode -- an 11-column
               table behind a horizontal scrollbar has nowhere to go on a phone. */}
-          <div className={`grid gap-3 p-3 sm:grid-cols-2 xl:grid-cols-3 ${viewMode === "cards" ? "" : "md:hidden"}`}>
+          <div className={`grid gap-3 sm:grid-cols-2 xl:grid-cols-3 ${viewMode === "cards" ? "" : "md:hidden"}`}>
             {items.map((job: NormalizedJob) => {
               const driver = resolveDriver(job.driverName, job.driverInitials);
               const amount = toPounds(job.amountCharged);
@@ -261,7 +263,8 @@ export function FinishedJobsPage() {
             )}
           </div>
 
-          <div className={`overflow-x-auto custom-scrollbar ${viewMode === "table" ? "hidden md:block" : "hidden"}`}>
+          <div className={`bg-white rounded-module shadow-[0_4px_20px_rgb(0,0,0,0.03)] border border-admin-line overflow-hidden ${viewMode === "table" ? "hidden md:block" : "hidden"}`}>
+          <div className="overflow-x-auto custom-scrollbar">
             <table className="w-full text-left text-[14px] border-collapse whitespace-nowrap">
               <thead>
                 <tr className="border-b border-admin-line bg-[#F7F7F7]/50">
@@ -447,9 +450,10 @@ export function FinishedJobsPage() {
               </tbody>
             </table>
           </div>
-        </div>
+          </div>
+        </>
       )}
-      
+
       {/* Pagination (simple) */}
       {!isLoading && !error && data?.pagination && (
          <div className="flex flex-wrap items-center justify-between gap-2 px-2 text-[13px] text-admin-muted">
