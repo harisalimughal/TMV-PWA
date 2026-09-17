@@ -188,7 +188,7 @@ export function Layout({ activeSection, onSelectSection, onLogout, children }: P
       <aside
         aria-label="Main navigation"
         aria-hidden={isMobile && !mobileNavOpen}
-        className={`bg-admin-sidebar text-admin-sidebar-fg flex flex-col justify-between transition-all duration-300 z-40 fixed inset-y-0 left-0 h-screen md:sticky md:top-0 md:z-30 w-[260px] ${
+        className={`bg-admin-brand-soft border-r border-brand-line text-admin-ink flex flex-col justify-between transition-all duration-300 z-40 fixed inset-y-0 left-0 h-screen md:sticky md:top-0 md:z-30 w-[260px] ${
           collapsed ? "md:w-16" : "md:w-[260px]"
         } ${mobileNavOpen ? "translate-x-0" : "-translate-x-full"} md:translate-x-0`}
       >
@@ -207,14 +207,14 @@ export function Layout({ activeSection, onSelectSection, onLogout, children }: P
             )}
             <button
               onClick={() => setCollapsed(!collapsed)}
-              className="hidden md:block p-1 rounded hover:bg-white/10 text-admin-sidebar-muted hover:text-admin-sidebar-fg transition"
+              className="hidden md:block p-1 rounded hover:bg-admin-surface text-admin-muted hover:text-admin-ink transition"
               title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
             >
               {collapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronLeft className="w-4 h-4" />}
             </button>
             <button
               onClick={() => setMobileNavOpen(false)}
-              className="md:hidden p-1 rounded hover:bg-white/10 text-admin-sidebar-muted hover:text-admin-sidebar-fg transition"
+              className="md:hidden p-1 rounded hover:bg-admin-surface text-admin-muted hover:text-admin-ink transition"
               title="Close menu"
             >
               <X className="w-5 h-5" />
@@ -224,9 +224,9 @@ export function Layout({ activeSection, onSelectSection, onLogout, children }: P
           <nav className="px-4 pb-4 space-y-1 overflow-y-auto flex-1 custom-scrollbar">
             {NAV_CONFIG.map((item, idx) => {
               if ((item as NavHeader).type === "header") {
-                if (effectiveCollapsed) return <div key={idx} className="my-4 border-t border-white/10" />;
+                if (effectiveCollapsed) return <div key={idx} className="my-4 border-t border-admin-line" />;
                 return (
-                  <div key={idx} className="pt-6 pb-2 px-3 text-eyebrow text-admin-sidebar-muted">
+                  <div key={idx} className="pt-6 pb-2 px-3 text-eyebrow text-fg-subtle">
                     {item.label}
                   </div>
                 );
@@ -241,11 +241,11 @@ export function Layout({ activeSection, onSelectSection, onLogout, children }: P
                   key={navItem.id}
                   onClick={() => { onSelectSection(navItem.id!); setMobileNavOpen(false); }}
                   className={`w-full h-11 flex items-center gap-3 px-4 rounded-card text-[14px] font-medium transition group relative ${
-                    isActive ? "text-admin-ink font-semibold bg-white shadow-primary" : "text-admin-sidebar-muted hover:bg-white/10 hover:text-admin-sidebar-fg"
+                    isActive ? "text-admin-ink font-semibold bg-white shadow-primary" : "text-admin-muted hover:bg-white/50 hover:text-admin-ink"
                   }`}
                   title={effectiveCollapsed ? navItem.label : undefined}
                 >
-                  <Icon className={`w-4 h-4 flex-shrink-0 transition-transform ${isActive ? "text-admin-brand scale-105" : "text-admin-sidebar-muted group-hover:text-admin-sidebar-fg"}`} />
+                  <Icon className={`w-4 h-4 flex-shrink-0 transition-transform ${isActive ? "text-admin-brand scale-105" : "text-admin-muted group-hover:text-admin-ink-2"}`} />
 
                   {!effectiveCollapsed && <span className="truncate">{navItem.label}</span>}
 
@@ -257,7 +257,7 @@ export function Layout({ activeSection, onSelectSection, onLogout, children }: P
                   )}
 
                   {effectiveCollapsed && navItem.isLive && (
-                    <span className="w-2 h-2 rounded-full bg-admin-status-green absolute right-2 ring-2 ring-admin-sidebar" />
+                    <span className="w-2 h-2 rounded-full bg-admin-status-green absolute right-2 ring-2 ring-white" />
                   )}
                 </button>
               );
@@ -366,7 +366,7 @@ export function Layout({ activeSection, onSelectSection, onLogout, children }: P
           </div>
         </header>
 
-        <div className="flex-1 overflow-y-auto flex flex-col">
+        <div className="flex-1 overflow-y-auto flex flex-col custom-scrollbar">
           <main className="flex-1 p-4 md:p-8">{children}</main>
         </div>
       </div>
