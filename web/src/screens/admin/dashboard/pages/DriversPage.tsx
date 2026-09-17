@@ -11,7 +11,6 @@ import {
   Trash2,
   UserX
 } from "lucide-react";
-import { DateRangePicker } from "../components/DateRangePicker";
 import { getAvatarColor, formatVanReg } from "../utils/drivers";
 import { AddDriverModal } from "../components/AddDriverModal";
 import { ApiErrorState } from "../components/ApiErrorState";
@@ -20,17 +19,16 @@ import { Button } from "../../../../ui";
 
 export function DriversPage() {
   const queryClient = useQueryClient();
-  const [from, setFrom] = useState<string | undefined>();
-  const [to, setTo] = useState<string | undefined>();
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [editingDriver, setEditingDriver] = useState<DriverSummaryItem | null>(null);
 
   // Real roster + real per-driver stats (assigned/completed/revenue/missing evidence,
   // avg delay/duration) -- all computed server-side against actual job data, not the
-  // old localStorage-backed roster + a re-aggregation of fetchJobs() here.
+  // old localStorage-backed roster + a re-aggregation of fetchJobs() here. Always
+  // all-time -- no date range filter on this tab.
   const { data, isLoading, isError, error, refetch } = useQuery({
-    queryKey: ["drivers_summary", from, to],
-    queryFn: () => fetchDrivers(from, to),
+    queryKey: ["drivers_summary"],
+    queryFn: () => fetchDrivers(),
     staleTime: 30000
   });
 
@@ -80,21 +78,13 @@ export function DriversPage() {
       <div className="flex items-center justify-between px-2">
         <div>
           <h2 className="text-title text-fg">Drivers</h2>
+          <p className="text-[13px] text-admin-muted mt-0.5">
+            {isLoading ? "..." : `${roster.filter(d => d.active).length} active drivers`}
+          </p>
         </div>
         <Button onClick={() => setIsAddModalOpen(true)} iconLeft={<Plus />}>
           Add driver
         </Button>
-      </div>
-
-      {/* TOOLBAR */}
-      <div className="p-2 bg-white rounded-module shadow-sm border border-transparent flex flex-wrap items-center gap-4">
-        <DateRangePicker from={from} to={to} onChange={(f, t) => { setFrom(f); setTo(t); }} />
-
-        <div className="w-[1px] h-6 bg-admin-line ml-2 mr-2" />
-
-        <span className="text-[13px] text-admin-muted font-medium">
-          {isLoading ? "..." : `${roster.filter(d => d.active).length} active drivers`}
-        </span>
       </div>
 
       {isLoading && (
