@@ -12,6 +12,7 @@ import { saveJobReview } from "../api";
 import { formatCapturedTime, formatLocationLabel, mapsUrlForLocation } from "../../../../lib/geo";
 import { htmlToPlainText } from "../../../../lib/htmlText";
 import { RawBookingText } from "../../../../components/driver/RawBookingText";
+import { JobScenarioSection } from "./JobScenarioSection";
 
 type ScenarioKind = "checkin" | "checkout" | "parking" | "liability";
 
@@ -378,6 +379,8 @@ export function SubmissionDetailDrawer({ job: initialJob, isOpen, onClose, onNav
            <p className="text-[13px] text-admin-muted">No booking description recorded.</p>
          )}
       </div>
+
+      {!isScenario && normalizedJob && <JobScenarioSection scenarios={normalizedJob.scenarios} />}
 
       {!isScenario && normalizedJob && (
         <div className="bg-white rounded-module p-4 sm:p-6 shadow-sm border border-admin-line">

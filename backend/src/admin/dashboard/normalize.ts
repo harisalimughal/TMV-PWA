@@ -15,7 +15,7 @@ import { fromPounds, Pence, pence } from "../../utils/money";
 import { MongoDataset } from "./read";
 import { toThumbnailUrl } from "../../storage/cloudinary";
 import { calculateDelayMinutes, calculateMinutes, getDelayBand, isTimingTrustworthy, toUtcIso } from "./timezone";
-import { ActivityEntry, EvidenceCategory, EvidenceState, JobException, NormalizedEvidenceItem, NormalizedJob } from "./types";
+import { ActivityEntry, EvidenceCategory, EvidenceState, JobException, JobScenarioSubmission, NormalizedEvidenceItem, NormalizedJob } from "./types";
 
 function htmlToText(html: string): string {
   return html
@@ -79,6 +79,38 @@ function parseBookingDetails(job: Job): NormalizedJob["bookingDetails"] {
     hireDuration: job.hireDurationText || field(d, ["Duration of van hire", "Duration"]),
     extraChargeText: job.extraChargeText || field(d, ["Any extra charge", "Extra charge"])
   };
+}
+
+/** Same field mapping scenarios.routes.ts's GET /:kind already uses for the
+ *  standalone Scenarios tabs, just scoped to one job's submissions across every
+ *  kind instead of one kind across every job -- so a job's own Check In/Check
+ *  Out/Parking Liability/Liability Report entries can be shown inline on its
+ *  detail view instead of only reachable from those separate tabs. */
+function buildJobScenarios(rows: MongoDataset["scenarioSubmissions"]): JobScenarioSubmission[] {
+  return [...rows]
+    .sort((a, b) => a.submittedAt.localeCompare(b.submittedAt))
+    .map((r, index) => ({
+      id: `${r.scenario}-${r.jobId}-${index}`,
+      kind: r.scenario,
+      timestamp: r.submittedAt,
+      driver: r.driver || "—",
+      clientName: r.fields.client_name || "—",
+      clientPhone: r.fields.client_phone || "",
+      clientEmail: r.fields.client_email || "",
+      containerNumber: r.fields.container_number || "—",
+      address: r.fields.address || "",
+      damageCategories: r.fields.damage_categories || "",
+      clientPresent: r.fields.client_present || "—",
+      rawRecord: r.fields,
+      photos: r.photoUrls.map((url, i) => ({
+        fileId: url,
+        thumbUrl: toThumbnailUrl(url),
+        capturedAt: r.photoMeta?.[i]?.capturedAt,
+        location: r.photoMeta?.[i]?.location,
+        locationName: r.photoMeta?.[i]?.locationName
+      })),
+      signature: r.signatureUrl ? { fileId: r.signatureUrl, thumbUrl: toThumbnailUrl(r.signatureUrl) } : null
+    }));
 }
 
 export async function normalizeMongoDataset(dataset: MongoDataset): Promise<NormalizedJob[]> {
@@ -234,6 +266,7 @@ export async function normalizeMongoDataset(dataset: MongoDataset): Promise<Norm
       paidOnline: Boolean(job.paidOnline),
       evidenceCompleteness: completeness,
       evidenceItems: items,
+      scenarios: buildJobScenarios(jobScenarios),
       clientConfirmedName: job.clientConfirmedBy || undefined,
       signatureUrl: job.signatureUrl || undefined,
       driveFolderId: undefined,

@@ -61,6 +61,34 @@ export interface BookingDetails {
   extraChargeText?: string;
 }
 
+export type ScenarioKind = "checkin" | "checkout" | "parking" | "liability";
+
+/** A Check In/Check Out/Parking Liability/Liability Report submission filed against
+ *  this specific job -- same shape scenarios.routes.ts's GET /:kind already returns
+ *  for the standalone Scenarios tabs, just scoped to one job instead of one kind. */
+export interface JobScenarioSubmission {
+  id: string;
+  kind: ScenarioKind;
+  timestamp: string;
+  driver: string;
+  clientName: string;
+  clientPhone: string;
+  clientEmail: string;
+  containerNumber: string;
+  address: string;
+  damageCategories: string;
+  clientPresent: string;
+  rawRecord: Record<string, string>;
+  photos: Array<{
+    fileId: string;
+    thumbUrl: string;
+    capturedAt?: string;
+    location?: { lat: number; lng: number; accuracy: number };
+    locationName?: string;
+  }>;
+  signature: { fileId: string; thumbUrl: string } | null;
+}
+
 export interface NormalizedJob {
   jobId: string;
   calendarEventId: string;
@@ -121,6 +149,11 @@ export interface NormalizedJob {
     signature: EvidenceState;
   };
   evidenceItems: NormalizedEvidenceItem[];
+
+  /** Check In/Check Out/Parking Liability/Liability Report submissions filed against
+   *  this job specifically (scenario_submissions docs scoped by jobId) -- oldest
+   *  first, same order as `activity`. Empty for the (common) job with none. */
+  scenarios: JobScenarioSubmission[];
 
   clientConfirmedName?: string;
   signatureUrl?: string;

@@ -16,6 +16,7 @@ import { Button } from "../../../../ui";
 import { formatLondonDateTime } from "../utils/date";
 import { htmlToPlainText } from "../../../../lib/htmlText";
 import { RawBookingText } from "../../../../components/driver/RawBookingText";
+import { JobScenarioSection } from "./JobScenarioSection";
 import { fetchDrivers as fetchDriverRoster, type AdminDriver } from "../../../../api/admin";
 import { JobStatusBadge } from "./StatusBadge";
 import { PdfPreviewModal } from "./PdfPreviewModal";
@@ -231,6 +232,8 @@ export function JobDetailDrawer({ job: initialJob, isOpen, onClose, onUpdated }:
               <RawBookingText text={htmlToPlainText(job.rawDescription)} />
             </div>
           )}
+
+          <JobScenarioSection scenarios={job.scenarios} />
 
           {/* Reassign Modal / Dropdown (Inline) */}
           {isReassigning && (

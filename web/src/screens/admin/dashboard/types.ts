@@ -54,6 +54,34 @@ export interface BookingDetails {
   extraChargeText?: string;
 }
 
+export type ScenarioKind = "checkin" | "checkout" | "parking" | "liability";
+
+/** A Check In/Check Out/Parking Liability/Liability Report submission filed
+ *  against this specific job -- see backend/src/admin/dashboard/types.ts's
+ *  matching interface. */
+export interface JobScenarioSubmission {
+  id: string;
+  kind: ScenarioKind;
+  timestamp: string;
+  driver: string;
+  clientName: string;
+  clientPhone: string;
+  clientEmail: string;
+  containerNumber: string;
+  address: string;
+  damageCategories: string;
+  clientPresent: string;
+  rawRecord: Record<string, string>;
+  photos: Array<{
+    fileId: string;
+    thumbUrl: string;
+    capturedAt?: string;
+    location?: { lat: number; lng: number; accuracy: number };
+    locationName?: string;
+  }>;
+  signature: { fileId: string; thumbUrl: string } | null;
+}
+
 export interface NormalizedJob {
   jobId: string;
   calendarEventId: string;
@@ -104,6 +132,10 @@ export interface NormalizedJob {
     signature: EvidenceState;
   };
   evidenceItems: NormalizedEvidenceItem[];
+  /** Check In/Check Out/Parking Liability/Liability Report submissions filed
+   *  against this job specifically -- oldest first. Empty for the common case
+   *  of a job with none. */
+  scenarios: JobScenarioSubmission[];
   /** Verbatim Calendar event title this job was synced from. */
   rawTitle: string;
   /** Verbatim Calendar event description -- same source the driver app's
