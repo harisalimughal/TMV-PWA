@@ -282,6 +282,18 @@ export function JobsPage() {
             </button>
           </div>
 
+          {/* Driver filter -- same roster + behaviour as Finished Jobs' driver filter. */}
+          <select
+            value={driverFilter}
+            onChange={e => { setDriverFilter(e.target.value); setPage(1); }}
+            className="shrink-0 h-10 px-3 rounded-card border border-admin-line/50 bg-admin-surface text-[13px] font-medium text-admin-ink outline-none focus:border-admin-brand"
+          >
+            <option value="">All drivers</option>
+            {driverOptions.map(d => (
+              <option key={d.initials} value={d.initials}>{d.fullName || d.initials}</option>
+            ))}
+          </select>
+
           <div className="relative w-full sm:w-64 order-last sm:order-none">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-admin-muted" />
             <input
@@ -304,18 +316,6 @@ export function JobsPage() {
               </button>
             ))}
           </div>
-
-          {/* Driver filter -- same roster + behaviour as Finished Jobs' driver filter. */}
-          <select
-            value={driverFilter}
-            onChange={e => { setDriverFilter(e.target.value); setPage(1); }}
-            className="shrink-0 h-10 px-3 rounded-card border border-admin-line/50 bg-admin-surface text-[13px] font-medium text-admin-ink outline-none focus:border-admin-brand"
-          >
-            <option value="">All drivers</option>
-            {driverOptions.map(d => (
-              <option key={d.initials} value={d.initials}>{d.fullName || d.initials}</option>
-            ))}
-          </select>
 
           <div className="hidden sm:block w-px h-6 bg-admin-line mx-1 shrink-0" />
 
