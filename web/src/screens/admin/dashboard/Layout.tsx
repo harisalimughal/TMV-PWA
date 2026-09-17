@@ -62,9 +62,7 @@ const NAV_CONFIG: NavSectionItem[] = [
   { id: "drivers", label: "Drivers", icon: Users, desc: "Driver scorecards, revenue handled and punctuality metrics" },
   { id: "pricing", label: "Pricing Settings", icon: Banknote, desc: "Configure crew rates, packing service pricing, and overtime rules" },
   { id: "reports", label: "Reports", icon: FileSpreadsheet, desc: "Downloadable operational datasets and certified export files" },
-  { id: "messaging", label: "Messaging Content", icon: MessageSquare, desc: "Manage automated customer and driver communication templates" },
-  { type: "header", label: "Danger Zone" },
-  { id: "maintenance", label: "Data Maintenance", icon: Trash2, desc: "Factory reset -- wipe app-generated data to start fresh for a new client" }
+  { id: "messaging", label: "Messaging Content", icon: MessageSquare, desc: "Manage automated customer and driver communication templates" }
 ];
 
 export function Layout({ activeSection, onSelectSection, onLogout, children }: Props) {
@@ -378,6 +376,12 @@ export function Layout({ activeSection, onSelectSection, onLogout, children }: P
                       className="w-full flex items-center gap-2.5 px-3 py-2 rounded-card text-[13px] font-medium text-admin-ink-2 hover:bg-admin-surface transition text-left"
                     >
                       <Settings className="w-4 h-4 text-admin-muted" /> Settings
+                    </button>
+                    <button
+                      onClick={() => { setProfileOpen(false); onSelectSection("maintenance"); }}
+                      className="w-full flex items-center gap-2.5 px-3 py-2 rounded-card text-[13px] font-medium text-admin-status-red hover:bg-admin-status-red-bg transition text-left"
+                    >
+                      <Trash2 className="w-4 h-4" /> Data Maintenance
                     </button>
                     {onLogout && (
                       <button
