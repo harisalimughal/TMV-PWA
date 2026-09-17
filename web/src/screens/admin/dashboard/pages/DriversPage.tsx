@@ -20,10 +20,13 @@ import { Button } from "../../../../ui";
 
 /** "150 mins" reads fine for one job but not for a summed total -- "2h 30m" (or just
  *  "45m" under an hour) matches how Completed Jobs/Revenue read as a rounded total,
- *  not a per-job average. */
+ *  not a per-job average. Falls back to 0 for a non-finite input (e.g. a browser still
+ *  running a cached bundle from before totalDurationMinutes existed in the API
+ *  response) instead of rendering "NaNh NaNm". */
 function formatDuration(totalMinutes: number): string {
-  const hrs = Math.floor(totalMinutes / 60);
-  const mins = totalMinutes % 60;
+  const safeMinutes = Number.isFinite(totalMinutes) ? totalMinutes : 0;
+  const hrs = Math.floor(safeMinutes / 60);
+  const mins = safeMinutes % 60;
   if (hrs === 0) return `${mins}m`;
   if (mins === 0) return `${hrs}h`;
   return `${hrs}h ${mins}m`;
@@ -212,9 +215,6 @@ export function DriversPage() {
                     {driver.completed} / {driver.assigned}
                   </span>
                 </div>
-                <span className="text-[11px] text-admin-status-green font-semibold mt-1.5 block tracking-wide">
-                  {driver.completionRate}% COMPLETION
-                </span>
               </div>
 
               <div>
