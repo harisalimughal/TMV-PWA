@@ -7,7 +7,7 @@ interface Props {
   category?: string;
   state?: "COMPLETED" | "PROCESSING" | "FAILED" | "MISSING";
   onClick?: () => void;
-  size?: "sm" | "md" | "lg";
+  size?: "sm" | "md" | "lg" | "full";
 }
 
 export function ThumbnailPreview({ src, alt, category, state, onClick, size = "md" }: Props) {
@@ -16,7 +16,10 @@ export function ThumbnailPreview({ src, alt, category, state, onClick, size = "m
   const sizeClasses = {
     sm: "w-7 h-7 text-[9px] rounded",
     md: "w-8 h-8 text-[10px] rounded",
-    lg: "w-24 h-24 text-xs rounded-card"
+    lg: "w-24 h-24 text-xs rounded-card",
+    // Scales with its grid cell instead of a fixed pixel size -- matches the
+    // Finished Jobs photo grid's aspect-square tiles (SubmissionDetailDrawer).
+    full: "w-full aspect-square text-xs rounded-card"
   }[size];
 
   // If explicitly declared state is PROCESSING
@@ -88,6 +91,12 @@ export function ThumbnailPreview({ src, alt, category, state, onClick, size = "m
       {loadStatus === "loaded" && onClick && (
         <div className="absolute inset-0 bg-admin-ink/20 opacity-0 group-hover:opacity-100 flex items-center justify-center transition">
           <ZoomIn className="w-3 h-3 text-white" />
+        </div>
+      )}
+
+      {loadStatus === "loaded" && category && (
+        <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-admin-ink/80 to-transparent p-1.5 text-[9px] text-white font-bold truncate pointer-events-none">
+          {category}
         </div>
       )}
     </div>

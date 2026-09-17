@@ -278,13 +278,13 @@ export function JobDetailDrawer({ job: initialJob, isOpen, onClose, onUpdated }:
                   const fullUrl = ev.driveUrl || ev.thumbProxyUrl;
                   const capturedTime = ev.capturedAt ? formatCapturedTime(ev.capturedAt) : "";
                   return (
-                    <div key={ev.id || i} className="p-1.5 bg-admin-surface rounded-card border border-admin-line text-center space-y-1.5">
-                      <span className="text-[11px] font-semibold text-admin-muted block truncate">{ev.category}</span>
+                    <div key={ev.id || i} className="space-y-1">
                       <ThumbnailPreview
                         src={thumbUrl}
                         alt={`${ev.category} photo`}
+                        category={ev.category}
                         state={ev.state}
-                        size="lg"
+                        size="full"
                         onClick={() => {
                           if (fullUrl) {
                             setActivePhoto({
