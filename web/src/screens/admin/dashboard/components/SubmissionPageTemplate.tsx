@@ -23,9 +23,7 @@ interface Props {
   from?: string;
   to?: string;
   onDateChange: (f?: string, t?: string) => void;
-  groupBy: string;
-  onGroupByChange: (g: string) => void;
-  
+
   // Data State
   itemCount: number;
   isFetching: boolean;
@@ -50,7 +48,7 @@ export function SubmissionPageTemplate({
   title, icon: Icon, status = "Published", statusColor = "green",
   search, onSearchChange, searchPlaceholder = "Search...",
   driverFilter, onDriverFilterChange, driverOptions,
-  from, to, onDateChange, groupBy, onGroupByChange,
+  from, to, onDateChange,
   itemCount, isFetching, onRefresh,
   page, pageSize, totalItems, onPageChange,
   tableHeader, tableBody, onExportCsv
@@ -96,17 +94,6 @@ export function SubmissionPageTemplate({
 
           {/* Row 1: Core Controls */}
           <div className="flex flex-wrap items-center gap-3">
-            <div className="relative w-full sm:w-64 order-last sm:order-none">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-admin-muted" />
-              <input
-                type="text"
-                placeholder={searchPlaceholder}
-                value={search}
-                onChange={e => onSearchChange(e.target.value)}
-                className="w-full pl-9 pr-4 h-9 rounded-full bg-admin-surface border border-admin-line text-[13px] text-admin-ink focus:border-admin-brand outline-none transition"
-              />
-            </div>
-
             {onDriverFilterChange && (
               <select
                 value={driverFilter || ""}
@@ -120,23 +107,20 @@ export function SubmissionPageTemplate({
               </select>
             )}
 
+            <div className="relative w-full sm:w-64">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-admin-muted" />
+              <input
+                type="text"
+                placeholder={searchPlaceholder}
+                value={search}
+                onChange={e => onSearchChange(e.target.value)}
+                className="w-full pl-9 pr-4 h-9 rounded-full bg-admin-surface border border-admin-line text-[13px] text-admin-ink focus:border-admin-brand outline-none transition"
+              />
+            </div>
+
             <div className="hidden sm:block w-px h-6 bg-admin-line mx-1 shrink-0" />
 
             <DateRangePicker from={from} to={to} onChange={(f, t) => onDateChange(f, t)} />
-
-            <div className="flex items-center gap-2 shrink-0">
-              <span className="text-[12px] font-medium text-admin-muted">Group by</span>
-              <select
-                value={groupBy}
-                onChange={e => onGroupByChange(e.target.value)}
-                className="h-9 px-3 rounded-card bg-admin-surface border border-admin-line text-[13px] font-medium text-admin-ink outline-none focus:border-admin-brand"
-              >
-                <option value="None">None</option>
-                <option value="Driver">Driver</option>
-                <option value="Date">Date</option>
-                <option value="Status">Status</option>
-              </select>
-            </div>
           </div>
 
           {/* Row 2: Secondary Controls */}

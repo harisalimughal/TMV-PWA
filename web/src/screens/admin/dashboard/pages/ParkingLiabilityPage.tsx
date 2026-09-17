@@ -13,7 +13,6 @@ export function ParkingLiabilityPage() {
   const [search, setSearch] = useState("");
   const [from, setFrom] = useState<string | undefined>();
   const [to, setTo] = useState<string | undefined>();
-  const [groupBy, setGroupBy] = useState("None");
   const [driverFilter, setDriverFilter] = useState<string>("");
 
   const [page, setPage] = useState(1);
@@ -138,7 +137,7 @@ export function ParkingLiabilityPage() {
                   {resolvedDriver.code}
                 </div>
                 <div>
-                  <span className="font-semibold text-admin-brand text-[14px] block">{resolvedDriver.name}</span>
+                  <span className="font-semibold text-admin-brand text-[14px] block whitespace-nowrap">{resolvedDriver.name}</span>
                   {resolvedDriver.needsReassignment && (
                     <span className="text-[11px] uppercase tracking-[0.02em] font-semibold text-amber-700 bg-amber-100 px-2.5 py-1 rounded-control mt-2 block w-max">
                       Needs Reassignment
@@ -211,8 +210,6 @@ export function ParkingLiabilityPage() {
         from={from}
         to={to}
         onDateChange={(f, t) => { setFrom(f); setTo(t); setPage(1); }}
-        groupBy={groupBy}
-        onGroupByChange={setGroupBy}
         itemCount={processedData.length}
         isFetching={isFetching || isLoading}
         onRefresh={() => refetch()}

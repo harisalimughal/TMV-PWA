@@ -186,31 +186,9 @@ export function ScenariosPage({ kind }: Props) {
 
         <div className="w-[1px] h-6 bg-admin-line mx-2" />
 
-        {/* Date Ranges. These four chips previously had no handler at all -- they
-            highlighted on hover and did nothing. They now drive the same from/to the
-            DateRangePicker beside them uses, and show which one is active. */}
-        <div className="flex items-center gap-1 bg-admin-surface p-1 rounded-card">
-          {RANGE_PRESETS.map(preset => {
-            const range = preset.range();
-            const isActive = from === range.from && to === range.to;
-            return (
-              <button
-                key={preset.label}
-                onClick={() => {
-                  setFrom(range.from);
-                  setTo(range.to);
-                  setPage(1);
-                }}
-                aria-pressed={isActive}
-                className={`px-3 py-1.5 rounded-control text-[12px] font-medium transition ${
-                  isActive ? "bg-white text-admin-ink shadow-sm" : "text-admin-muted hover:text-admin-ink hover:bg-white/50"
-                }`}
-              >
-                {preset.label}
-              </button>
-            );
-          })}
-        </div>
+        {/* DateRangePicker already renders its own All Time/Today/7 Days/30 Days
+            preset chips alongside the calendar inputs -- a second, separately-driven
+            set of the same four chips used to sit here too. */}
         <DateRangePicker from={from} to={to} onChange={(f, t) => { setFrom(f); setTo(t); setPage(1); }} />
 
         <div className="w-[1px] h-6 bg-admin-line mx-2" />
@@ -475,17 +453,3 @@ export function ScenariosPage({ kind }: Props) {
   );
 }
 
-/** Relative date presets for the Scenarios toolbar chips. Days are resolved in
- *  Europe/London so a late-evening click doesn't roll the range into tomorrow. */
-const RANGE_PRESETS: Array<{ label: string; range: () => { from?: string; to?: string } }> = [
-  { label: "All Time", range: () => ({ from: undefined, to: undefined }) },
-  { label: "Today", range: () => ({ from: londonDay(0), to: londonDay(0) }) },
-  { label: "7 Days", range: () => ({ from: londonDay(-6), to: londonDay(0) }) },
-  { label: "30 Days", range: () => ({ from: londonDay(-29), to: londonDay(0) }) }
-];
-
-function londonDay(offset: number): string {
-  const date = new Date();
-  date.setDate(date.getDate() + offset);
-  return new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/London" }).format(date);
-}
