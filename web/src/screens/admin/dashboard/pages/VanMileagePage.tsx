@@ -95,15 +95,6 @@ export function VanMileagePage() {
 
   return (
     <div className="space-y-6 max-w-[1440px] mx-auto">
-      <div className="flex flex-wrap items-center justify-end gap-y-2 gap-x-3 px-2">
-        <button
-          onClick={() => { window.location.href = "/api/admin/van/records/export.csv"; }}
-          className="h-9 px-3 rounded-card border border-admin-line bg-white text-[13px] font-medium text-admin-ink hover:bg-admin-surface transition flex items-center gap-2"
-        >
-          <Download className="w-4 h-4 text-admin-muted" /> Export CSV
-        </button>
-      </div>
-
       <div className="p-2 bg-white rounded-module shadow-sm border border-admin-line flex flex-wrap items-center gap-4">
         <div className="relative flex-1 min-w-[220px]">
           <Search className="w-4 h-4 text-admin-muted absolute left-3 top-2.5" />
@@ -123,6 +114,12 @@ export function VanMileagePage() {
         <span className="text-[13px] text-admin-muted font-medium ml-auto">
           {isLoading ? "..." : `${pagination?.total ?? 0} driver${(pagination?.total ?? 0) === 1 ? "" : "s"}`}
         </span>
+        <button
+          onClick={() => { window.location.href = "/api/admin/van/records/export.csv"; }}
+          className="h-9 px-3 rounded-card border border-admin-line bg-white text-[13px] font-medium text-admin-ink hover:bg-admin-surface transition flex items-center gap-2"
+        >
+          <Download className="w-4 h-4 text-admin-muted" /> Export CSV
+        </button>
         <button
           onClick={() => refetch()}
           className="w-9 h-9 flex items-center justify-center rounded-full hover:bg-admin-surface text-admin-muted hover:text-admin-ink transition"

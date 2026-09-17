@@ -124,37 +124,6 @@ export function ScenariosPage({ kind }: Props) {
 
   return (
     <div className="space-y-6 max-w-[1440px] mx-auto">
-      {/* PAGE HEADER */}
-      <div className="flex flex-wrap items-center justify-end gap-y-2 gap-x-3 px-2">
-        <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
-          {kind === "liability" && (
-            <>
-              <Button
-                variant="secondary"
-                onClick={() => setIsConfigOpen(true)}
-                iconLeft={<Settings2 />}
-                aria-label="Manage categories"
-                className="shrink-0"
-              >
-                <span className="hidden sm:inline">Manage categories</span>
-              </Button>
-              <div className="hidden sm:block w-[1px] h-6 bg-admin-line mx-1" />
-            </>
-          )}
-          <Button
-            variant="secondary"
-            onClick={() => {
-              window.location.href = `/api/admin/scenarios/${kind}/export.csv`;
-            }}
-            iconLeft={<Download />}
-            aria-label="Export CSV"
-            className="shrink-0"
-          >
-            <span className="hidden sm:inline">Export CSV</span>
-          </Button>
-        </div>
-      </div>
-
       {/* TOOLBAR -- same two-row shape as Parking Liability's SubmissionPageTemplate:
           filters on their own row, count/refresh on a second, so neither wraps mid-row
           on a typical desktop width the way one long flex-wrap row of driver+search+
@@ -193,18 +162,46 @@ export function ScenariosPage({ kind }: Props) {
           <DateRangePicker from={from} to={to} onChange={(f, t) => { setFrom(f); setTo(t); setPage(1); }} />
         </div>
 
-        <div className="flex items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center justify-between gap-3">
           <span className="text-[13px] text-admin-muted font-medium">
             {isLoading ? "..." : `${filteredItems.length} submission${filteredItems.length === 1 ? "" : "s"}`}
           </span>
 
-          <button
-            onClick={() => refetch()}
-            className="w-9 h-9 shrink-0 flex items-center justify-center rounded-full hover:bg-admin-surface text-admin-muted hover:text-admin-ink transition"
-            title="Refresh"
-          >
-            <RefreshCw className={`w-4 h-4 ${isLoading ? "animate-spin" : ""}`} />
-          </button>
+          <div className="flex items-center gap-2 sm:gap-3">
+            {kind === "liability" && (
+              <>
+                <Button
+                  variant="secondary"
+                  onClick={() => setIsConfigOpen(true)}
+                  iconLeft={<Settings2 />}
+                  aria-label="Manage categories"
+                  className="shrink-0"
+                >
+                  <span className="hidden sm:inline">Manage categories</span>
+                </Button>
+                <div className="hidden sm:block w-[1px] h-6 bg-admin-line" />
+              </>
+            )}
+            <Button
+              variant="secondary"
+              onClick={() => {
+                window.location.href = `/api/admin/scenarios/${kind}/export.csv`;
+              }}
+              iconLeft={<Download />}
+              aria-label="Export CSV"
+              className="shrink-0"
+            >
+              <span className="hidden sm:inline">Export CSV</span>
+            </Button>
+
+            <button
+              onClick={() => refetch()}
+              className="w-9 h-9 shrink-0 flex items-center justify-center rounded-full hover:bg-admin-surface text-admin-muted hover:text-admin-ink transition"
+              title="Refresh"
+            >
+              <RefreshCw className={`w-4 h-4 ${isLoading ? "animate-spin" : ""}`} />
+            </button>
+          </div>
         </div>
       </div>
 

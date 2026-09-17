@@ -66,27 +66,12 @@ export function SubmissionPageTemplate({
   return (
     <div className="max-w-[1440px] mx-auto space-y-6 pb-12">
       
-      {/* STANDARD PAGE HEADER -- the title itself now lives in Layout.tsx's top header
-          bar, so this row (when there's an export button at all) is just that button,
-          right-aligned. */}
-      <div className="flex flex-wrap items-center justify-end gap-y-3 gap-x-2 px-2">
-        {/* The Preview / Edit Form / Settings / overflow buttons and a hardcoded
-            "0/4" progress pill used to live here. None of them had a handler and the
-            pill never moved off 0/4, so the whole cluster was decoration that read as
-            functionality. Removed rather than stubbed -- an honest toolbar with three
-            working controls beats a rich one where half do nothing. */}
-        {onExportCsv && (
-          <Button
-            variant="secondary"
-            onClick={onExportCsv}
-            iconLeft={<Download />}
-            aria-label="Export CSV"
-            className="shrink-0"
-          >
-            <span className="hidden sm:inline">Export CSV</span>
-          </Button>
-        )}
-      </div>
+      {/* The Preview / Edit Form / Settings / overflow buttons and a hardcoded "0/4"
+          progress pill used to live in a standalone header row here. None of them had
+          a handler and the pill never moved off 0/4, so the whole cluster was
+          decoration that read as functionality -- removed rather than stubbed. Export
+          CSV (the one real action) now sits with Row 2's refresh button below instead
+          of alone up top, where it left an empty-looking strip above the filters. */}
 
       {/* MAIN CARD CONTAINER */}
       <div className="bg-white rounded-module shadow-[0_4px_24px_rgb(0,0,0,0.04)] border border-admin-line overflow-hidden flex flex-col">
@@ -126,17 +111,31 @@ export function SubmissionPageTemplate({
           </div>
 
           {/* Row 2: Secondary Controls */}
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center justify-between gap-3">
             <span className="text-label font-medium text-fg-muted whitespace-nowrap">
               {itemCount} record{itemCount !== 1 ? 's' : ''}
             </span>
-            <button
-              onClick={onRefresh}
-              className="w-8 h-8 shrink-0 rounded-full border border-admin-line bg-admin-surface hover:bg-white text-admin-muted hover:text-admin-ink transition flex items-center justify-center shadow-sm"
-              title="Refresh Data"
-            >
-              <RefreshCw className={`w-3.5 h-3.5 ${isFetching ? 'animate-spin text-admin-brand' : ''}`} />
-            </button>
+
+            <div className="flex items-center gap-2 sm:gap-3">
+              {onExportCsv && (
+                <Button
+                  variant="secondary"
+                  onClick={onExportCsv}
+                  iconLeft={<Download />}
+                  aria-label="Export CSV"
+                  className="shrink-0"
+                >
+                  <span className="hidden sm:inline">Export CSV</span>
+                </Button>
+              )}
+              <button
+                onClick={onRefresh}
+                className="w-8 h-8 shrink-0 rounded-full border border-admin-line bg-admin-surface hover:bg-white text-admin-muted hover:text-admin-ink transition flex items-center justify-center shadow-sm"
+                title="Refresh Data"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${isFetching ? 'animate-spin text-admin-brand' : ''}`} />
+              </button>
+            </div>
           </div>
         </div>
 
