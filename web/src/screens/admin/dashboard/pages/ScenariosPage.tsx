@@ -1,8 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
-  LayoutGrid,
-  Table as TableIcon,
   RefreshCw,
   FileText,
   Search,
@@ -77,7 +75,6 @@ export function ScenariosPage({ kind }: Props) {
   const [from, setFrom] = useState<string | undefined>();
   const [to, setTo] = useState<string | undefined>();
   const [searchQuery, setSearchQuery] = useState("");
-  const [viewMode, setViewMode] = useState<"table" | "cards">("table");
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [previewJob, setPreviewJob] = useState<any | null>(null);
   /** Set right before opening the drawer from the row-level "Download" action -- see
@@ -161,42 +158,6 @@ export function ScenariosPage({ kind }: Props) {
 
       {/* TOOLBAR */}
       <div className="p-2 bg-white rounded-module shadow-sm border border-admin-line flex flex-wrap items-center gap-4">
-        {/* View Toggle */}
-        <div className="flex items-center gap-1 bg-admin-surface p-1 rounded-card">
-          <button
-            onClick={() => setViewMode("table")}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-control text-[13px] font-medium transition ${
-              viewMode === "table" ? "bg-white text-admin-ink shadow-sm" : "text-admin-muted hover:text-admin-ink"
-            }`}
-          >
-            <TableIcon className="w-4 h-4" /> Table
-          </button>
-          <button
-            onClick={() => setViewMode("cards")}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-control text-[13px] font-medium transition ${
-              viewMode === "cards" ? "bg-white text-admin-ink shadow-sm" : "text-admin-muted hover:text-admin-ink"
-            }`}
-          >
-            <LayoutGrid className="w-4 h-4" /> Cards
-          </button>
-        </div>
-        
-        <div className="w-[1px] h-6 bg-admin-line mx-2" />
-        
-        {/* Search */}
-        <div className="relative flex-1 min-w-[200px]">
-          <Search className="w-4 h-4 text-admin-muted absolute left-3 top-2.5" />
-          <input 
-            type="text" 
-            placeholder="Search reference, job, or user..." 
-            value={searchQuery}
-            onChange={e => setSearchQuery(e.target.value)}
-            className="w-full h-9 pl-9 pr-3 rounded-full border border-admin-line bg-admin-surface text-[13px] outline-none focus:border-admin-brand focus:ring-1 focus:ring-admin-brand focus:bg-white transition"
-          />
-        </div>
-
-        <div className="w-[1px] h-6 bg-admin-line mx-2" />
-
         {/* Driver filter -- same roster + behaviour as Finished Jobs' driver filter. */}
         <select
           value={driverFilter}
@@ -208,6 +169,20 @@ export function ScenariosPage({ kind }: Props) {
             <option key={d.initials} value={d.initials}>{d.fullName || d.initials}</option>
           ))}
         </select>
+
+        <div className="w-[1px] h-6 bg-admin-line mx-2" />
+
+        {/* Search */}
+        <div className="relative flex-1 min-w-[200px]">
+          <Search className="w-4 h-4 text-admin-muted absolute left-3 top-2.5" />
+          <input 
+            type="text" 
+            placeholder="Search reference, job, or user..." 
+            value={searchQuery}
+            onChange={e => setSearchQuery(e.target.value)}
+            className="w-full h-9 pl-9 pr-3 rounded-full border border-admin-line bg-admin-surface text-[13px] outline-none focus:border-admin-brand focus:ring-1 focus:ring-admin-brand focus:bg-white transition"
+          />
+        </div>
 
         <div className="w-[1px] h-6 bg-admin-line mx-2" />
 
@@ -262,7 +237,7 @@ export function ScenariosPage({ kind }: Props) {
       {isError && <ApiErrorState message={(error as Error)?.message} onRetry={() => refetch()} />}
 
       {/* TABLE VIEW */}
-      {!isLoading && !isError && viewMode === "table" && (
+      {!isLoading && !isError && (
         <div className="bg-white rounded-module shadow-[0_4px_20px_rgb(0,0,0,0.03)] border border-admin-line flex flex-col overflow-hidden">
           <div className="overflow-x-auto custom-scrollbar">
             <table className="w-full text-left text-[14px] border-collapse whitespace-nowrap">
@@ -469,14 +444,6 @@ export function ScenariosPage({ kind }: Props) {
             </div>
           )}
         </div>
-      )}
-
-      {!isLoading && !isError && viewMode === "cards" && (
-         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-           <div className="bg-white p-6 rounded-module shadow-sm border border-admin-line">
-             <p className="text-admin-muted text-[13px]">Card view available on mobile devices.</p>
-           </div>
-         </div>
       )}
 
       {kind === "liability" && <LiabilityConfigModal isOpen={isConfigOpen} onClose={() => setIsConfigOpen(false)} />}
