@@ -110,7 +110,7 @@ export function dashboardDriversSummaryRoutes(): Router {
           initials: s.initials, fullName: s.fullName, email: s.email, phone: s.phone,
           vanRegistration: s.vanRegistration, imei: s.imei, active: s.active, hasAccount: s.hasAccount,
           assigned: s.assignedCount, completed: s.completedCount, cancelled: s.cancelledCount, completionRate,
-          avgDurationMinutes: avgDuration, avgDelayMinutes: avgDelay,
+          avgDurationMinutes: avgDuration, totalDurationMinutes: s.totalDurationMinutes, avgDelayMinutes: avgDelay,
           revenuePounds: toPounds(pence(s.revenuePence)), revenueFormatted: formatGBP(pence(s.revenuePence)),
           cashCollectedPounds: toPounds(pence(s.cashCollectedPence)),
           missingEvidenceCount: s.missingEvidenceCount, overtimeCount: s.overtimeCount

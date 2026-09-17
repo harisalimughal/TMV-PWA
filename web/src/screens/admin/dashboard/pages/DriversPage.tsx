@@ -14,21 +14,36 @@ import {
 import { getAvatarColor, formatVanReg } from "../utils/drivers";
 import { AddDriverModal } from "../components/AddDriverModal";
 import { ApiErrorState } from "../components/ApiErrorState";
+import { DateRangePicker } from "../components/DateRangePicker";
 import { DriverSummaryItem } from "../types";
 import { Button } from "../../../../ui";
+
+/** "150 mins" reads fine for one job but not for a summed total -- "2h 30m" (or just
+ *  "45m" under an hour) matches how Completed Jobs/Revenue read as a rounded total,
+ *  not a per-job average. */
+function formatDuration(totalMinutes: number): string {
+  const hrs = Math.floor(totalMinutes / 60);
+  const mins = totalMinutes % 60;
+  if (hrs === 0) return `${mins}m`;
+  if (mins === 0) return `${hrs}h`;
+  return `${hrs}h ${mins}m`;
+}
 
 export function DriversPage() {
   const queryClient = useQueryClient();
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [editingDriver, setEditingDriver] = useState<DriverSummaryItem | null>(null);
+  const [from, setFrom] = useState<string | undefined>();
+  const [to, setTo] = useState<string | undefined>();
 
   // Real roster + real per-driver stats (assigned/completed/revenue/missing evidence,
   // avg delay/duration) -- all computed server-side against actual job data, not the
-  // old localStorage-backed roster + a re-aggregation of fetchJobs() here. Always
-  // all-time -- no date range filter on this tab.
+  // old localStorage-backed roster + a re-aggregation of fetchJobs() here. from/to
+  // scope every one of those stats server-side (drivers-summary.routes.ts), the same
+  // way Finished Jobs' own date filter scopes its results.
   const { data, isLoading, isError, error, refetch } = useQuery({
-    queryKey: ["drivers_summary"],
-    queryFn: () => fetchDrivers(),
+    queryKey: ["drivers_summary", from, to],
+    queryFn: () => fetchDrivers(from, to),
     staleTime: 30000
   });
 
@@ -85,6 +100,12 @@ export function DriversPage() {
         <Button onClick={() => setIsAddModalOpen(true)} iconLeft={<Plus />}>
           Add driver
         </Button>
+      </div>
+
+      {/* TOOLBAR -- scopes every card's Completed Jobs/Revenue/Total Move Time (and
+          Avg Start Delay) to this range server-side, same as Finished Jobs' filter. */}
+      <div className="p-2 bg-white rounded-module shadow-sm border border-admin-line flex flex-wrap items-center gap-4">
+        <DateRangePicker from={from} to={to} onChange={(f, t) => { setFrom(f); setTo(t); }} />
       </div>
 
       {isLoading && (
@@ -214,9 +235,9 @@ export function DriversPage() {
               </div>
 
               <div>
-                <span className="text-admin-muted block text-[12px] mb-1">Avg Move Time</span>
+                <span className="text-admin-muted block text-[12px] mb-1">Total Move Time</span>
                 <span className="font-bold text-admin-ink text-[16px] tabular-nums leading-none block">
-                  {driver.avgDurationMinutes} mins
+                  {formatDuration(driver.totalDurationMinutes)}
                 </span>
               </div>
             </div>

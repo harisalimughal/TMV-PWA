@@ -209,6 +209,7 @@ export interface DriverSummaryItem {
   cancelled: number;
   completionRate: number;
   avgDurationMinutes: number;
+  totalDurationMinutes: number;
   avgDelayMinutes: number;
   revenuePounds: number;
   revenueFormatted: string;
