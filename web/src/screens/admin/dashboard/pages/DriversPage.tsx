@@ -3,7 +3,6 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { deleteDriver, fetchDrivers, saveDriver } from "../api";
 import {
   Plus,
-  AlertTriangle,
   ShieldCheck,
   Mail,
   Phone,
@@ -231,18 +230,6 @@ export function DriversPage() {
                 </span>
               </div>
             </div>
-
-            {/* Evidence Banner */}
-            {driver.missingEvidenceCount > 0 && (
-              <div className={`mt-5 p-2.5 rounded-control flex items-center gap-2 text-[12px] font-semibold border ${
-                driver.missingEvidenceCount >= 10
-                  ? "bg-[#FEF2F2] text-admin-status-red border-[#FECACA]"
-                  : "bg-[#FFFBEB] text-amber-700 border-[#FDE68A]"
-              }`}>
-                <AlertTriangle className="w-4 h-4 shrink-0" />
-                <span>{driver.missingEvidenceCount} missing/failed evidence uploads</span>
-              </div>
-            )}
           </div>
         ))}
       </div>
