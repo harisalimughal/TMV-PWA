@@ -2,7 +2,7 @@ import webpush, { PushSubscription as WebPushSubscription } from "web-push";
 import { initVapid } from "./vapid";
 import {
   getSubscriptionsByDriver,
-  getAllPushSubscriptions,
+  getDriverPushSubscriptions,
   getAdminPushSubscriptions,
   removePushSubscriptionByEndpoint,
   upsertPushSubscription
@@ -120,10 +120,12 @@ export async function sendPushToDriver(
   return { total: subscriptions.length, sent, failed, pruned: 0 };
 }
 
+/** "Broadcast to All Active Drivers" -- driver devices only, never the admin's own
+ *  (see getDriverPushSubscriptions's comment for why this used to also hit admins). */
 export async function broadcastPushNotification(
   payload: PushNotificationPayload
 ): Promise<SendPushResult> {
-  const subscriptions = await getAllPushSubscriptions();
+  const subscriptions = await getDriverPushSubscriptions();
   if (subscriptions.length === 0) {
     return { total: 0, sent: 0, failed: 0, pruned: 0 };
   }

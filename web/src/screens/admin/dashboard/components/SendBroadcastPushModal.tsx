@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { X, Send, Bell, Loader2, Users } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
-import { fetchDrivers } from "../api";
+import { fetchDrivers } from "../../../../api/admin";
 import { Button, IconButton } from "../../../../ui";
 import { useToast } from "../../../../components/ui/Toast";
 
@@ -18,7 +18,15 @@ export function SendBroadcastPushModal({ isOpen, onClose }: Props) {
   const [url, setUrl] = useState<string>("/?tab=jobs");
   const [isSending, setIsSending] = useState(false);
 
-  const { data: driversData } = useQuery({
+  // The lightweight roster endpoint (/api/admin/drivers -- just initials/name/active,
+  // no per-driver job stats), not the dashboard's own fetchDrivers (/api/admin/drivers/
+  // summary), which computes every driver's full performance stats via the same
+  // whole-dataset rebuild that made the Jobs list and Reassign slow before their own
+  // fixes earlier this session. That endpoint took long enough to answer that this
+  // modal's individual-driver options were still empty by the time an admin looked at
+  // the dropdown -- "Broadcast to All Active Drivers" was the only option that ever
+  // seemed to exist.
+  const { data: drivers } = useQuery({
     queryKey: ["broadcast_modal_drivers"],
     queryFn: () => fetchDrivers(),
     enabled: isOpen
@@ -26,10 +34,10 @@ export function SendBroadcastPushModal({ isOpen, onClose }: Props) {
 
   if (!isOpen) return null;
 
-  // Only real accounts can receive a push -- a synthetic entry (a job's
-  // driverInitials with nobody actually added via Add Driver) has no device
-  // subscription behind it, so it'd just silently reach nobody.
-  const drivers = (driversData?.drivers || []).filter(d => d.hasAccount);
+  // Every entry from this endpoint is already a real driver_accounts doc (it only
+  // ever returns the roster, never a job-only driverInitials code with no account
+  // behind it) -- active is the only filter still needed.
+  const activeDrivers = (drivers || []).filter(d => d.active);
 
   const handleSend = async () => {
     if (!title.trim() || !body.trim()) {
@@ -90,7 +98,7 @@ export function SendBroadcastPushModal({ isOpen, onClose }: Props) {
                 className="w-full h-10 px-3 rounded-card border border-admin-line bg-admin-surface text-[13px] text-admin-ink outline-none focus:border-admin-brand transition"
               >
                 <option value="all">📢 Broadcast to All Active Drivers</option>
-                {drivers.map(d => (
+                {activeDrivers.map(d => (
                   <option key={d.initials} value={d.initials}>
                     Driver: {d.fullName || d.initials} ({d.initials})
                   </option>

@@ -74,6 +74,18 @@ export async function getAdminPushSubscriptions(): Promise<PushSubscriptionDoc[]
   return collection.find({ role: "admin" }).toArray();
 }
 
+/** Every driver device -- i.e. every subscription except an admin's. Used for the
+ *  "Broadcast to All Active Drivers" action (SendBroadcastPushModal); getAllPushSubscriptions
+ *  is the true "everyone including admins" set and was being used there by mistake,
+ *  so a broadcast an admin sent to "all drivers" also landed on their own device.
+ *  role is optional (see PushSubscriptionDoc) and defaults to "driver" server-side at
+ *  subscribe time, so `{ $ne: "admin" }` (not `role: "driver"`) also covers any older
+ *  subscription written before that field existed. */
+export async function getDriverPushSubscriptions(): Promise<PushSubscriptionDoc[]> {
+  const collection = await pushSubscriptionsCollection();
+  return collection.find({ role: { $ne: "admin" } }).toArray();
+}
+
 export async function countActiveSubscriptions(): Promise<{ total: number; drivers: number }> {
   const collection = await pushSubscriptionsCollection();
   const [total, driverInitialsList] = await Promise.all([
