@@ -36,10 +36,26 @@ export function usePushNotifications(): PushNotificationsState {
       setCurrentSub(sub);
       setIsSubscribed(!!sub);
       setPermission(Notification.permission);
+
+      // The browser can hold a live local subscription even when the server never
+      // has it (or lost it) -- e.g. a past /api/push/subscribe call that failed
+      // right after the browser-side subscribe() step had already succeeded. The
+      // UI only ever offers "Enable Push Notifications" while isSubscribed is
+      // false, so a device stuck in this state has no way back in through the UI.
+      // Re-posting here on every check is cheap and idempotent (the server just
+      // upserts by endpoint), and it's what lets a device self-heal on its own
+      // next load instead of staying invisible to the server indefinitely.
+      if (sub) {
+        fetch("/api/push/subscribe", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ subscription: sub.toJSON(), platform })
+        }).catch(() => {});
+      }
     } catch (err) {
       console.warn("Failed to check push subscription", err);
     }
-  }, [isSupported]);
+  }, [isSupported, platform]);
 
   useEffect(() => {
     checkSubscription();
