@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from "react";
 import {
   Search, LayoutDashboard, Truck, CheckSquare, LogIn, LogOut, Users, Banknote,
-  AlertTriangle, FileSpreadsheet, RefreshCw, Download, ShieldAlert, ArrowRight, X
+  AlertTriangle, RefreshCw, Download, ShieldAlert, ArrowRight, X
 } from "lucide-react";
 
 interface Props {
@@ -23,7 +23,6 @@ const PALETTE_ITEMS = [
   { id: "liability", label: "Liability Report", section: "liability", icon: ShieldAlert, category: "Scenarios" },
   { id: "drivers", label: "Drivers", section: "drivers", icon: Users, category: "Management" },
   { id: "finance", label: "Finance", section: "finance", icon: Banknote, category: "Management" },
-  { id: "reports", label: "Reports", section: "reports", icon: FileSpreadsheet, category: "Management" },
   { id: "act_refresh", label: "Sync Live Sheets Data", action: "refresh", icon: RefreshCw, category: "Actions" },
   { id: "act_export", label: "Export Jobs to CSV", action: "export", icon: Download, category: "Actions" }
 ];

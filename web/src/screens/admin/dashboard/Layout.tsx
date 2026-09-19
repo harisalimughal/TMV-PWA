@@ -10,7 +10,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import {
   LayoutDashboard, Navigation, Truck, CheckSquare, LogIn, LogOut, AlertCircle, ShieldAlert,
-  Users, Banknote, FileSpreadsheet, RefreshCw, Trash2,
+  Users, Banknote, RefreshCw, Trash2,
   ChevronLeft, ChevronRight, ChevronDown, Search, Command, MessageSquare, Bell, Menu, X, Settings
 } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -60,7 +60,6 @@ const NAV_CONFIG: NavSectionItem[] = [
   { type: "header", label: "Management" },
   { id: "drivers", label: "Drivers", icon: Users, desc: "Driver scorecards, revenue handled and punctuality metrics" },
   { id: "pricing", label: "Pricing Settings", icon: Banknote, desc: "Configure crew rates, packing service pricing, and overtime rules" },
-  { id: "reports", label: "Reports", icon: FileSpreadsheet, desc: "Downloadable operational datasets and certified export files" },
   { id: "messaging", label: "Messaging Content", icon: MessageSquare, desc: "Manage automated customer and driver communication templates" }
 ];
 

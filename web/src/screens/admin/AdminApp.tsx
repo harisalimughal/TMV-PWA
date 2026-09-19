@@ -13,7 +13,6 @@ import { NotificationsPage } from "./dashboard/pages/NotificationsPage";
 import { DriversPage } from "./dashboard/pages/DriversPage";
 import { ScenariosPage } from "./dashboard/pages/ScenariosPage";
 import { ParkingLiabilityPage } from "./dashboard/pages/ParkingLiabilityPage";
-import { ReportsPage } from "./dashboard/pages/ReportsPage";
 import { MessagingPage } from "./dashboard/pages/MessagingPage";
 import { PricingSettingsPage } from "./dashboard/pages/PricingSettingsPage";
 import { MaintenancePage } from "./dashboard/pages/MaintenancePage";
@@ -25,7 +24,7 @@ import { useServiceWorkerUpdate } from "../pwa-settings/hooks/useServiceWorkerUp
  * hostname+pathname check). Fully independent of the driver login flow -- its own
  * session cookie (tmv_admin_session), its own password, mounted at /api/admin.
  *
- * The bulk of this -- Layout + all 14 pages -- is TMV-Chat-bot's dashboard/web ported
+ * The bulk of this -- Layout + all 13 pages -- is TMV-Chat-bot's dashboard/web ported
  * into tmv-pwa (see ./dashboard/*), so this domain can run entirely off tmv-pwa's own
  * Mongo backend instead of the retired Sheets/Drive-dependent project.
  */
@@ -131,7 +130,6 @@ export function AdminApp() {
       {activeSection === "liability" && <ScenariosPage kind="liability" />}
       {activeSection === "drivers" && <DriversPage />}
       {activeSection === "pricing" && <PricingSettingsPage />}
-      {activeSection === "reports" && <ReportsPage />}
       {activeSection === "messaging" && <MessagingPage />}
       {activeSection === "maintenance" && <MaintenancePage />}
     </Layout>

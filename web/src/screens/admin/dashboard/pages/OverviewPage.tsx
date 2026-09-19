@@ -1,11 +1,16 @@
-import React, { useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   Truck,
   CheckCircle2,
   Clock,
   Banknote,
-  AlertTriangle
+  AlertTriangle,
+  FileText,
+  FileDown,
+  Download,
+  ChevronDown,
+  Loader2
 } from "lucide-react";
 import {
   AreaChart,
@@ -15,22 +20,72 @@ import {
   Tooltip,
   ResponsiveContainer
 } from "recharts";
-import { fetchSummary } from "../api";
+import { fetchSummary, fetchJobs, fetchDrivers } from "../api";
 import { DateRangePicker } from "../components/DateRangePicker";
+import { PrintPortal } from "../components/PrintPortal";
+import { PaperAnalyticsReport } from "../components/PaperAnalyticsReport";
+import { waitForPrintImages } from "../utils/printReady";
+import { sounds } from "../utils/audio";
+import { toCsv, downloadCsv, stampForFilename } from "../utils/csv";
 import { formatLondonDate } from "../utils/date";
-import { completionRate } from "../utils/kpi";
-import { GenerateReportModal } from "../components/GenerateReportModal";
-import { Button, Spinner } from "../../../../ui";
+import { completionRate, formatDuration } from "../utils/kpi";
+import { NormalizedJob, SummaryResponse, DriverSummaryItem } from "../types";
+import { Button, Spinner, SegmentedControl } from "../../../../ui";
 
 interface Props {
   onSelectSection?: (id: string) => void;
 }
 
+type OverviewTab = "overview" | "breakdown";
+
 export function OverviewPage({ onSelectSection }: Props) {
   const [from, setFrom] = useState<string | undefined>();
   const [to, setTo] = useState<string | undefined>();
-  const [isReportModalOpen, setIsReportModalOpen] = useState(false);
+  // Defaults to Work Breakdown -- OverviewSummary/WorkBreakdown below are rendered
+  // as a ternary, not both at once, so whichever one isn't the active tab never
+  // mounts and never fires its useQuery. Overview's KPI/chart fetch (summary +
+  // implicitly the full jobs dataset behind it) is the heavier of the two, so
+  // defaulting away from it means opening this page doesn't pay for it up front.
+  const [tab, setTab] = useState<OverviewTab>("breakdown");
 
+  return (
+    <div className="max-w-[1440px] mx-auto space-y-6">
+
+      {/* VIEW SWITCHER -- Overview's own KPIs/charts vs. the per-driver settlement
+          breakdown that used to live behind the "Generate report" modal. Large and
+          up top since this decides which whole page you're looking at; the date
+          range (and, on Work Breakdown, the driver filter/export) are secondary
+          filters and sit below it. */}
+      <div className="flex justify-center pt-2">
+        <SegmentedControl
+          size="lg"
+          aria-label="Overview view"
+          value={tab}
+          onChange={setTab}
+          options={[
+            { value: "overview" as const, label: "Overview" },
+            { value: "breakdown" as const, label: "Work Breakdown" }
+          ]}
+        />
+      </div>
+
+      {/* Date filter -- secondary to the view switcher above, centered under it */}
+      <div className="flex justify-center px-2">
+        <DateRangePicker from={from} to={to} onChange={(f, t) => { setFrom(f); setTo(t); }} />
+      </div>
+
+      {tab === "overview" ? (
+        <OverviewSummary from={from} to={to} onSelectSection={onSelectSection} />
+      ) : (
+        <WorkBreakdown from={from} to={to} />
+      )}
+    </div>
+  );
+}
+
+function OverviewSummary({
+  from, to, onSelectSection
+}: { from?: string; to?: string; onSelectSection?: (id: string) => void }) {
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: ["summary", from, to],
     queryFn: () => fetchSummary(from, to)
@@ -70,18 +125,7 @@ export function OverviewPage({ onSelectSection }: Props) {
         : { label: "Needs attention", className: "text-admin-status-red", chip: "bg-admin-status-red/10" };
 
   return (
-    <div className="max-w-[1440px] mx-auto space-y-6">
-      
-      {/* HEADER SECTION */}
-      <div className="flex flex-wrap items-center justify-between gap-4 px-2">
-        <div className="space-y-1">
-          <p className="text-body text-fg-muted">Real-time performance and financial metrics.</p>
-        </div>
-        <div className="flex items-center gap-3">
-          <DateRangePicker from={from} to={to} onChange={(f, t) => { setFrom(f); setTo(t); }} />
-          <Button onClick={() => setIsReportModalOpen(true)}>Generate report</Button>
-        </div>
-      </div>
+    <div className="space-y-6">
 
       {/* TOP ROW: Stats (wider) + Top Drivers (narrower) */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -91,7 +135,7 @@ export function OverviewPage({ onSelectSection }: Props) {
 
           {/* STATS GRID */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-            
+
             <div className="bg-white p-8 rounded-module shadow-[0_8px_30px_rgb(0,0,0,0.03)] flex flex-col justify-between hover:shadow-[0_12px_40px_rgb(0,0,0,0.06)] transition">
               <div className="flex items-center justify-between mb-4">
                 <span className="text-heading text-fg">Gross Revenue</span>
@@ -101,8 +145,8 @@ export function OverviewPage({ onSelectSection }: Props) {
                 £{totalRevenue.toLocaleString("en-GB", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
               </div>
               <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[13px] font-medium text-admin-muted">
-                <span>Cash Â£{kpis.cashCollectedPounds.toLocaleString("en-GB", { maximumFractionDigits: 0 })}</span>
-                <span>Card/bank Â£{kpis.cardBankPounds.toLocaleString("en-GB", { maximumFractionDigits: 0 })}</span>
+                <span>Cash £{kpis.cashCollectedPounds.toLocaleString("en-GB", { maximumFractionDigits: 0 })}</span>
+                <span>Card/bank £{kpis.cardBankPounds.toLocaleString("en-GB", { maximumFractionDigits: 0 })}</span>
               </div>
             </div>
 
@@ -224,7 +268,210 @@ export function OverviewPage({ onSelectSection }: Props) {
           </ResponsiveContainer>
         </div>
       </div>
-      <GenerateReportModal isOpen={isReportModalOpen} onClose={() => setIsReportModalOpen(false)} initialFrom={from} initialTo={to} />
+    </div>
+  );
+}
+
+/**
+ * The per-driver Cash/Card/Bank/Invoice breakdown -- used to live behind a "Generate
+ * report" modal with a now-pointless report-type picker (every option produced this
+ * same table). Now it's just a tab here, with its own driver filter and export
+ * buttons inline, matching how every other admin tab exports its own data.
+ */
+function WorkBreakdown({ from, to }: { from?: string; to?: string }) {
+  const [driver, setDriver] = useState("all");
+  const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
+  const [isExportOpen, setIsExportOpen] = useState(false);
+  const exportRef = useRef<HTMLDivElement>(null);
+  const [printableData, setPrintableData] = useState<{
+    jobs: NormalizedJob[];
+    driverSettlement: DriverSummaryItem[];
+  } | null>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (exportRef.current && !exportRef.current.contains(event.target as Node)) setIsExportOpen(false);
+    };
+    if (isExportOpen) document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [isExportOpen]);
+
+  const { data: driversData, isLoading } = useQuery({
+    queryKey: ["report_drivers", from, to],
+    queryFn: () => fetchDrivers(from, to)
+  });
+
+  const allDrivers = driversData?.drivers ?? [];
+  const rows = driver !== "all" ? allDrivers.filter(d => d.initials.toLowerCase() === driver.toLowerCase()) : allDrivers;
+
+  const handleDownloadCsv = () => {
+    setIsExportOpen(false);
+    sounds.playSuccess();
+    const csv = toCsv(rows, [
+      { header: "Driver", value: r => r.fullName },
+      { header: "Code", value: r => r.initials },
+      { header: "Completed Jobs", value: r => r.completed },
+      { header: "Moving Hours", value: r => formatDuration(r.totalDurationMinutes) },
+      { header: "Cash (£)", value: r => r.cashCollectedPounds.toFixed(2) },
+      { header: "Card (£)", value: r => r.cardCollectedPounds.toFixed(2) },
+      { header: "Bank (£)", value: r => r.bankCollectedPounds.toFixed(2) },
+      { header: "Invoice (£)", value: r => r.invoiceCollectedPounds.toFixed(2) },
+      { header: "Total (£)", value: r => r.revenuePounds.toFixed(2) }
+    ]);
+    downloadCsv(`TMV_Driver_Settlement_${stampForFilename()}.csv`, csv);
+  };
+
+  const handleDownloadPdf = async () => {
+    try {
+      setIsGeneratingPdf(true);
+      const jobsRes = await fetchJobs({
+        from,
+        to,
+        driver: driver !== "all" ? driver : undefined,
+        pageSize: 100
+      }).catch(() => ({ items: [] as NormalizedJob[] }));
+
+      setPrintableData({ jobs: (jobsRes as any)?.items || [], driverSettlement: rows });
+      document.body.classList.add("printing-report");
+
+      setTimeout(async () => {
+        await waitForPrintImages("#tmv-print-portal, .print-content");
+
+        const originalTitle = document.title;
+        const dateStr = from ? `${from}_${to || from}` : new Date().toISOString().slice(0, 10);
+        document.title = `TMV_Driver_Settlement_${dateStr}`;
+
+        window.print();
+
+        document.title = originalTitle;
+        document.body.classList.remove("printing-report");
+        setIsGeneratingPdf(false);
+        setPrintableData(null);
+      }, 400);
+    } catch (err) {
+      console.error("PDF report generation failed", err);
+      setIsGeneratingPdf(false);
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="bg-white p-6 sm:p-8 rounded-module shadow-[0_8px_30px_rgb(0,0,0,0.03)] space-y-6">
+
+        {/* TOOLBAR */}
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div>
+            <h3 className="text-heading text-fg">Driver Settlement</h3>
+            <p className="text-[13px] text-admin-muted mt-1">Cash, card, bank and invoice collected per driver for the selected range.</p>
+          </div>
+          <div className="flex flex-wrap items-center gap-3">
+            <select
+              value={driver}
+              onChange={e => setDriver(e.target.value)}
+              disabled={isLoading}
+              className="h-10 px-3 rounded-card border border-admin-line bg-admin-surface text-[13px] text-admin-ink outline-none focus:border-admin-brand transition disabled:opacity-60 disabled:cursor-not-allowed"
+            >
+              {isLoading ? (
+                <option value="all">Loading drivers…</option>
+              ) : (
+                <>
+                  <option value="all">All Drivers</option>
+                  {allDrivers.map(d => (
+                    <option key={d.initials} value={d.initials}>
+                      {d.fullName || d.initials} ({d.initials})
+                    </option>
+                  ))}
+                </>
+              )}
+            </select>
+            <div className="relative" ref={exportRef}>
+              <Button
+                variant="secondary"
+                onClick={() => setIsExportOpen(o => !o)}
+                disabled={rows.length === 0 || isGeneratingPdf}
+                iconLeft={isGeneratingPdf ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download />}
+                iconRight={<ChevronDown className={`w-3.5 h-3.5 transition-transform ${isExportOpen ? "rotate-180" : ""}`} />}
+              >
+                {isGeneratingPdf ? "Preparing PDF…" : "Export"}
+              </Button>
+              {isExportOpen && (
+                <div className="absolute right-0 mt-2 w-44 rounded-card bg-white border border-admin-line shadow-[0_8px_30px_rgb(0,0,0,0.12)] z-50 py-1 overflow-hidden animate-in fade-in slide-in-from-top-2">
+                  <button
+                    onClick={handleDownloadCsv}
+                    className="w-full text-left px-4 py-2.5 text-label font-semibold text-fg hover:bg-admin-surface transition flex items-center gap-2"
+                  >
+                    <FileText className="w-4 h-4 text-admin-muted" /> Export as CSV
+                  </button>
+                  <button
+                    onClick={handleDownloadPdf}
+                    className="w-full text-left px-4 py-2.5 text-label font-semibold text-fg hover:bg-admin-surface transition flex items-center gap-2"
+                  >
+                    <FileDown className="w-4 h-4 text-admin-muted" /> Export as PDF
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* BREAKDOWN TABLE */}
+        <div className="border border-admin-line rounded-card overflow-hidden">
+          <table className="w-full text-left text-[13px] border-collapse">
+            <thead className="bg-admin-surface">
+              <tr className="border-b border-admin-line">
+                <th className="py-2.5 px-3 font-semibold text-admin-muted">Driver</th>
+                <th className="py-2.5 px-3 font-semibold text-admin-muted text-right">Completed Jobs</th>
+                <th className="py-2.5 px-3 font-semibold text-admin-muted text-right">Moving Hours</th>
+                <th className="py-2.5 px-3 font-semibold text-admin-muted text-right">Cash (£)</th>
+                <th className="py-2.5 px-3 font-semibold text-admin-muted text-right">Card (£)</th>
+                <th className="py-2.5 px-3 font-semibold text-admin-muted text-right">Bank (£)</th>
+                <th className="py-2.5 px-3 font-semibold text-admin-muted text-right">Invoice (£)</th>
+                <th className="py-2.5 px-3 font-semibold text-admin-muted text-right">Total (£)</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-admin-line/60">
+              {isLoading ? (
+                <tr>
+                  <td colSpan={8} className="py-8 text-center text-admin-muted">
+                    <Loader2 className="w-4 h-4 animate-spin inline-block mr-2" /> Loading…
+                  </td>
+                </tr>
+              ) : rows.length === 0 ? (
+                <tr>
+                  <td colSpan={8} className="py-8 text-center text-admin-muted">No drivers found for this range.</td>
+                </tr>
+              ) : (
+                rows.map(r => (
+                  <tr key={r.initials}>
+                    <td className="py-2.5 px-3 font-semibold text-admin-ink">{r.fullName} <span className="text-admin-muted font-mono font-normal">({r.initials})</span></td>
+                    <td className="py-2.5 px-3 text-right">{r.completed}</td>
+                    <td className="py-2.5 px-3 text-right font-mono">{formatDuration(r.totalDurationMinutes)}</td>
+                    <td className="py-2.5 px-3 text-right font-mono">{r.cashCollectedPounds.toFixed(2)}</td>
+                    <td className="py-2.5 px-3 text-right font-mono">{r.cardCollectedPounds.toFixed(2)}</td>
+                    <td className="py-2.5 px-3 text-right font-mono">{r.bankCollectedPounds.toFixed(2)}</td>
+                    <td className="py-2.5 px-3 text-right font-mono">{r.invoiceCollectedPounds.toFixed(2)}</td>
+                    <td className="py-2.5 px-3 text-right font-mono font-bold">{r.revenuePounds.toFixed(2)}</td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Hidden Print Portal for PDF generation */}
+      {printableData && (
+        <PrintPortal>
+          <PaperAnalyticsReport
+            reportType="Driver Settlement Report"
+            from={from}
+            to={to}
+            driver={driver}
+            jobs={printableData.jobs}
+            driverSettlement={printableData.driverSettlement}
+          />
+        </PrintPortal>
+      )}
     </div>
   );
 }

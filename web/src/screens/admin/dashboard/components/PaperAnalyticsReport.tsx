@@ -1,31 +1,30 @@
 import React from "react";
-import { NormalizedJob, SummaryResponse, DriverSummaryItem } from "../types";
+import { NormalizedJob, DriverSummaryItem } from "../types";
 import { formatLondonDate, formatLondonDateTime } from "../utils/date";
-import { completionRate } from "../utils/kpi";
+import { formatDuration } from "../utils/kpi";
 
 interface Props {
   reportType: string;
   from?: string;
   to?: string;
   driver?: string;
-  summary?: SummaryResponse | null;
   jobs?: NormalizedJob[];
-  /** Only populated for "Driver Performance" / "Payments" -- per-driver cash/card/
-   *  bank/invoice totals for the selected range. This is the settlement "slip" the
-   *  client asked for: what each driver collected, by payment method, so it can be
-   *  checked against what they hand in. */
+  /** Per-driver cash/card/bank/invoice totals for the selected range (and driver
+   *  filter, if any) -- the settlement "slip" the client asked for: what each driver
+   *  collected, by payment method, so it can be checked against what they hand in.
+   *  The KPI band above the table is summed straight from these same rows, never
+   *  from a separate company-wide fetch -- so it can never disagree with the table
+   *  it's summarizing, even when a single driver is selected. */
   driverSettlement?: DriverSummaryItem[] | null;
 }
 
-export function PaperAnalyticsReport({ reportType, from, to, driver, summary, jobs = [], driverSettlement }: Props) {
+export function PaperAnalyticsReport({ reportType, from, to, driver, jobs = [], driverSettlement }: Props) {
   const generatedAt = formatLondonDateTime(new Date().toISOString());
 
-  const kpis = summary?.kpis;
-  const totalJobs = kpis?.totalJobs ?? jobs.length;
-  const completedJobs = kpis?.completed ?? jobs.filter(j => j.status === "COMPLETED").length;
-  const revenuePounds = kpis?.revenuePounds ?? jobs.reduce((acc, j) => acc + (j.amountCharged || 0) / 100, 0);
-  const compRate = completionRate(completedJobs, totalJobs);
-  const avgDelay = kpis?.avgDelayMinutes ?? 0;
+  const settlementRows = driverSettlement ?? [];
+  const totalCollectedPounds = settlementRows.reduce((sum, d) => sum + d.revenuePounds, 0);
+  const totalCompletedJobs = settlementRows.reduce((sum, d) => sum + d.completed, 0);
+  const totalMovingMinutes = settlementRows.reduce((sum, d) => sum + d.totalDurationMinutes, 0);
 
   const dateRangeLabel = from && to
     ? `${formatLondonDate(from)} – ${formatLondonDate(to)}`
@@ -90,35 +89,34 @@ export function PaperAnalyticsReport({ reportType, from, to, driver, summary, jo
           </div>
         </div>
 
-        {/* KPI Grid */}
+        {/* KPI Grid -- summed straight from the Driver Settlement rows below, so
+            these numbers can never disagree with the table they're summarizing
+            (previously pulled from a separate company-wide fetch that ignored the
+            driver filter, which is exactly why they didn't match). */}
         <div className="grid grid-cols-4 gap-3 mb-6 shrink-0">
           <div className="p-3.5 bg-[#F9FAFB] rounded-card border border-[#E5E7EB]">
-            <div className="text-[11px] font-bold text-[#6B7280] uppercase tracking-wider">Gross Revenue</div>
-            <div className="text-[20px] font-extrabold text-[#111827] mt-1">£{revenuePounds.toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+            <div className="text-[11px] font-bold text-[#6B7280] uppercase tracking-wider">Total Collected</div>
+            <div className="text-[20px] font-extrabold text-[#111827] mt-1">£{totalCollectedPounds.toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
           </div>
 
           <div className="p-3.5 bg-[#F9FAFB] rounded-card border border-[#E5E7EB]">
-            <div className="text-[11px] font-bold text-[#6B7280] uppercase tracking-wider">Total Moves</div>
-            <div className="text-[20px] font-extrabold text-[#111827] mt-1">{totalJobs}</div>
-            <div className="text-[11px] text-[#059669] font-medium">{completedJobs} completed</div>
+            <div className="text-[11px] font-bold text-[#6B7280] uppercase tracking-wider">Completed Jobs</div>
+            <div className="text-[20px] font-extrabold text-[#111827] mt-1">{totalCompletedJobs}</div>
           </div>
 
           <div className="p-3.5 bg-[#F9FAFB] rounded-card border border-[#E5E7EB]">
-            <div className="text-[11px] font-bold text-[#6B7280] uppercase tracking-wider">Completion Rate</div>
-            <div className="text-[20px] font-extrabold text-[#111827] mt-1">{compRate ?? "N/A"}</div>
+            <div className="text-[11px] font-bold text-[#6B7280] uppercase tracking-wider">Moving Hours</div>
+            <div className="text-[20px] font-extrabold text-[#111827] mt-1">{formatDuration(totalMovingMinutes)}</div>
           </div>
 
           <div className="p-3.5 bg-[#F9FAFB] rounded-card border border-[#E5E7EB]">
-            <div className="text-[11px] font-bold text-[#6B7280] uppercase tracking-wider">Avg Arrival Delay</div>
-            <div className="text-[20px] font-extrabold text-[#111827] mt-1">{avgDelay}m</div>
-            <div className="text-[11px] text-[#6B7280]">Target &lt;15m</div>
+            <div className="text-[11px] font-bold text-[#6B7280] uppercase tracking-wider">Drivers</div>
+            <div className="text-[20px] font-extrabold text-[#111827] mt-1">{settlementRows.length}</div>
           </div>
         </div>
 
-        {/* Driver Settlement -- Driver Performance / Payments report types: per-driver
-            cash/card/bank/invoice breakdown for the selected range, the "who collected
-            what, and how" slip. Takes priority over the generic driver table below
-            since it's the only one with money in it. */}
+        {/* Driver Settlement -- per-driver cash/card/bank/invoice breakdown for the
+            selected range, the "who collected what, and how" slip. */}
         {driverSettlement && driverSettlement.length > 0 && (
           <div className="mb-6 shrink-0">
             <h2 className="text-[14px] font-bold text-admin-ink mb-2 uppercase tracking-wide">Driver Settlement</h2>
@@ -127,7 +125,8 @@ export function PaperAnalyticsReport({ reportType, from, to, driver, summary, jo
                 <tr className="bg-[#F3F4F6] text-left text-[#374151]">
                   <th className="p-2 border border-[#E5E7EB] font-bold">Driver</th>
                   <th className="p-2 border border-[#E5E7EB] font-bold">Code</th>
-                  <th className="p-2 border border-[#E5E7EB] font-bold text-right">Completed</th>
+                  <th className="p-2 border border-[#E5E7EB] font-bold text-right">Completed Jobs</th>
+                  <th className="p-2 border border-[#E5E7EB] font-bold text-right">Moving Hours</th>
                   <th className="p-2 border border-[#E5E7EB] font-bold text-right">Cash (£)</th>
                   <th className="p-2 border border-[#E5E7EB] font-bold text-right">Card (£)</th>
                   <th className="p-2 border border-[#E5E7EB] font-bold text-right">Bank (£)</th>
@@ -141,39 +140,12 @@ export function PaperAnalyticsReport({ reportType, from, to, driver, summary, jo
                     <td className="p-2 border border-[#E5E7EB] font-semibold text-[#111827]">{d.fullName}</td>
                     <td className="p-2 border border-[#E5E7EB] font-mono">{d.initials}</td>
                     <td className="p-2 border border-[#E5E7EB] text-right font-medium text-[#059669]">{d.completed}</td>
+                    <td className="p-2 border border-[#E5E7EB] text-right font-mono">{formatDuration(d.totalDurationMinutes)}</td>
                     <td className="p-2 border border-[#E5E7EB] text-right font-mono">{d.cashCollectedPounds.toFixed(2)}</td>
                     <td className="p-2 border border-[#E5E7EB] text-right font-mono">{d.cardCollectedPounds.toFixed(2)}</td>
                     <td className="p-2 border border-[#E5E7EB] text-right font-mono">{d.bankCollectedPounds.toFixed(2)}</td>
                     <td className="p-2 border border-[#E5E7EB] text-right font-mono">{d.invoiceCollectedPounds.toFixed(2)}</td>
                     <td className="p-2 border border-[#E5E7EB] text-right font-mono font-bold">{d.revenuePounds.toFixed(2)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-
-        {/* Driver Performance Summary (generic report types only -- Driver Settlement
-            above already covers Driver Performance / Payments with real money) */}
-        {!driverSettlement && summary?.charts?.jobsByDriver && summary.charts.jobsByDriver.length > 0 && (
-          <div className="mb-6 shrink-0">
-            <h2 className="text-[14px] font-bold text-admin-ink mb-2 uppercase tracking-wide">Driver Performance</h2>
-            <table className="w-full text-[12px] border-collapse border border-[#E5E7EB]">
-              <thead>
-                <tr className="bg-[#F3F4F6] text-left text-[#374151]">
-                  <th className="p-2 border border-[#E5E7EB] font-bold">Driver</th>
-                  <th className="p-2 border border-[#E5E7EB] font-bold">Code</th>
-                  <th className="p-2 border border-[#E5E7EB] font-bold text-right">Completed</th>
-                  <th className="p-2 border border-[#E5E7EB] font-bold text-right">Active</th>
-                </tr>
-              </thead>
-              <tbody>
-                {summary.charts.jobsByDriver.map((d, i) => (
-                  <tr key={i} className={i % 2 === 0 ? "bg-white" : "bg-[#F9FAFB]"}>
-                    <td className="p-2 border border-[#E5E7EB] font-semibold text-[#111827]">{d.driverName}</td>
-                    <td className="p-2 border border-[#E5E7EB] font-mono">{d.initials}</td>
-                    <td className="p-2 border border-[#E5E7EB] text-right font-medium text-[#059669]">{d.completed}</td>
-                    <td className="p-2 border border-[#E5E7EB] text-right text-[#D97706]">{d.active}</td>
                   </tr>
                 ))}
               </tbody>
