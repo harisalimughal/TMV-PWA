@@ -27,8 +27,18 @@ export interface ApiError {
   failedTypes?: string[];
 }
 
-/** Uploads carry photos over mobile data, so they get a much longer ceiling. */
-const DEFAULT_TIMEOUT_MS = 20_000;
+/** Uploads carry photos over mobile data, so they get a much longer ceiling.
+ *
+ * 35s (was 20s) is a stop-gap for the MongoDB Atlas cross-region latency (the app
+ * server is in Manchester, the cluster resolves to AWS ap-south-1/Mumbai -- see
+ * admin/dashboard/read.ts's own comment on the same symptom). getJobsGroupedForDriver
+ * alone makes two sequential Mongo round trips (driver profile, then jobs scoped to
+ * that driver) that can't be parallelized since the second depends on the first's
+ * result, and each round trip alone was measured taking ~10s live in production --
+ * comfortably blowing the old 20s ceiling and surfacing as "couldn't load your job,
+ * it took too long" even though the request would have succeeded given more time.
+ * Revert this once the cluster is migrated to a region near the app server. */
+const DEFAULT_TIMEOUT_MS = 35_000;
 const UPLOAD_TIMEOUT_MS = 120_000;
 
 type UnauthorizedHandler = () => void;
