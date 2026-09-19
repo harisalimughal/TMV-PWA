@@ -96,24 +96,27 @@ export function FeaturedJobCard({ job, onStarted }: FeaturedJobCardProps) {
     >
       <BookingWindowHeader job={job} />
 
-      <div className="mt-4 flex items-center justify-between gap-2">
-        <CustomerIdentity customerName={job.customerName} customerPhone={job.customerPhone} className="flex-1 justify-start" />
-        {needsOnMyWay && (
+      <div className="mt-4">
+        <CustomerIdentity customerName={job.customerName} customerPhone={job.customerPhone} />
+      </div>
+
+      {needsOnMyWay && (
+        <div className="mt-3 flex justify-center">
           <button
             type="button"
             disabled={notifying}
             aria-busy={notifying || undefined}
             onClick={handleOnMyWay}
             className={cx(
-              "flex shrink-0 items-center gap-1.5 rounded-pill bg-brand px-3.5 py-2 text-label font-bold text-white",
+              "flex items-center gap-1.5 rounded-pill bg-brand px-3.5 py-2 text-label font-bold text-white",
               "transition-transform duration-fast active:scale-95 disabled:opacity-60"
             )}
           >
             <Navigation className="size-4" aria-hidden />
             {notifying ? "Notifying…" : "I'm on the Way"}
           </button>
-        )}
-      </div>
+        </div>
+      )}
 
       <JobDetailsPanel
         job={job}
