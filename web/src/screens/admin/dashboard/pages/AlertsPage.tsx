@@ -4,6 +4,7 @@ import { DateTime } from "luxon";
 import { Search, ShieldAlert, Car, HelpCircle, LogIn, LogOut, Activity } from "lucide-react";
 import { fetchAlerts, AlertCategory } from "../api";
 import { ApiErrorState } from "../components/ApiErrorState";
+import { DateRangePicker } from "../components/DateRangePicker";
 import { getAvatarColor } from "../utils/drivers";
 
 /** GPSLive's dt_tracker is SQL-style ("2026-09-06 16:43:09", UTC), not ISO -- same
@@ -79,11 +80,17 @@ function cleanDescription(desc: string): string {
 export function AlertsPage() {
   const [categoryFilter, setCategoryFilter] = useState<"All" | AlertCategory>("All");
   const [searchQuery, setSearchQuery] = useState("");
+  const [from, setFrom] = useState<string | undefined>();
+  const [to, setTo] = useState<string | undefined>();
 
+  // With a date range set, this is a real query against GPSLive's own history
+  // (alerts.routes.ts's /v1/alerts/custom, fleet-wide) -- not just "last 50" filtered
+  // client-side. Auto-refresh only makes sense for the live "last 50" default view;
+  // a picked-in-the-past range shouldn't quietly change underneath the admin.
   const { data, isLoading, error, refetch } = useQuery({
-    queryKey: ["gpslive_alerts"],
-    queryFn: fetchAlerts,
-    refetchInterval: 30000
+    queryKey: ["gpslive_alerts", from, to],
+    queryFn: () => fetchAlerts(from, to),
+    refetchInterval: from || to ? false : 30000
   });
 
   const allRows = data?.rows || [];
@@ -116,7 +123,9 @@ export function AlertsPage() {
       )}
 
       <p className="px-2 text-[13px] text-admin-muted">
-        The fleet's last 50 alerts from GPSLive -- every alert type on the account, not just congestion.
+        {from || to
+          ? "GPSLive alerts for the selected range -- every alert type on the account, not just congestion."
+          : "The fleet's last 50 alerts from GPSLive -- every alert type on the account, not just congestion."}
       </p>
 
       {/* TOOLBAR */}
@@ -134,6 +143,8 @@ export function AlertsPage() {
             </button>
           ))}
         </div>
+
+        <DateRangePicker from={from} to={to} onChange={(f, t) => { setFrom(f); setTo(t); }} />
 
         <div className="flex-1 min-w-[200px] relative">
           <Search className="w-4 h-4 text-admin-muted absolute left-3 top-1/2 -translate-y-1/2" />

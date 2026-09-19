@@ -7,11 +7,22 @@
  * driver notification.
  */
 import { Request, Response, Router } from "express";
+import { DateTime } from "luxon";
 import {
-  buildDriverMatchIndex, fetchGpsLiveNotifications, guessPlateFromDeviceName, matchDriverByPlateAndName
+  buildDriverMatchIndex, fetchGpsLiveAlertsForFleet, fetchGpsLiveNotifications,
+  guessPlateFromDeviceName, matchDriverByPlateAndName
 } from "../../integrations/gpslive";
 import { listDriverProfiles } from "../../auth/driver-account.service";
 import { log } from "../../utils/logger";
+
+/** The frontend's DateRangePicker sends UTC-anchored ISO strings; GPSLive's
+ *  /v1/alerts/custom wants "YYYY-MM-DD HH:mm:ss" and its own dt_tracker values are
+ *  already treated as UTC elsewhere (see AlertsPage.tsx's formatGpsLiveTimestamp),
+ *  so this converts as UTC rather than Europe/London to match that convention. */
+function toGpsLiveDate(iso: string): string | null {
+  const dt = DateTime.fromISO(iso, { zone: "utc" });
+  return dt.isValid ? dt.toFormat("yyyy-MM-dd HH:mm:ss") : null;
+}
 
 export type AlertCategory = "congestion" | "tunnel" | "other";
 
@@ -35,10 +46,13 @@ function categorize(description: string): AlertCategory {
 export function dashboardAlertsRoutes(): Router {
   const router = Router();
 
-  router.get("/", async (_req: Request, res: Response) => {
+  router.get("/", async (req: Request, res: Response) => {
     try {
+      const from = typeof req.query.from === "string" ? toGpsLiveDate(req.query.from) : null;
+      const to = typeof req.query.to === "string" ? toGpsLiveDate(req.query.to) : null;
+
       const [events, drivers] = await Promise.all([
-        fetchGpsLiveNotifications(),
+        from && to ? fetchGpsLiveAlertsForFleet(from, to) : fetchGpsLiveNotifications(),
         listDriverProfiles().catch(error => {
           log.warn("alerts route: driver lookup unavailable, showing alerts without driver match", { error: String(error) });
           return [];

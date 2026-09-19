@@ -216,6 +216,50 @@ export async function fetchGpsLiveAlertsForDevice(
 }
 
 /**
+ * Every alert across the whole fleet in an explicit date range -- fans the same
+ * /v1/alerts/custom endpoint fetchGpsLiveAlertsForDevice uses for one device out to
+ * every known device's IMEI, for the Alerts tab's date filter. `dateFrom`/`dateTo`
+ * take the same "YYYY-MM-DD HH:mm:ss" format (see fetchGpsLiveAlertsForDevice).
+ * Falls back to an empty list (not an error) when the fleet has no devices, same
+ * best-effort posture as the rest of this integration.
+ */
+export async function fetchGpsLiveAlertsForFleet(dateFrom: string, dateTo: string): Promise<GpsLiveAlertEvent[]> {
+  const apiKey = await getGpsApiKey();
+  if (!apiKey) return [];
+
+  const devices = await fetchGpsLiveDevices();
+  const imeis = devices.map(d => d.imei).filter(Boolean);
+  if (imeis.length === 0) return [];
+
+  const response = await withTimeout(
+    "GPSLive alerts.custom (fleet)",
+    withRetry(
+      "gpslive.alerts.custom.fleet",
+      () =>
+        fetch("https://api.gpslive.app/v1/alerts/custom", {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${apiKey}`,
+            "Content-Type": "application/json"
+          },
+          // 500, not the single-device call's 20 -- this covers the whole fleet over
+          // whatever range the admin picked, not one van's recent history.
+          body: JSON.stringify({ dateFrom, dateTo, imeis, search: "", limit: 500 })
+        }),
+      "idempotent"
+    ),
+    env.gpsTimeoutMs
+  );
+
+  if (!response.ok) {
+    throw new GpsLiveError(`GPSLive alerts.custom (fleet) failed: HTTP ${response.status}`, response.status);
+  }
+
+  const body = (await response.json()) as unknown;
+  return Array.isArray(body) ? (body as GpsLiveAlertEvent[]) : [];
+}
+
+/**
  * The account's last 50 alert notifications across the whole fleet (every alert
  * type -- Moving, Ignition On, Crash Detection, Zone In/Out, ...), not scoped to one
  * device or a time range. Same shape as fetchGpsLiveAlertsForDevice's rows.

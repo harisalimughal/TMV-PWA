@@ -369,8 +369,14 @@ export interface AlertRow {
   detectedAt: string;
 }
 
-export async function fetchAlerts(): Promise<{ rows: AlertRow[] }> {
-  const res = await apiFetch("/api/admin/alerts");
+/** No from/to: GPSLive's own "last 50 across the fleet" feed, no date range. With
+ *  both: a real date-ranged query across every device (see alerts.routes.ts). */
+export async function fetchAlerts(from?: string, to?: string): Promise<{ rows: AlertRow[] }> {
+  const params = new URLSearchParams();
+  if (from) params.set("from", from);
+  if (to) params.set("to", to);
+  const qs = params.toString();
+  const res = await apiFetch(`/api/admin/alerts${qs ? `?${qs}` : ""}`);
   if (!res.ok) throw await apiError(res, "Failed to load GPSLive alerts");
   return res.json();
 }
