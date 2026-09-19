@@ -71,6 +71,18 @@ export interface SettingDoc {
   updatedAt: Date;
 }
 
+/** A row an admin has hidden from the Notifications or Alerts tab. Both tabs are
+ *  computed live (notifications from jobs+activity, alerts proxied from GPSLive) with
+ *  no delete-able record of their own -- this is what "delete" on those tabs actually
+ *  does: remember the id so the row is filtered back out on every future load, without
+ *  touching the job/activity log or calling GPSLive. */
+export interface DismissalDoc {
+  type: "notification" | "alert";
+  /** jobId for a notification row, GPSLive's event_id for an alert row. */
+  refId: string;
+  dismissedAt: Date;
+}
+
 export interface PushSubscriptionDoc {
   endpoint: string;
   /** Determined server-side from whichever session cookie was actually present on
@@ -162,6 +174,11 @@ export async function pushSubscriptionsCollection(): Promise<Collection<PushSubs
   return db.collection<PushSubscriptionDoc>("push_subscriptions");
 }
 
+export async function dismissalsCollection(): Promise<Collection<DismissalDoc>> {
+  const db = await getDb();
+  return db.collection<DismissalDoc>("dashboard_dismissals");
+}
+
 /** Collection name kept as-is (predates the Fuel/Service record types) -- renaming a
  *  live Mongo collection isn't worth the migration risk for what's just an internal
  *  identifier. */
@@ -178,8 +195,8 @@ export async function vanComplianceCollection(): Promise<Collection<VanComplianc
 /** Creates indexes if they don't exist yet. Safe to call every startup -- createIndex
  * is a no-op when the index already matches. */
 export async function ensureIndexes(): Promise<void> {
-  const [accounts, jobs, evidence, activity, settings, pushSubs, vanRecords, vanCompliance] = await Promise.all([
-    driverAccounts(), jobsCollection(), evidenceCollection(), activityCollection(), settingsCollection(), pushSubscriptionsCollection(), vanRecordsCollection(), vanComplianceCollection()
+  const [accounts, jobs, evidence, activity, settings, pushSubs, vanRecords, vanCompliance, dismissals] = await Promise.all([
+    driverAccounts(), jobsCollection(), evidenceCollection(), activityCollection(), settingsCollection(), pushSubscriptionsCollection(), vanRecordsCollection(), vanComplianceCollection(), dismissalsCollection()
   ]);
   await Promise.all([
     accounts.createIndex({ email: 1 }, { unique: true }),
@@ -198,7 +215,8 @@ export async function ensureIndexes(): Promise<void> {
     vanRecords.createIndex({ submittedAt: -1 }),
     vanRecords.createIndex({ driverInitials: 1, submittedAt: -1 }),
     vanRecords.createIndex({ type: 1, submittedAt: -1 }),
-    vanCompliance.createIndex({ vanRegistration: 1 }, { unique: true })
+    vanCompliance.createIndex({ vanRegistration: 1 }, { unique: true }),
+    dismissals.createIndex({ type: 1, refId: 1 }, { unique: true })
   ]);
   log.info("mongo indexes verified");
 }

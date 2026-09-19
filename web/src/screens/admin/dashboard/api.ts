@@ -281,6 +281,40 @@ export async function saveSetting(key: string, value: string): Promise<void> {
   return postJson("/api/admin/settings", { key, value });
 }
 
+export type MessageAudience = "customer" | "driver";
+export type MessageChannel = "SMS" | "Email" | "Push";
+
+export interface MessageCatalogItem {
+  id: string;
+  audience: MessageAudience;
+  channel: MessageChannel;
+  label: string;
+  hint: string;
+  variables: string[];
+  enabled: boolean;
+  hasTitle: boolean;
+  title?: string;
+  titleFallback?: string;
+  body: string;
+  bodyFallback: string;
+}
+
+/** notifications/message-catalog.ts's full inventory of every message the app sends,
+ *  backing the admin Messaging tab's Customer/Driver lists. */
+export async function fetchMessages(): Promise<{ items: MessageCatalogItem[] }> {
+  const res = await apiFetch("/api/admin/messages");
+  if (!res.ok) throw await apiError(res, "Failed to load messages");
+  return res.json();
+}
+
+export async function toggleMessage(id: string, enabled: boolean): Promise<void> {
+  return postJson(`/api/admin/messages/${encodeURIComponent(id)}/toggle`, { enabled });
+}
+
+export async function saveMessageTemplate(id: string, fields: { title?: string; body?: string }): Promise<void> {
+  return postJson(`/api/admin/messages/${encodeURIComponent(id)}`, fields);
+}
+
 export interface NotificationRow {
   jobId: string;
   customerName: string;
@@ -296,6 +330,13 @@ export async function fetchNotifications(): Promise<{ rows: NotificationRow[] }>
   const res = await apiFetch("/api/admin/notifications");
   if (!res.ok) throw await apiError(res, "Failed to load notifications");
   return res.json();
+}
+
+/** Hides the given rows from the Notifications tab -- see notifications.routes.ts's
+ *  own comment for why this is a dismiss, not a real delete (a row here is a job, not
+ *  its own record). */
+export async function dismissNotifications(jobIds: string[]): Promise<void> {
+  return postJson("/api/admin/notifications/dismiss", { jobIds });
 }
 
 export interface LiveFleetVehicle {
@@ -379,6 +420,13 @@ export async function fetchAlerts(from?: string, to?: string): Promise<{ rows: A
   const res = await apiFetch(`/api/admin/alerts${qs ? `?${qs}` : ""}`);
   if (!res.ok) throw await apiError(res, "Failed to load GPSLive alerts");
   return res.json();
+}
+
+/** Hides the given rows from the Alerts tab -- these are proxied live from GPSLive's
+ *  own account, so this only remembers the id locally; nothing changes on GPSLive's
+ *  side (see alerts.routes.ts's own comment). */
+export async function dismissAlerts(eventIds: string[]): Promise<void> {
+  return postJson("/api/admin/alerts/dismiss", { eventIds });
 }
 
 export interface FactoryResetSummary {

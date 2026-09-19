@@ -300,6 +300,7 @@ export function FinishedJobsPage() {
 
                   const startedTime = job.actualStart ? formatLondonDateTime(job.actualStart) : "—";
                   const finishedTime = job.actualFinish ? formatLondonDateTime(job.actualFinish) : "—";
+                  const onMyWayTime = job.onMyWayAt ? formatLondonDateTime(job.onMyWayAt) : null;
 
                   const p = job.pickup || <span className="text-[14px] font-normal text-[#B0B0B0] italic">Not recorded</span>;
                   const d = job.dropoff || <span className="text-[14px] font-normal text-[#B0B0B0] italic">Not recorded</span>;
@@ -366,7 +367,12 @@ export function FinishedJobsPage() {
                           </div>
                         </td>
 
-                        <td className="px-4 text-[13px] font-normal text-admin-muted tabular-nums whitespace-nowrap">{startedTime}</td>
+                        <td className="px-4 text-[13px] font-normal text-admin-muted tabular-nums whitespace-nowrap">
+                          {startedTime}
+                          {onMyWayTime && (
+                            <span className="block text-[11px] text-admin-muted/70 mt-0.5">On my way: {onMyWayTime}</span>
+                          )}
+                        </td>
                         <td className="px-4 text-[13px] font-normal text-admin-muted tabular-nums whitespace-nowrap">{finishedTime}</td>
                         <td className="px-4 whitespace-nowrap">
                           <DelayBandBadge band={job.delayBand} minutes={job.delayMinutes} />

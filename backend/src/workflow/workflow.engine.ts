@@ -16,6 +16,7 @@ import { log, setContext } from "../utils/logger";
 import { formatPounds } from "../utils/money";
 import { sendReviewRequestEmail } from "../google/gmail";
 import { REVIEW_REQUEST_EMAIL_TEMPLATE } from "../notifications/message";
+import { isMessageEnabled } from "../notifications/message-catalog";
 import { sendPushToAdmins } from "../push/push.service";
 
 export const DEFAULT_CUSTOMER_CONFIRMATION_TEXT =
@@ -188,6 +189,13 @@ function notifyAdminsOfCompletion(job: Job, jobId: string): void {
 
 async function sendReviewRequestIfAny(job: Job, jobId: string, actor: string, from: string): Promise<void> {
   if (!job.customerEmail) return;
+  if (!(await isMessageEnabled("CUSTOMER_REVIEW_REQUEST_EMAIL"))) {
+    await appendActivity({
+      jobId, driver: actor, action: "CLIENT_REVIEW_EMAIL_SKIPPED", fromState: from, toState: from,
+      detail: "Disabled in admin Messaging settings"
+    });
+    return;
+  }
   try {
     const reviewTemplate = await getSetting("REVIEW_REQUEST_EMAIL_TEXT", REVIEW_REQUEST_EMAIL_TEMPLATE);
     await sendReviewRequestEmail(job, reviewTemplate);

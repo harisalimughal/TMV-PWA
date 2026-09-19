@@ -422,6 +422,10 @@ export function SubmissionDetailDrawer({ job: initialJob, isOpen, onClose, onNav
             <DetailRow label="Payment status" value={normalizedJob.paymentStatus || "Not recorded"} />
             <DetailRow label="Customer confirmed by" value={normalizedJob.clientConfirmedName || "Not recorded"} />
             <DetailRow
+              label="On my way (customer notified)"
+              value={normalizedJob.onMyWayAt ? formatLondonDateTime(normalizedJob.onMyWayAt) : "Not recorded"}
+            />
+            <DetailRow
               label="Started"
               value={normalizedJob.actualStart ? formatLondonDateTime(normalizedJob.actualStart) : "Not recorded"}
             />

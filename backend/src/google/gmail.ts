@@ -63,6 +63,19 @@ export async function sendReviewRequestEmail(job: Job, template: string): Promis
   await sendPlainTextEmail(job.customerEmail, subject, renderMessageTemplate(template, job));
 }
 
+/** Gated behind notifications/message-catalog.ts's DRIVER_JOB_ASSIGNMENT_EMAIL --
+ *  off by default (see that catalog entry's own comment for why). Called from
+ *  jobs/driver-notify.ts alongside the (always-on-by-default) assignment push.
+ *  Unlike sendJobStartedEmail/sendReviewRequestEmail above, `body` arrives already
+ *  rendered -- driver-notify.ts resolves it via message-catalog.ts's getMessageBody,
+ *  which does the same renderMessageTemplate() call itself, so doing it again here
+ *  would be a harmless but pointless no-op every {placeholder} has already resolved. */
+export async function sendDriverJobAssignmentEmail(driverEmail: string, job: Job, body: string): Promise<void> {
+  if (!driverEmail) return;
+  const subject = `New job assigned — ${job.customerName || "your next job"}`;
+  await sendPlainTextEmail(driverEmail, subject, body);
+}
+
 /** Sent from POST /api/auth/forgot-password. The link is valid for 30 minutes (see
  * auth/reset-token.ts) and is single-use in practice -- completing a reset bumps the
  * account's tokenVersion, which invalidates any other outstanding reset link too. */

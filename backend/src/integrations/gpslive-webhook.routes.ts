@@ -123,15 +123,9 @@ export function gpsLiveWebhookRoutes(): Router {
       const imei = activeJob.gpsliveImei || event.imei || "";
 
       if (isCongestion) {
-        await flagCongestionZoneEntry(activeJob.jobId, driverInitials, imei, {
-          title: "Entered Central London",
-          body: "Congestion charge may apply -- add it on the Extra Charges step."
-        });
+        await flagCongestionZoneEntry(activeJob.jobId, driverInitials, imei);
       } else {
-        await flagTunnelZoneEntry(activeJob.jobId, driverInitials, imei, {
-          title: "Entered a tunnel toll zone",
-          body: "Tunnel charge may apply -- add it on the Extra Charges step."
-        });
+        await flagTunnelZoneEntry(activeJob.jobId, driverInitials, imei);
       }
 
       log.info(`${zone} zone entry detected via webhook`, {

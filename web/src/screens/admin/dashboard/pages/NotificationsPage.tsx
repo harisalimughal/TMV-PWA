@@ -10,11 +10,13 @@ import {
   Send,
   Radio,
   CheckCircle2,
-  Loader2
+  Loader2,
+  Trash2
 } from "lucide-react";
-import { fetchNotifications, NotificationRow } from "../api";
+import { dismissNotifications, fetchNotifications, NotificationRow } from "../api";
 import { DateRangePicker } from "../components/DateRangePicker";
 import { ApiErrorState } from "../components/ApiErrorState";
+import { BulkDismissModal } from "../components/BulkDismissModal";
 import { formatLondonDateTime } from "../utils/date";
 import { getAvatarColor } from "../utils/drivers";
 import { usePushNotifications } from "../../../../lib/pwa/usePushNotifications";
@@ -61,6 +63,8 @@ export function NotificationsPage() {
   const [statusFilter, setStatusFilter] = useState("All");
   const [broadcastModalOpen, setBroadcastModalOpen] = useState(false);
   const [testingMyDevice, setTestingMyDevice] = useState(false);
+  const [selectedRows, setSelectedRows] = useState<Set<string>>(new Set());
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
 
   const toast = useToast();
   const {
@@ -113,8 +117,49 @@ export function NotificationsPage() {
 
   const pageRows = filtered.slice((page - 1) * pageSize, page * pageSize);
 
+  const toggleAll = () => {
+    if (pageRows.length > 0 && pageRows.every(r => selectedRows.has(r.jobId))) {
+      setSelectedRows(new Set());
+    } else {
+      setSelectedRows(new Set(pageRows.map(r => r.jobId)));
+    }
+  };
+
+  const toggleRow = (jobId: string) => {
+    const next = new Set(selectedRows);
+    if (next.has(jobId)) next.delete(jobId);
+    else next.add(jobId);
+    setSelectedRows(next);
+  };
+
   return (
-    <div className="space-y-6 max-w-[1440px] mx-auto">
+    <div className="space-y-6 max-w-[1440px] mx-auto relative">
+      {/* BULK ACTION BAR (Floating) */}
+      {selectedRows.size > 0 && (
+        <div className="fixed bottom-4 sm:bottom-6 left-4 right-4 sm:left-1/2 sm:right-auto sm:-translate-x-1/2 z-50 animate-in slide-in-from-bottom-5 flex justify-center">
+          <div className="bg-admin-ink text-white rounded-full shadow-2xl px-4 sm:px-5 py-3 flex items-center gap-3 sm:gap-6 max-w-full overflow-x-auto">
+            <span className="text-[13px] font-bold whitespace-nowrap shrink-0">
+              {selectedRows.size} selected
+            </span>
+            <div className="h-4 w-px bg-white/20 shrink-0" />
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                onClick={() => setConfirmingDelete(true)}
+                className="shrink-0 whitespace-nowrap px-2.5 sm:px-3 py-1.5 rounded-full text-[12px] font-semibold text-red-300 hover:bg-white/10 hover:text-red-200 transition flex items-center gap-1.5"
+              >
+                <Trash2 className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Delete</span>
+              </button>
+              <button
+                onClick={() => setSelectedRows(new Set())}
+                className="shrink-0 px-2.5 py-1.5 rounded-full text-[12px] font-semibold hover:bg-white/10 transition"
+              >
+                Clear
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* PWA & PUSH NOTIFICATION DASHBOARD CARD */}
       <div className="p-5 bg-white rounded-module border border-admin-line shadow-sm flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
         <div className="flex items-start gap-4">
@@ -217,6 +262,14 @@ export function NotificationsPage() {
             <table className="w-full text-left border-collapse">
               <thead>
                 <tr className="border-b border-admin-line bg-admin-surface/60 text-eyebrow text-fg-subtle">
+                  <th className="py-3 px-4 w-10 text-center">
+                    <input
+                      type="checkbox"
+                      onChange={toggleAll}
+                      checked={pageRows.length > 0 && pageRows.every(r => selectedRows.has(r.jobId))}
+                      className="rounded text-admin-brand cursor-pointer"
+                    />
+                  </th>
                   <th className="py-3 px-4 font-bold">Job ID</th>
                   <th className="py-3 px-4 font-bold">Customer</th>
                   <th className="py-3 px-4 font-bold">Driver</th>
@@ -235,6 +288,14 @@ export function NotificationsPage() {
 
                   return (
                     <tr key={row.jobId} className="hover:bg-admin-surface/40 transition">
+                      <td className="px-4 text-center">
+                        <input
+                          type="checkbox"
+                          checked={selectedRows.has(row.jobId)}
+                          onChange={() => toggleRow(row.jobId)}
+                          className="rounded text-admin-brand cursor-pointer"
+                        />
+                      </td>
                       <td className="px-4 py-3 text-[13px] font-mono font-medium text-admin-ink">
                         {row.jobId}
                       </td>
@@ -319,6 +380,20 @@ export function NotificationsPage() {
         isOpen={broadcastModalOpen}
         onClose={() => setBroadcastModalOpen(false)}
       />
+
+      {confirmingDelete && (
+        <BulkDismissModal
+          count={selectedRows.size}
+          itemLabel="notification"
+          onClose={() => setConfirmingDelete(false)}
+          onConfirm={async () => {
+            await dismissNotifications(Array.from(selectedRows));
+            setConfirmingDelete(false);
+            setSelectedRows(new Set());
+            void refetch();
+          }}
+        />
+      )}
     </div>
   );
 }

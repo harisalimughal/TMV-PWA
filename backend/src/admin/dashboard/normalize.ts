@@ -185,6 +185,7 @@ export async function normalizeMongoDataset(dataset: MongoDataset): Promise<Norm
     const bookedFinish = toUtcIso(job.bookedFinish);
     const actualStart = job.actualStart ? toUtcIso(job.actualStart) : undefined;
     const actualFinish = job.actualFinish ? toUtcIso(job.actualFinish) : undefined;
+    const onMyWayAt = job.onMyWayAt ? toUtcIso(job.onMyWayAt) : undefined;
 
     const bookedMinutes = job.bookedMinutes || calculateMinutes(bookedStart, bookedFinish);
     const actualMinutes = job.actualMinutes || (actualStart && actualFinish ? calculateMinutes(actualStart, actualFinish) : undefined);
@@ -253,7 +254,7 @@ export async function normalizeMongoDataset(dataset: MongoDataset): Promise<Norm
     normalizedJobs.push({
       jobId,
       calendarEventId: job.calendarEventId || "",
-      bookedStart, bookedFinish, actualStart, actualFinish,
+      bookedStart, bookedFinish, actualStart, actualFinish, onMyWayAt,
       bookedMinutes, actualMinutes, delayMinutes, delayBand, timingTrustworthy,
       customerName: job.customerName || "Not recorded",
       customerEmail: job.customerEmail || undefined,

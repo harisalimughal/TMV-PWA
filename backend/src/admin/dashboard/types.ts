@@ -97,6 +97,9 @@ export interface NormalizedJob {
   bookedFinish: string; // ISO UTC
   actualStart?: string; // ISO UTC
   actualFinish?: string; // ISO UTC
+  /** ISO UTC timestamp of the driver's "I'm on the Way" tap -- when the customer
+   *  SMS/email actually went out, distinct from actualStart (the Arrival photo). */
+  onMyWayAt?: string;
   bookedMinutes: number;
   actualMinutes?: number;
   delayMinutes: number;

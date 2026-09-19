@@ -28,7 +28,7 @@ import { normalizeMongoDataset } from "./normalize";
 import { NormalizedJob } from "./types";
 import { generateJobPdf } from "./pdf-generator";
 import { getDashboardDataset, invalidateDashboardDataset } from "./dataset-cache";
-import { sendPushToDriver } from "../../push/push.service";
+import { notifyDriverJobAssigned } from "../../jobs/driver-notify";
 
 function escapeCsvField(val: unknown): string {
   if (val === null || val === undefined) return "";
@@ -229,12 +229,16 @@ export function dashboardJobsRoutes(): Router {
       // background sync.
       await syncBookingsForDate(startDt);
 
+      let mirroredJob: Job | null = null;
       if (event.id) {
-        await mirrorNewJob(event.id, {
+        mirroredJob = await mirrorNewJob(event.id, {
           driverInitials, customerName, customerEmail, customerPhone, pickup, dropoff,
           crewSize, price, paidOnline, bookedStart: startDt.toISO()!, bookedFinish: finishDt.toISO()!,
           rawTitle: title, rawDescription: description
-        }).catch(err => log.warn("failed to mirror new job into Mongo (background sync will pick it up shortly)", { error: String(err) }));
+        }).catch(err => {
+          log.warn("failed to mirror new job into Mongo (background sync will pick it up shortly)", { error: String(err) });
+          return null;
+        });
       }
       invalidateDashboardDataset();
 
@@ -242,12 +246,10 @@ export function dashboardJobsRoutes(): Router {
       // picked right at creation never got a push at all until the driver happened to
       // open the app and see it in their list. Best-effort: never blocks the response,
       // a driver's device being unreachable isn't a job-creation failure.
-      if (driverInitials) {
-        sendPushToDriver(driverInitials, {
-          title: "New Job Assigned",
-          body: `New job for ${customerName} — pickup at ${pickup}.`,
-          url: "/?tab=jobs"
-        }).catch(err => log.warn("failed to send new-job push", { error: String(err), driverInitials }));
+      if (driverInitials && mirroredJob) {
+        notifyDriverJobAssigned(mirroredJob, driverInitials).catch(err =>
+          log.warn("failed to notify driver of new job", { error: String(err), driverInitials })
+        );
       }
 
       return res.status(200).json({ ok: true });
@@ -340,11 +342,9 @@ export function dashboardJobsRoutes(): Router {
       });
       invalidateDashboardDataset();
 
-      sendPushToDriver(driverInitials, {
-        title: "New Job Assigned",
-        body: `Job #${jobId} has been assigned to you.`,
-        url: `/?tab=jobs`
-      }).catch(err => log.warn("failed to send job assignment push", { error: String(err) }));
+      notifyDriverJobAssigned(existing, driverInitials).catch(err =>
+        log.warn("failed to notify driver of reassignment", { error: String(err), job_id: jobId })
+      );
 
       return res.status(200).json({ ok: true, driverInitials, driverName: driver.fullName });
     } catch (error) {
@@ -709,7 +709,7 @@ interface NewJobFields {
   bookedStart: string; bookedFinish: string; rawTitle: string; rawDescription: string;
 }
 
-async function mirrorNewJob(calendarEventId: string, fields: NewJobFields): Promise<void> {
+async function mirrorNewJob(calendarEventId: string, fields: NewJobFields): Promise<Job> {
   const now = new Date().toISOString();
   const bookedMinutes = Math.max(0, Math.round(
     (new Date(fields.bookedFinish).getTime() - new Date(fields.bookedStart).getTime()) / 60_000
@@ -720,7 +720,7 @@ async function mirrorNewJob(calendarEventId: string, fields: NewJobFields): Prom
   const crypto = await import("node:crypto");
   const jobId = `TMV-${crypto.createHash("sha1").update(calendarEventId).digest("hex").slice(0, 10).toUpperCase()}`;
 
-  await upsertJob({
+  const job: Job = {
     jobId, calendarEventId,
     driverInitials: fields.driverInitials, customerName: fields.customerName,
     customerEmail: fields.customerEmail, customerPhone: fields.customerPhone,
@@ -737,7 +737,10 @@ async function mirrorNewJob(calendarEventId: string, fields: NewJobFields): Prom
     status: JobStatus.READY, currentState: WorkflowState.READY,
     rawTitle: fields.rawTitle, rawDescription: fields.rawDescription,
     createdAt: now, updatedAt: now
-  });
+  };
+
+  await upsertJob(job);
+  return job;
 }
 
 function applyFilters(jobs: NormalizedJob[], query: Record<string, any>): NormalizedJob[] {

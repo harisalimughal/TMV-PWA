@@ -40,7 +40,7 @@ vi.mock("../src/google/gmail", () => ({
   sendJobStartedEmail: (...args: any[]) => sendJobStartedEmail(...args)
 }));
 
-import { startJob } from "../src/jobs/jobs.service";
+import { sendOnMyWay, startJob } from "../src/jobs/jobs.service";
 
 const driver = {
   initials: "AB",
@@ -68,73 +68,74 @@ function job(overrides: Partial<any> = {}) {
   };
 }
 
-describe("startJob SMS notification", () => {
+describe("sendOnMyWay SMS notification", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     getDriverProfile.mockResolvedValue(driver);
   });
 
-  it("sends the customer SMS when a job is newly started", async () => {
+  it("sends the customer SMS and stamps onMyWayAt when notifying a not-yet-notified job", async () => {
     const readyJob = job();
     getJob.mockResolvedValue(readyJob);
 
-    await startJob("TMV-SMS", "abi@example.com");
+    await sendOnMyWay("TMV-SMS", "abi@example.com");
 
     await vi.waitFor(() => expect(sendJobStartedSms).toHaveBeenCalledTimes(1));
     expect(getSetting).toHaveBeenCalledWith("JOB_STARTED_MESSAGE_TEXT", expect.any(String));
     expect(sendJobStartedSms).toHaveBeenCalledWith(
-      expect.objectContaining({ jobId: "TMV-SMS", status: JobStatus.IN_PROGRESS }),
+      expect.objectContaining({ jobId: "TMV-SMS", onMyWayAt: expect.any(String) }),
       "On my way {vanRegistration}",
       driver
     );
-    expect(appendActivity).toHaveBeenCalledWith(expect.objectContaining({
+    await vi.waitFor(() => expect(appendActivity).toHaveBeenCalledWith(expect.objectContaining({
       jobId: "TMV-SMS",
       action: "CLIENT_JOB_STARTED_SMS_SENT",
       detail: "07111 222333"
-    }));
+    })));
   });
 
-  it("does not resend SMS for a job that is already in progress", async () => {
-    getJob.mockResolvedValue(job({
-      status: JobStatus.IN_PROGRESS,
-      currentState: WorkflowState.WAITING_ARRIVAL_PHOTO
-    }));
+  it("does not resend SMS for a job that's already been notified", async () => {
+    getJob.mockResolvedValue(job({ onMyWayAt: new Date().toISOString() }));
 
-    await startJob("TMV-SMS", "abi@example.com");
+    await sendOnMyWay("TMV-SMS", "abi@example.com");
 
     expect(sendJobStartedSms).not.toHaveBeenCalled();
   });
 });
 
-describe("startJob email notification", () => {
+describe("sendOnMyWay email notification", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     getDriverProfile.mockResolvedValue(driver);
   });
 
-  it("sends the customer a driver-introduction email alongside the SMS when a job is newly started", async () => {
+  it("sends the customer a driver-introduction email alongside the SMS", async () => {
     const readyJob = job();
     getJob.mockResolvedValue(readyJob);
 
-    await startJob("TMV-SMS", "abi@example.com");
+    await sendOnMyWay("TMV-SMS", "abi@example.com");
 
     await vi.waitFor(() => expect(sendJobStartedEmail).toHaveBeenCalledTimes(1));
     expect(sendJobStartedEmail).toHaveBeenCalledWith(
-      expect.objectContaining({ jobId: "TMV-SMS", status: JobStatus.IN_PROGRESS }),
+      expect.objectContaining({ jobId: "TMV-SMS", onMyWayAt: expect.any(String) }),
       "On my way {vanRegistration}",
       driver
     );
-    expect(appendActivity).toHaveBeenCalledWith(expect.objectContaining({
+    // isMessageEnabled's own getSetting() check adds one more promise hop before
+    // sendJobStartedEmail fires, so the SENT activity write can still be pending a
+    // microtask after the assertion above -- wait for it directly rather than assuming
+    // it landed already.
+    await vi.waitFor(() => expect(appendActivity).toHaveBeenCalledWith(expect.objectContaining({
       jobId: "TMV-SMS",
       action: "CLIENT_JOB_STARTED_EMAIL_SENT",
       detail: "client@example.com"
-    }));
+    })));
   });
 
   it("skips the email (but still sends SMS) when the booking has no customer email", async () => {
     getJob.mockResolvedValue(job({ customerEmail: "" }));
 
-    await startJob("TMV-SMS", "abi@example.com");
+    await sendOnMyWay("TMV-SMS", "abi@example.com");
 
     await vi.waitFor(() => expect(sendJobStartedSms).toHaveBeenCalledTimes(1));
     expect(sendJobStartedEmail).not.toHaveBeenCalled();
@@ -144,7 +145,42 @@ describe("startJob email notification", () => {
     }));
   });
 
-  it("does not resend the email for a job that is already in progress", async () => {
+  it("does not resend the email for a job that's already been notified", async () => {
+    getJob.mockResolvedValue(job({ onMyWayAt: new Date().toISOString() }));
+
+    await sendOnMyWay("TMV-SMS", "abi@example.com");
+
+    expect(sendJobStartedEmail).not.toHaveBeenCalled();
+  });
+});
+
+describe("startJob", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    getDriverProfile.mockResolvedValue(driver);
+  });
+
+  it("refuses to start a job the driver hasn't sent \"I'm on the Way\" for yet", async () => {
+    getJob.mockResolvedValue(job());
+
+    await expect(startJob("TMV-SMS", "abi@example.com")).rejects.toThrow(
+      "Tap \"I'm on the Way\" first"
+    );
+    expect(sendJobStartedSms).not.toHaveBeenCalled();
+    expect(sendJobStartedEmail).not.toHaveBeenCalled();
+  });
+
+  it("starts the job without messaging the customer once onMyWayAt is already set", async () => {
+    getJob.mockResolvedValue(job({ onMyWayAt: new Date().toISOString() }));
+
+    const started = await startJob("TMV-SMS", "abi@example.com");
+
+    expect(started.status).toBe(JobStatus.IN_PROGRESS);
+    expect(sendJobStartedSms).not.toHaveBeenCalled();
+    expect(sendJobStartedEmail).not.toHaveBeenCalled();
+  });
+
+  it("does not resend for a job that is already in progress", async () => {
     getJob.mockResolvedValue(job({
       status: JobStatus.IN_PROGRESS,
       currentState: WorkflowState.WAITING_ARRIVAL_PHOTO
@@ -152,6 +188,7 @@ describe("startJob email notification", () => {
 
     await startJob("TMV-SMS", "abi@example.com");
 
+    expect(sendJobStartedSms).not.toHaveBeenCalled();
     expect(sendJobStartedEmail).not.toHaveBeenCalled();
   });
 });

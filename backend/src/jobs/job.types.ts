@@ -96,6 +96,13 @@ export interface Job {
    *  reminder.service.ts), or unset if it hasn't fired yet. Prevents a re-run of the
    *  sweep from reminding the same driver twice for the same job. */
   reminderSentAt?: string;
+  /** ISO timestamp of when the driver tapped "I'm on the Way" -- the moment the
+   *  customer SMS/email actually went out (see jobs.service.ts's sendOnMyWay).
+   *  Unset means the customer hasn't been notified yet, which startJob() now checks:
+   *  a job can't move to IN_PROGRESS without this set first. Distinct from
+   *  actualStart, which is the Arrival photo's timestamp -- "on my way" can happen
+   *  well before the driver physically arrives. */
+  onMyWayAt?: string;
   /** ISO timestamp of when this job's van was first detected inside the London
    *  Congestion Charge zone, via GPSLive's "CHARGES - ALERTS" geofence webhook (see
    *  integrations/gpslive-webhook.routes.ts) -- drives the "Entered Central London"

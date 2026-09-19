@@ -2,7 +2,7 @@ import { Request, Response, Router } from "express";
 import multer from "multer";
 import { env } from "../config/env";
 import { requireDriverAuth } from "../auth/require-driver-auth";
-import { getJobForDriver, getJobsGroupedForDriver, getNextJobForDriver, getTomorrowJobsForDriver, startJob } from "./jobs.service";
+import { getJobForDriver, getJobsGroupedForDriver, getNextJobForDriver, getTomorrowJobsForDriver, sendOnMyWay, startJob } from "./jobs.service";
 import { uploadEvidenceImage } from "../storage/cloudinary";
 import { looksLikeImage } from "./evidence.service";
 import {
@@ -202,6 +202,15 @@ export function jobsRoutes(): Router {
         suggestedTotal: await suggestedTotal(job),
         confirmationText
       });
+    } catch (error) {
+      errorResponse(res, error);
+    }
+  });
+
+  router.post("/:jobId/on-my-way", async (req: Request, res: Response) => {
+    try {
+      const job = await sendOnMyWay(String(req.params.jobId), req.driverEmail!);
+      res.status(200).json({ job });
     } catch (error) {
       errorResponse(res, error);
     }

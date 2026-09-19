@@ -13,6 +13,7 @@ import {
   guessPlateFromDeviceName, matchDriverByPlateAndName
 } from "../../integrations/gpslive";
 import { listDriverProfiles } from "../../auth/driver-account.service";
+import { dismiss, listDismissedIds } from "../../db/dismissals.repo";
 import { log } from "../../utils/logger";
 
 /** The frontend's DateRangePicker sends UTC-anchored ISO strings; GPSLive's
@@ -51,17 +52,20 @@ export function dashboardAlertsRoutes(): Router {
       const from = typeof req.query.from === "string" ? toGpsLiveDate(req.query.from) : null;
       const to = typeof req.query.to === "string" ? toGpsLiveDate(req.query.to) : null;
 
-      const [events, drivers] = await Promise.all([
+      const [events, drivers, dismissed] = await Promise.all([
         from && to ? fetchGpsLiveAlertsForFleet(from, to) : fetchGpsLiveNotifications(),
         listDriverProfiles().catch(error => {
           log.warn("alerts route: driver lookup unavailable, showing alerts without driver match", { error: String(error) });
           return [];
-        })
+        }),
+        listDismissedIds("alert")
       ]);
 
       const driverIndex = buildDriverMatchIndex(drivers);
 
-      const rows: AlertRow[] = events.map(event => {
+      const rows: AlertRow[] = events
+        .filter(event => !dismissed.has(event.event_id))
+        .map(event => {
         const deviceName = event.device?.name || null;
         const matched = deviceName
           ? matchDriverByPlateAndName(guessPlateFromDeviceName(deviceName), deviceName, driverIndex)
@@ -82,6 +86,20 @@ export function dashboardAlertsRoutes(): Router {
     } catch (error) {
       log.error("dashboard alerts lookup failed", error);
       return res.status(502).json({ error: { code: "ALERTS_LOOKUP_FAILED", message: "Failed to fetch GPSLive alerts." } });
+    }
+  });
+
+  router.post("/dismiss", async (req: Request, res: Response) => {
+    const eventIds = Array.isArray(req.body?.eventIds) ? req.body.eventIds.filter((id: unknown) => typeof id === "string") : [];
+    if (eventIds.length === 0) {
+      return res.status(400).json({ error: { code: "NO_IDS", message: "No alert ids given to dismiss." } });
+    }
+    try {
+      await dismiss("alert", eventIds);
+      res.status(200).json({ dismissed: eventIds.length });
+    } catch (error) {
+      log.error("dashboard alerts dismiss failed", error);
+      res.status(500).json({ error: { code: "ALERTS_DISMISS_FAILED", message: "Failed to remove the selected alerts." } });
     }
   });
 

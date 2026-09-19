@@ -14,6 +14,7 @@ import { ValidationError } from "../workflow/validation.engine";
 import { sendJobStartedSms } from "../integrations/firetext";
 import { sendJobStartedEmail } from "../google/gmail";
 import { JOB_STARTED_MESSAGE_TEMPLATE } from "../notifications/message";
+import { isMessageEnabled } from "../notifications/message-catalog";
 import { checkCongestionZoneAtJobStart } from "./congestion-zone.service";
 
 export function driverIdentifier(email?: string, chatUserName?: string): string {
@@ -315,28 +316,37 @@ function sendJobStartedSmsIfAny(job: Job, driver: DriverProfile): void {
     return;
   }
 
-  getFiretextApiKey()
-    .then(apiKey => {
-      if (!apiKey) throw new FiretextNotConfiguredError("Firetext is not configured");
-      return getSetting("JOB_STARTED_MESSAGE_TEXT", JOB_STARTED_MESSAGE_TEMPLATE);
-    })
-    .then(template => sendJobStartedSms(job, template, driver))
-    .then(() => appendActivity({
-      jobId: job.jobId,
-      driver: actor,
-      action: "CLIENT_JOB_STARTED_SMS_SENT",
-      detail: job.customerPhone
-    }))
-    .catch(err => {
-      const skipped = err instanceof FiretextNotConfiguredError;
-      const message = err instanceof Error ? err.message : String(err);
-      if (!skipped) log.warn("job started SMS failed (non-fatal)", { job_id: job.jobId, error: message });
-      return appendActivity({
-        jobId: job.jobId,
-        driver: actor,
-        action: skipped ? "CLIENT_JOB_STARTED_SMS_SKIPPED" : "CLIENT_JOB_STARTED_SMS_FAILED",
-        detail: message
-      });
+  isMessageEnabled("CUSTOMER_JOB_STARTED_SMS")
+    .then(enabled => {
+      if (!enabled) {
+        return appendActivity({
+          jobId: job.jobId, driver: actor,
+          action: "CLIENT_JOB_STARTED_SMS_SKIPPED", detail: "Disabled in admin Messaging settings"
+        });
+      }
+      return getFiretextApiKey()
+        .then(apiKey => {
+          if (!apiKey) throw new FiretextNotConfiguredError("Firetext is not configured");
+          return getSetting("JOB_STARTED_MESSAGE_TEXT", JOB_STARTED_MESSAGE_TEMPLATE);
+        })
+        .then(template => sendJobStartedSms(job, template, driver))
+        .then(() => appendActivity({
+          jobId: job.jobId,
+          driver: actor,
+          action: "CLIENT_JOB_STARTED_SMS_SENT",
+          detail: job.customerPhone
+        }))
+        .catch(err => {
+          const skipped = err instanceof FiretextNotConfiguredError;
+          const message = err instanceof Error ? err.message : String(err);
+          if (!skipped) log.warn("job started SMS failed (non-fatal)", { job_id: job.jobId, error: message });
+          return appendActivity({
+            jobId: job.jobId,
+            driver: actor,
+            action: skipped ? "CLIENT_JOB_STARTED_SMS_SKIPPED" : "CLIENT_JOB_STARTED_SMS_FAILED",
+            detail: message
+          });
+        });
     })
     .catch(err => log.warn("job started SMS failure audit failed", { job_id: job.jobId, error: String(err) }));
 }
@@ -358,25 +368,68 @@ function sendJobStartedEmailIfAny(job: Job, driver: DriverProfile): void {
     return;
   }
 
-  getSetting("JOB_STARTED_MESSAGE_TEXT", JOB_STARTED_MESSAGE_TEMPLATE)
-    .then(template => sendJobStartedEmail(job, template, driver))
-    .then(() => appendActivity({
-      jobId: job.jobId,
-      driver: actor,
-      action: "CLIENT_JOB_STARTED_EMAIL_SENT",
-      detail: job.customerEmail
-    }))
-    .catch(err => {
-      const message = err instanceof Error ? err.message : String(err);
-      log.warn("job started email failed (non-fatal)", { job_id: job.jobId, error: message });
-      return appendActivity({
-        jobId: job.jobId,
-        driver: actor,
-        action: "CLIENT_JOB_STARTED_EMAIL_FAILED",
-        detail: message
-      });
+  isMessageEnabled("CUSTOMER_JOB_STARTED_EMAIL")
+    .then(enabled => {
+      if (!enabled) {
+        return appendActivity({
+          jobId: job.jobId, driver: actor,
+          action: "CLIENT_JOB_STARTED_EMAIL_SKIPPED", detail: "Disabled in admin Messaging settings"
+        });
+      }
+      return getSetting("JOB_STARTED_MESSAGE_TEXT", JOB_STARTED_MESSAGE_TEMPLATE)
+        .then(template => sendJobStartedEmail(job, template, driver))
+        .then(() => appendActivity({
+          jobId: job.jobId,
+          driver: actor,
+          action: "CLIENT_JOB_STARTED_EMAIL_SENT",
+          detail: job.customerEmail
+        }))
+        .catch(err => {
+          const message = err instanceof Error ? err.message : String(err);
+          log.warn("job started email failed (non-fatal)", { job_id: job.jobId, error: message });
+          return appendActivity({
+            jobId: job.jobId,
+            driver: actor,
+            action: "CLIENT_JOB_STARTED_EMAIL_FAILED",
+            detail: message
+          });
+        });
     })
     .catch(err => log.warn("job started email failure audit failed", { job_id: job.jobId, error: String(err) }));
+}
+
+/**
+ * "I'm on the Way" -- the customer SMS/email used to fire the instant a job actually
+ * started (see startJob below). The client wanted these decoupled: a driver can now
+ * tell the customer they're coming well before tapping Start Job, and Start Job itself
+ * no longer messages the customer at all (see this function's own onMyWayAt stamp,
+ * which startJob checks for before it'll move a job to IN_PROGRESS). Job status/state
+ * is untouched here -- this only sends the notification and records when it went out.
+ */
+export async function sendOnMyWay(jobId: string, identifier: string): Promise<Job> {
+  return withJobLock(jobId, async () => {
+    const { job, driver } = await getJobForDriver(jobId, identifier);
+
+    if (job.status === JobStatus.COMPLETED) throw new ValidationError("This job is already completed.");
+    // Idempotent, not an error -- a double-tap or a stale screen re-sending this
+    // shouldn't surface a scary error to the driver, and re-notifying the customer a
+    // second time for the same job would just be noise.
+    if (job.onMyWayAt) return job;
+
+    if (isFutureDay(job.bookedStart)) {
+      const bookedDay = DateTime.fromISO(job.bookedStart).setZone(env.timezone).toFormat("cccc d LLLL");
+      throw new ValidationError(`This job is booked for ${bookedDay}. You can't notify the customer until then.`);
+    }
+
+    const from = job.currentState;
+    const now = new Date().toISOString();
+    job.onMyWayAt = now;
+
+    const savedJob = await saveJob(job, driver, "ON_MY_WAY", from, `Server on-my-way timestamp ${now}`);
+    sendJobStartedSmsIfAny(savedJob, driver);
+    sendJobStartedEmailIfAny(savedJob, driver);
+    return savedJob;
+  });
 }
 
 export async function startJob(jobId: string, identifier: string): Promise<Job> {
@@ -394,8 +447,8 @@ export async function startJob(jobId: string, identifier: string): Promise<Job> 
       // A job walked back to READY (the header back-arrow on the arrival-photo step
       // maps GO_BACK to READY) keeps status IN_PROGRESS. Without this it dead-ends:
       // Start sees IN_PROGRESS and returns the job unchanged, still on READY. Nudge
-      // it forward again -- but not through the SMS / congestion-zone side effects,
-      // which already ran on the first start.
+      // it forward again -- but not through the congestion-zone side effect, which
+      // already ran on the first start (and onMyWayAt is already set from back then).
       if (job.currentState === WorkflowState.READY) {
         const from = job.currentState;
         job.currentState = WorkflowState.WAITING_ARRIVAL_PHOTO;
@@ -403,6 +456,14 @@ export async function startJob(jobId: string, identifier: string): Promise<Job> 
       }
       log.info("start job ignored; already started", { job_id: job.jobId, state: job.currentState });
       return job;
+    }
+
+    // The customer has to actually be told the driver's coming before the job can
+    // start -- see sendOnMyWay above. This only guards a genuinely fresh start (the
+    // IN_PROGRESS branch above, which never reaches here, covers every job that
+    // already started before this check existed).
+    if (!job.onMyWayAt) {
+      throw new ValidationError("Tap \"I'm on the Way\" first so the customer's told before you start the job.");
     }
 
     // A job tapped from the "Tomorrow" list is still just for browsing -- starting it
@@ -424,8 +485,6 @@ export async function startJob(jobId: string, identifier: string): Promise<Job> 
     job.currentState = WorkflowState.WAITING_ARRIVAL_PHOTO;
 
     const startedJob = await saveJob(job, driver, "START_JOB", from, `Server start timestamp ${now}`);
-    sendJobStartedSmsIfAny(startedJob, driver);
-    sendJobStartedEmailIfAny(startedJob, driver);
     // Best-effort, never awaited by the response -- see the function's own doc
     // comment for why a job can need this even though the real-time webhook exists.
     checkCongestionZoneAtJobStart(startedJob, driver).catch(error =>

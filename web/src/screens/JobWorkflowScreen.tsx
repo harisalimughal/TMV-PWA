@@ -1,7 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   AlertTriangle,
-  ArrowRight,
   Camera,
   Car,
   Check,
@@ -16,7 +15,6 @@ import {
   type EvidenceItem,
   type JobUpdateResult,
   sendAction,
-  startJob,
   uploadEvidencePhotos,
   uploadSignature,
   type ApiError,
@@ -37,7 +35,6 @@ import {
   IssueDecision,
   JobDetailsToggle,
   RawBookingText,
-  bigActionButtonClass,
   JobHeader,
   JobProgress,
   RouteCard,
@@ -45,7 +42,6 @@ import {
 } from "../components/driver";
 import { ScenarioFormScreen } from "./ScenarioFormScreen";
 import { useOnline } from "../lib/net";
-import { haptics } from "../lib/haptics";
 import { htmlToPlainText } from "../lib/htmlText";
 import { formatCalendarWindow } from "../lib/calendarWindow";
 import type { ScenarioKey } from "../scenarioSpec";
@@ -514,7 +510,6 @@ export function JobWorkflowScreen({ jobId, onBack }: JobWorkflowScreenProps) {
             online={online}
             uploadProgress={uploadProgress}
             photoRemoteCount={stepRemotePhotos.length}
-            onStart={() => run(() => startJob(job.jobId), "Job started")}
             onAction={(action, input, message) =>
               run(() => sendAction(job.jobId, action, input), message, {
                 home: !STAY_ON_SCREEN_ACTIONS.has(action)
@@ -574,6 +569,13 @@ export function JobWorkflowScreen({ jobId, onBack }: JobWorkflowScreenProps) {
                 bookedStart={job.bookedStart}
                 bookedFinish={job.bookedFinish}
               />
+
+              {job.onMyWayAt && (
+                <p className="text-meta text-fg-subtle">
+                  Customer notified "I'm on the way" at{" "}
+                  {new Date(job.onMyWayAt).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", timeZone: LONDON })}
+                </p>
+              )}
 
               {isNotToday(job.bookedStart) && (
                 <WarningNotice title="Check the date">
@@ -1539,7 +1541,6 @@ interface StepDockProps {
   uploadProgress: number | null;
   /** Photos already uploaded for the current photo step — count toward the step max. */
   photoRemoteCount: number;
-  onStart: () => void;
   onAction: (action: string, input?: Record<string, string[]>, message?: string) => void;
   onUploadPhotos: (files: File[], metas: Array<PhotoCaptureMeta | null>) => void;
   onOpenSignature: () => void;
@@ -1564,7 +1565,6 @@ function StepDock({
   online,
   uploadProgress,
   photoRemoteCount,
-  onStart,
   onAction,
   onUploadPhotos,
   onOpenSignature,
@@ -1574,29 +1574,11 @@ function StepDock({
   const offlineReason = !online ? "You're offline — reconnect to submit this step." : undefined;
 
   switch (state) {
-    case "READY":
-      return (
-        <BottomActionBar>
-          <button
-            type="button"
-            disabled={busy}
-            aria-busy={busy || undefined}
-            onClick={() => {
-              if (offlineReason) {
-                haptics.warn();
-                onBlocked(offlineReason);
-                return;
-              }
-              haptics.tap();
-              onStart();
-            }}
-            className={bigActionButtonClass}
-          >
-            {busy ? "Starting…" : "I'm on my way"}
-            {!busy && <ArrowRight className="size-[22px]" aria-hidden />}
-          </button>
-        </BottomActionBar>
-      );
+    // READY has no dock of its own -- FeaturedJobCard.tsx (the Jobs list) owns the
+    // whole "I'm on the Way" / Start Job flow before this screen is ever opened; this
+    // screen only opens once a job is already past READY. (This case used to render
+    // its own "I'm on my way" button here, dead code once FeaturedJobCard replaced the
+    // READY screen -- see handleWorkflowBack's own comment above for the same history.)
 
     case "WAITING_ARRIVAL_PHOTO":
     case "WAITING_LOADED_PHOTO":

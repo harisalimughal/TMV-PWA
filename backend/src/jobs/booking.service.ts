@@ -5,7 +5,7 @@ import { env } from "../config/env";
 import { listCalendarEvents } from "../google/calendar";
 import { listJobs, upsertJob } from "../db/jobs.repo";
 import { recordException } from "../db/exceptions.repo";
-import { sendPushToDriver } from "../push/push.service";
+import { notifyDriverJobAssigned } from "./driver-notify";
 import { Job, JobStatus, ParsedCalendarBooking } from "./job.types";
 import { WorkflowState } from "../workflow/workflow.states";
 import { log } from "../utils/logger";
@@ -448,11 +448,9 @@ export async function syncBookingsForDate(date = DateTime.now().setZone(env.time
   await Promise.all(writes.map(upsertJob));
 
   for (const job of newlyAssigned) {
-    sendPushToDriver(job.driverInitials, {
-      title: "New Job Assigned",
-      body: `New job for ${job.customerName || "a customer"} — pickup at ${job.pickup || "TBC"}.`,
-      url: "/?tab=jobs"
-    }).catch(err => log.warn("failed to send new-job push", { error: String(err), driverInitials: job.driverInitials, job_id: job.jobId }));
+    notifyDriverJobAssigned(job, job.driverInitials).catch(err =>
+      log.warn("failed to notify driver of new job", { error: String(err), driverInitials: job.driverInitials, job_id: job.jobId })
+    );
   }
 
   return synced;

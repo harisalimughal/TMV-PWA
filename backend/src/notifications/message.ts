@@ -48,7 +48,11 @@ export const REVIEW_REQUEST_EMAIL_TEMPLATE =
 export function renderMessageTemplate(
   template: string,
   job: Job,
-  driver: Pick<DriverProfile, "phone" | "vanRegistration" | "fullName"> | { phone?: string; vanRegistration?: string; fullName?: string } = {}
+  driver: Pick<DriverProfile, "phone" | "vanRegistration" | "fullName"> | { phone?: string; vanRegistration?: string; fullName?: string } = {},
+  /** One-off placeholders specific to a single message type (e.g. {leadMinutes} on
+   *  the job reminder push) -- not part of the shared set above since most templates
+   *  have no use for them. Applied after the shared substitutions. */
+  extra: Record<string, string> = {}
 ): string {
   const bookedStartDt = job.bookedStart
     ? DateTime.fromISO(job.bookedStart).setZone(env.timezone)
@@ -56,7 +60,7 @@ export function renderMessageTemplate(
   const jobTime = bookedStartDt?.isValid ? bookedStartDt.toFormat("h:mm a") : "";
   const jobDate = bookedStartDt?.isValid ? bookedStartDt.toFormat("cccc d LLL") : "";
 
-  return template
+  let result = template
     .replace(/\{customerName\}/g, job.customerName || "there")
     .replace(/\{NAME\}/g, job.customerName || "there")
     .replace(/\{companyName\}/g, env.notificationFromName)
@@ -67,5 +71,11 @@ export function renderMessageTemplate(
     .replace(/\{driver_name\}/g, driver.fullName || "")
     .replace(/\{job_time\}/g, jobTime)
     .replace(/\{job_date\}/g, jobDate)
-    .replace(/\{booking_date\}/g, jobDate);
+    .replace(/\{booking_date\}/g, jobDate)
+    .replace(/\{jobId\}/g, job.jobId || "");
+
+  for (const [key, value] of Object.entries(extra)) {
+    result = result.split(`{${key}}`).join(value);
+  }
+  return result;
 }

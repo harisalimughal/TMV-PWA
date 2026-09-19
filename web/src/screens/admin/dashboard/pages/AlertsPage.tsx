@@ -1,10 +1,11 @@
 import React, { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { DateTime } from "luxon";
-import { Search, ShieldAlert, Car, HelpCircle, LogIn, LogOut, Activity } from "lucide-react";
-import { fetchAlerts, AlertCategory } from "../api";
+import { Search, ShieldAlert, Car, HelpCircle, LogIn, LogOut, Activity, Trash2 } from "lucide-react";
+import { dismissAlerts, fetchAlerts, AlertCategory } from "../api";
 import { ApiErrorState } from "../components/ApiErrorState";
 import { DateRangePicker } from "../components/DateRangePicker";
+import { BulkDismissModal } from "../components/BulkDismissModal";
 import { getAvatarColor } from "../utils/drivers";
 
 /** GPSLive's dt_tracker is SQL-style ("2026-09-06 16:43:09", UTC), not ISO -- same
@@ -82,6 +83,8 @@ export function AlertsPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [from, setFrom] = useState<string | undefined>();
   const [to, setTo] = useState<string | undefined>();
+  const [selectedRows, setSelectedRows] = useState<Set<string>>(new Set());
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
 
   // With a date range set, this is a real query against GPSLive's own history
   // (alerts.routes.ts's /v1/alerts/custom, fleet-wide) -- not just "last 50" filtered
@@ -111,8 +114,49 @@ export function AlertsPage() {
     return true;
   });
 
+  const toggleAll = () => {
+    if (filtered.length > 0 && filtered.every(r => selectedRows.has(r.eventId))) {
+      setSelectedRows(new Set());
+    } else {
+      setSelectedRows(new Set(filtered.map(r => r.eventId)));
+    }
+  };
+
+  const toggleRow = (eventId: string) => {
+    const next = new Set(selectedRows);
+    if (next.has(eventId)) next.delete(eventId);
+    else next.add(eventId);
+    setSelectedRows(next);
+  };
+
   return (
-    <div className="space-y-6 max-w-[1440px] mx-auto">
+    <div className="space-y-6 max-w-[1440px] mx-auto relative">
+      {/* BULK ACTION BAR (Floating) */}
+      {selectedRows.size > 0 && (
+        <div className="fixed bottom-4 sm:bottom-6 left-4 right-4 sm:left-1/2 sm:right-auto sm:-translate-x-1/2 z-50 animate-in slide-in-from-bottom-5 flex justify-center">
+          <div className="bg-admin-ink text-white rounded-full shadow-2xl px-4 sm:px-5 py-3 flex items-center gap-3 sm:gap-6 max-w-full overflow-x-auto">
+            <span className="text-[13px] font-bold whitespace-nowrap shrink-0">
+              {selectedRows.size} selected
+            </span>
+            <div className="h-4 w-px bg-white/20 shrink-0" />
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                onClick={() => setConfirmingDelete(true)}
+                className="shrink-0 whitespace-nowrap px-2.5 sm:px-3 py-1.5 rounded-full text-[12px] font-semibold text-red-300 hover:bg-white/10 hover:text-red-200 transition flex items-center gap-1.5"
+              >
+                <Trash2 className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Delete</span>
+              </button>
+              <button
+                onClick={() => setSelectedRows(new Set())}
+                className="shrink-0 px-2.5 py-1.5 rounded-full text-[12px] font-semibold hover:bg-white/10 transition"
+              >
+                Clear
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* PAGE HEADER */}
       {congestionCount > 0 && (
         <div className="flex flex-wrap items-center justify-end gap-3 px-2">
@@ -179,6 +223,14 @@ export function AlertsPage() {
             <table className="w-full text-left border-collapse">
               <thead>
                 <tr className="border-b border-admin-line bg-admin-surface/60 text-eyebrow text-fg-subtle">
+                  <th className="py-3 px-4 w-10 text-center">
+                    <input
+                      type="checkbox"
+                      onChange={toggleAll}
+                      checked={filtered.length > 0 && filtered.every(r => selectedRows.has(r.eventId))}
+                      className="rounded text-admin-brand cursor-pointer"
+                    />
+                  </th>
                   <th className="py-3 px-4 font-bold">Category</th>
                   <th className="py-3 px-4 font-bold">Event</th>
                   <th className="py-3 px-4 font-bold">Location / rule</th>
@@ -190,6 +242,14 @@ export function AlertsPage() {
               <tbody className="divide-y divide-admin-line">
                 {filtered.map(row => (
                   <tr key={row.eventId} className="hover:bg-admin-surface/40 transition">
+                    <td className="px-4 text-center">
+                      <input
+                        type="checkbox"
+                        checked={selectedRows.has(row.eventId)}
+                        onChange={() => toggleRow(row.eventId)}
+                        className="rounded text-admin-brand cursor-pointer"
+                      />
+                    </td>
                     <td className="px-4 py-3">
                       <span
                         className={`px-2 py-1 rounded-full text-[11px] font-bold uppercase tracking-wider inline-flex items-center gap-1 ${CATEGORY_PILL[row.category]}`}
@@ -230,6 +290,20 @@ export function AlertsPage() {
             </table>
           </div>
         </div>
+      )}
+
+      {confirmingDelete && (
+        <BulkDismissModal
+          count={selectedRows.size}
+          itemLabel="alert"
+          onClose={() => setConfirmingDelete(false)}
+          onConfirm={async () => {
+            await dismissAlerts(Array.from(selectedRows));
+            setConfirmingDelete(false);
+            setSelectedRows(new Set());
+            void refetch();
+          }}
+        />
       )}
     </div>
   );

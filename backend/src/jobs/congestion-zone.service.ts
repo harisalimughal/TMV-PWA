@@ -3,6 +3,7 @@ import { env } from "../config/env";
 import { getGpsApiKey } from "../config/live-settings";
 import { DriverProfile, Job } from "./job.types";
 import { getJob, listJobs, upsertJob } from "../db/jobs.repo";
+import { getMessageBody, getMessageTitle, isMessageEnabled } from "../notifications/message-catalog";
 import { sendPushToDriver } from "../push/push.service";
 import { fetchGpsLiveAlertsForDevice, fetchGpsLiveDevices, findDeviceForDriver } from "../integrations/gpslive";
 import { log } from "../utils/logger";
@@ -17,6 +18,13 @@ type Zone = "congestion" | "tunnel";
 const ZONE_FIELD: Record<Zone, "congestionZoneEnteredAt" | "tunnelZoneEnteredAt"> = {
   congestion: "congestionZoneEnteredAt",
   tunnel: "tunnelZoneEnteredAt"
+};
+
+/** notifications/message-catalog.ts id for each zone's push -- both default on, each
+ *  independently toggle-able from the admin Messaging tab. */
+const ZONE_MESSAGE_ID: Record<Zone, string> = {
+  congestion: "DRIVER_CONGESTION_ZONE_PUSH",
+  tunnel: "DRIVER_TUNNEL_ZONE_PUSH"
 };
 
 /**
@@ -52,15 +60,12 @@ async function alreadyChargedTodayForVan(zone: Zone, imei: string, excludeJobId:
  * double-notifies. `imei`, when known, also guards against flagging a second job for
  * a charge the same van already triggered today (see alreadyChargedTodayForVan) --
  * pass "" when the device couldn't be resolved to skip that check (best-effort, same
- * as everywhere else in this file).
+ * as everywhere else in this file). The push itself is gated by this zone's entry in
+ * notifications/message-catalog.ts (DRIVER_CONGESTION_ZONE_PUSH / _TUNNEL_) -- the
+ * flag/dedup bookkeeping above still happens even if the admin has turned the push
+ * off, so re-enabling it later doesn't re-fire for zone entries already recorded.
  */
-async function flagZoneEntry(
-  zone: Zone,
-  jobId: string,
-  driverInitials: string,
-  imei: string,
-  notification: { title: string; body: string }
-): Promise<void> {
+async function flagZoneEntry(zone: Zone, jobId: string, driverInitials: string, imei: string): Promise<void> {
   const job = await getJob(jobId);
   const field = ZONE_FIELD[zone];
   if (!job || job[field]) return;
@@ -73,53 +78,34 @@ async function flagZoneEntry(
 
   await upsertJob({ ...job, [field]: new Date().toISOString() });
 
-  await sendPushToDriver(driverInitials, { ...notification, url: "/?tab=jobs" }).catch(error =>
-    log.warn(`${zone} zone push failed`, { error: String(error), job_id: jobId })
-  );
+  const messageId = ZONE_MESSAGE_ID[zone];
+  if (await isMessageEnabled(messageId)) {
+    const [title, body] = await Promise.all([getMessageTitle(messageId), getMessageBody(messageId)]);
+    // `data.kind` lets the driver app's InAppNotificationListener tell this apart from
+    // every other push it handles, so it can show the persistent red zone-alert popup
+    // (with a sound) instead of the usual auto-dismissing toast -- see that
+    // component's own comment for why this one doesn't just behave like the rest.
+    await sendPushToDriver(driverInitials, { title, body, url: "/?tab=jobs", data: { kind: `${zone}_zone` } }).catch(error =>
+      log.warn(`${zone} zone push failed`, { error: String(error), job_id: jobId })
+    );
+  }
 
   log.info(`${zone} zone entry flagged`, { job_id: jobId, driver: driverInitials });
 }
 
-export function flagCongestionZoneEntry(
-  jobId: string,
-  driverInitials: string,
-  imei: string,
-  notification: { title: string; body: string }
-): Promise<void> {
-  return flagZoneEntry("congestion", jobId, driverInitials, imei, notification);
+export function flagCongestionZoneEntry(jobId: string, driverInitials: string, imei: string): Promise<void> {
+  return flagZoneEntry("congestion", jobId, driverInitials, imei);
 }
 
-export function flagTunnelZoneEntry(
-  jobId: string,
-  driverInitials: string,
-  imei: string,
-  notification: { title: string; body: string }
-): Promise<void> {
-  return flagZoneEntry("tunnel", jobId, driverInitials, imei, notification);
+export function flagTunnelZoneEntry(jobId: string, driverInitials: string, imei: string): Promise<void> {
+  return flagZoneEntry("tunnel", jobId, driverInitials, imei);
 }
 
 /** Zone-specific bits of the job-start "already inside" check below: the GPSLive
- *  event_desc substring to look for, and the flag call + push copy to fire. */
-const ZONE_CHECK: Record<
-  Zone,
-  { search: string; flag: typeof flagCongestionZoneEntry; notification: { title: string; body: string } }
-> = {
-  congestion: {
-    search: "Congestion",
-    flag: flagCongestionZoneEntry,
-    notification: {
-      title: "Already in Central London",
-      body: "Congestion charge may apply -- add it on the Extra Charges step."
-    }
-  },
-  tunnel: {
-    search: "Tunnel",
-    flag: flagTunnelZoneEntry,
-    notification: {
-      title: "Already in a tunnel toll zone",
-      body: "Tunnel charge may apply -- add it on the Extra Charges step."
-    }
-  }
+ *  event_desc substring to look for, and the flag call to fire. */
+const ZONE_CHECK: Record<Zone, { search: string; flag: typeof flagCongestionZoneEntry }> = {
+  congestion: { search: "Congestion", flag: flagCongestionZoneEntry },
+  tunnel: { search: "Tunnel", flag: flagTunnelZoneEntry }
 };
 
 /**
@@ -156,14 +142,14 @@ export async function checkCongestionZoneAtJobStart(job: Job, driver: DriverProf
     const dateTo = format(now);
 
     for (const zone of Object.keys(ZONE_CHECK) as Zone[]) {
-      const { search, flag, notification } = ZONE_CHECK[zone];
+      const { search, flag } = ZONE_CHECK[zone];
       const events = await fetchGpsLiveAlertsForDevice(device.imei, dateFrom, dateTo, search);
       const latest = events
         .filter(e => e.event_desc?.includes(search))
         .sort((a, b) => b.dt_tracker.localeCompare(a.dt_tracker))[0];
 
       if (latest?.type === "zone_in") {
-        await flag(job.jobId, driver.initials, device.imei, notification);
+        await flag(job.jobId, driver.initials, device.imei);
       }
     }
   } catch (error) {

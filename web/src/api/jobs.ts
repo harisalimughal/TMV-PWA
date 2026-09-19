@@ -48,6 +48,9 @@ export interface Job {
   bookedFinish: string;
   actualStart: string;
   actualFinish: string;
+  /** ISO timestamp of the "I'm on the Way" tap -- unset until the driver taps it,
+   *  which is now a prerequisite for Start Job (see api's on-my-way endpoint). */
+  onMyWayAt?: string;
   bookedMinutes: number;
   actualMinutes: number;
   differenceMinutes: number;
@@ -173,6 +176,12 @@ export async function reverseGeocodeLive(lat: number, lng: number): Promise<stri
 export async function fetchLiabilityDamageCategories(): Promise<string[]> {
   const body = await request<{ categories: string[] }>("/api/jobs/liability-categories");
   return body.categories;
+}
+
+/** Sends the customer "on my way" SMS/email and stamps onMyWayAt -- job status/state
+ *  is untouched. startJob (below) now refuses to run until this has happened. */
+export function sendOnMyWay(jobId: string): Promise<JobUpdateResult> {
+  return request(`/api/jobs/${encodeURIComponent(jobId)}/on-my-way`, { method: "POST" });
 }
 
 export function startJob(jobId: string): Promise<JobUpdateResult> {
