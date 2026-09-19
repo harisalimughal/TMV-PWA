@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { formatLondonDateTime } from "../utils/date";
 import { resolveDriver } from "../utils/drivers";
+import { formatLocationLabel, type CapturedLocation } from "../../../../lib/geo";
 
 interface Props {
   item: any;
@@ -8,7 +9,18 @@ interface Props {
   isPreview?: boolean;
 }
 
-function PhotoSection({ title, src }: { title: string; src: string | null }) {
+interface PhotoSectionProps {
+  title: string;
+  src: string | null;
+  /** Where/when this photo was actually taken -- absent on submissions made before
+   *  this was captured. Printed as a caption under the photo since this is the
+   *  evidence that protects the company on a damage/parking claim. */
+  capturedAt?: string;
+  location?: CapturedLocation;
+  locationName?: string;
+}
+
+function PhotoSection({ title, src, capturedAt, location, locationName }: PhotoSectionProps) {
   const [failed, setFailed] = useState(false);
 
   return (
@@ -28,6 +40,13 @@ function PhotoSection({ title, src }: { title: string; src: string | null }) {
           </div>
         )}
       </div>
+      {src && !failed && (capturedAt || location) && (
+        <div className="mt-1.5 text-[10px] text-[#6B7280] text-center">
+          {capturedAt && formatLondonDateTime(capturedAt)}
+          {capturedAt && location && " — "}
+          {location && formatLocationLabel(location, locationName)}
+        </div>
+      )}
     </div>
   );
 }
@@ -46,7 +65,18 @@ export function PaperScenarioReport({ item, kind, isPreview = false }: Props) {
   const clientEmail = item.clientEmail || raw["Client Email"] || "-";
   const address = item.address || raw["Address"] || "Not recorded";
   const signatureUrl: string | undefined = item.signature?.url || item.signature?.thumbUrl || raw["Signature"];
-  const photos: Array<{ fileId: string; thumbUrl: string }> = item.photos || [];
+  // Falls back to the record's overall timestamp/location-less state on a submission
+  // made before signature capture existed -- never blocks rendering the signature itself.
+  const signatureCapturedAt: string | undefined = item.signature?.capturedAt;
+  const signatureLocation: CapturedLocation | undefined = item.signature?.location;
+  const signatureLocationName: string | undefined = item.signature?.locationName;
+  const photos: Array<{
+    fileId: string;
+    thumbUrl: string;
+    capturedAt?: string;
+    location?: CapturedLocation;
+    locationName?: string;
+  }> = item.photos || [];
   const photoPages = photos.length > 0 ? photos : [{ fileId: "missing", thumbUrl: "" }];
   const totalPages = Math.max(photoPages.length, 1);
 
@@ -149,7 +179,14 @@ export function PaperScenarioReport({ item, kind, isPreview = false }: Props) {
           ) : (
             <span className="text-[13px] font-semibold text-admin-muted italic">Not captured</span>
           )}
-          <span className="text-[10px] font-medium text-admin-muted mt-2">Signed: {formattedTime}</span>
+          <span className="text-[10px] font-medium text-admin-muted mt-2">
+            Signed: {signatureCapturedAt ? formatLondonDateTime(signatureCapturedAt) : formattedTime}
+          </span>
+          {signatureLocation && (
+            <span className="text-[10px] font-medium text-admin-muted">
+              {formatLocationLabel(signatureLocation, signatureLocationName)}
+            </span>
+          )}
         </div>
       </div>
     </div>
@@ -211,6 +248,9 @@ export function PaperScenarioReport({ item, kind, isPreview = false }: Props) {
             <PhotoSection
               title={photos.length > 0 ? `${title} Evidence${photos.length > 1 ? ` ${page}` : ""}` : "Photo Evidence"}
               src={src}
+              capturedAt={photo.capturedAt}
+              location={photo.location}
+              locationName={photo.locationName}
             />
             {page === 1 && <DetailsAndSignature />}
           </Page>

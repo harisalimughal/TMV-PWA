@@ -35,6 +35,8 @@ export interface QueuedSubmission {
   /** Parallel to `photos` -- where/when each was taken, captured before the device
    *  ever went offline. Preserved here so a replayed submission doesn't silently lose it. */
   photoMeta?: Array<PhotoCaptureMeta | null>;
+  /** Where/when the signature was captured, same treatment as photoMeta. */
+  signatureMeta?: PhotoCaptureMeta | null;
   signature: Blob | null;
   createdAt: number;
   attempts: number;
@@ -131,6 +133,7 @@ export async function flush(): Promise<{ sent: number; failed: number }> {
       for (const [key, value] of Object.entries(item.fields)) form.append(key, value);
       item.photos.forEach(photo => form.append("photos", photo));
       if (item.photoMeta && item.photoMeta.length > 0) form.append("photoMeta", JSON.stringify(item.photoMeta));
+      if (item.signatureMeta) form.append("signatureMeta", JSON.stringify(item.signatureMeta));
       if (item.signature) form.append("signature", item.signature, "signature.png");
 
       try {

@@ -12,11 +12,11 @@ import { env } from "../../config/env";
 import { getDriverProfileByInitials, listDriverProfiles } from "../../auth/driver-account.service";
 import { createCalendarEvent, deleteCalendarEvent, getCalendarEvent, updateCalendarEvent } from "../../google/calendar";
 import { parseCalendarEvent, syncBookingsForDate, withReassignedInitials } from "../../jobs/booking.service";
-import { getJob, upsertJob, deleteJob, listJobsPage } from "../../db/jobs.repo";
-import { appendActivity, deleteActivityForJob } from "../../db/activity.repo";
+import { getJob, upsertJob, deleteJob, listJobsPage, listJobsInRange } from "../../db/jobs.repo";
+import { appendActivity, deleteActivityForJob, listActivityForJobs } from "../../db/activity.repo";
 import { listEvidenceForJob, listEvidenceForJobs, deleteEvidenceForJob, getEvidence, deleteEvidence } from "../../db/evidence.repo";
 import { listScenarioSubmissionsForJob, listScenarioSubmissionsForJobs, deleteScenarioSubmissionsForJob } from "../../db/scenario.repo";
-import { deleteExceptionsForJob } from "../../db/exceptions.repo";
+import { deleteExceptionsForJob, listExceptionsForJobs } from "../../db/exceptions.repo";
 import { destroyEvidenceImage, publicIdFromCloudinaryUrl } from "../../storage/cloudinary";
 import { JobStatus, Job } from "../../jobs/job.types";
 import { WorkflowState } from "../../workflow/workflow.states";
@@ -36,6 +36,30 @@ function escapeCsvField(val: unknown): string {
   if (/^[=+\-@]/.test(str)) str = `'${str}`;
   if (/[",\n\r]/.test(str)) str = `"${str.replace(/"/g, '""')}"`;
   return str;
+}
+
+/**
+ * Normalizes a single already-fetched job, scoping its evidence/activity/scenarios/
+ * exceptions reads to just that one jobId instead of going through the shared
+ * getDashboardDataset() (the whole company's job/evidence/activity/scenario/exception
+ * history). Backs job detail, the job PDF and the manager-review save's response --
+ * none of them need any other job's data, and exceptions in particular was measured
+ * as "the single biggest contributor to the admin dashboard's read latency" (see
+ * exceptions.repo.ts's recordException) precisely because it was being fetched in
+ * full for pages like these that only ever look at one job.
+ */
+async function buildNormalizedJob(job: Job): Promise<NormalizedJob> {
+  const [evidence, activity, scenarioSubmissions, exceptions] = await Promise.all([
+    listEvidenceForJobs([job.jobId]),
+    listActivityForJobs([job.jobId]),
+    listScenarioSubmissionsForJobs([job.jobId]),
+    listExceptionsForJobs([job.jobId])
+  ]);
+  const [normalized] = await normalizeMongoDataset({
+    jobs: [job], evidence, activity, scenarioSubmissions, exceptions,
+    fetchedAt: new Date().toISOString(), durationMs: 0
+  });
+  return normalized;
 }
 
 /**
@@ -436,12 +460,14 @@ export function dashboardJobsRoutes(): Router {
         action: "MANAGER_REVIEW_UPDATED",
         detail: note ? `${status}: ${note}` : status
       });
-      // Invalidate before re-reading so this response reflects the review just saved,
-      // instead of a cached pre-review snapshot.
+      // Invalidates the shared cache so every other dashboard page reflects this
+      // review on its next load, but this response itself is built from `existing`
+      // (already updated in memory above) plus this one job's own scoped reads --
+      // no need to force an immediate full company-wide dataset rebuild just to hand
+      // back the one job that was just saved.
       invalidateDashboardDataset();
 
-      const { jobs } = await getDashboardDataset();
-      const job = jobs.find(j => j.jobId.toUpperCase() === jobId.toUpperCase());
+      const job = await buildNormalizedJob(existing);
 
       return res.status(200).json({
         job,
@@ -459,7 +485,27 @@ export function dashboardJobsRoutes(): Router {
 
   router.get("/export.csv", async (req, res) => {
     try {
-      const { jobs: allJobs } = await getDashboardDataset();
+      const from = typeof req.query.from === "string" ? req.query.from : undefined;
+      const to = typeof req.query.to === "string" ? req.query.to : undefined;
+
+      // Scoped when a date range is given -- this export's columns only ever need
+      // jobs + their own evidence (for "Evidence Status"), never activity/scenarios/
+      // exceptions, so this skips the shared getDashboardDataset() read (the whole
+      // company's history) for the common "export this range" case. An unscoped
+      // export ("ALL" / driver-only / status-only) still needs everything, so it
+      // keeps using the cached full dataset.
+      let allJobs: NormalizedJob[];
+      if (from || to) {
+        const scopedJobs = await listJobsInRange(from, to);
+        const evidence = await listEvidenceForJobs(scopedJobs.map(j => j.jobId));
+        allJobs = await normalizeMongoDataset({
+          jobs: scopedJobs, evidence, activity: [], scenarioSubmissions: [], exceptions: [],
+          fetchedAt: new Date().toISOString(), durationMs: 0
+        });
+      } else {
+        ({ jobs: allJobs } = await getDashboardDataset());
+      }
+
       const jobs = applyFilters(allJobs, req.query);
 
       const headers = [
@@ -511,13 +557,17 @@ export function dashboardJobsRoutes(): Router {
 
   router.get("/:jobId", async (req, res) => {
     try {
-      const jobId = String(req.params.jobId || "").trim();
-      const { dataset, jobs } = await getDashboardDataset();
-      const job = jobs.find(j => j.jobId.toUpperCase() === jobId.toUpperCase());
+      const jobId = String(req.params.jobId || "").trim().toUpperCase();
+      // Single-job lookup, scoped: getJob() is a direct _id findOne, not a full
+      // company-wide dataset read -- opening one job's detail used to force the same
+      // 5-collection read every other dashboard page shares, which is why this (along
+      // with the PDF and review-save routes below) was a big part of "the job page
+      // keeps loading" -- see buildNormalizedJob's own comment.
+      const rawJob = await getJob(jobId);
+      if (!rawJob) return res.status(404).json({ error: { code: "JOB_NOT_FOUND", message: `Job ${jobId} not found.` } });
 
-      if (!job) return res.status(404).json({ error: { code: "JOB_NOT_FOUND", message: `Job ${jobId} not found.` } });
-
-      return res.status(200).json({ job, meta: { fetchedAt: dataset.fetchedAt } });
+      const job = await buildNormalizedJob(rawJob);
+      return res.status(200).json({ job, meta: { fetchedAt: new Date().toISOString() } });
     } catch (error) {
       return res.status(500).json({ error: { code: "JOB_FETCH_FAILED", message: "Failed to load job details." } });
     }
@@ -525,12 +575,11 @@ export function dashboardJobsRoutes(): Router {
 
   router.get("/:jobId/report.pdf", async (req, res) => {
     try {
-      const jobId = String(req.params.jobId || "").trim();
-      const { jobs } = await getDashboardDataset();
-      const job = jobs.find(j => j.jobId.toUpperCase() === jobId.toUpperCase());
+      const jobId = String(req.params.jobId || "").trim().toUpperCase();
+      const rawJob = await getJob(jobId);
+      if (!rawJob) return res.status(404).json({ error: { code: "JOB_NOT_FOUND", message: `Job ${jobId} not found.` } });
 
-      if (!job) return res.status(404).json({ error: { code: "JOB_NOT_FOUND", message: `Job ${jobId} not found.` } });
-
+      const job = await buildNormalizedJob(rawJob);
       const pdfBuffer = generateJobPdf(job);
       const dateStr = new Date().toISOString().slice(0, 10);
       res.setHeader("Content-Type", "application/pdf");

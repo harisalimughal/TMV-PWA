@@ -2,16 +2,19 @@ import { DateTime } from "luxon";
 import { env } from "../config/env";
 import { listJobs, upsertJob } from "../db/jobs.repo";
 import { getDriverProfileByInitials } from "../auth/driver-account.service";
-import { sendJobReminderEmail } from "../google/gmail";
 import { sendPushToDriver } from "../push/push.service";
 import { Job, JobStatus } from "./job.types";
 import { log } from "../utils/logger";
 
 /**
- * Reminds a driver by email + push shortly before (TMV_JOB_REMINDER_LEAD_MS, default
- * 1 hour) a job they're assigned to is due to start. Runs on the same kind of plain
+ * Reminds a driver by push shortly before (TMV_JOB_REMINDER_LEAD_MS, default 1 hour)
+ * a job they're assigned to is due to start. Runs on the same kind of plain
  * setInterval sweep server.ts already uses for the Calendar sync -- this app has no
  * external job scheduler, so "due soon" just means "found due on the next pass".
+ *
+ * Push only, deliberately -- this used to also email the driver the job's customer
+ * name/pickup/drop-off, but the driver app IS the notification channel and the client
+ * didn't know the email existed until it started firing on every assigned job.
  *
  * A job only ever gets one reminder per booked time: reminderSentAt is stamped once
  * it fires, and booking.service.ts's toJob() clears that stamp itself if the booked
@@ -46,18 +49,11 @@ async function sendJobReminder(job: Job, now: DateTime): Promise<void> {
 
   const leadMinutes = Math.max(0, Math.round(DateTime.fromISO(job.bookedStart, { setZone: true }).diff(now, "minutes").minutes));
 
-  await Promise.all([
-    driver.email
-      ? sendJobReminderEmail(driver.email, job, leadMinutes).catch(error =>
-          log.warn("job reminder email failed", { error: String(error), job_id: job.jobId })
-        )
-      : Promise.resolve(),
-    sendPushToDriver(job.driverInitials, {
-      title: "Job starting soon",
-      body: `${job.customerName || "Your next job"} - pickup at ${job.pickup || "TBC"} in about ${leadMinutes} min.`,
-      url: "/?tab=jobs"
-    }).catch(error => log.warn("job reminder push failed", { error: String(error), job_id: job.jobId }))
-  ]);
+  await sendPushToDriver(job.driverInitials, {
+    title: "Job starting soon",
+    body: `${job.customerName || "Your next job"} - pickup at ${job.pickup || "TBC"} in about ${leadMinutes} min.`,
+    url: "/?tab=jobs"
+  }).catch(error => log.warn("job reminder push failed", { error: String(error), job_id: job.jobId }));
 
   await upsertJob({ ...job, reminderSentAt: now.toUTC().toISO()! });
   log.info("sent job starting-soon reminder", { job_id: job.jobId, driver: job.driverInitials, lead_minutes: leadMinutes });

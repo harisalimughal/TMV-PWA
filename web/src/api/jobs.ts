@@ -252,12 +252,15 @@ export async function submitScenario(
   options: { jobId?: string; label: string; onProgress?: (fraction: number) => void } = { label: "Form" },
   /** Parallel to `photos` -- where/when each was taken. Sent as one JSON field
    *  alongside the photos so the backend can pair them up by index. */
-  photoMeta?: Array<PhotoCaptureMeta | null>
+  photoMeta?: Array<PhotoCaptureMeta | null>,
+  /** Where/when the customer's signature was captured -- same shape as one photoMeta
+   *  entry, sent as its own field since there's only ever one signature. */
+  signatureMeta?: PhotoCaptureMeta | null
 ): Promise<ScenarioSubmitResult> {
   const url = scenarioUrl(scenario, options.jobId);
 
   if (isOffline()) {
-    await enqueue({ url, label: options.label, fields, photos, photoMeta, signature });
+    await enqueue({ url, label: options.label, fields, photos, photoMeta, signatureMeta, signature });
     return "queued";
   }
 
@@ -265,6 +268,7 @@ export async function submitScenario(
   for (const [key, value] of Object.entries(fields)) form.append(key, value);
   photos.forEach(photo => form.append("photos", photo));
   if (photoMeta && photoMeta.length > 0) form.append("photoMeta", JSON.stringify(photoMeta));
+  if (signatureMeta) form.append("signatureMeta", JSON.stringify(signatureMeta));
   if (signature) form.append("signature", signature, "signature.png");
 
   try {
@@ -276,7 +280,7 @@ export async function submitScenario(
     // does not -- replaying it would fail identically every time, so it surfaces to
     // the driver to fix now, while the customer is still standing there.
     if (error?.offline) {
-      await enqueue({ url, label: options.label, fields, photos, photoMeta, signature });
+      await enqueue({ url, label: options.label, fields, photos, photoMeta, signatureMeta, signature });
       return "queued";
     }
     throw error;

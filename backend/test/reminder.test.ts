@@ -4,12 +4,10 @@ import { DateTime } from "luxon";
 const listJobs = vi.fn();
 const upsertJob = vi.fn().mockResolvedValue(undefined);
 const getDriverProfileByInitials = vi.fn();
-const sendJobReminderEmail = vi.fn().mockResolvedValue(undefined);
 const sendPushToDriver = vi.fn().mockResolvedValue({ total: 1, sent: 1, failed: 0, pruned: 0 });
 
 vi.mock("../src/db/jobs.repo", () => ({ listJobs: (...args: any[]) => listJobs(...args), upsertJob: (...args: any[]) => upsertJob(...args) }));
 vi.mock("../src/auth/driver-account.service", () => ({ getDriverProfileByInitials: (...args: any[]) => getDriverProfileByInitials(...args) }));
-vi.mock("../src/google/gmail", () => ({ sendJobReminderEmail: (...args: any[]) => sendJobReminderEmail(...args) }));
 vi.mock("../src/push/push.service", () => ({ sendPushToDriver: (...args: any[]) => sendPushToDriver(...args) }));
 
 import { sweepJobReminders } from "../src/jobs/reminder.service";
@@ -35,13 +33,12 @@ describe("sweepJobReminders", () => {
     getDriverProfileByInitials.mockResolvedValue({ initials: "HE", email: "he@example.com", active: true });
   });
 
-  it("sends an email and push for a job due within the reminder window", async () => {
+  it("sends a push for a job due within the reminder window", async () => {
     const job = baseJob();
     listJobs.mockResolvedValue([job]);
 
     await sweepJobReminders();
 
-    expect(sendJobReminderEmail).toHaveBeenCalledTimes(1);
     expect(sendPushToDriver).toHaveBeenCalledTimes(1);
     expect(upsertJob).toHaveBeenCalledTimes(1);
     expect(upsertJob.mock.calls[0][0].reminderSentAt).toBeTruthy();
@@ -52,7 +49,6 @@ describe("sweepJobReminders", () => {
 
     await sweepJobReminders();
 
-    expect(sendJobReminderEmail).not.toHaveBeenCalled();
     expect(sendPushToDriver).not.toHaveBeenCalled();
     expect(upsertJob).not.toHaveBeenCalled();
   });
@@ -62,7 +58,6 @@ describe("sweepJobReminders", () => {
 
     await sweepJobReminders();
 
-    expect(sendJobReminderEmail).not.toHaveBeenCalled();
     expect(sendPushToDriver).not.toHaveBeenCalled();
     expect(upsertJob).not.toHaveBeenCalled();
   });
@@ -72,7 +67,6 @@ describe("sweepJobReminders", () => {
 
     await sweepJobReminders();
 
-    expect(sendJobReminderEmail).not.toHaveBeenCalled();
     expect(sendPushToDriver).not.toHaveBeenCalled();
   });
 
@@ -81,7 +75,6 @@ describe("sweepJobReminders", () => {
 
     await sweepJobReminders();
 
-    expect(sendJobReminderEmail).not.toHaveBeenCalled();
     expect(sendPushToDriver).not.toHaveBeenCalled();
   });
 
@@ -90,7 +83,6 @@ describe("sweepJobReminders", () => {
 
     await sweepJobReminders();
 
-    expect(sendJobReminderEmail).not.toHaveBeenCalled();
     expect(sendPushToDriver).not.toHaveBeenCalled();
   });
 });

@@ -9,6 +9,9 @@ import { Router } from "express";
 import { formatGBP, pence, toPounds } from "../../utils/money";
 import { listDriverProfiles } from "../../auth/driver-account.service";
 import { getDashboardDataset } from "./dataset-cache";
+import { listJobsInRange } from "../../db/jobs.repo";
+import { listEvidenceForJobs } from "../../db/evidence.repo";
+import { normalizeMongoDataset } from "./normalize";
 
 interface DriverStat {
   initials: string;
@@ -32,6 +35,9 @@ interface DriverStat {
   delayJobsCount: number;
   revenuePence: number;
   cashCollectedPence: number;
+  cardCollectedPence: number;
+  bankCollectedPence: number;
+  invoiceCollectedPence: number;
   missingEvidenceCount: number;
   overtimeCount: number;
 }
@@ -44,11 +50,27 @@ export function dashboardDriversSummaryRoutes(): Router {
       const from = typeof req.query.from === "string" ? req.query.from : undefined;
       const to = typeof req.query.to === "string" ? req.query.to : undefined;
 
-      const [drivers, { dataset, jobs: allJobs }] = await Promise.all([listDriverProfiles(), getDashboardDataset()]);
-      let jobs = allJobs;
-
-      if (from) jobs = jobs.filter(j => (j.actualStart || j.bookedStart) >= from);
-      if (to) jobs = jobs.filter(j => (j.actualStart || j.bookedStart) <= to);
+      // A date-scoped request (this report's normal use -- pick a week, see what each
+      // driver collected) only needs jobs in that range plus their own evidence, for
+      // missingEvidenceCount below. Skips the shared getDashboardDataset() read (the
+      // whole company's job/evidence/activity/scenario/exception history) entirely;
+      // "All Time" still needs everything, so it keeps using the cached full dataset.
+      let drivers, jobs, fetchedAt: string;
+      if (from || to) {
+        const [driverList, scopedJobs] = await Promise.all([listDriverProfiles(), listJobsInRange(from, to)]);
+        drivers = driverList;
+        const evidence = await listEvidenceForJobs(scopedJobs.map(j => j.jobId));
+        jobs = await normalizeMongoDataset({
+          jobs: scopedJobs, evidence, activity: [], scenarioSubmissions: [], exceptions: [],
+          fetchedAt: new Date().toISOString(), durationMs: 0
+        });
+        fetchedAt = new Date().toISOString();
+      } else {
+        const [driverList, { dataset, jobs: allJobs }] = await Promise.all([listDriverProfiles(), getDashboardDataset()]);
+        drivers = driverList;
+        jobs = allJobs;
+        fetchedAt = dataset.fetchedAt;
+      }
 
       const driverStats = new Map<string, DriverStat>();
 
@@ -62,7 +84,8 @@ export function dashboardDriversSummaryRoutes(): Router {
           hasAccount: true,
           assignedCount: 0, completedCount: 0, cancelledCount: 0,
           totalDurationMinutes: 0, durationJobsCount: 0, totalDelayMinutes: 0, delayJobsCount: 0,
-          revenuePence: 0, cashCollectedPence: 0, missingEvidenceCount: 0, overtimeCount: 0
+          revenuePence: 0, cashCollectedPence: 0, cardCollectedPence: 0, bankCollectedPence: 0,
+          invoiceCollectedPence: 0, missingEvidenceCount: 0, overtimeCount: 0
         });
       }
 
@@ -75,7 +98,8 @@ export function dashboardDriversSummaryRoutes(): Router {
             hasAccount: false,
             assignedCount: 0, completedCount: 0, cancelledCount: 0,
             totalDurationMinutes: 0, durationJobsCount: 0, totalDelayMinutes: 0, delayJobsCount: 0,
-            revenuePence: 0, cashCollectedPence: 0, missingEvidenceCount: 0, overtimeCount: 0
+            revenuePence: 0, cashCollectedPence: 0, cardCollectedPence: 0, bankCollectedPence: 0,
+            invoiceCollectedPence: 0, missingEvidenceCount: 0, overtimeCount: 0
           };
           driverStats.set(init, stat);
         }
@@ -84,7 +108,13 @@ export function dashboardDriversSummaryRoutes(): Router {
         if (j.status === "COMPLETED") {
           stat.completedCount++;
           stat.revenuePence += j.amountCharged;
-          if (j.paymentMethod.toLowerCase().includes("cash")) stat.cashCollectedPence += j.amountCharged;
+          // Same substring categorization as finance.routes.ts's company-wide totals,
+          // just kept per-driver here -- so this and the Finance page always agree.
+          const method = j.paymentMethod.toLowerCase();
+          if (method.includes("cash")) stat.cashCollectedPence += j.amountCharged;
+          else if (method.includes("card")) stat.cardCollectedPence += j.amountCharged;
+          else if (method.includes("bank")) stat.bankCollectedPence += j.amountCharged;
+          else if (method.includes("invoice")) stat.invoiceCollectedPence += j.amountCharged;
         } else if (j.status === "CANCELLED") {
           stat.cancelledCount++;
         }
@@ -113,11 +143,14 @@ export function dashboardDriversSummaryRoutes(): Router {
           avgDurationMinutes: avgDuration, totalDurationMinutes: s.totalDurationMinutes, avgDelayMinutes: avgDelay,
           revenuePounds: toPounds(pence(s.revenuePence)), revenueFormatted: formatGBP(pence(s.revenuePence)),
           cashCollectedPounds: toPounds(pence(s.cashCollectedPence)),
+          cardCollectedPounds: toPounds(pence(s.cardCollectedPence)),
+          bankCollectedPounds: toPounds(pence(s.bankCollectedPence)),
+          invoiceCollectedPounds: toPounds(pence(s.invoiceCollectedPence)),
           missingEvidenceCount: s.missingEvidenceCount, overtimeCount: s.overtimeCount
         };
       }).sort((a, b) => b.completed - a.completed);
 
-      return res.status(200).json({ drivers: items, meta: { fetchedAt: dataset.fetchedAt } });
+      return res.status(200).json({ drivers: items, meta: { fetchedAt } });
     } catch (error) {
       return res.status(500).json({ error: { code: "DRIVERS_FETCH_FAILED", message: "Failed to fetch driver performance summary." } });
     }

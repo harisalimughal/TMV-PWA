@@ -5,6 +5,7 @@ import { MULTISELECT_DELIMITER, SCENARIOS, type ScenarioFieldSpec, type Scenario
 import { PhotoPicker } from "../components/PhotoPicker";
 import { JobDetailsToggle } from "../components/driver";
 import { formatCapturedTime, formatLocationLabel, mapsUrlForLocation, type PhotoCaptureMeta } from "../lib/geo";
+import { useLocationWatch } from "../components/camera/useLocationWatch";
 import { SignatureField } from "../components/SignatureField";
 import { SignatureModal } from "../components/SignatureModal";
 import { useToast } from "../components/ui/Toast";
@@ -195,6 +196,10 @@ export function ScenarioFormScreen({
   const [signatureBlob, setSignatureBlob] = useState<Blob | null>(null);
   const [signaturePreviewUrl, setSignaturePreviewUrl] = useState<string | null>(null);
   const [signatureModalOpen, setSignatureModalOpen] = useState(false);
+  // Watches position while the pad's open so a fix is already on hand the instant the
+  // customer taps Save -- same approach the camera uses for photos (useLocationWatch).
+  const signatureLocationRef = useLocationWatch(signatureModalOpen);
+  const [signatureMeta, setSignatureMeta] = useState<PhotoCaptureMeta | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [progress, setProgress] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -222,12 +227,14 @@ export function ScenarioFormScreen({
   function handleSignatureSave(blob: Blob) {
     setSignatureBlob(blob);
     setSignaturePreviewUrl(URL.createObjectURL(blob));
+    setSignatureMeta({ capturedAt: new Date().toISOString(), location: signatureLocationRef.current });
     setSignatureModalOpen(false);
   }
 
   function handleSignatureClear() {
     setSignatureBlob(null);
     setSignaturePreviewUrl(null);
+    setSignatureMeta(null);
   }
 
   /** Every unmet requirement, in the order it appears on screen. Drives the reason
@@ -312,7 +319,8 @@ export function ScenarioFormScreen({
           label: jobId ? `${spec.title} — Job ${jobId}` : spec.title,
           onProgress: setProgress
         },
-        photoMeta
+        photoMeta,
+        signatureMeta
       );
 
       if (result === "queued") {

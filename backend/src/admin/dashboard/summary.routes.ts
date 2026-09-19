@@ -2,6 +2,9 @@
 import { Router } from "express";
 import { addPence, formatGBP, pence, toPounds } from "../../utils/money";
 import { getDashboardDataset } from "./dataset-cache";
+import { listJobsInRange } from "../../db/jobs.repo";
+import { listEvidenceForJobs } from "../../db/evidence.repo";
+import { normalizeMongoDataset } from "./normalize";
 
 export function dashboardSummaryRoutes(): Router {
   const router = Router();
@@ -11,11 +14,27 @@ export function dashboardSummaryRoutes(): Router {
       const from = typeof req.query.from === "string" ? req.query.from : undefined;
       const to = typeof req.query.to === "string" ? req.query.to : undefined;
 
-      const { dataset, jobs: allJobs } = await getDashboardDataset();
-      let jobs = allJobs;
-
-      if (from) jobs = jobs.filter(j => (j.actualStart || j.bookedStart) >= from);
-      if (to) jobs = jobs.filter(j => (j.actualStart || j.bookedStart) <= to);
+      // A date-scoped request only needs jobs in that range plus their own evidence
+      // (for the photosMissing/Processing/Failed/missingSignatures counts below) --
+      // activity/scenarios/exceptions never feed into anything this route returns.
+      // Skips the shared getDashboardDataset() read (the whole company's history)
+      // entirely for the common "pick a range" case; "All Time" still needs everything,
+      // so it keeps using the cached full dataset.
+      let jobs, fetchedAt: string, durationMs: number | undefined;
+      if (from || to) {
+        const scopedJobs = await listJobsInRange(from, to);
+        const evidence = await listEvidenceForJobs(scopedJobs.map(j => j.jobId));
+        jobs = await normalizeMongoDataset({
+          jobs: scopedJobs, evidence, activity: [], scenarioSubmissions: [], exceptions: [],
+          fetchedAt: new Date().toISOString(), durationMs: 0
+        });
+        fetchedAt = new Date().toISOString();
+      } else {
+        const { dataset, jobs: allJobs } = await getDashboardDataset();
+        jobs = allJobs;
+        fetchedAt = dataset.fetchedAt;
+        durationMs = dataset.durationMs;
+      }
 
       const totalJobs = jobs.length;
       const ready = jobs.filter(j => j.status === "READY").length;
@@ -113,7 +132,7 @@ export function dashboardSummaryRoutes(): Router {
           driversWorkingCount: workingDrivers.size, avgDurationMinutes: avgDuration, avgDelayMinutes: avgDelay
         },
         charts: { statusBreakdown, revenueOverTime, paymentMethodSplit, jobsByDriver },
-        meta: { fetchedAt: dataset.fetchedAt, durationMs: dataset.durationMs }
+        meta: { fetchedAt, durationMs }
       });
     } catch (error) {
       res.status(500).json({

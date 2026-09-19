@@ -17,6 +17,14 @@ export interface ScenarioSubmissionDoc {
     locationName?: string;
   }>;
   signatureUrl: string;
+  /** Where/when the customer's signature was actually captured -- same shape as one
+   *  photoMeta entry. Optional: absent on submissions made before this existed, or
+   *  when the driver's device had no location/denied permission. */
+  signatureMeta?: {
+    capturedAt?: string;
+    location?: { lat: number; lng: number; accuracy: number };
+    locationName?: string;
+  };
   submittedAt: string;
 }
 

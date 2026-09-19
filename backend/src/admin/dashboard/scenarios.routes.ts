@@ -52,7 +52,10 @@ export function dashboardScenariosRoutes(): Router {
       const rows = all.filter(r => r.scenario === kind);
 
       const fieldNames = [...new Set(rows.flatMap(r => Object.keys(r.fields)))];
-      const columns = ["Job ID", "Driver", "Submitted", ...fieldNames, "Photo URLs", "Photo Locations", "Signature URL"];
+      const columns = [
+        "Job ID", "Driver", "Submitted", ...fieldNames,
+        "Photo URLs", "Photo Locations", "Signature URL", "Signature Captured At", "Signature Location"
+      ];
 
       const csvContent = "﻿" + [
         columns.map(escapeCsvField).join(","),
@@ -64,7 +67,11 @@ export function dashboardScenariosRoutes(): Router {
             .map(m => (m.location ? m.locationName || `${m.location.lat},${m.location.lng}` : m.capturedAt ? "no location" : ""))
             .filter(Boolean)
             .join(" | "),
-          r.signatureUrl
+          r.signatureUrl,
+          r.signatureMeta?.capturedAt ?? "",
+          r.signatureMeta?.location
+            ? r.signatureMeta.locationName || `${r.signatureMeta.location.lat},${r.signatureMeta.location.lng}`
+            : ""
         ].map(escapeCsvField).join(","))
       ].join("\r\n");
 
@@ -129,7 +136,15 @@ export function dashboardScenariosRoutes(): Router {
             location: r.photoMeta?.[i]?.location,
             locationName: r.photoMeta?.[i]?.locationName
           })),
-          signature: r.signatureUrl ? { fileId: r.signatureUrl, thumbUrl: toThumbnailUrl(r.signatureUrl) } : null
+          signature: r.signatureUrl
+            ? {
+                fileId: r.signatureUrl,
+                thumbUrl: toThumbnailUrl(r.signatureUrl),
+                capturedAt: r.signatureMeta?.capturedAt,
+                location: r.signatureMeta?.location,
+                locationName: r.signatureMeta?.locationName
+              }
+            : null
         };
       }); // earliest events first, matching every other dashboard list
 

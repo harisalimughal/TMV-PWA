@@ -54,6 +54,21 @@ function escapeRegex(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
+/** Shared by listJobsPage and listJobsInRange: a job matches `from`/`to` by
+ *  actualStart when it's genuinely started, falling back to bookedStart otherwise --
+ *  the same semantics the old in-memory `(j.actualStart || j.bookedStart)` filter used
+ *  on summary/finance/drivers-summary, kept identical so scoping the query doesn't
+ *  change any of their numbers. */
+function effectiveStartStage(): Record<string, any> {
+  return {
+    $addFields: {
+      __effectiveStart: {
+        $cond: [{ $and: [{ $ne: ["$actualStart", ""] }, { $ne: ["$actualStart", null] }] }, "$actualStart", "$bookedStart"]
+      }
+    }
+  };
+}
+
 /** Raw Job fields safe to sort on directly at the Mongo level -- anything else (e.g.
  *  delayMinutes, which only exists after normalize.ts computes it from bookedStart vs
  *  actualStart) falls back to bookedStart. */
@@ -99,13 +114,7 @@ export async function listJobsPage(filter: JobsPageFilter): Promise<{ items: Job
     // Mirrors the old in-memory filter's semantics: prefer actualStart (when the job
     // has genuinely started) over bookedStart, so a job that ran late/early is filtered
     // by when it actually happened, not just when it was booked.
-    pipeline.push({
-      $addFields: {
-        __effectiveStart: {
-          $cond: [{ $and: [{ $ne: ["$actualStart", ""] }, { $ne: ["$actualStart", null] }] }, "$actualStart", "$bookedStart"]
-        }
-      }
-    });
+    pipeline.push(effectiveStartStage());
     const range: Record<string, string> = {};
     if (filter.from) range.$gte = filter.from;
     if (filter.to) range.$lte = filter.to;
@@ -137,4 +146,24 @@ export async function listJobsPage(filter: JobsPageFilter): Promise<{ items: Job
   ]);
 
   return { items, total: countResult[0]?.total ?? 0 };
+}
+
+/**
+ * Every job whose effective start falls in [from, to] -- no pagination, since the
+ * dashboard's aggregate report pages (summary/finance/drivers-summary) need to roll up
+ * every matching job, not one page of them. Exists so those pages can scope their read
+ * to the selected date range instead of pulling the whole company's job history through
+ * getDashboardDataset() just to filter it back down in JS -- the same fix listJobsPage
+ * already proved out for the Jobs Archive (measured live: cost is proportional to how
+ * many documents actually come back over the wire, not a fixed per-query tax). Returns
+ * every job when both are omitted, same as plain listJobs().
+ */
+export async function listJobsInRange(from?: string, to?: string): Promise<Job[]> {
+  if (!from && !to) return listJobs();
+  const col = await jobsCollection();
+  const range: Record<string, string> = {};
+  if (from) range.$gte = from;
+  if (to) range.$lte = to;
+  const pipeline = [effectiveStartStage(), { $match: { __effectiveStart: range } }, { $project: { _id: 0 } }];
+  return col.aggregate<Job>(pipeline).toArray();
 }

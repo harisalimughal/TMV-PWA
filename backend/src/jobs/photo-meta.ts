@@ -11,6 +11,22 @@ export interface PhotoCapture {
   locationName?: string;
 }
 
+function parseCaptureEntry(entry: unknown): PhotoCapture {
+  if (!entry || typeof entry !== "object") return {};
+  const capturedAt = typeof (entry as any).capturedAt === "string" ? (entry as any).capturedAt : undefined;
+  const loc = (entry as any).location;
+  const location =
+    loc && typeof loc === "object" &&
+    typeof loc.lat === "number" && typeof loc.lng === "number" && typeof loc.accuracy === "number"
+      ? { lat: loc.lat, lng: loc.lng, accuracy: loc.accuracy }
+      : undefined;
+  const locationName =
+    typeof (entry as any).locationName === "string" && (entry as any).locationName.trim()
+      ? (entry as any).locationName.trim()
+      : undefined;
+  return { capturedAt, location, locationName };
+}
+
 /**
  * Parses the "photoMeta" multipart field the PWA sends alongside its photo files --
  * a JSON array, one entry per file in the same order (see web/src/lib/geo.ts's
@@ -31,19 +47,21 @@ export function parsePhotoMeta(raw: unknown): PhotoCapture[] {
     return [];
   }
   if (!Array.isArray(parsed)) return [];
-  return parsed.map(entry => {
-    if (!entry || typeof entry !== "object") return {};
-    const capturedAt = typeof (entry as any).capturedAt === "string" ? (entry as any).capturedAt : undefined;
-    const loc = (entry as any).location;
-    const location =
-      loc && typeof loc === "object" &&
-      typeof loc.lat === "number" && typeof loc.lng === "number" && typeof loc.accuracy === "number"
-        ? { lat: loc.lat, lng: loc.lng, accuracy: loc.accuracy }
-        : undefined;
-    const locationName =
-      typeof (entry as any).locationName === "string" && (entry as any).locationName.trim()
-        ? (entry as any).locationName.trim()
-        : undefined;
-    return { capturedAt, location, locationName };
-  });
+  return parsed.map(parseCaptureEntry);
+}
+
+/**
+ * Parses the "signatureMeta" multipart field -- same shape as one photoMeta entry,
+ * but a single JSON object (there's only ever one signature per submission), sent
+ * alongside the signature file by the same scenario forms that send photoMeta.
+ */
+export function parseSignatureMeta(raw: unknown): PhotoCapture {
+  if (typeof raw !== "string" || !raw) return {};
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return {};
+  }
+  return parseCaptureEntry(parsed);
 }

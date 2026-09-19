@@ -79,7 +79,13 @@ export interface JobScenarioSubmission {
     location?: { lat: number; lng: number; accuracy: number };
     locationName?: string;
   }>;
-  signature: { fileId: string; thumbUrl: string } | null;
+  signature: {
+    fileId: string;
+    thumbUrl: string;
+    capturedAt?: string;
+    location?: { lat: number; lng: number; accuracy: number };
+    locationName?: string;
+  } | null;
 }
 
 export interface NormalizedJob {
@@ -214,6 +220,9 @@ export interface DriverSummaryItem {
   revenuePounds: number;
   revenueFormatted: string;
   cashCollectedPounds: number;
+  cardCollectedPounds: number;
+  bankCollectedPounds: number;
+  invoiceCollectedPounds: number;
   missingEvidenceCount: number;
   overtimeCount: number;
 }
@@ -336,7 +345,15 @@ export interface ScenarioItem {
      *  when there was no location, or the lookup failed. */
     locationName?: string;
   }>;
-  signature: { fileId: string; thumbUrl: string } | null;
+  signature: {
+    fileId: string;
+    thumbUrl: string;
+    /** Where/when the customer's signature was actually captured — absent for
+     *  submissions made before this existed. */
+    capturedAt?: string;
+    location?: { lat: number; lng: number; accuracy: number };
+    locationName?: string;
+  } | null;
 }
 
 export function toPounds(pence: number): number {

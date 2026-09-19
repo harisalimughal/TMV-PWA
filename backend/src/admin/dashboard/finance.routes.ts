@@ -2,6 +2,8 @@
 import { Router } from "express";
 import { addPence, formatGBP, pence, toPounds } from "../../utils/money";
 import { getDashboardDataset } from "./dataset-cache";
+import { listJobsInRange } from "../../db/jobs.repo";
+import { normalizeMongoDataset } from "./normalize";
 
 export function dashboardFinanceRoutes(): Router {
   const router = Router();
@@ -12,11 +14,25 @@ export function dashboardFinanceRoutes(): Router {
       const to = typeof req.query.to === "string" ? req.query.to : undefined;
       const groupBy = req.query.groupBy === "month" ? "month" : req.query.groupBy === "week" ? "week" : "day";
 
-      const { dataset, jobs: allJobs } = await getDashboardDataset();
-      let jobs = allJobs;
-
-      if (from) jobs = jobs.filter(j => (j.actualStart || j.bookedStart) >= from);
-      if (to) jobs = jobs.filter(j => (j.actualStart || j.bookedStart) <= to);
+      // A date-scoped request only needs jobs in that range -- none of finance's own
+      // numbers (revenue/cash-card split/reconciliation) depend on evidence, activity,
+      // scenarios or exceptions, so this skips the shared getDashboardDataset() read
+      // entirely (the whole company's job/evidence/activity/scenario/exception history)
+      // instead of pulling it just to filter it back down in JS. "All Time" (no range)
+      // still needs everything, so it keeps using the cached full dataset.
+      let jobs, fetchedAt: string;
+      if (from || to) {
+        const scopedJobs = await listJobsInRange(from, to);
+        jobs = await normalizeMongoDataset({
+          jobs: scopedJobs, evidence: [], activity: [], scenarioSubmissions: [], exceptions: [],
+          fetchedAt: new Date().toISOString(), durationMs: 0
+        });
+        fetchedAt = new Date().toISOString();
+      } else {
+        const { dataset, jobs: allJobs } = await getDashboardDataset();
+        jobs = allJobs;
+        fetchedAt = dataset.fetchedAt;
+      }
 
       let totalBase = pence(0), totalExtras = pence(0), totalOvertime = pence(0), totalRevenue = pence(0);
       let totalCash = pence(0), totalCard = pence(0), totalBank = pence(0), totalInvoice = pence(0);
@@ -89,7 +105,7 @@ export function dashboardFinanceRoutes(): Router {
           cardPounds: toPounds(totalCard), bankPounds: toPounds(totalBank), invoicePounds: toPounds(totalInvoice)
         },
         unreconciledJobs, timeline,
-        meta: { fetchedAt: dataset.fetchedAt }
+        meta: { fetchedAt }
       });
     } catch (error) {
       return res.status(500).json({ error: { code: "FINANCE_FETCH_FAILED", message: "Failed to fetch finance summary." } });

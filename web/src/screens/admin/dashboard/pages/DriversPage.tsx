@@ -222,7 +222,7 @@ export function DriversPage() {
                   {driver.revenueFormatted}
                 </span>
                 <span className="text-[11px] text-admin-muted font-medium mt-1.5 block tracking-wide">
-                  £{driver.cashCollectedPounds.toFixed(2)} CASH
+                  £{driver.cashCollectedPounds.toFixed(2)} CASH · £{driver.cardCollectedPounds.toFixed(2)} CARD
                 </span>
               </div>
 

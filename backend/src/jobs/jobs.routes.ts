@@ -11,7 +11,7 @@ import {
   submitDrawnSignature, suggestedTotal
 } from "../workflow/workflow.engine";
 import { submitScenario } from "./scenario.service";
-import { parsePhotoMeta } from "./photo-meta";
+import { parsePhotoMeta, parseSignatureMeta } from "./photo-meta";
 import { DAMAGE_CATEGORIES, SCENARIOS, ScenarioKey } from "../workflow/scenario.spec";
 import { ValidationError } from "../workflow/validation.engine";
 import { listActivityForJob } from "../db/activity.repo";
@@ -329,20 +329,22 @@ export function jobsRoutes(): Router {
         }));
         const signatureFile = filesByField.signature?.[0];
         if (!signatureFile) throw new ValidationError("A signature is required.");
+        const signatureMeta = parseSignatureMeta(req.body?.signatureMeta);
 
         // Every non-file form field is a scenario field, keyed by its own name (see
         // workflow/scenario.spec.ts's field names) -- multer already parses these as
-        // plain strings. "photoMeta" is capture metadata, not a scenario field --
-        // parsed above, excluded here so it doesn't land in the submission's fields.
+        // plain strings. "photoMeta"/"signatureMeta" are capture metadata, not scenario
+        // fields -- parsed above, excluded here so they don't land in the submission's
+        // fields.
         const fields: Record<string, string> = {};
         for (const [key, value] of Object.entries(req.body ?? {})) {
-          if (key === "photoMeta") continue;
+          if (key === "photoMeta" || key === "signatureMeta") continue;
           fields[key] = String(value);
         }
 
         const { job, submission } = await submitScenario(
           scenario, String(req.params.jobId), req.driverEmail!, fields, photos,
-          { buffer: signatureFile.buffer, contentType: signatureFile.mimetype }
+          { buffer: signatureFile.buffer, contentType: signatureFile.mimetype, ...signatureMeta }
         );
         res.status(200).json({ job, submission });
       } catch (error) {

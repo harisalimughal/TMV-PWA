@@ -22,7 +22,7 @@ export interface ScenarioPhoto {
   locationName?: string;
 }
 
-/** Parallel to `photos` -- resolves each located photo to a short place name (see
+/** Parallel to `photos` (or a one-element array for the signature) -- resolves each located photo to a short place name (see
  *  integrations/geocode.ts), started alongside the Cloudinary upload below so a
  *  submission with located photos doesn't wait through both round trips back to
  *  back. Best-effort: reverseGeocode never throws, so a photo with no location or a
@@ -96,6 +96,7 @@ export async function submitScenario(
   const folder = `tmv-pwa/${jobId}/${spec.folderKey}`;
   const submittedAt = new Date().toISOString();
   const photoMetaPromise = resolvePhotoMeta(photos);
+  const signatureMetaPromise = resolvePhotoMeta([signature]);
   const photoUrls = await Promise.all(
     photos.map((photo, index) => uploadEvidenceImage(photo.buffer, folder, `photo-${index}-${Date.now()}`))
   );
@@ -110,6 +111,8 @@ export async function submitScenario(
     // Parallel to photoUrls, same index -- where/when each was taken.
     photoMeta: await photoMetaPromise,
     signatureUrl: signatureUpload.url,
+    // Where/when the customer actually signed -- same treatment as a photo's location.
+    signatureMeta: (await signatureMetaPromise)[0],
     submittedAt
   };
   await insertScenarioSubmission(submission);
@@ -159,6 +162,7 @@ export async function submitStorageScenario(
   const folder = `tmv-pwa/${ref}/${spec.folderKey}`;
   const submittedAt = new Date().toISOString();
   const photoMetaPromise = resolvePhotoMeta(photos);
+  const signatureMetaPromise = resolvePhotoMeta([signature]);
   const photoUrls = await Promise.all(
     photos.map((photo, index) => uploadEvidenceImage(photo.buffer, folder, `photo-${index}-${Date.now()}`))
   );
@@ -172,6 +176,7 @@ export async function submitStorageScenario(
     photoUrls: photoUrls.map(p => p.url),
     photoMeta: await photoMetaPromise,
     signatureUrl: signatureUpload.url,
+    signatureMeta: (await signatureMetaPromise)[0],
     submittedAt
   };
   await insertScenarioSubmission(submission);

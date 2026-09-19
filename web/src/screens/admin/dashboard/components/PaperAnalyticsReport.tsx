@@ -1,5 +1,5 @@
 import React from "react";
-import { NormalizedJob, SummaryResponse } from "../types";
+import { NormalizedJob, SummaryResponse, DriverSummaryItem } from "../types";
 import { formatLondonDate, formatLondonDateTime } from "../utils/date";
 import { completionRate } from "../utils/kpi";
 
@@ -10,9 +10,14 @@ interface Props {
   driver?: string;
   summary?: SummaryResponse | null;
   jobs?: NormalizedJob[];
+  /** Only populated for "Driver Performance" / "Payments" -- per-driver cash/card/
+   *  bank/invoice totals for the selected range. This is the settlement "slip" the
+   *  client asked for: what each driver collected, by payment method, so it can be
+   *  checked against what they hand in. */
+  driverSettlement?: DriverSummaryItem[] | null;
 }
 
-export function PaperAnalyticsReport({ reportType, from, to, driver, summary, jobs = [] }: Props) {
+export function PaperAnalyticsReport({ reportType, from, to, driver, summary, jobs = [], driverSettlement }: Props) {
   const generatedAt = formatLondonDateTime(new Date().toISOString());
 
   const kpis = summary?.kpis;
@@ -110,8 +115,47 @@ export function PaperAnalyticsReport({ reportType, from, to, driver, summary, jo
           </div>
         </div>
 
-        {/* Driver Performance Summary (if present) */}
-        {summary?.charts?.jobsByDriver && summary.charts.jobsByDriver.length > 0 && (
+        {/* Driver Settlement -- Driver Performance / Payments report types: per-driver
+            cash/card/bank/invoice breakdown for the selected range, the "who collected
+            what, and how" slip. Takes priority over the generic driver table below
+            since it's the only one with money in it. */}
+        {driverSettlement && driverSettlement.length > 0 && (
+          <div className="mb-6 shrink-0">
+            <h2 className="text-[14px] font-bold text-admin-ink mb-2 uppercase tracking-wide">Driver Settlement</h2>
+            <table className="w-full text-[12px] border-collapse border border-[#E5E7EB]">
+              <thead>
+                <tr className="bg-[#F3F4F6] text-left text-[#374151]">
+                  <th className="p-2 border border-[#E5E7EB] font-bold">Driver</th>
+                  <th className="p-2 border border-[#E5E7EB] font-bold">Code</th>
+                  <th className="p-2 border border-[#E5E7EB] font-bold text-right">Completed</th>
+                  <th className="p-2 border border-[#E5E7EB] font-bold text-right">Cash (£)</th>
+                  <th className="p-2 border border-[#E5E7EB] font-bold text-right">Card (£)</th>
+                  <th className="p-2 border border-[#E5E7EB] font-bold text-right">Bank (£)</th>
+                  <th className="p-2 border border-[#E5E7EB] font-bold text-right">Invoice (£)</th>
+                  <th className="p-2 border border-[#E5E7EB] font-bold text-right">Total (£)</th>
+                </tr>
+              </thead>
+              <tbody>
+                {driverSettlement.map((d, i) => (
+                  <tr key={d.initials || i} className={i % 2 === 0 ? "bg-white" : "bg-[#F9FAFB]"}>
+                    <td className="p-2 border border-[#E5E7EB] font-semibold text-[#111827]">{d.fullName}</td>
+                    <td className="p-2 border border-[#E5E7EB] font-mono">{d.initials}</td>
+                    <td className="p-2 border border-[#E5E7EB] text-right font-medium text-[#059669]">{d.completed}</td>
+                    <td className="p-2 border border-[#E5E7EB] text-right font-mono">{d.cashCollectedPounds.toFixed(2)}</td>
+                    <td className="p-2 border border-[#E5E7EB] text-right font-mono">{d.cardCollectedPounds.toFixed(2)}</td>
+                    <td className="p-2 border border-[#E5E7EB] text-right font-mono">{d.bankCollectedPounds.toFixed(2)}</td>
+                    <td className="p-2 border border-[#E5E7EB] text-right font-mono">{d.invoiceCollectedPounds.toFixed(2)}</td>
+                    <td className="p-2 border border-[#E5E7EB] text-right font-mono font-bold">{d.revenuePounds.toFixed(2)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {/* Driver Performance Summary (generic report types only -- Driver Settlement
+            above already covers Driver Performance / Payments with real money) */}
+        {!driverSettlement && summary?.charts?.jobsByDriver && summary.charts.jobsByDriver.length > 0 && (
           <div className="mb-6 shrink-0">
             <h2 className="text-[14px] font-bold text-admin-ink mb-2 uppercase tracking-wide">Driver Performance</h2>
             <table className="w-full text-[12px] border-collapse border border-[#E5E7EB]">

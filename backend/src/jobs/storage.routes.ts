@@ -3,7 +3,7 @@ import multer from "multer";
 import { env } from "../config/env";
 import { requireDriverAuth } from "../auth/require-driver-auth";
 import { submitStorageScenario } from "./scenario.service";
-import { parsePhotoMeta } from "./photo-meta";
+import { parsePhotoMeta, parseSignatureMeta } from "./photo-meta";
 import { ValidationError } from "../workflow/validation.engine";
 import { log } from "../utils/logger";
 
@@ -65,18 +65,19 @@ export function storageRoutes(): Router {
         }));
         const signatureFile = filesByField.signature?.[0];
         if (!signatureFile) throw new ValidationError("A signature is required.");
+        const signatureMeta = parseSignatureMeta(req.body?.signatureMeta);
 
-        // "photoMeta" is capture metadata (parsed above), not a scenario field --
-        // excluded here so it doesn't land in the submission's fields.
+        // "photoMeta"/"signatureMeta" are capture metadata (parsed above), not
+        // scenario fields -- excluded here so they don't land in the submission's fields.
         const fields: Record<string, string> = {};
         for (const [key, value] of Object.entries(req.body ?? {})) {
-          if (key === "photoMeta") continue;
+          if (key === "photoMeta" || key === "signatureMeta") continue;
           fields[key] = String(value);
         }
 
         const { submission } = await submitStorageScenario(
           scenario, req.driverEmail!, fields, photos,
-          { buffer: signatureFile.buffer, contentType: signatureFile.mimetype }
+          { buffer: signatureFile.buffer, contentType: signatureFile.mimetype, ...signatureMeta }
         );
         res.status(200).json({ submission });
       } catch (error) {

@@ -525,8 +525,29 @@ export function SubmissionDetailDrawer({ job: initialJob, isOpen, onClose, onNav
       <div className="bg-white rounded-module p-4 sm:p-6 shadow-sm border border-admin-line">
          <label className="text-[13px] font-semibold text-admin-muted block mb-4">Client Signature</label>
          {signatureUrl ? (
-            <div className="border border-admin-line rounded-card p-4 bg-admin-surface max-w-sm flex justify-center">
-              <img src={signatureUrl} alt="Signature" className="max-h-24 mix-blend-multiply" />
+            <div className="max-w-sm">
+              <div className="border border-admin-line rounded-card p-4 bg-admin-surface flex justify-center">
+                <img src={signatureUrl} alt="Signature" className="max-h-24 mix-blend-multiply" />
+              </div>
+              {/* Proof of place for the signature itself, same as a photo's caption --
+                  absent on submissions made before signature location was captured. */}
+              {isScenario && (scenarioItem.signature?.capturedAt || scenarioItem.signature?.location) && (
+                <div className="mt-2 text-[11px] leading-tight text-admin-muted text-center space-y-0.5">
+                  {scenarioItem.signature?.capturedAt && <div>{formatCapturedTime(scenarioItem.signature.capturedAt)}</div>}
+                  {scenarioItem.signature?.location ? (
+                    <a
+                      href={mapsUrlForLocation(scenarioItem.signature.location)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="block truncate text-admin-brand underline underline-offset-2"
+                    >
+                      {formatLocationLabel(scenarioItem.signature.location, scenarioItem.signature.locationName)}
+                    </a>
+                  ) : (
+                    <div>No location</div>
+                  )}
+                </div>
+              )}
             </div>
          ) : (
             <div className="p-8 text-center bg-admin-surface border border-dashed border-admin-line rounded-card max-w-sm">

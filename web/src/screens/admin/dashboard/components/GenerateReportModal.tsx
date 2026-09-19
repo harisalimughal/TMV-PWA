@@ -4,11 +4,16 @@ import { useQuery } from "@tanstack/react-query";
 import { DateRangePicker } from "./DateRangePicker";
 import { Button, IconButton } from "../../../../ui";
 import { fetchSummary, fetchJobs, fetchDrivers } from "../api";
-import { NormalizedJob, SummaryResponse } from "../types";
+import { NormalizedJob, SummaryResponse, DriverSummaryItem } from "../types";
 import { PrintPortal } from "./PrintPortal";
 import { PaperAnalyticsReport } from "./PaperAnalyticsReport";
 import { waitForPrintImages } from "../utils/printReady";
 import { sounds } from "../utils/audio";
+import { toCsv, downloadCsv, stampForFilename } from "../utils/csv";
+
+/** These two are the "how much did each driver actually collect, split by payment
+ *  method" ask -- the rest of REPORT_TYPES stay job-listing reports. */
+const SETTLEMENT_REPORT_TYPES = ["Driver Performance", "Payments"];
 
 interface Props {
   isOpen: boolean;
@@ -38,6 +43,7 @@ export function GenerateReportModal({ isOpen, onClose, initialFrom, initialTo }:
   const [printableData, setPrintableData] = useState<{
     summary: SummaryResponse | null;
     jobs: NormalizedJob[];
+    driverSettlement: DriverSummaryItem[] | null;
   } | null>(null);
 
   const { data: driversData } = useQuery({
@@ -64,17 +70,42 @@ export function GenerateReportModal({ isOpen, onClose, initialFrom, initialTo }:
   const requiresDateRange = ["Daily Operations", "Weekly Operations", "Monthly Operations"].includes(reportType);
   const noDatesSelected = requiresDateRange && (!from || !to);
   
-  const showDriverFilter = ["Driver Performance", "Revenue", "Daily Operations", "Weekly Operations", "Monthly Operations"].includes(reportType);
+  const showDriverFilter = ["Driver Performance", "Payments", "Revenue", "Daily Operations", "Weekly Operations", "Monthly Operations"].includes(reportType);
+
+  const isSettlementReport = SETTLEMENT_REPORT_TYPES.includes(reportType);
 
   const handleGenerate = async () => {
     if (format === "CSV") {
+      // Driver Performance / Payments are "how much did each driver collect, by
+      // payment method" -- a job-listing CSV can't answer that without the operator
+      // re-aggregating it by hand, which is the exact confusion this report exists to
+      // remove. Build the per-driver settlement CSV client-side instead.
+      if (isSettlementReport) {
+        sounds.playSuccess();
+        const { drivers } = await fetchDrivers(from, to).catch(() => ({ drivers: [] as DriverSummaryItem[] }));
+        const rows = driver !== "all" ? drivers.filter(d => d.initials.toLowerCase() === driver.toLowerCase()) : drivers;
+        const csv = toCsv(rows, [
+          { header: "Driver", value: r => r.fullName },
+          { header: "Code", value: r => r.initials },
+          { header: "Completed Jobs", value: r => r.completed },
+          { header: "Cash (£)", value: r => r.cashCollectedPounds.toFixed(2) },
+          { header: "Card (£)", value: r => r.cardCollectedPounds.toFixed(2) },
+          { header: "Bank (£)", value: r => r.bankCollectedPounds.toFixed(2) },
+          { header: "Invoice (£)", value: r => r.invoiceCollectedPounds.toFixed(2) },
+          { header: "Total (£)", value: r => r.revenuePounds.toFixed(2) }
+        ]);
+        downloadCsv(`TMV_Driver_Settlement_${stampForFilename()}.csv`, csv);
+        onClose();
+        return;
+      }
+
       const params = new URLSearchParams();
       if (from) params.set("from", from);
       if (to) params.set("to", to);
       if (driver && driver !== "all") params.set("driver", driver);
       if (reportType === "Exceptions") {
         params.set("evidence", "missing");
-      } else if (reportType === "Revenue" || reportType === "Payments") {
+      } else if (reportType === "Revenue") {
         params.set("payStatus", "ALL");
       }
 
@@ -87,19 +118,25 @@ export function GenerateReportModal({ isOpen, onClose, initialFrom, initialTo }:
     if (format === "PDF") {
       try {
         setIsGenerating(true);
-        const [sumRes, jobsRes] = await Promise.all([
+        const [sumRes, jobsRes, driversRes] = await Promise.all([
           fetchSummary(from, to).catch(() => null),
           fetchJobs({
             from,
             to,
             driver: driver !== "all" ? driver : undefined,
             pageSize: 100
-          }).catch(() => ({ items: [] as NormalizedJob[] }))
+          }).catch(() => ({ items: [] as NormalizedJob[] })),
+          isSettlementReport ? fetchDrivers(from, to).catch(() => ({ drivers: [] as DriverSummaryItem[] })) : Promise.resolve(null)
         ]);
+
+        const driverSettlement = driversRes
+          ? (driver !== "all" ? driversRes.drivers.filter(d => d.initials.toLowerCase() === driver.toLowerCase()) : driversRes.drivers)
+          : null;
 
         setPrintableData({
           summary: sumRes,
-          jobs: (jobsRes as any)?.items || []
+          jobs: (jobsRes as any)?.items || [],
+          driverSettlement
         });
 
         document.body.classList.add("printing-report");
@@ -247,6 +284,7 @@ export function GenerateReportModal({ isOpen, onClose, initialFrom, initialTo }:
             driver={driver}
             summary={printableData.summary}
             jobs={printableData.jobs}
+            driverSettlement={printableData.driverSettlement}
           />
         </PrintPortal>
       )}

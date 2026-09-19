@@ -109,7 +109,15 @@ function buildJobScenarios(rows: MongoDataset["scenarioSubmissions"]): JobScenar
         location: r.photoMeta?.[i]?.location,
         locationName: r.photoMeta?.[i]?.locationName
       })),
-      signature: r.signatureUrl ? { fileId: r.signatureUrl, thumbUrl: toThumbnailUrl(r.signatureUrl) } : null
+      signature: r.signatureUrl
+        ? {
+            fileId: r.signatureUrl,
+            thumbUrl: toThumbnailUrl(r.signatureUrl),
+            capturedAt: r.signatureMeta?.capturedAt,
+            location: r.signatureMeta?.location,
+            locationName: r.signatureMeta?.locationName
+          }
+        : null
     }));
 }
 
