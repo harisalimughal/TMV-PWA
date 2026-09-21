@@ -304,6 +304,18 @@ function WorkBreakdown({ from, to }: { from?: string; to?: string }) {
   const allDrivers = driversData?.drivers ?? [];
   const rows = driver !== "all" ? allDrivers.filter(d => d.initials.toLowerCase() === driver.toLowerCase()) : allDrivers;
 
+  // The dropdown offers real drivers to filter down to -- not every code this
+  // endpoint returns. A job with a driverInitials value that doesn't match any
+  // registered account (a typo'd Calendar entry, a former driver, "UNASSIGNED") still
+  // gets a synthesized, hasAccount:false row from drivers-summary.routes.ts so that
+  // job's revenue isn't silently dropped from the "All Drivers" table below -- but
+  // there's no real driver behind it to select, and it shouldn't be offered as if
+  // there were (same filter JobsPage/FinishedJobsPage already apply to their own
+  // driver filters).
+  const driverOptions = allDrivers
+    .filter(d => d.initials && d.initials !== "UNASSIGNED" && d.hasAccount)
+    .sort((a, b) => (a.fullName || a.initials).localeCompare(b.fullName || b.initials));
+
   const handleDownloadCsv = () => {
     setIsExportOpen(false);
     sounds.playSuccess();
@@ -376,7 +388,7 @@ function WorkBreakdown({ from, to }: { from?: string; to?: string }) {
               ) : (
                 <>
                   <option value="all">All Drivers</option>
-                  {allDrivers.map(d => (
+                  {driverOptions.map(d => (
                     <option key={d.initials} value={d.initials}>
                       {d.fullName || d.initials} ({d.initials})
                     </option>

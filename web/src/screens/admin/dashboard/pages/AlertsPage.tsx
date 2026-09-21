@@ -86,14 +86,33 @@ export function AlertsPage() {
   const [selectedRows, setSelectedRows] = useState<Set<string>>(new Set());
   const [confirmingDelete, setConfirmingDelete] = useState(false);
 
-  // With a date range set, this is a real query against GPSLive's own history
-  // (alerts.routes.ts's /v1/alerts/custom, fleet-wide) -- not just "last 50" filtered
-  // client-side. Auto-refresh only makes sense for the live "last 50" default view;
-  // a picked-in-the-past range shouldn't quietly change underneath the admin.
+  const hasExplicitRange = Boolean(from || to);
+  // The category tabs (Congestion/Tunnel) filter client-side over whatever `allRows`
+  // came back -- fine when a real date range is queried, but with no range at all the
+  // fetch below is GPSLive's fleet-wide "last 50 events, every type" live feed, which
+  // routine telemetry (moving/stopped/ignition) floods within an hour or two (see
+  // fetchAlerts' own doc comment). A congestion event from yesterday can already be
+  // pushed out of that window, so "Congestion + no date picked" was showing nothing
+  // even though matching events exist further back. Picking a category (not "All")
+  // with no explicit range now queries real history over a wide lookback instead of
+  // that tiny live feed, same as if the admin had picked a long date range themselves.
+  const CATEGORY_LOOKBACK_DAYS = 365;
+  const effectiveFrom = hasExplicitRange
+    ? from
+    : categoryFilter !== "All"
+      ? DateTime.now().minus({ days: CATEGORY_LOOKBACK_DAYS }).toISO()
+      : undefined;
+  const effectiveTo = hasExplicitRange ? to : categoryFilter !== "All" ? DateTime.now().toISO() : undefined;
+
+  // With a date range (explicit or the category default above) set, this is a real
+  // query against GPSLive's own history (alerts.routes.ts's /v1/alerts/custom,
+  // fleet-wide) -- not just "last 50" filtered client-side. Auto-refresh only makes
+  // sense for the live "last 50" default view; a dated query shouldn't quietly change
+  // underneath the admin.
   const { data, isLoading, error, refetch } = useQuery({
-    queryKey: ["gpslive_alerts", from, to],
-    queryFn: () => fetchAlerts(from, to),
-    refetchInterval: from || to ? false : 30000
+    queryKey: ["gpslive_alerts", effectiveFrom, effectiveTo],
+    queryFn: () => fetchAlerts(effectiveFrom, effectiveTo),
+    refetchInterval: effectiveFrom || effectiveTo ? false : 30000
   });
 
   const allRows = data?.rows || [];
@@ -167,9 +186,11 @@ export function AlertsPage() {
       )}
 
       <p className="px-2 text-[13px] text-admin-muted">
-        {from || to
+        {hasExplicitRange
           ? "GPSLive alerts for the selected range -- every alert type on the account, not just congestion."
-          : "The fleet's last 50 alerts from GPSLive -- every alert type on the account, not just congestion."}
+          : categoryFilter !== "All"
+            ? `${CATEGORY_LABEL[categoryFilter]} events from the last ${CATEGORY_LOOKBACK_DAYS} days.`
+            : "The fleet's last 50 alerts from GPSLive -- every alert type on the account, not just congestion."}
       </p>
 
       {/* TOOLBAR */}
