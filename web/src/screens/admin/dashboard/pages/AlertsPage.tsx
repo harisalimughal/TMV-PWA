@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { DateTime } from "luxon";
 import { Search, ShieldAlert, Car, HelpCircle, LogIn, LogOut, Activity, Trash2 } from "lucide-react";
@@ -96,13 +96,22 @@ export function AlertsPage() {
   // even though matching events exist further back. Picking a category (not "All")
   // with no explicit range now queries real history over a wide lookback instead of
   // that tiny live feed, same as if the admin had picked a long date range themselves.
+  //
+  // useMemo, not a plain expression: DateTime.now() is a fresh value on every render,
+  // and effectiveFrom/effectiveTo feed the query key below -- computing it inline made
+  // every render (including the one the fetch itself triggers) look like a brand new
+  // query, refetching forever without ever settling. Memoizing on the actual filter
+  // inputs freezes "now" to the moment the admin picked this category/range instead.
   const CATEGORY_LOOKBACK_DAYS = 365;
-  const effectiveFrom = hasExplicitRange
-    ? from
-    : categoryFilter !== "All"
-      ? DateTime.now().minus({ days: CATEGORY_LOOKBACK_DAYS }).toISO()
-      : undefined;
-  const effectiveTo = hasExplicitRange ? to : categoryFilter !== "All" ? DateTime.now().toISO() : undefined;
+  const { effectiveFrom, effectiveTo } = useMemo(() => {
+    if (hasExplicitRange) return { effectiveFrom: from, effectiveTo: to };
+    if (categoryFilter !== "All") {
+      const now = DateTime.now();
+      return { effectiveFrom: now.minus({ days: CATEGORY_LOOKBACK_DAYS }).toISO(), effectiveTo: now.toISO() };
+    }
+    return { effectiveFrom: undefined, effectiveTo: undefined };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hasExplicitRange, from, to, categoryFilter]);
 
   // With a date range (explicit or the category default above) set, this is a real
   // query against GPSLive's own history (alerts.routes.ts's /v1/alerts/custom,
