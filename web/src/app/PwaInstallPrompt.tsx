@@ -33,12 +33,15 @@ export function PwaInstallPrompt() {
   const toast = useToast();
   const [dismissed, setDismissed] = useState(wasDismissedThisSession);
   const [busy, setBusy] = useState(false);
+  const canInstallNow = status === "installable";
+  const canInstallFromMenu = status === "needs-browser-menu";
+  const visible = (canInstallNow || canInstallFromMenu) && !dismissed;
 
   useEffect(() => {
     if (status !== "installable") setBusy(false);
   }, [status]);
 
-  if (status !== "installable" || dismissed) return null;
+  if (!visible) return null;
 
   async function install() {
     setBusy(true);
@@ -74,11 +77,15 @@ export function PwaInstallPrompt() {
         <Download className="size-5 shrink-0 text-brand" aria-hidden />
         <div className="min-w-0 flex-1">
           <p className="truncate text-[14px] font-bold text-fg">Install TMV Driver</p>
-          <p className="truncate text-[12.5px] text-fg-muted">Open faster from your home screen.</p>
+          <p className="truncate text-[12.5px] text-fg-muted">
+            {canInstallNow ? "Open faster from your home screen." : "Use Chrome menu > Install app."}
+          </p>
         </div>
-        <Button size="sm" onClick={install} loading={busy}>
-          Install App
-        </Button>
+        {canInstallNow && (
+          <Button size="sm" onClick={install} loading={busy}>
+            Install App
+          </Button>
+        )}
         <IconButton aria-label="Dismiss install prompt" icon={<X />} onClick={dismiss} className="shrink-0" />
       </div>
     </aside>

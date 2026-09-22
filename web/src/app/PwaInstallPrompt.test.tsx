@@ -52,4 +52,13 @@ describe("PwaInstallPrompt", () => {
 
     await waitFor(() => expect(promptEvent.prompt).toHaveBeenCalledTimes(1));
   });
+
+  it("shows Chrome install guidance when the native prompt has not fired yet", () => {
+    window.__tmvInstallPrompt = null;
+
+    renderPrompt();
+
+    expect(screen.getByText("Install TMV Driver")).toBeInTheDocument();
+    expect(screen.getByText("Use Chrome menu > Install app.")).toBeInTheDocument();
+  });
 });
