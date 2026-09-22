@@ -17,7 +17,7 @@ import { FolderActionDropdown } from "../components/FolderActionDropdown";
 import { PaperDossierReport } from "../components/PaperDossierReport";
 import { BulkDeleteModal } from "../components/BulkDeleteModal";
 import { FileText } from "lucide-react";
-import { fetchJobs, fetchDrivers } from "../api";
+import { fetchJobs, fetchDrivers, fetchJobDetail } from "../api";
 import { NormalizedJob, formatGBP, toPounds } from "../types";
 import { DateRangePicker } from "../components/DateRangePicker";
 import { ApiErrorState } from "../components/ApiErrorState";
@@ -41,6 +41,7 @@ export function FinishedJobsPage() {
    *  drawer knows to run its own download flow immediately on open (see
    *  SubmissionDetailDrawer's autoDownload prop) instead of just sitting on Preview. */
   const [autoDownloadJobId, setAutoDownloadJobId] = useState<string | null>(null);
+  const openedDeepLinkJobRef = useRef<string | null>(null);
 
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: ["jobs", "COMPLETED", page, pageSize, from, to, driverFilter],
@@ -74,6 +75,19 @@ export function FinishedJobsPage() {
     job.totalCharges || job.calculatedTotalCharges || job.basePrice + job.extraCharges + job.overtimeCharge;
 
   const items = data?.items || [];
+
+  useEffect(() => {
+    const jobId = new URLSearchParams(window.location.search).get("job");
+    if (!jobId || openedDeepLinkJobRef.current === jobId) return;
+    openedDeepLinkJobRef.current = jobId;
+    setAutoDownloadJobId(null);
+    fetchJobDetail(jobId)
+      .then(job => setPreviewJob(job))
+      .catch(() => {
+        openedDeepLinkJobRef.current = null;
+      });
+  }, []);
+
   const toggleRow = (id: string) => {
     const next = new Set(selectedRows);
     if (next.has(id)) next.delete(id);

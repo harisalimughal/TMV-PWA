@@ -5,6 +5,7 @@ import { getDriverProfile } from "../auth/driver-account.service";
 import { getJob, listJobs, upsertJob } from "../db/jobs.repo";
 import { appendActivity } from "../db/activity.repo";
 import { getSetting } from "../db/settings.repo";
+import { readEvidenceSummary } from "../db/evidence.repo";
 import { WorkflowState } from "../workflow/workflow.states";
 import { DriverProfile, Job, JobStatus } from "./job.types";
 import { syncTodayBookings } from "./booking.service";
@@ -12,7 +13,7 @@ import { log } from "../utils/logger";
 import { withJobLock } from "../utils/lock";
 import { ValidationError } from "../workflow/validation.engine";
 import { sendJobStartedSms } from "../integrations/firetext";
-import { sendJobStartedEmail } from "../google/gmail";
+import { sendJobStartedEmail, sendOpsJobCompletionEmail } from "../google/gmail";
 import { JOB_STARTED_MESSAGE_TEMPLATE } from "../notifications/message";
 import { isMessageEnabled } from "../notifications/message-catalog";
 import { checkCongestionZoneAtJobStart } from "./congestion-zone.service";
@@ -504,6 +505,37 @@ function delayStatus(bookedFinish: string, actualFinish: string): string {
   return "Very Late";
 }
 
+function sendOpsCompletionEmailIfAny(job: Job, driver: DriverProfile): void {
+  const actor = driver.email || driver.chatUserName;
+  readEvidenceSummary(job.jobId)
+    .catch(error => {
+      log.warn("job completion evidence summary unavailable for ops email", { job_id: job.jobId, error: String(error) });
+      return undefined;
+    })
+    .then(evidence => sendOpsJobCompletionEmail(job, driver, evidence))
+    .then(() => appendActivity({
+      jobId: job.jobId,
+      driver: actor,
+      action: "OPS_JOB_COMPLETION_EMAIL_SENT",
+      fromState: WorkflowState.COMPLETED,
+      toState: WorkflowState.COMPLETED,
+      detail: "info@themanvan.co.uk"
+    }))
+    .catch(error => {
+      const message = error instanceof Error ? error.message : String(error);
+      log.warn("job completion ops email failed (non-fatal)", { job_id: job.jobId, error: message });
+      return appendActivity({
+        jobId: job.jobId,
+        driver: actor,
+        action: "OPS_JOB_COMPLETION_EMAIL_FAILED",
+        fromState: WorkflowState.COMPLETED,
+        toState: WorkflowState.COMPLETED,
+        detail: message
+      });
+    })
+    .catch(error => log.warn("job completion ops email audit failed", { job_id: job.jobId, error: String(error) }));
+}
+
 export async function completeJob(jobId: string, identifier: string): Promise<Job> {
   const { job, driver } = await getJobForDriver(jobId, identifier);
   if (job.status === JobStatus.COMPLETED) return job;
@@ -523,5 +555,7 @@ export async function completeJob(jobId: string, identifier: string): Promise<Jo
   job.delayStatus = delayStatus(job.bookedFinish, job.actualFinish);
   job.status = JobStatus.COMPLETED;
   job.currentState = WorkflowState.COMPLETED;
-  return saveJob(job, driver, "COMPLETE_JOB", from, `Server finish timestamp ${now}`);
+  const completedJob = await saveJob(job, driver, "COMPLETE_JOB", from, `Server finish timestamp ${now}`);
+  sendOpsCompletionEmailIfAny(completedJob, driver);
+  return completedJob;
 }
