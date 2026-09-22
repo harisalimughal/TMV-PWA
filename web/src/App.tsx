@@ -15,6 +15,7 @@ import { startOutboxSync } from "./lib/outbox";
 import { AppLayout, type TabId } from "./app/AppLayout";
 import { DevicePreview } from "./app/DevicePreview";
 import { UpdateBanner } from "./app/UpdateBanner";
+import { PwaInstallPrompt } from "./app/PwaInstallPrompt";
 import { ConfirmDialog } from "./ui";
 import { useToast } from "./components/ui/Toast";
 import { ErrorBoundary } from "./components/ErrorBoundary";
@@ -391,6 +392,7 @@ export function App() {
     <DevicePreview>
       <InAppNotificationListener />
       {framed}
+      <PwaInstallPrompt />
       <UpdateBanner />
       <ConfirmDialog
         open={confirmLogout}
