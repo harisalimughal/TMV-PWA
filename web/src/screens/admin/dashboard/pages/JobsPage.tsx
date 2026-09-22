@@ -445,10 +445,10 @@ export function JobsPage() {
                             </div>
                             <div className="min-w-0">
                               <div className="flex items-center gap-2">
-                                <DriverViewedDot viewedAt={job.driverViewedAt} />
                                 <span className="font-semibold text-admin-brand text-[14px] leading-tight truncate">
                                   {job.jobId}
                                 </span>
+                                <DriverViewedDot viewedAt={job.driverViewedAt} />
                                 {!isUnassigned && resolvedDriver.vehicleReg && (
                                   <span className="bg-admin-surface px-1 py-[1px] border border-admin-line rounded-[3px] font-mono font-bold uppercase text-[9px] text-admin-muted truncate max-w-[80px]">
                                     {formatVanReg(resolvedDriver.vehicleReg)}
@@ -721,8 +721,8 @@ function JobCardList({
                 </button>
                 <button onClick={() => onOpen(job)} className="order-2 flex-1 min-w-0 text-left">
                   <div className="flex items-center gap-2 flex-wrap">
-                    <DriverViewedDot viewedAt={job.driverViewedAt} />
                     <span className="font-semibold text-admin-brand text-[14px]">{job.jobId}</span>
+                    <DriverViewedDot viewedAt={job.driverViewedAt} />
                     <JobStatusBadge status={job.status} />
                   </div>
                   <p className="text-card text-fg mt-1.5 truncate">

@@ -230,8 +230,8 @@ export function FinishedJobsPage() {
                     </div>
                     <button onClick={() => setPreviewJob(job)} className="order-2 flex-1 min-w-0 text-left">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <DriverViewedDot viewedAt={job.driverViewedAt} />
                         <span className="font-semibold text-admin-brand text-[14px]">{job.jobId}</span>
+                        <DriverViewedDot viewedAt={job.driverViewedAt} />
                         <JobStatusBadge status={job.status} />
                       </div>
                       <p className="text-card text-fg mt-1.5 truncate">
