@@ -1,9 +1,9 @@
-import React, { useState } from "react";
+import React, { useRef, useState } from "react";
 import { ArrowRight, Navigation } from "lucide-react";
 import { cx } from "../../ui";
 import { haptics } from "../../lib/haptics";
 import { useOnline } from "../../lib/net";
-import { sendOnMyWay, startJob, type ApiError, type Job } from "../../api/jobs";
+import { markJobViewed, sendOnMyWay, startJob, type ApiError, type Job } from "../../api/jobs";
 import { notifyJobsRefresh } from "../../lib/jobsRefresh";
 import { useToast } from "../ui/Toast";
 import { BookingWindowHeader } from "./BookingWindowHeader";
@@ -34,6 +34,7 @@ export function FeaturedJobCard({ job, onStarted }: FeaturedJobCardProps) {
   const toast = useToast();
   const [starting, setStarting] = useState(false);
   const [notifying, setNotifying] = useState(false);
+  const viewedSent = useRef(false);
   // Optimistic -- notifyJobsRefresh() below re-fetches the authoritative job list, but
   // that's a network round trip; without this the button would flash back for the gap
   // between the send succeeding and the refetch landing.
@@ -49,6 +50,14 @@ export function FeaturedJobCard({ job, onStarted }: FeaturedJobCardProps) {
   // jobs.service.ts's startJob, which now rejects a start with no onMyWayAt) -- a job
   // already in progress always has this set already, from whenever it first started.
   const needsOnMyWay = job.status === "READY" && !job.onMyWayAt && !sentLocally;
+
+  function noteViewed() {
+    if (viewedSent.current) return;
+    viewedSent.current = true;
+    void markJobViewed(job.jobId).catch(() => {
+      viewedSent.current = false;
+    });
+  }
 
   async function handleOnMyWay() {
     if (!online) {
@@ -89,6 +98,7 @@ export function FeaturedJobCard({ job, onStarted }: FeaturedJobCardProps) {
 
   return (
     <div
+      onClick={noteViewed}
       className={cx(
         "block w-full rounded-panel border border-line-strong bg-surface p-4 text-left",
         "shadow-[0_1px_3px_rgb(15_23_42/0.08),0_12px_28px_-10px_rgb(15_23_42/0.22)]"
@@ -106,7 +116,10 @@ export function FeaturedJobCard({ job, onStarted }: FeaturedJobCardProps) {
             type="button"
             disabled={notifying}
             aria-busy={notifying || undefined}
-            onClick={handleOnMyWay}
+            onClick={event => {
+              event.stopPropagation();
+              void handleOnMyWay();
+            }}
             className={cx(
               "flex items-center gap-1.5 rounded-pill bg-brand px-3.5 py-2 text-label font-bold text-white",
               "transition-transform duration-fast active:scale-95 disabled:opacity-60"
@@ -131,7 +144,10 @@ export function FeaturedJobCard({ job, onStarted }: FeaturedJobCardProps) {
               type="button"
               disabled={starting}
               aria-busy={starting || undefined}
-              onClick={handleStart}
+              onClick={event => {
+                event.stopPropagation();
+                void handleStart();
+              }}
               className={cx(bigActionButtonClass, "mt-4")}
             >
               {starting ? "Starting…" : startLabel}
