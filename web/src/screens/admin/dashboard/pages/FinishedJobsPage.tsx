@@ -16,6 +16,7 @@ import { SubmissionDetailDrawer } from "../components/SubmissionDetailDrawer";
 import { FolderActionDropdown } from "../components/FolderActionDropdown";
 import { PaperDossierReport } from "../components/PaperDossierReport";
 import { BulkDeleteModal } from "../components/BulkDeleteModal";
+import { DriverViewedDot } from "../components/DriverViewedDot";
 import { FileText } from "lucide-react";
 import { fetchJobs, fetchDrivers, fetchJobDetail } from "../api";
 import { NormalizedJob, formatGBP, toPounds } from "../types";
@@ -229,6 +230,7 @@ export function FinishedJobsPage() {
                     </div>
                     <button onClick={() => setPreviewJob(job)} className="order-2 flex-1 min-w-0 text-left">
                       <div className="flex items-center gap-2 flex-wrap">
+                        <DriverViewedDot viewedAt={job.driverViewedAt} />
                         <span className="font-semibold text-admin-brand text-[14px]">{job.jobId}</span>
                         <JobStatusBadge status={job.status} />
                       </div>
@@ -364,6 +366,7 @@ export function FinishedJobsPage() {
 
                         <td className="px-4 text-[14px] text-admin-ink">
                           <div className="flex items-center gap-2">
+                            <DriverViewedDot viewedAt={job.driverViewedAt} />
                             <span className="truncate max-w-[150px]">{job.customerName || "—"}</span>
                             {isTest && (
                               <span className="px-1.5 py-0.5 rounded-control bg-admin-surface border border-admin-line text-admin-muted text-[10px] font-semibold uppercase tracking-wider" title="Test or Incomplete Record">

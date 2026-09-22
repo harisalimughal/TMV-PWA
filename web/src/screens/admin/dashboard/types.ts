@@ -98,6 +98,8 @@ export interface NormalizedJob {
   /** When the driver's "I'm on the Way" tap sent the customer SMS/email -- distinct
    *  from actualStart (the Arrival photo's timestamp). */
   onMyWayAt?: string;
+  /** First intentional driver interaction with this job. */
+  driverViewedAt?: string;
   bookedMinutes: number;
   actualMinutes?: number;
   delayMinutes: number;

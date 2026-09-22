@@ -2,7 +2,7 @@ import { Request, Response, Router } from "express";
 import multer from "multer";
 import { env } from "../config/env";
 import { requireDriverAuth } from "../auth/require-driver-auth";
-import { getJobForDriver, getJobsGroupedForDriver, getNextJobForDriver, getTomorrowJobsForDriver, sendOnMyWay, startJob } from "./jobs.service";
+import { getJobForDriver, getJobsGroupedForDriver, getNextJobForDriver, getTomorrowJobsForDriver, markJobViewed, sendOnMyWay, startJob } from "./jobs.service";
 import { uploadEvidenceImage } from "../storage/cloudinary";
 import { looksLikeImage } from "./evidence.service";
 import {
@@ -187,7 +187,7 @@ export function jobsRoutes(): Router {
 
   router.get("/:jobId", async (req: Request, res: Response) => {
     try {
-      const { job } = await getJobForDriver(String(req.params.jobId), req.driverEmail!);
+      const job = await markJobViewed(String(req.params.jobId), req.driverEmail!, "Opened job workflow");
       const [activity, evidence, evidenceItems, confirmationText] = await Promise.all([
         listActivityForJob(job.jobId),
         readEvidenceSummary(job.jobId),
@@ -202,6 +202,15 @@ export function jobsRoutes(): Router {
         suggestedTotal: await suggestedTotal(job),
         confirmationText
       });
+    } catch (error) {
+      errorResponse(res, error);
+    }
+  });
+
+  router.post("/:jobId/viewed", async (req: Request, res: Response) => {
+    try {
+      const job = await markJobViewed(String(req.params.jobId), req.driverEmail!, "Expanded upcoming job");
+      res.status(200).json({ job });
     } catch (error) {
       errorResponse(res, error);
     }

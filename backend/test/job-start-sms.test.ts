@@ -7,6 +7,7 @@ const listJobs = vi.fn();
 const upsertJob = vi.fn().mockResolvedValue(undefined);
 const getDriverProfile = vi.fn();
 const appendActivity = vi.fn().mockResolvedValue(undefined);
+const listActivityForJob = vi.fn().mockResolvedValue([]);
 const getSetting = vi.fn().mockResolvedValue("On my way {vanRegistration}");
 const sendJobStartedSms = vi.fn().mockResolvedValue(undefined);
 const sendJobStartedEmail = vi.fn().mockResolvedValue(undefined);
@@ -28,7 +29,8 @@ vi.mock("../src/auth/driver-account.service", () => ({
   getDriverProfile: (...args: any[]) => getDriverProfile(...args)
 }));
 vi.mock("../src/db/activity.repo", () => ({
-  appendActivity: (...args: any[]) => appendActivity(...args)
+  appendActivity: (...args: any[]) => appendActivity(...args),
+  listActivityForJob: (...args: any[]) => listActivityForJob(...args)
 }));
 vi.mock("../src/db/settings.repo", () => ({
   getSetting: (...args: any[]) => getSetting(...args)
@@ -72,6 +74,7 @@ describe("sendOnMyWay SMS notification", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     getDriverProfile.mockResolvedValue(driver);
+    listActivityForJob.mockResolvedValue([]);
   });
 
   it("sends the customer SMS and stamps onMyWayAt when notifying a not-yet-notified job", async () => {
@@ -107,6 +110,7 @@ describe("sendOnMyWay email notification", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     getDriverProfile.mockResolvedValue(driver);
+    listActivityForJob.mockResolvedValue([]);
   });
 
   it("sends the customer a driver-introduction email alongside the SMS", async () => {
@@ -158,6 +162,7 @@ describe("startJob", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     getDriverProfile.mockResolvedValue(driver);
+    listActivityForJob.mockResolvedValue([]);
   });
 
   it("refuses to start a job the driver hasn't sent \"I'm on the Way\" for yet", async () => {

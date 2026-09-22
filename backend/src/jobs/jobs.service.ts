@@ -3,7 +3,7 @@ import { env } from "../config/env";
 import { getFiretextApiKey } from "../config/live-settings";
 import { getDriverProfile } from "../auth/driver-account.service";
 import { getJob, listJobs, upsertJob } from "../db/jobs.repo";
-import { appendActivity } from "../db/activity.repo";
+import { appendActivity, listActivityForJob } from "../db/activity.repo";
 import { getSetting } from "../db/settings.repo";
 import { readEvidenceSummary } from "../db/evidence.repo";
 import { WorkflowState } from "../workflow/workflow.states";
@@ -285,6 +285,26 @@ export async function getJobForDriver(
   return { job, driver };
 }
 
+export async function markJobViewed(jobId: string, identifier: string, detail = "Driver viewed the job"): Promise<Job> {
+  const { job, driver } = await getJobForDriver(jobId, identifier);
+  const actor = driver.email || driver.chatUserName;
+  const activity = await listActivityForJob(job.jobId);
+  const alreadyViewed = activity.some(entry =>
+    entry.action === "DRIVER_VIEWED_JOB" && entry.driver === actor
+  );
+  if (!alreadyViewed) {
+    await appendActivity({
+      jobId: job.jobId,
+      driver: actor,
+      action: "DRIVER_VIEWED_JOB",
+      fromState: job.currentState,
+      toState: job.currentState,
+      detail
+    });
+  }
+  return job;
+}
+
 /** Persists a workflow transition: the job doc and an activity log entry. */
 export async function saveJob(
   job: Job,
@@ -410,6 +430,7 @@ function sendJobStartedEmailIfAny(job: Job, driver: DriverProfile): void {
 export async function sendOnMyWay(jobId: string, identifier: string): Promise<Job> {
   return withJobLock(jobId, async () => {
     const { job, driver } = await getJobForDriver(jobId, identifier);
+    await markJobViewed(jobId, identifier, "Tapped I'm on the Way");
 
     if (job.status === JobStatus.COMPLETED) throw new ValidationError("This job is already completed.");
     // Idempotent, not an error -- a double-tap or a stale screen re-sending this
@@ -441,6 +462,7 @@ export async function startJob(jobId: string, identifier: string): Promise<Job> 
    */
   return withJobLock(jobId, async () => {
     const { job, driver } = await getJobForDriver(jobId, identifier);
+    await markJobViewed(jobId, identifier, "Tapped Start Job");
 
     if (job.status === JobStatus.COMPLETED) throw new ValidationError("This job is already completed.");
 

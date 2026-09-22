@@ -184,6 +184,10 @@ export function sendOnMyWay(jobId: string): Promise<JobUpdateResult> {
   return request(`/api/jobs/${encodeURIComponent(jobId)}/on-my-way`, { method: "POST" });
 }
 
+export function markJobViewed(jobId: string): Promise<JobUpdateResult> {
+  return request(`/api/jobs/${encodeURIComponent(jobId)}/viewed`, { method: "POST" });
+}
+
 export function startJob(jobId: string): Promise<JobUpdateResult> {
   return request(`/api/jobs/${encodeURIComponent(jobId)}/start`, { method: "POST" });
 }

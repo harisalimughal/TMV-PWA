@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CalendarClock } from "lucide-react";
 import { type DriverProfile } from "../api/auth";
-import { fetchJobsList, type ApiError, type Job } from "../api/jobs";
+import { fetchJobsList, markJobViewed, type ApiError, type Job } from "../api/jobs";
 import { PullToRefresh } from "../app/PullToRefresh";
 import { AppShell } from "../app/AppShell";
 import { OfflineBanner } from "../app/OfflineBanner";
@@ -321,6 +321,11 @@ function UpcomingJobsList({ groups }: { groups: ReturnType<typeof groupJobsByDat
   // Recomputed on every render (not module-scope) so a session left open past
   // midnight doesn't keep labelling groups by yesterday's "today" key.
   const todaysKey = todayKey();
+  const handleToggle = (jobId: string) => {
+    const willExpand = expandedJobId !== jobId;
+    if (willExpand) void markJobViewed(jobId).catch(() => undefined);
+    setExpandedJobId(willExpand ? jobId : null);
+  };
 
   return (
     <>
@@ -336,7 +341,7 @@ function UpcomingJobsList({ groups }: { groups: ReturnType<typeof groupJobsByDat
               job={job}
               index={i}
               expanded={expandedJobId === job.jobId}
-              onToggle={() => setExpandedJobId(id => (id === job.jobId ? null : job.jobId))}
+              onToggle={() => handleToggle(job.jobId)}
             />
           ))}
         </ScheduleSection>

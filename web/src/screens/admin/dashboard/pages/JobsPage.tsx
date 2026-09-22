@@ -7,6 +7,7 @@ import { JobStatusBadge } from "../components/StatusBadge";
 import { DateRangePicker } from "../components/DateRangePicker";
 import { ApiErrorState } from "../components/ApiErrorState";
 import { BulkDeleteModal } from "../components/BulkDeleteModal";
+import { DriverViewedDot } from "../components/DriverViewedDot";
 import { formatLondonDateTime } from "../utils/date";
 import { downloadCsv, stampForFilename, toCsv } from "../utils/csv";
 import { resolveDriver, formatVanReg } from "../utils/drivers";
@@ -444,6 +445,7 @@ export function JobsPage() {
                             </div>
                             <div className="min-w-0">
                               <div className="flex items-center gap-2">
+                                <DriverViewedDot viewedAt={job.driverViewedAt} />
                                 <span className="font-semibold text-admin-brand text-[14px] leading-tight truncate">
                                   {job.jobId}
                                 </span>
@@ -719,6 +721,7 @@ function JobCardList({
                 </button>
                 <button onClick={() => onOpen(job)} className="order-2 flex-1 min-w-0 text-left">
                   <div className="flex items-center gap-2 flex-wrap">
+                    <DriverViewedDot viewedAt={job.driverViewedAt} />
                     <span className="font-semibold text-admin-brand text-[14px]">{job.jobId}</span>
                     <JobStatusBadge status={job.status} />
                   </div>

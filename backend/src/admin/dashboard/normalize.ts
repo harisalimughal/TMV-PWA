@@ -229,6 +229,10 @@ export async function normalizeMongoDataset(dataset: MongoDataset): Promise<Norm
     const { completeness, items } = classifyEvidence(jobId, jobEvidence, job.signatureUrl, jobScenarios);
 
     const activity = activityByJob.get(jobId) || [];
+    const driverViewedAt = activity
+      .filter(a => a.action === "DRIVER_VIEWED_JOB")
+      .map(a => a.timestamp)
+      .sort((a, b) => a.localeCompare(b))[0];
     const exceptions = exceptionsByJob.get(jobId) || [];
 
     if (isDuplicate) {
@@ -254,7 +258,7 @@ export async function normalizeMongoDataset(dataset: MongoDataset): Promise<Norm
     normalizedJobs.push({
       jobId,
       calendarEventId: job.calendarEventId || "",
-      bookedStart, bookedFinish, actualStart, actualFinish, onMyWayAt,
+      bookedStart, bookedFinish, actualStart, actualFinish, onMyWayAt, driverViewedAt,
       bookedMinutes, actualMinutes, delayMinutes, delayBand, timingTrustworthy,
       customerName: job.customerName || "Not recorded",
       customerEmail: job.customerEmail || undefined,

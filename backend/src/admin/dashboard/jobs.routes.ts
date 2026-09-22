@@ -664,24 +664,18 @@ export function dashboardJobsRoutes(): Router {
       });
 
       const jobIds = pageJobs.map(j => j.jobId);
-      // activity and exceptions are deliberately NOT fetched here -- confirmed neither
-      // is read anywhere in JobsPage.tsx's list/card/table rendering (job.activity only
-      // renders in JobDetailDrawer.tsx, which uses the separate GET /:jobId endpoint and
-      // its own already-cached full dataset). Skipping them saves ~190-200ms each on
-      // this connection -- close to a fixed per-round-trip floor, not proportional to
-      // how little data actually comes back (confirmed live: both returned 0 docs for a
-      // real page yet still cost ~190ms). normalizeMongoDataset() gets empty arrays for
-      // both, which is safe: it only uses them to populate NormalizedJob.activity/
-      // .exceptions, nothing else depends on them.
-      const [pageEvidence, pageScenarios] = await Promise.all([
+      // Activity is scoped to this page only so list cards can show the driver-viewed
+      // marker without falling back to a full company-wide activity read.
+      const [pageEvidence, pageActivity, pageScenarios] = await Promise.all([
         listEvidenceForJobs(jobIds),
+        listActivityForJobs(jobIds),
         listScenarioSubmissionsForJobs(jobIds)
       ]);
 
       const normalizedItems = await normalizeMongoDataset({
         jobs: pageJobs,
         evidence: pageEvidence,
-        activity: [],
+        activity: pageActivity,
         scenarioSubmissions: pageScenarios,
         exceptions: [],
         fetchedAt: new Date().toISOString(),

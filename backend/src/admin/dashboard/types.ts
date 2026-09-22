@@ -100,6 +100,9 @@ export interface NormalizedJob {
   /** ISO UTC timestamp of the driver's "I'm on the Way" tap -- when the customer
    *  SMS/email actually went out, distinct from actualStart (the Arrival photo). */
   onMyWayAt?: string;
+  /** First intentional driver interaction recorded for this job: opening workflow,
+   *  expanding an upcoming card, or tapping a job action. */
+  driverViewedAt?: string;
   bookedMinutes: number;
   actualMinutes?: number;
   delayMinutes: number;
