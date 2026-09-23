@@ -44,6 +44,31 @@ describe("parseCalendarEvent field extraction", () => {
     expect(parseCalendarEvent(ev("Name: A B\nMob: +44 7919 183787"))!.customerPhone).toBe("+44 7919 183787");
   });
 
+  it("falls back to the first standalone UK mobile number when no phone label is present", () => {
+    const parsed = parseCalendarEvent(
+      ev(
+        [
+          "Collection:",
+          "2 Mercers Place",
+          "London",
+          "W6 7BZ",
+          "",
+          "Delivery:",
+          "Store First, Stanney Mill Road, Ellesmere Port, CH2 4HX",
+          "",
+          "Name: Tom Hostick",
+          "Email: hosticktom@gmail.com",
+          "",
+          "07815695889 (Tom)",
+          "07498286274 (Sean)"
+        ].join("\n")
+      )
+    );
+
+    expect(parsed).not.toBeNull();
+    expect(parsed!.customerPhone).toBe("07815695889");
+  });
+
   it("reads pickup/drop-off from MOVE FROM / MOVE TO with the address on the next line", () => {
     const parsed = parseCalendarEvent(
       ev(

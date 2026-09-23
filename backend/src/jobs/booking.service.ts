@@ -151,6 +151,20 @@ function field(description: string, labels: string[], opts: { multiline?: boolea
   return "";
 }
 
+function unlabelledUkMobile(description: string): string {
+  const lines = htmlToText(description).split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+  for (const line of lines) {
+    if (LABEL_LINE.test(line)) continue;
+    const match = line.match(/(?:^|[^\d+])(\+?44\s?7[\d\s().-]{8,}|0\s?7[\d\s().-]{8,}|7[\d\s().-]{8,})(?:[^\d]|$)/);
+    if (!match) continue;
+    const digits = match[1].replace(/\D/g, "");
+    if (digits.startsWith("44") && digits.length === 12) return match[1].trim().replace(/[^\d+]+$/g, "");
+    if (digits.startsWith("0") && digits.length === 11) return match[1].trim().replace(/[^\d+]+$/g, "");
+    if (digits.startsWith("7") && digits.length === 10) return match[1].trim().replace(/[^\d+]+$/g, "");
+  }
+  return "";
+}
+
 /** Split a combined floor value like "From: 02 flight of stairs / To: 01 flight of
  *  stairs" (or "2nd floor / ground floor") into its two halves. */
 function splitCombinedFloor(v: string): { from: string; to: string } {
@@ -195,7 +209,7 @@ export function parseCalendarEvent(event: calendar_v3.Schema$Event): ParsedCalen
 
   const customerName = field(description, NAME_LABELS);
   const customerEmail = field(description, EMAIL_LABELS);
-  const customerPhone = field(description, PHONE_LABELS);
+  const customerPhone = field(description, PHONE_LABELS) || unlabelledUkMobile(description);
   const pickup = field(description, PICKUP_LABELS, { multiline: true });
   const dropoff = field(description, DROPOFF_LABELS, { multiline: true });
   const stopBy = field(description, STOP_BY_LABELS, { multiline: true });

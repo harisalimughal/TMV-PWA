@@ -29,6 +29,7 @@ import { NormalizedJob } from "./types";
 import { generateJobPdf } from "./pdf-generator";
 import { getDashboardDataset, invalidateDashboardDataset } from "./dataset-cache";
 import { notifyDriverJobAssigned } from "../../jobs/driver-notify";
+import { markJobFinishedManually } from "./manual-finish";
 
 function escapeCsvField(val: unknown): string {
   if (val === null || val === undefined) return "";
@@ -350,6 +351,34 @@ export function dashboardJobsRoutes(): Router {
     } catch (error) {
       log.error("dashboard reassign driver failed", error, { job_id: jobId });
       return res.status(500).json({ error: { code: "REASSIGN_FAILED", message: "Failed to reassign driver." } });
+    }
+  });
+
+  router.post("/:jobId/finish-manually", async (req, res) => {
+    const jobId = String(req.params.jobId || "").trim();
+    const note = String(req.body?.note ?? "").trim();
+
+    if (!note) {
+      return res.status(400).json({
+        error: { code: "VALIDATION_FAILED", message: "Add a short note explaining why this job is being finished manually." }
+      });
+    }
+    if (note.length > 1000) {
+      return res.status(400).json({
+        error: { code: "VALIDATION_FAILED", message: "Manual finish note must be 1000 characters or fewer." }
+      });
+    }
+
+    try {
+      const finished = await markJobFinishedManually(jobId, note);
+      if (!finished) {
+        return res.status(404).json({ error: { code: "JOB_NOT_FOUND", message: `Job ${jobId} not found.` } });
+      }
+      invalidateDashboardDataset();
+      return res.status(200).json({ ok: true, job: await buildNormalizedJob(finished) });
+    } catch (error) {
+      log.error("dashboard manual finish failed", error, { job_id: jobId });
+      return res.status(500).json({ error: { code: "MANUAL_FINISH_FAILED", message: "Failed to mark job as finished." } });
     }
   });
 

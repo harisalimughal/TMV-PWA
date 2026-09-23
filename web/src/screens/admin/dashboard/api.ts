@@ -91,6 +91,16 @@ export async function reassignJob(jobId: string, driverInitials: string): Promis
   return res.json();
 }
 
+export async function markJobFinishedManually(jobId: string, note: string): Promise<{ ok: true; job: NormalizedJob }> {
+  const res = await apiFetch(`/api/admin/jobs/${encodeURIComponent(jobId)}/finish-manually`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ note })
+  });
+  if (!res.ok) throw await apiError(res, "Failed to mark job as finished");
+  return res.json();
+}
+
 export async function deleteJob(jobId: string): Promise<{ ok: true }> {
   const res = await apiFetch(`/api/admin/jobs/${encodeURIComponent(jobId)}`, { method: "DELETE" });
   if (!res.ok) throw await apiError(res, "Failed to delete job");

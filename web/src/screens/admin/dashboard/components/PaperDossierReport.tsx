@@ -1,11 +1,36 @@
 import React, { useState } from "react";
-import { NormalizedJob } from "../types";
+import { NormalizedJob, ScenarioKind } from "../types";
 import { formatLondonDateTime } from "../utils/date";
+import { formatLocationLabel, type CapturedLocation } from "../../../../lib/geo";
 
 interface Props {
   job: NormalizedJob;
   isPreview?: boolean;
 }
+
+const SCENARIO_LABELS: Record<ScenarioKind, string> = {
+  checkin: "Check In",
+  checkout: "Check Out",
+  parking: "Parking Liability",
+  liability: "Liability Report"
+};
+
+type EvidenceReportPage = {
+  category: string;
+  fileId?: string | null;
+  thumbProxyUrl?: string;
+  capturedAt?: string;
+  location?: CapturedLocation;
+  locationName?: string;
+};
+
+type ScenarioPhotoReportPage = {
+  fileId: string;
+  thumbUrl: string;
+  capturedAt?: string;
+  location?: CapturedLocation;
+  locationName?: string;
+};
 
 export function PaperDossierReport({ job, isPreview = false }: Props) {
   const now = new Date().toISOString();
@@ -27,7 +52,15 @@ export function PaperDossierReport({ job, isPreview = false }: Props) {
   
   // If there are NO photos, create a fake empty array with 1 item so we still render the structure
   // but with a "Not captured" state as requested by the user.
-  const photoPages = photos.length > 0 ? photos : [{ category: "Photos", fileId: null }];
+  const photoPages: EvidenceReportPage[] = photos.length > 0 ? photos : [{ category: "Photos", fileId: null }];
+  const scenarioPages: Array<{
+    scenario: NormalizedJob["scenarios"][number];
+    photo: ScenarioPhotoReportPage;
+    photoIndex: number;
+  }> = (job.scenarios || []).flatMap(scenario => {
+    const scenarioPhotos = scenario.photos.length ? scenario.photos : [{ fileId: `${scenario.id}-missing`, thumbUrl: "" }];
+    return scenarioPhotos.map((photo, photoIndex) => ({ scenario, photo, photoIndex }));
+  });
 
   const submitterName = job.driverName || "Unknown Driver";
   const submitterInitials = job.driverInitials || "UN";
@@ -60,7 +93,19 @@ export function PaperDossierReport({ job, isPreview = false }: Props) {
     </div>
   );
 
-  const PhotoSection = ({ title, src }: { title: string, src: string | null }) => {
+  const PhotoSection = ({
+    title,
+    src,
+    capturedAt,
+    location,
+    locationName
+  }: {
+    title: string,
+    src: string | null,
+    capturedAt?: string,
+    location?: CapturedLocation,
+    locationName?: string
+  }) => {
     const [failed, setFailed] = useState(false);
     return (
       <div className="flex flex-col mb-8">
@@ -79,9 +124,74 @@ export function PaperDossierReport({ job, isPreview = false }: Props) {
              </div>
            )}
         </div>
+        {src && !failed && (capturedAt || location) && (
+          <div className="mt-1.5 text-[10px] text-[#6B7280] text-center">
+            {capturedAt && formatLondonDateTime(capturedAt)}
+            {capturedAt && location && " - "}
+            {location && formatLocationLabel(location, locationName)}
+          </div>
+        )}
       </div>
     );
   };
+
+  const DetailsRow = ({ label, value }: { label: string; value?: string }) => {
+    if (!value) return null;
+    return (
+      <div className="flex items-center justify-between gap-4 p-3 border-b border-[#E5E7EB] bg-white last:border-b-0">
+        <span className="text-label font-medium text-fg-muted">{label}</span>
+        <span className="text-[13px] font-bold text-admin-ink text-right break-words max-w-[360px]">{value}</span>
+      </div>
+    );
+  };
+
+  const ScenarioDetails = ({
+    scenario,
+    showSignature
+  }: {
+    scenario: NormalizedJob["scenarios"][number];
+    showSignature: boolean;
+  }) => (
+    <div className="mb-3 grid grid-cols-1 gap-3 shrink-0">
+      <div className="border border-[#E5E7EB] rounded-card overflow-hidden">
+        <DetailsRow label="Submitted" value={`${formatLondonDateTime(scenario.timestamp)} | ${scenario.driver || "Driver not recorded"}`} />
+        <DetailsRow label="Client Name" value={scenario.clientName || "Not recorded"} />
+        <DetailsRow label="Client Phone" value={scenario.clientPhone} />
+        <DetailsRow label="Client Email" value={scenario.clientEmail} />
+        {(scenario.kind === "checkin" || scenario.kind === "checkout") && (
+          <DetailsRow label="Container Number" value={scenario.containerNumber || "Not recorded"} />
+        )}
+        {scenario.kind === "parking" && <DetailsRow label="Address" value={scenario.address || "Not recorded"} />}
+        {scenario.kind === "liability" && (
+          <DetailsRow label="Damage Categories" value={scenario.damageCategories || "Not recorded"} />
+        )}
+        <DetailsRow label="Client Present" value={scenario.clientPresent} />
+      </div>
+
+      {showSignature && (
+        <div className="mb-3 shrink-0">
+          <h2 className="text-label font-medium text-fg-muted mb-1.5">Scenario Signature:</h2>
+          <div className="border border-[#E5E7EB] rounded-card p-4 bg-[#F8F9FA] flex flex-col items-center justify-center min-h-[100px]">
+            {scenario.signature ? (
+              <img src={scenario.signature.thumbUrl} alt="Scenario signature" className="max-h-[70px] object-contain mix-blend-multiply" />
+            ) : (
+              <span className="text-[13px] font-semibold text-admin-muted italic">Not captured</span>
+            )}
+            {scenario.signature?.capturedAt && (
+              <span className="text-[10px] font-medium text-admin-muted mt-2">
+                Signed: {formatLondonDateTime(scenario.signature.capturedAt)}
+              </span>
+            )}
+            {scenario.signature?.location && (
+              <span className="text-[10px] font-medium text-admin-muted">
+                {formatLocationLabel(scenario.signature.location, scenario.signature.locationName)}
+              </span>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
 
   // Common wrapper for each page. display:flex used to live directly on this element
   // -- the one page-break-after:always boundary Chromium's print engine has to
@@ -113,8 +223,7 @@ export function PaperDossierReport({ job, isPreview = false }: Props) {
     </div>
   );
 
-  // Calculate total pages based on number of photos, minimum 2 pages (one for data, one for sig)
-  const totalPages = Math.max(photos.length, 1);
+  const totalPages = Math.max(photoPages.length, 1) + scenarioPages.length;
 
   return (
     <div className={`font-sans ${isPreview ? 'w-full' : 'block'}`}>
@@ -150,7 +259,13 @@ export function PaperDossierReport({ job, isPreview = false }: Props) {
         
         return (
           <Page key={index} page={pageNum} totalPages={totalPages}>
-            <PhotoSection title={p.category || "Photo Evidence"} src={src} />
+            <PhotoSection
+              title={p.category || "Photo Evidence"}
+              src={src}
+              capturedAt={p.capturedAt}
+              location={p.location}
+              locationName={p.locationName}
+            />
             
             {/* Inject data blocks on specific pages if possible, or at the end */}
             {pageNum === 1 && (
@@ -212,6 +327,25 @@ export function PaperDossierReport({ job, isPreview = false }: Props) {
                 </div>
               </div>
             )}
+          </Page>
+        );
+      })}
+
+      {scenarioPages.map(({ scenario, photo, photoIndex }, index) => {
+        const pageNum = photoPages.length + index + 1;
+        const label = SCENARIO_LABELS[scenario.kind] || "Scenario";
+        const src = photo.thumbUrl || null;
+
+        return (
+          <Page key={`${scenario.id}-${photo.fileId || photoIndex}`} page={pageNum} totalPages={totalPages}>
+            <PhotoSection
+              title={`${label} Evidence${scenario.photos.length > 1 ? ` ${photoIndex + 1}` : ""}`}
+              src={src}
+              capturedAt={photo.capturedAt}
+              location={photo.location}
+              locationName={photo.locationName}
+            />
+            {photoIndex === 0 && <ScenarioDetails scenario={scenario} showSignature={true} />}
           </Page>
         );
       })}

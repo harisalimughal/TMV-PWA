@@ -2,6 +2,7 @@ import React from "react";
 import { LogIn, LogOut, AlertCircle, ShieldAlert } from "lucide-react";
 import { JobScenarioSubmission, ScenarioKind } from "../types";
 import { formatLondonDateTime } from "../utils/date";
+import { formatLocationLabel, mapsUrlForLocation, type CapturedLocation } from "../../../../lib/geo";
 
 const KIND_META: Record<ScenarioKind, { label: string; icon: React.ComponentType<{ className?: string }> }> = {
   checkin: { label: "Check In", icon: LogIn },
@@ -16,6 +17,37 @@ function Field({ label, value, span2 = false }: { label: string; value: string; 
     <div className={span2 ? "col-span-2" : undefined}>
       <span className="block text-[10px] font-bold uppercase tracking-wider text-admin-muted">{label}</span>
       <span className="mt-0.5 block text-[13px] font-medium text-admin-ink break-words">{value}</span>
+    </div>
+  );
+}
+
+function EvidenceMeta({
+  capturedAt,
+  location,
+  locationName,
+  center = false
+}: {
+  capturedAt?: string;
+  location?: CapturedLocation;
+  locationName?: string;
+  center?: boolean;
+}) {
+  if (!capturedAt && !location) return null;
+  return (
+    <div className={`mt-1 text-[10px] leading-tight text-admin-muted space-y-0.5 ${center ? "text-center" : ""}`}>
+      {capturedAt && <div>{formatLondonDateTime(capturedAt)}</div>}
+      {location ? (
+        <a
+          href={mapsUrlForLocation(location)}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="block max-w-[160px] truncate text-admin-brand underline underline-offset-2"
+        >
+          {formatLocationLabel(location, locationName)}
+        </a>
+      ) : (
+        <div>No location</div>
+      )}
     </div>
   );
 }
@@ -48,15 +80,17 @@ function ScenarioCard({ item }: { item: JobScenarioSubmission }) {
       {item.photos.length > 0 && (
         <div className="flex gap-1.5 mt-3 flex-wrap">
           {item.photos.map((p, i) => (
-            <a
-              key={i}
-              href={p.thumbUrl}
-              target="_blank"
-              rel="noreferrer"
-              className="w-14 h-14 rounded-card overflow-hidden border border-admin-line block bg-white hover:border-admin-brand transition shrink-0"
-            >
-              <img src={p.thumbUrl} className="w-full h-full object-cover" alt="Scenario evidence" />
-            </a>
+            <div key={i} className="w-24 shrink-0">
+              <a
+                href={p.thumbUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="w-14 h-14 rounded-card overflow-hidden border border-admin-line block bg-white hover:border-admin-brand transition"
+              >
+                <img src={p.thumbUrl} className="w-full h-full object-cover" alt="Scenario evidence" />
+              </a>
+              <EvidenceMeta capturedAt={p.capturedAt} location={p.location} locationName={p.locationName} />
+            </div>
           ))}
         </div>
       )}
@@ -67,6 +101,11 @@ function ScenarioCard({ item }: { item: JobScenarioSubmission }) {
           <div className="inline-block bg-white border border-admin-line rounded-card p-2">
             <img src={item.signature.thumbUrl} className="h-10 object-contain mix-blend-multiply" alt="Client signature" />
           </div>
+          <EvidenceMeta
+            capturedAt={item.signature.capturedAt}
+            location={item.signature.location}
+            locationName={item.signature.locationName}
+          />
         </div>
       )}
     </div>

@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect } from "react";
 import { useQuery, keepPreviousData } from "@tanstack/react-query";
-import { fetchDrivers, fetchJobs, reassignJob } from "../api";
+import { fetchDrivers, fetchJobs, markJobFinishedManually, reassignJob } from "../api";
 import { NormalizedJob } from "../types";
 import { JobDetailDrawer } from "../components/JobDetailDrawer";
 import { JobStatusBadge } from "../components/StatusBadge";
@@ -24,7 +24,9 @@ import {
   RefreshCw,
   AlertTriangle,
   UserPlus,
-  Trash2
+  Trash2,
+  MoreHorizontal,
+  CheckCircle2
 } from "lucide-react";
 
 export function JobsPage() {
@@ -35,6 +37,7 @@ export function JobsPage() {
   const [viewMode, setViewMode] = useState<"table" | "cards">("cards");
   const [reassignOpen, setReassignOpen] = useState(false);
   const [cardReassignJob, setCardReassignJob] = useState<NormalizedJob | null>(null);
+  const [manualFinishJob, setManualFinishJob] = useState<NormalizedJob | null>(null);
   const [deleteJobIds, setDeleteJobIds] = useState<string[] | null>(null);
   const [drawerJob, setDrawerJob] = useState<NormalizedJob | null>(null);
   
@@ -514,9 +517,20 @@ export function JobsPage() {
                           </div>
                         </td>
 
-                        <td className="px-4 text-center">
-                          <div className="opacity-0 group-hover:opacity-100 transition text-admin-muted">
-                            <ChevronRight className="w-5 h-5" />
+                        <td className="px-4 text-center" onClick={e => e.stopPropagation()}>
+                          <div className="flex items-center justify-center gap-1">
+                            <JobActionsMenu
+                              job={job}
+                              onReassign={setCardReassignJob}
+                              onManualFinish={setManualFinishJob}
+                            />
+                            <button
+                              onClick={() => setDrawerJob(job)}
+                              className="opacity-0 group-hover:opacity-100 transition text-admin-muted p-1 rounded-full hover:bg-admin-surface hover:text-admin-ink"
+                              aria-label={`Open job ${job.jobId}`}
+                            >
+                              <ChevronRight className="w-5 h-5" />
+                            </button>
                           </div>
                         </td>
                       </tr>
@@ -579,6 +593,7 @@ export function JobsPage() {
           onToggle={toggleRow}
           onOpen={setDrawerJob}
           onReassign={setCardReassignJob}
+          onManualFinish={setManualFinishJob}
           toPounds={toPounds}
           page={safePage}
           totalPages={totalPages}
@@ -618,6 +633,17 @@ export function JobsPage() {
         />
       )}
 
+      {manualFinishJob && (
+        <ManualFinishModal
+          job={manualFinishJob}
+          onClose={() => setManualFinishJob(null)}
+          onDone={() => {
+            setManualFinishJob(null);
+            void refetch();
+          }}
+        />
+      )}
+
       {deleteJobIds && (
         <BulkDeleteModal
           jobIds={deleteJobIds}
@@ -643,6 +669,7 @@ interface JobCardListProps {
   onToggle: (id: string) => void;
   onOpen: (job: NormalizedJob) => void;
   onReassign: (job: NormalizedJob) => void;
+  onManualFinish: (job: NormalizedJob) => void;
   toPounds: (pence: number | undefined) => number;
   page: number;
   totalPages: number;
@@ -662,6 +689,7 @@ function JobCardList({
   onToggle,
   onOpen,
   onReassign,
+  onManualFinish,
   toPounds,
   page,
   totalPages,
@@ -711,14 +739,9 @@ function JobCardList({
                 />
                 {/* Sibling of the onOpen button below, not nested inside it -- a <button>
                     inside a <button> is invalid HTML and browsers handle it unpredictably. */}
-                <button
-                  onClick={() => onReassign(job)}
-                  title="Reassign driver"
-                  aria-label={`Reassign driver for job ${job.jobId}`}
-                  className="order-3 shrink-0 mt-0.5 p-1.5 rounded-full text-admin-muted hover:bg-admin-brand hover:text-white transition"
-                >
-                  <UserPlus className="w-4 h-4" />
-                </button>
+                <div className="order-3 shrink-0 mt-0.5">
+                  <JobActionsMenu job={job} onReassign={onReassign} onManualFinish={onManualFinish} />
+                </div>
                 <button onClick={() => onOpen(job)} className="order-2 flex-1 min-w-0 text-left">
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className="font-semibold text-admin-brand text-[14px]">{job.jobId}</span>
@@ -784,6 +807,69 @@ function JobCardList({
           >
             <ChevronRight className="w-4 h-4" />
           </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function canManualFinish(job: NormalizedJob): boolean {
+  return job.status !== "COMPLETED" && job.status !== "CANCELLED";
+}
+
+function JobActionsMenu({
+  job,
+  onReassign,
+  onManualFinish
+}: {
+  job: NormalizedJob;
+  onReassign: (job: NormalizedJob) => void;
+  onManualFinish: (job: NormalizedJob) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const allowManualFinish = canManualFinish(job);
+
+  function closeAnd(run: () => void) {
+    setOpen(false);
+    run();
+  }
+
+  return (
+    <div className="relative inline-flex">
+      <button
+        type="button"
+        onClick={event => {
+          event.stopPropagation();
+          setOpen(value => !value);
+        }}
+        title="Job actions"
+        aria-label={`Actions for job ${job.jobId}`}
+        className="p-1.5 rounded-full text-admin-muted hover:bg-admin-brand hover:text-white transition"
+      >
+        <MoreHorizontal className="w-4 h-4" />
+      </button>
+
+      {open && (
+        <div
+          className="absolute right-0 top-9 z-30 w-48 overflow-hidden rounded-card border border-admin-line bg-white shadow-xl"
+          onClick={event => event.stopPropagation()}
+        >
+          <button
+            type="button"
+            onClick={() => closeAnd(() => onReassign(job))}
+            className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-[13px] font-medium text-admin-ink hover:bg-admin-surface"
+          >
+            <UserPlus className="w-4 h-4 text-admin-muted" /> Reassign driver
+          </button>
+          {allowManualFinish && (
+            <button
+              type="button"
+              onClick={() => closeAnd(() => onManualFinish(job))}
+              className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-[13px] font-medium text-admin-status-green hover:bg-admin-status-green-bg"
+            >
+              <CheckCircle2 className="w-4 h-4" /> Mark as Finished
+            </button>
+          )}
         </div>
       )}
     </div>
@@ -897,6 +983,100 @@ function BulkReassignModal({
             className="flex-1 h-11 rounded-card bg-admin-brand text-white text-[14px] font-semibold disabled:opacity-50"
           >
             {busy ? "Reassigning…" : "Reassign"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ManualFinishModal({
+  job,
+  onClose,
+  onDone
+}: {
+  job: NormalizedJob;
+  onClose: () => void;
+  onDone: () => void;
+}) {
+  const [note, setNote] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const trimmedNote = note.trim();
+
+  async function handleConfirm() {
+    if (!trimmedNote || busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await markJobFinishedManually(job.jobId, trimmedNote);
+      onDone();
+    } catch (err: any) {
+      setError(err?.message || "Couldn't mark this job as finished.");
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-admin-ink/40 backdrop-blur-sm p-4">
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="manual-finish-title"
+        className="bg-white rounded-module shadow-2xl w-full max-w-[460px] p-6 animate-in zoom-in-95"
+      >
+        <div className="flex items-start gap-3">
+          <div className="mt-0.5 w-9 h-9 rounded-full bg-admin-status-green-bg text-admin-status-green flex items-center justify-center shrink-0">
+            <CheckCircle2 className="w-5 h-5" />
+          </div>
+          <div className="min-w-0">
+            <h2 id="manual-finish-title" className="text-title text-fg">
+              Mark as Finished
+            </h2>
+            <p className="text-[13px] text-admin-muted mt-1">
+              {job.jobId} · {job.customerName || "Not recorded"}
+            </p>
+          </div>
+        </div>
+
+        <div className="mt-5 rounded-card border border-amber-200 bg-amber-50 px-3 py-2.5 text-[13px] leading-relaxed text-amber-900">
+          This completes the job for scheduling and driver flow, but missing photos or signature will stay missing in the record.
+        </div>
+
+        <label className="block mt-5">
+          <span className="text-label font-semibold text-fg">Admin note</span>
+          <textarea
+            value={note}
+            onChange={event => setNote(event.target.value)}
+            disabled={busy}
+            rows={4}
+            maxLength={1000}
+            placeholder="Example: Driver completed this job manually outside the app."
+            className="mt-1.5 w-full rounded-card border border-admin-line bg-admin-surface px-3 py-2 text-[13px] text-admin-ink outline-none focus:border-admin-brand disabled:opacity-70"
+          />
+          <span className="mt-1 block text-[11px] text-admin-muted">{trimmedNote.length}/1000</span>
+        </label>
+
+        {error && (
+          <p className="text-[13px] text-admin-status-red mt-3" role="alert">
+            {error}
+          </p>
+        )}
+
+        <div className="flex gap-3 mt-6">
+          <button
+            onClick={onClose}
+            disabled={busy}
+            className="flex-1 h-11 rounded-card bg-admin-surface text-card text-fg disabled:opacity-50"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleConfirm}
+            disabled={!trimmedNote || busy}
+            className="flex-1 h-11 rounded-card bg-admin-status-green text-white text-[14px] font-semibold disabled:opacity-50"
+          >
+            {busy ? "Finishing..." : "Finish manually"}
           </button>
         </div>
       </div>
