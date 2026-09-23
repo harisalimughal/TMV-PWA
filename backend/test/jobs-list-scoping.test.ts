@@ -1,4 +1,4 @@
-import { describe, expect, it, vi, beforeEach } from "vitest";
+import { afterEach, describe, expect, it, vi, beforeEach } from "vitest";
 import { JobStatus } from "../src/jobs/job.types";
 import { WorkflowState } from "../src/workflow/workflow.states";
 
@@ -50,8 +50,13 @@ const driver = {
 describe("driver job lists are scoped to that driver's own initials", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.useRealTimers();
     listJobs.mockResolvedValue([]);
     getDriverProfile.mockResolvedValue(driver);
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   it("getJobsGroupedForDriver (the 'Jobs' tab) queries only this driver's jobs", async () => {
@@ -79,5 +84,59 @@ describe("driver job lists are scoped to that driver's own initials", () => {
 
     const { job } = await getNextJobForDriver("helena@example.com");
     expect(job?.jobId).toBe("TMV-1");
+  });
+
+  it("does not show tomorrow jobs in Upcoming before 21:00 London", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-09-23T19:59:00.000Z")); // 20:59 Europe/London
+    listJobs.mockResolvedValue([
+      {
+        jobId: "TMV-TOMORROW",
+        driverInitials: "HE",
+        status: JobStatus.READY,
+        currentState: WorkflowState.READY,
+        bookedStart: "2026-09-24T09:00:00.000Z"
+      }
+    ]);
+
+    const { next } = await getJobsGroupedForDriver("helena@example.com");
+
+    expect(next.map(j => j.jobId)).toEqual([]);
+  });
+
+  it("shows tomorrow jobs in Upcoming from 21:00 London", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-09-23T20:00:00.000Z")); // 21:00 Europe/London
+    listJobs.mockResolvedValue([
+      {
+        jobId: "TMV-TOMORROW",
+        driverInitials: "HE",
+        status: JobStatus.READY,
+        currentState: WorkflowState.READY,
+        bookedStart: "2026-09-24T09:00:00.000Z"
+      }
+    ]);
+
+    const { next } = await getJobsGroupedForDriver("helena@example.com");
+
+    expect(next.map(j => j.jobId)).toEqual(["TMV-TOMORROW"]);
+  });
+
+  it("does not show jobs beyond tomorrow even after 21:00 London", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-09-23T20:30:00.000Z")); // 21:30 Europe/London
+    listJobs.mockResolvedValue([
+      {
+        jobId: "TMV-DAY-AFTER",
+        driverInitials: "HE",
+        status: JobStatus.READY,
+        currentState: WorkflowState.READY,
+        bookedStart: "2026-09-25T09:00:00.000Z"
+      }
+    ]);
+
+    const { next } = await getJobsGroupedForDriver("helena@example.com");
+
+    expect(next.map(j => j.jobId)).toEqual([]);
   });
 });

@@ -175,6 +175,10 @@ function isDueTomorrow(iso: string): boolean {
   return dt.hasSame(tomorrow, "day");
 }
 
+function canPreviewTomorrow(now = DateTime.now().setZone(env.timezone)): boolean {
+  return now.hour >= 21;
+}
+
 /**
  * The driver's own jobs booked for tomorrow, oldest first -- lets a driver plan ahead
  * once today's work is done. Assigned-only, same as every other driver-facing job
@@ -187,6 +191,8 @@ export async function getTomorrowJobsForDriver(identifier: string): Promise<{
   unassignedCount: number;
 }> {
   const [driver, jobs] = await Promise.all([resolveDriver(identifier), listJobs()]);
+
+  if (!canPreviewTomorrow()) return { jobs: [], driver, unassignedCount: 0 };
 
   const tomorrowAll = jobs
     .filter(j => isDueTomorrow(j.bookedStart))
@@ -235,7 +241,10 @@ export async function getJobsGroupedForDriver(identifier: string): Promise<{
   // collection grew.
   const driver = await resolveDriver(identifier);
   const jobs = await listJobs({ driverInitials: driver.initials });
-  const todayKey = DateTime.now().setZone(env.timezone).toISODate();
+  const now = DateTime.now().setZone(env.timezone);
+  const todayKey = now.toISODate();
+  const tomorrowKey = now.plus({ days: 1 }).toISODate();
+  const showTomorrow = canPreviewTomorrow(now);
 
   const relevant = jobs
     .filter(j => j.status !== JobStatus.COMPLETED && j.status !== JobStatus.CANCELLED)
@@ -250,7 +259,7 @@ export async function getJobsGroupedForDriver(identifier: string): Promise<{
     if (!dayKey || !todayKey) continue;
     if (dayKey === todayKey) today.push(job);
     else if (dayKey < todayKey) past.push(job);
-    else next.push(job);
+    else if (showTomorrow && dayKey === tomorrowKey) next.push(job);
   }
 
   const byBookedStart = (a: Job, b: Job) => a.bookedStart.localeCompare(b.bookedStart);
