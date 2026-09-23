@@ -359,6 +359,7 @@ function toJob(parsed: ParsedCalendarBooking, existing?: Job): Job {
     // Cleared when the booked start actually moves, so a rescheduled job reminds the
     // driver again for its real new time instead of staying silent forever.
     reminderSentAt: existing?.bookedStart === bookedStart ? existing?.reminderSentAt : undefined,
+    onMyWayAt: existing?.onMyWayAt,
     signatureUrl: existing?.signatureUrl ?? "",
     driveFolderId: "",
     driveFolderUrl: "",
