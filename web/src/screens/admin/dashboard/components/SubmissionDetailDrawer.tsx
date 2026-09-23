@@ -143,7 +143,9 @@ export function SubmissionDetailDrawer({ job: initialJob, isOpen, onClose, onNav
     href: p.thumbUrl,
     thumbSrc: p.thumbUrl,
     category: SCENARIO_TITLES[kind!],
-    capturedAt: p.capturedAt,
+    capturedAt: p.capturedAt || scenarioItem.timestamp,
+    receivedAt: undefined as string | undefined,
+    completedAt: undefined as string | undefined,
     location: p.location,
     locationName: p.locationName
   })) : [];
@@ -153,6 +155,8 @@ export function SubmissionDetailDrawer({ job: initialJob, isOpen, onClose, onNav
     thumbSrc: p.thumbProxyUrl || `/admin/api/jobs/${(job as NormalizedJob).jobId}/photos/${p.fileId}`,
     category: p.category,
     capturedAt: p.capturedAt,
+    receivedAt: p.receivedAt,
+    completedAt: p.completedAt,
     location: p.location,
     locationName: p.locationName
   })) : [];
@@ -461,6 +465,7 @@ export function SubmissionDetailDrawer({ job: initialJob, isOpen, onClose, onNav
            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
              {photos.map((p) => {
                const capturedTime = p.capturedAt ? formatCapturedTime(p.capturedAt) : "";
+               const fallbackTime = !capturedTime && (p.receivedAt || p.completedAt) ? formatLondonDateTime(p.receivedAt || p.completedAt) : "";
                return (
                  <div key={p.key} className="space-y-1">
                    <div className="relative group/photo">
@@ -498,9 +503,9 @@ export function SubmissionDetailDrawer({ job: initialJob, isOpen, onClose, onNav
                    </div>
                    {/* Proof of place -- where/when the driver's device says this was
                        actually taken. Absent on older submissions. */}
-                   {(capturedTime || p.location) && (
+                   {(capturedTime || fallbackTime || p.location) && (
                      <div className="text-[10px] leading-tight text-admin-muted text-center space-y-0.5">
-                       {capturedTime && <div>{capturedTime}</div>}
+                       {(capturedTime || fallbackTime) && <div>{capturedTime || fallbackTime}</div>}
                        {p.location ? (
                          <a
                            href={mapsUrlForLocation(p.location)}
@@ -511,7 +516,7 @@ export function SubmissionDetailDrawer({ job: initialJob, isOpen, onClose, onNav
                            {formatLocationLabel(p.location, p.locationName)}
                          </a>
                        ) : (
-                         <div>No location</div>
+                         <div>Location not recorded</div>
                        )}
                      </div>
                    )}

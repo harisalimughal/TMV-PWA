@@ -20,6 +20,8 @@ type EvidenceReportPage = {
   fileId?: string | null;
   thumbProxyUrl?: string;
   capturedAt?: string;
+  receivedAt?: string;
+  completedAt?: string;
   location?: CapturedLocation;
   locationName?: string;
 };
@@ -97,12 +99,14 @@ export function PaperDossierReport({ job, isPreview = false }: Props) {
     title,
     src,
     capturedAt,
+    fallbackAt,
     location,
     locationName
   }: {
     title: string,
     src: string | null,
     capturedAt?: string,
+    fallbackAt?: string,
     location?: CapturedLocation,
     locationName?: string
   }) => {
@@ -124,11 +128,11 @@ export function PaperDossierReport({ job, isPreview = false }: Props) {
              </div>
            )}
         </div>
-        {src && !failed && (capturedAt || location) && (
+        {src && !failed && (capturedAt || fallbackAt || location) && (
           <div className="mt-1.5 text-[10px] text-[#6B7280] text-center">
-            {capturedAt && formatLondonDateTime(capturedAt)}
-            {capturedAt && location && " - "}
-            {location && formatLocationLabel(location, locationName)}
+            {(capturedAt || fallbackAt) && formatLondonDateTime(capturedAt || fallbackAt)}
+            {(capturedAt || fallbackAt) && location && " - "}
+            {location ? formatLocationLabel(location, locationName) : "Location not recorded"}
           </div>
         )}
       </div>
@@ -263,6 +267,7 @@ export function PaperDossierReport({ job, isPreview = false }: Props) {
               title={p.category || "Photo Evidence"}
               src={src}
               capturedAt={p.capturedAt}
+              fallbackAt={p.receivedAt || p.completedAt}
               location={p.location}
               locationName={p.locationName}
             />

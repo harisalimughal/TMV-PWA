@@ -11,6 +11,7 @@ import {
   Loader2,
   FileText,
   Trash2
+  , CheckCircle2
 } from "lucide-react";
 import { NormalizedJob } from "../types";
 import { Button } from "../../../../ui";
@@ -25,7 +26,7 @@ import { waitForPrintImages } from "../utils/printReady";
 import { PhotoModal } from "./PhotoModal";
 import { ThumbnailPreview } from "./ThumbnailPreview";
 import { resolveDriver, formatVanReg, getAvatarColor } from "../utils/drivers";
-import { reassignJob, deleteEvidencePhoto } from "../api";
+import { reassignJob, deleteEvidencePhoto, markJobFinishedManually } from "../api";
 import { formatCapturedTime, formatLocationLabel, mapsUrlForLocation } from "../../../../lib/geo";
 
 interface Props {
@@ -43,6 +44,9 @@ export function JobDetailDrawer({ job: initialJob, isOpen, onClose, onUpdated }:
   const [activePhoto, setActivePhoto] = useState<{title: string, url: string, driveUrl?: string} | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [deletingPhotoId, setDeletingPhotoId] = useState<string | null>(null);
+  const [manualFinishOpen, setManualFinishOpen] = useState(false);
+  const [manualFinishNote, setManualFinishNote] = useState("");
+  const [manualFinishing, setManualFinishing] = useState(false);
 
   // Reassign Mode State -- real roster (not utils/drivers.ts's old localStorage mock)
   // and a real backend call, see handleReassign below.
@@ -132,6 +136,25 @@ export function JobDetailDrawer({ job: initialJob, isOpen, onClose, onUpdated }:
       showToast(error?.message || "Couldn't delete photo. Try again.");
     } finally {
       setDeletingPhotoId(null);
+    }
+  };
+
+  const canManualFinish = job.status !== "COMPLETED" && job.status !== "CANCELLED";
+  const handleManualFinish = async () => {
+    const note = manualFinishNote.trim();
+    if (!note || manualFinishing) return;
+    setManualFinishing(true);
+    try {
+      const result = await markJobFinishedManually(job.jobId, note);
+      setJob(result.job);
+      setManualFinishOpen(false);
+      setManualFinishNote("");
+      showToast("Job marked as finished");
+      onUpdated?.();
+    } catch (error: any) {
+      showToast(error?.message || "Couldn't mark this job as finished.");
+    } finally {
+      setManualFinishing(false);
     }
   };
 
@@ -297,6 +320,7 @@ export function JobDetailDrawer({ job: initialJob, isOpen, onClose, onUpdated }:
                   const thumbUrl = ev.thumbProxyUrl || ev.driveUrl;
                   const fullUrl = ev.driveUrl || ev.thumbProxyUrl;
                   const capturedTime = ev.capturedAt ? formatCapturedTime(ev.capturedAt) : "";
+                  const fallbackTime = !capturedTime && (ev.receivedAt || ev.completedAt) ? formatLondonDateTime(ev.receivedAt || ev.completedAt) : "";
                   // Signature (lives on job.signatureUrl, not the evidence collection)
                   // and Documents (scenario submission photos) don't have a real
                   // evidence.repo.ts row behind their synthetic id -- only the four
@@ -339,9 +363,9 @@ export function JobDetailDrawer({ job: initialJob, isOpen, onClose, onUpdated }:
                       </div>
                       {/* Proof of place -- where/when the driver's device says this
                           was actually taken. Absent on older evidence. */}
-                      {(capturedTime || ev.location) && (
+                      {(capturedTime || fallbackTime || ev.location) && (
                         <div className="text-[10.5px] leading-tight text-admin-muted space-y-0.5">
-                          {capturedTime && <div>{capturedTime}</div>}
+                          {(capturedTime || fallbackTime) && <div>{capturedTime || fallbackTime}</div>}
                           {ev.location ? (
                             <a
                               href={mapsUrlForLocation(ev.location)}
@@ -353,7 +377,7 @@ export function JobDetailDrawer({ job: initialJob, isOpen, onClose, onUpdated }:
                               {formatLocationLabel(ev.location, ev.locationName)}
                             </a>
                           ) : (
-                            <div>No location</div>
+                            <div>Location not recorded</div>
                           )}
                         </div>
                       )}
@@ -386,6 +410,16 @@ export function JobDetailDrawer({ job: initialJob, isOpen, onClose, onUpdated }:
             <Button variant="secondary" onClick={() => setIsReassigning(!isReassigning)} iconLeft={<User />}>
               Reassign
             </Button>
+
+            {canManualFinish && (
+              <Button
+                variant="secondary"
+                onClick={() => setManualFinishOpen(true)}
+                iconLeft={<CheckCircle2 />}
+              >
+                Mark as Finished
+              </Button>
+            )}
           </div>
 
           <button
@@ -406,6 +440,65 @@ export function JobDetailDrawer({ job: initialJob, isOpen, onClose, onUpdated }:
           photoUrl={activePhoto.url}
           driveUrl={activePhoto.driveUrl}
         />
+      )}
+
+      {manualFinishOpen && (
+        <div className="fixed inset-0 z-[180] flex items-center justify-center bg-admin-ink/40 backdrop-blur-sm p-4">
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="manual-finish-drawer-title"
+            className="bg-white rounded-module shadow-2xl w-full max-w-[460px] p-6 animate-in zoom-in-95"
+          >
+            <div className="flex items-start gap-3">
+              <div className="mt-0.5 w-9 h-9 rounded-full bg-admin-status-green-bg text-admin-status-green flex items-center justify-center shrink-0">
+                <CheckCircle2 className="w-5 h-5" />
+              </div>
+              <div className="min-w-0">
+                <h2 id="manual-finish-drawer-title" className="text-title text-fg">
+                  Mark as Finished
+                </h2>
+                <p className="text-[13px] text-admin-muted mt-1">
+                  {job.jobId} &bull; {job.customerName || "Not recorded"}
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-5 rounded-card border border-amber-200 bg-amber-50 px-3 py-2.5 text-[13px] leading-relaxed text-amber-900">
+              This completes the job for scheduling and driver flow, but missing photos or signature will stay missing in the record.
+            </div>
+
+            <label className="block mt-5">
+              <span className="text-label font-semibold text-fg">Admin note</span>
+              <textarea
+                value={manualFinishNote}
+                onChange={event => setManualFinishNote(event.target.value)}
+                disabled={manualFinishing}
+                rows={4}
+                maxLength={1000}
+                placeholder="Example: Driver completed this job manually outside the app."
+                className="mt-1.5 w-full rounded-card border border-admin-line bg-admin-surface px-3 py-2 text-[13px] text-admin-ink outline-none focus:border-admin-brand disabled:opacity-70"
+              />
+            </label>
+
+            <div className="flex gap-3 mt-6">
+              <button
+                onClick={() => setManualFinishOpen(false)}
+                disabled={manualFinishing}
+                className="flex-1 h-11 rounded-card bg-admin-surface text-card text-fg disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleManualFinish}
+                disabled={!manualFinishNote.trim() || manualFinishing}
+                className="flex-1 h-11 rounded-card bg-admin-status-green text-white text-[14px] font-semibold disabled:opacity-50"
+              >
+                {manualFinishing ? "Finishing..." : "Finish manually"}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     
       <PdfPreviewModal 
