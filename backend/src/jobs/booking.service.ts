@@ -316,6 +316,7 @@ function toJob(parsed: ParsedCalendarBooking, existing?: Job): Job {
     existing?.amountCharged === undefined && existing?.calculatedTotalCharges !== undefined
       ? existing.calculatedTotalCharges
       : existing?.totalCharges ?? basePrice;
+  const reviveCancelled = existing?.status === JobStatus.CANCELLED && !existing.actualStart;
 
   return {
     jobId: jobIdForEvent(parsed.calendarEventId),
@@ -363,8 +364,8 @@ function toJob(parsed: ParsedCalendarBooking, existing?: Job): Job {
     signatureUrl: existing?.signatureUrl ?? "",
     driveFolderId: "",
     driveFolderUrl: "",
-    status: existing?.status ?? JobStatus.READY,
-    currentState: existing?.currentState ?? WorkflowState.READY,
+    status: reviveCancelled ? JobStatus.READY : existing?.status ?? JobStatus.READY,
+    currentState: reviveCancelled ? WorkflowState.READY : existing?.currentState ?? WorkflowState.READY,
     rawTitle: parsed.rawTitle,
     rawDescription: parsed.rawDescription,
     createdAt: existing?.createdAt || now,

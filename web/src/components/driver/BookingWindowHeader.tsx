@@ -36,8 +36,11 @@ function dateChip(iso: string): string {
   return `${weekday} ${day} ${month}`.toUpperCase();
 }
 
-/** "2 men 210£" — crew and booked price, the way the board reads it. */
-function crewPrice(job: Job): string {
+/** The Calendar title exactly as booked, falling back only for older jobs that lack rawTitle. */
+function bookingTitle(job: Job): string {
+  const rawTitle = job.rawTitle?.trim();
+  if (rawTitle) return rawTitle;
+
   const n = job.crewSize || 0;
   const crew = `${n || "?"} ${n === 1 ? "man" : "men"}`;
   return job.basePrice > 0 ? `${crew} ${Math.round(job.basePrice)}£` : crew;
@@ -59,7 +62,7 @@ export function BookingWindowHeader({ job }: BookingWindowHeaderProps) {
     <div className="rounded-card border border-line/40 bg-surface px-4 py-3 text-center shadow-[0_2px_12px_-2px_rgb(15_23_42/0.12)]">
       <div className="flex flex-wrap items-center justify-center gap-x-2.5 gap-y-1">
         <span className="inline-flex items-center rounded-none bg-success-subtle px-2.5 py-1 text-helper font-bold text-success">
-          {crewPrice(job)}
+          {bookingTitle(job)}
         </span>
         <span className="text-fg-subtle" aria-hidden>
           &ndash;

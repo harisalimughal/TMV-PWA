@@ -112,4 +112,36 @@ describe("syncBookingsForDate", () => {
       onMyWayAt: "2026-09-24T07:45:00.000Z"
     }));
   });
+
+  it("reactivates a cancelled job when the Calendar event exists again as confirmed", async () => {
+    const movedStart = "2026-09-25T07:30:00+01:00";
+    const movedFinish = "2026-09-25T09:30:00+01:00";
+    listJobs.mockResolvedValue([existingJob({
+      status: JobStatus.CANCELLED,
+      currentState: "CANCELLED",
+      bookedStart: "2026-09-24T07:30:00+01:00",
+      bookedFinish: "2026-09-24T09:30:00+01:00"
+    })]);
+    listCalendarEvents.mockResolvedValue([{
+      ...calendarEvent([
+        "Name: Client One",
+        "Email: client@example.com",
+        "Phone: 07111222333",
+        "Pickup: Old pickup",
+        "Delivery: Old dropoff"
+      ].join("\n")),
+      start: { dateTime: movedStart },
+      end: { dateTime: movedFinish }
+    }]);
+
+    await syncBookingsForDate(DateTime.fromISO("2026-09-25T12:00:00", { zone: "Europe/London" }));
+
+    expect(upsertJob).toHaveBeenCalledTimes(1);
+    expect(upsertJob.mock.calls[0][0]).toEqual(expect.objectContaining({
+      bookedStart: movedStart,
+      bookedFinish: movedFinish,
+      status: JobStatus.READY,
+      currentState: WorkflowState.READY
+    }));
+  });
 });
