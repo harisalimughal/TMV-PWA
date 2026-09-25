@@ -41,7 +41,7 @@ function calendarOvertimeRate(extraChargeText: string): { rate: number; unitMins
   const text = extraChargeText.trim().toLowerCase();
   if (!text) return null;
 
-  const amountMatch = text.match(/(?:£|gbp\s*)\s*(\d+(?:\.\d+)?)/i) ?? text.match(/\b(\d+(?:\.\d+)?)\s*(?:pounds?|gbp)\b/i);
+  const amountMatch = text.match(/(?:\u00a3|\u00c2\u00a3|gbp\s*)\s*(\d+(?:\.\d+)?)/i) ?? text.match(/\b(\d+(?:\.\d+)?)\s*(?:pounds?|gbp)\b/i);
   const rate = amountMatch ? Number(amountMatch[1]) : NaN;
   if (!Number.isFinite(rate) || rate <= 0) return null;
 
@@ -354,7 +354,11 @@ export async function handleAction(
       const unitMins = calendarRate?.unitMins ?? (unitStr.toLowerCase().includes("hour") ? 60 : 30);
 
       const chargeableMinutes = Math.max(0, reconciledMinutes - otGrace);
-      job.overtimeCharge = chargeableMinutes === 0 ? 0 : Math.ceil(chargeableMinutes / unitMins) * otRate;
+      job.overtimeCharge = chargeableMinutes === 0
+        ? 0
+        : calendarRate
+          ? Math.round((chargeableMinutes / unitMins) * otRate * 100) / 100
+          : Math.ceil(chargeableMinutes / unitMins) * otRate;
 
       const from = job.currentState;
       job.currentState = WorkflowState.WAITING_TOTAL_CHARGES;

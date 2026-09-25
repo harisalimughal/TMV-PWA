@@ -1,5 +1,6 @@
 /** Ported from TMV-Chat-bot's dashboard/server/routes/scenarios.route.ts. */
 import { Router } from "express";
+import { DateTime } from "luxon";
 import { listAllScenarioSubmissions, listScenarioSubmissionsByKind, ScenarioSubmissionDoc } from "../../db/scenario.repo";
 import { toThumbnailUrl } from "../../storage/cloudinary";
 import { listDriverProfiles } from "../../auth/driver-account.service";
@@ -36,6 +37,20 @@ function escapeCsvField(val: unknown): string {
   if (/^[=+\-@]/.test(str)) str = `'${str}`;
   if (/[",\n\r]/.test(str)) str = `"${str.replace(/"/g, '""')}"`;
   return str;
+}
+
+function inDateRange(iso: string, from?: string, to?: string): boolean {
+  const submittedAt = DateTime.fromISO(iso, { zone: "utc" });
+  if (!submittedAt.isValid) return false;
+  if (from) {
+    const fromDate = DateTime.fromISO(from, { zone: "utc" });
+    if (fromDate.isValid && submittedAt < fromDate) return false;
+  }
+  if (to) {
+    const toDate = DateTime.fromISO(to, { zone: "utc" });
+    if (toDate.isValid && submittedAt > toDate) return false;
+  }
+  return true;
 }
 
 export function dashboardScenariosRoutes(): Router {
@@ -95,8 +110,8 @@ export function dashboardScenariosRoutes(): Router {
       const driverFilter = typeof req.query.driver === "string" && req.query.driver
         ? req.query.driver.trim().toUpperCase()
         : undefined;
-      const from = typeof req.query.from === "string" ? req.query.from : undefined;
-      const to = typeof req.query.to === "string" ? req.query.to : undefined;
+      const from = typeof req.query.from === "string" && req.query.from ? req.query.from : undefined;
+      const to = typeof req.query.to === "string" && req.query.to ? req.query.to : undefined;
 
       // listScenarioSubmissionsByKind returns newest-first already; the source built
       // the "event N of M" labelling off an oldest-first pass, so pull everything for
@@ -108,8 +123,9 @@ export function dashboardScenariosRoutes(): Router {
       if (driverFilter) {
         rows = rows.filter(r => resolveDriver(r.driver).initials === driverFilter);
       }
-      if (from) rows = rows.filter(r => r.submittedAt >= from);
-      if (to) rows = rows.filter(r => r.submittedAt <= to);
+      if (from || to) {
+        rows = rows.filter(r => inDateRange(r.submittedAt, from, to));
+      }
 
       const jobCounts = new Map<string, number>();
       for (const r of rows) jobCounts.set(r.jobId, (jobCounts.get(r.jobId) || 0) + 1);

@@ -64,6 +64,14 @@ function evidenceLine(evidence?: EvidenceProgress): string {
   ].join("\n");
 }
 
+export function opsJobCompletionSubject(
+  job: Pick<Job, "customerName">,
+  driver: Pick<DriverProfile, "fullName" | "initials" | "email">
+): string {
+  const driverName = driver.fullName || driver.initials || driver.email || "Driver";
+  return `${driverName} completed the job of ${job.customerName || "Customer"}`;
+}
+
 export function renderOpsJobCompletionEmail(
   job: Job,
   driver: Pick<DriverProfile, "fullName" | "initials" | "email" | "vanRegistration">,
@@ -72,7 +80,7 @@ export function renderOpsJobCompletionEmail(
   const viewUrl = dashboardJobUrl(job.jobId);
   const driverLabel = `${driver.fullName || "Unknown driver"} (${driver.initials || job.driverInitials || "—"})`;
   const total = job.amountCharged ?? job.totalCharges ?? job.calculatedTotalCharges ?? job.basePrice;
-  const subjectText = `${job.jobId} completed - ${job.customerName || "Customer"}`;
+  const subjectText = opsJobCompletionSubject(job, driver);
   const lines = [
     subjectText,
     "",
@@ -194,7 +202,7 @@ export async function sendOpsJobCompletionEmail(
   driver: Pick<DriverProfile, "fullName" | "initials" | "email" | "vanRegistration">,
   evidence?: EvidenceProgress
 ): Promise<void> {
-  const subject = `Job completed: ${job.jobId} - ${job.customerName || "Customer"}`;
+  const subject = opsJobCompletionSubject(job, driver);
   await sendEmail("info@themanvan.co.uk", subject, renderOpsJobCompletionEmail(job, driver, evidence));
 }
 

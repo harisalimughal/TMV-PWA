@@ -28,4 +28,14 @@ describe("work breakdown helpers", () => {
 
     expect(jobsForDriver(jobs, "TI").map(job => job.jobId)).toEqual(["TMV-1"]);
   });
+
+  it("orders the clicked driver's jobs newest first", () => {
+    const jobs = [
+      { ...baseJob, jobId: "TMV-OLD", driverInitials: "TI", status: "COMPLETED", bookedStart: "2026-09-03T08:45:00.000Z" },
+      { ...baseJob, jobId: "TMV-NEW", driverInitials: "TI", status: "COMPLETED", bookedStart: "2026-09-14T15:00:00.000Z" },
+      { ...baseJob, jobId: "TMV-MID", driverInitials: "TI", status: "COMPLETED", bookedStart: "2026-09-08T12:00:00.000Z" }
+    ] as NormalizedJob[];
+
+    expect(jobsForDriver(jobs, "TI").map(job => job.jobId)).toEqual(["TMV-NEW", "TMV-MID", "TMV-OLD"]);
+  });
 });

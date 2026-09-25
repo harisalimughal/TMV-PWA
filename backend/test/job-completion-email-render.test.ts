@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { renderOpsJobCompletionEmail } from "../src/google/gmail";
+import { opsJobCompletionSubject, renderOpsJobCompletionEmail } from "../src/google/gmail";
 import { JobStatus, type Job } from "../src/jobs/job.types";
 import { WorkflowState } from "../src/workflow/workflow.states";
 
@@ -62,7 +62,10 @@ describe("renderOpsJobCompletionEmail", () => {
       { completed: { Arrival: 1, VanLoaded: 2, EmptyVan: 1 }, pending: {}, failed: {}, hasSignature: true }
     );
 
-    expect(email.text).toContain("TMV-456 completed - Mary Major");
+    expect(opsJobCompletionSubject(job(), { initials: "HA", fullName: "Haris Ali", email: "driver@example.com", vanRegistration: "AB12 CDE" }))
+      .toBe("Haris Ali completed the job of Mary Major");
+    expect(email.text).toContain("Haris Ali completed the job of Mary Major");
+    expect(email.html).toContain("Haris Ali completed the job of Mary Major");
     expect(email.text).toContain("Pickup: 10 Alpha Road");
     expect(email.text).toContain("Client confirmed by: Mary Major");
     expect(email.text).toContain("Arrival photos: 1");

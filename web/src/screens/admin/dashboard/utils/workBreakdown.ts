@@ -18,5 +18,5 @@ export function jobsForDriver(jobs: NormalizedJob[], driverInitials: string): No
   const initials = driverInitials.toLowerCase();
   return jobs
     .filter(job => job.status === "COMPLETED" && job.driverInitials.toLowerCase() === initials)
-    .sort((a, b) => (a.bookedStart || a.actualStart || "").localeCompare(b.bookedStart || b.actualStart || ""));
+    .sort((a, b) => (b.bookedStart || b.actualStart || "").localeCompare(a.bookedStart || a.actualStart || ""));
 }

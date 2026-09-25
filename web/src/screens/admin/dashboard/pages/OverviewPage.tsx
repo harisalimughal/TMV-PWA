@@ -462,8 +462,8 @@ function WorkBreakdown({ from, to }: { from?: string; to?: string }) {
         </div>
 
         {/* BREAKDOWN TABLE */}
-        <div className="border border-admin-line rounded-card overflow-hidden">
-          <table className="w-full text-left text-[13px] border-collapse">
+        <div className="border border-admin-line rounded-card overflow-x-auto">
+          <table className="w-full min-w-[1120px] text-left text-[13px] border-collapse">
             <thead className="bg-admin-surface">
               <tr className="border-b border-admin-line">
                 <th className="py-2.5 px-3 font-semibold text-admin-muted">Driver</th>
@@ -527,8 +527,8 @@ function WorkBreakdown({ from, to }: { from?: string; to?: string }) {
                             ) : driverJobs.length === 0 ? (
                               <div className="py-6 text-center text-admin-muted">No completed jobs found for this driver in the selected range.</div>
                             ) : (
-                              <div className="overflow-x-auto rounded-card border border-admin-line bg-white">
-                                <table className="w-full min-w-[980px] text-left text-[12px] border-collapse">
+                              <div className="max-w-full overflow-x-auto rounded-card border border-admin-line bg-white">
+                                <table className="w-full min-w-[1080px] text-left text-[12px] border-collapse">
                                   <thead className="bg-white">
                                     <tr className="border-b border-admin-line">
                                       <th className="py-2 px-3 font-semibold text-admin-muted">Job</th>

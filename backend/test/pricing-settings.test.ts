@@ -172,7 +172,7 @@ describe("pricing settings enforcement", () => {
     expect(updated.overtimeCharge).toBe(150);
   });
 
-  it("understands calendar extra-charge rates per full hour", async () => {
+  it("prorates calendar extra-charge rates per full hour", async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-09-24T10:30:00.000Z"));
 
@@ -188,6 +188,25 @@ describe("pricing settings enforcement", () => {
       { overtime_minutes: ["90"] }
     );
 
-    expect(updated.overtimeCharge).toBe(240);
+    expect(updated.overtimeCharge).toBe(180);
+  });
+
+  it("charges half of a calendar hourly rate for thirty minutes", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-09-24T10:30:00.000Z"));
+
+    getJob.mockResolvedValue(job({
+      extraCharges: [ExtraChargeType.EXTRA_TIME],
+      extraChargeText: "Any extra charge: £100 per hour"
+    }));
+
+    const updated = await handleAction(
+      "SUBMIT_OVERTIME",
+      "TMV-PRICE",
+      "abi@example.com",
+      { overtime_minutes: ["30"] }
+    );
+
+    expect(updated.overtimeCharge).toBe(50);
   });
 });
