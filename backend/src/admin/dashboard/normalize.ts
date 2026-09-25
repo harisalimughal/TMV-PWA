@@ -383,6 +383,7 @@ function classifyEvidence(
   for (const submission of scenarios) {
     const label = SCENARIO_LABEL[submission.scenario] || submission.scenario;
     submission.photoUrls.forEach((url, index) => {
+      const meta = submission.photoMeta?.[index];
       items.push({
         id: `${submission.scenario}-photo-${index}-${jobId}`,
         category: "Documents", state: "COMPLETED",
@@ -390,6 +391,9 @@ function classifyEvidence(
         fileName: `${label} photo ${index + 1}`,
         receivedAt: toUtcIso(submission.submittedAt),
         completedAt: toUtcIso(submission.submittedAt),
+        capturedAt: meta?.capturedAt,
+        location: meta?.location,
+        locationName: meta?.locationName,
         provenance: "recorded"
       });
     });
@@ -401,6 +405,9 @@ function classifyEvidence(
         fileName: `${label} signature`,
         receivedAt: toUtcIso(submission.submittedAt),
         completedAt: toUtcIso(submission.submittedAt),
+        capturedAt: submission.signatureMeta?.capturedAt,
+        location: submission.signatureMeta?.location,
+        locationName: submission.signatureMeta?.locationName,
         provenance: "recorded"
       });
     }

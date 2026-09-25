@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from "react";
 import { Camera, FileUp, Loader2, X } from "lucide-react";
 import { compressAll, formatBytes } from "../lib/image";
 import { haptics } from "../lib/haptics";
-import type { PhotoCaptureMeta } from "../lib/geo";
+import type { CapturedLocation, PhotoCaptureMeta } from "../lib/geo";
 import { reverseGeocodeLive } from "../api/jobs";
 import { cx } from "../ui";
 import { CameraCaptureModal } from "./camera";
@@ -47,6 +47,8 @@ export interface PhotoPickerProps {
    *  step title already says what the photo is for, so this section doesn't repeat
    *  it. `label` is still used for alt text and the camera modal's title either way. */
   labelHidden?: boolean;
+  /** Job/scenario evidence should not be captured until this step has a GPS fix. */
+  requireLocation?: boolean;
 }
 
 export interface RemotePhoto {
@@ -90,7 +92,8 @@ export function PhotoPicker({
   initialMeta,
   remoteFiles,
   onRemoveRemote,
-  labelHidden = false
+  labelHidden = false,
+  requireLocation = true
 }: PhotoPickerProps) {
   const [previews, setPreviews] = useState<Preview[]>(() =>
     (initialFiles ?? []).map((file, i) => ({
@@ -101,6 +104,9 @@ export function PhotoPicker({
   );
   const [processing, setProcessing] = useState(false);
   const [cameraOpen, setCameraOpen] = useState(false);
+  const [stepLocation, setStepLocation] = useState<CapturedLocation | null>(
+    () => initialMeta?.find(meta => meta?.location)?.location ?? null
+  );
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   // Hand a camera-open trigger to the caller (e.g. a docked "Take photo" button),
@@ -167,6 +173,7 @@ export function PhotoPicker({
   }
 
   async function handleCapture(file: File, meta: PhotoCaptureMeta) {
+    if (meta.location) setStepLocation(meta.location);
     await addFiles([file], [meta]);
   }
 
@@ -318,6 +325,8 @@ export function PhotoPicker({
         onClose={() => setCameraOpen(false)}
         onCapture={(file, meta) => void handleCapture(file, meta)}
         autoAcceptCapture={autoAcceptCapture}
+        requireLocation={requireLocation}
+        fallbackLocation={stepLocation}
         title={`Take ${label.toLowerCase()}`}
       />
     </section>

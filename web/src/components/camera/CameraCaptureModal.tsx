@@ -3,7 +3,7 @@ import { createPortal } from "react-dom";
 import { Camera, CameraOff, Loader2, RefreshCw, SwitchCamera, X } from "lucide-react";
 import { cx } from "../../ui";
 import { haptics } from "../../lib/haptics";
-import type { PhotoCaptureMeta } from "../../lib/geo";
+import type { CapturedLocation, PhotoCaptureMeta } from "../../lib/geo";
 import { useCameraStream } from "./useCameraStream";
 import { useLocationWatch } from "./useLocationWatch";
 
@@ -18,6 +18,10 @@ export interface CameraCaptureModalProps {
   autoAcceptCapture?: boolean;
   /** Header wording, e.g. "Take evidence photo". */
   title?: string;
+  /** Evidence photos must carry GPS. Non-evidence uses, such as profile photos, can opt out. */
+  requireLocation?: boolean;
+  /** Reused for additional photos in the same evidence step if GPS is briefly not ready. */
+  fallbackLocation?: CapturedLocation | null;
 }
 
 type Phase = "live" | "preview";
@@ -25,6 +29,22 @@ type Phase = "live" | "preview";
 const FOCUSABLE =
   'a[href],button:not([disabled]),input:not([disabled]),[tabindex]:not([tabindex="-1"])';
 const CAMERA_PERMISSION_GRANTED_KEY = "tmv.camera.permissionGranted.v1";
+
+export function locationForCapture(
+  current: CapturedLocation | null,
+  fallback: CapturedLocation | null,
+  requireLocation: boolean
+): CapturedLocation | null {
+  return current ?? fallback ?? null;
+}
+
+export function canUseLocationForCapture(
+  current: CapturedLocation | null,
+  fallback: CapturedLocation | null,
+  requireLocation: boolean
+): boolean {
+  return !requireLocation || Boolean(locationForCapture(current, fallback, requireLocation));
+}
 
 function hasRememberedCameraPermission(): boolean {
   try {
@@ -62,6 +82,8 @@ export function CameraCaptureModal({
   allowMultiple = false,
   autoAcceptCapture = false,
   title = "Take photo",
+  requireLocation = false,
+  fallbackLocation = null,
 }: CameraCaptureModalProps) {
   const { status, error, stream, hasMultipleCameras, start, stop, toggleFacing } =
     useCameraStream();
@@ -161,7 +183,11 @@ export function CameraCaptureModal({
 
   if (!open || typeof document === "undefined") return null;
 
+  const captureLocation = locationForCapture(locationRef.current, fallbackLocation, requireLocation);
+  const locationReady = canUseLocationForCapture(locationRef.current, fallbackLocation, requireLocation);
+
   function handleCapture() {
+    if (!locationReady) return;
     const video = videoRef.current;
     const canvas = canvasRef.current;
     if (!video || !canvas || !video.videoWidth) return;
@@ -176,7 +202,7 @@ export function CameraCaptureModal({
     ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
     // The location/time that matter are of this instant — the shutter press — not
     // whenever "Use photo" is eventually tapped on the confirm screen.
-    const meta: PhotoCaptureMeta = { capturedAt: new Date().toISOString(), location: locationRef.current };
+    const meta: PhotoCaptureMeta = { capturedAt: new Date().toISOString(), location: captureLocation };
     canvas.toBlob(
       blob => {
         setCapturing(false);
@@ -381,7 +407,7 @@ export function CameraCaptureModal({
             <button
               type="button"
               onClick={handleCapture}
-              disabled={status !== "ready" || capturing}
+              disabled={status !== "ready" || capturing || !locationReady}
               aria-label="Take photo"
               className="grid size-[74px] place-items-center rounded-pill border-[3px] border-white/85 bg-white/15 transition-transform active:scale-95 disabled:opacity-40 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-white"
             >
@@ -394,6 +420,12 @@ export function CameraCaptureModal({
               </span>
             </button>
           </div>
+        )}
+
+        {phase === "live" && requireLocation && !locationReady && !failed && (
+          <p className="mt-3 text-center text-[13px] font-medium text-white/75" role="status" aria-live="polite">
+            Getting current location...
+          </p>
         )}
 
         {phase === "preview" && (
