@@ -4,7 +4,7 @@ import { fetchDrivers, fetchJobs, markJobFinishedManually, reassignJob } from ".
 import { NormalizedJob } from "../types";
 import { JobDetailDrawer } from "../components/JobDetailDrawer";
 import { JobStatusBadge } from "../components/StatusBadge";
-import { DateRangePicker } from "../components/DateRangePicker";
+import { DateRangePicker, defaultDashboardDateRange } from "../components/DateRangePicker";
 import { ApiErrorState } from "../components/ApiErrorState";
 import { BulkDeleteModal } from "../components/BulkDeleteModal";
 import { DriverViewedDot } from "../components/DriverViewedDot";
@@ -42,8 +42,8 @@ export function JobsPage() {
   const [drawerJob, setDrawerJob] = useState<NormalizedJob | null>(null);
   
   // Filtering & Pagination
-  const [from, setFrom] = useState<string | undefined>();
-  const [to, setTo] = useState<string | undefined>();
+  const [from, setFrom] = useState<string | undefined>(() => defaultDashboardDateRange().from);
+  const [to, setTo] = useState<string | undefined>(() => defaultDashboardDateRange().to);
   const [searchQuery, setSearchQuery] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("All"); // All, In Progress
@@ -406,7 +406,14 @@ export function JobsPage() {
                       <h3 className="text-card text-fg mb-1">No jobs match your filters</h3>
                       <p className="text-[13px] text-admin-muted mb-4">Try adjusting your search or clearing filters.</p>
                       <button
-                        onClick={() => { setSearchQuery(""); setStatusFilter("All"); setFrom(undefined); setTo(undefined); setPage(1); }}
+                        onClick={() => {
+                          const range = defaultDashboardDateRange();
+                          setSearchQuery("");
+                          setStatusFilter("All");
+                          setFrom(range.from);
+                          setTo(range.to);
+                          setPage(1);
+                        }}
                         className="px-4 py-2 bg-admin-surface hover:bg-admin-line text-admin-ink text-[13px] font-semibold rounded-card transition"
                       >
                         Clear all filters

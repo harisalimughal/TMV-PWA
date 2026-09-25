@@ -46,13 +46,13 @@ export const PHOTO_STATES = new Set<WorkflowState>([
  * The checkpoints sit in different positions relative to their photo: Arrival's is
  * right after the Arrival photo (resume -> the next photo step, Loaded); Stop-by's is
  * right after the Stop-by photo (resume -> the drop-off issues check); Empty Van's is
- * right *before* the Empty Van photo (inserted right after Payment) -- resume there is
- * the Empty Van photo step itself, not past it.
+ * right before the Empty Van photo -- resume there is the Empty Van photo step itself,
+ * not past it.
  */
 export const RESUME_AFTER_ISSUES: Partial<Record<WorkflowState, WorkflowState>> = {
   [WorkflowState.WAITING_ARRIVAL_ISSUES_CHOICE]: WorkflowState.WAITING_LOADED_PHOTO,
   [WorkflowState.WAITING_STOP_BY_ISSUES_CHOICE]: WorkflowState.WAITING_EMPTY_VAN_ISSUES_CHECK,
-  [WorkflowState.WAITING_EMPTY_VAN_ISSUES_CHOICE]: WorkflowState.WAITING_EXTRA_CHARGES
+  [WorkflowState.WAITING_EMPTY_VAN_ISSUES_CHOICE]: WorkflowState.WAITING_EMPTY_VAN_PHOTO
 };
 
 export function nextAfterPhoto(state: WorkflowState): WorkflowState {

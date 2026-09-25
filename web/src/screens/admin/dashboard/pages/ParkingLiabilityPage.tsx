@@ -7,12 +7,13 @@ import { evidencePhotoCount } from "../utils/evidence";
 import { SubmissionDetailDrawer } from "../components/SubmissionDetailDrawer";
 import { SubmissionPageTemplate } from "../components/SubmissionPageTemplate";
 import { ApiErrorState } from "../components/ApiErrorState";
+import { defaultDashboardDateRange } from "../components/DateRangePicker";
 import { ClipboardList, Search } from "lucide-react";
 
 export function ParkingLiabilityPage() {
   const [search, setSearch] = useState("");
-  const [from, setFrom] = useState<string | undefined>();
-  const [to, setTo] = useState<string | undefined>();
+  const [from, setFrom] = useState<string | undefined>(() => defaultDashboardDateRange().from);
+  const [to, setTo] = useState<string | undefined>(() => defaultDashboardDateRange().to);
   const [driverFilter, setDriverFilter] = useState<string>("");
 
   const [page, setPage] = useState(1);
@@ -22,7 +23,7 @@ export function ParkingLiabilityPage() {
 
   const { data: response, isLoading, isError, error, refetch, isFetching } = useQuery({
     queryKey: ["scenarios", "parking", page, from, to, driverFilter],
-    queryFn: () => fetchScenarios("parking", page, driverFilter || undefined)
+    queryFn: () => fetchScenarios("parking", page, driverFilter || undefined, from, to)
   });
 
   // Same roster + filter pattern as Finished Jobs' driver filter -- resolved

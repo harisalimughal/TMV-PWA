@@ -17,7 +17,7 @@ import { NormalizedJob } from "../types";
 import { fetchScenarios, fetchDrivers } from "../api";
 import { PaperScenarioReport } from "../components/PaperScenarioReport";
 import { formatLondonDateTime } from "../utils/date";
-import { DateRangePicker } from "../components/DateRangePicker";
+import { DateRangePicker, defaultDashboardDateRange } from "../components/DateRangePicker";
 import { LiabilityConfigModal } from "../components/LiabilityConfigModal";
 import { ApiErrorState } from "../components/ApiErrorState";
 import { Settings2 } from "lucide-react";
@@ -72,8 +72,8 @@ const isTestGibberish = (text: string) => {
 
 export function ScenariosPage({ kind }: Props) {
   const [page, setPage] = useState(1);
-  const [from, setFrom] = useState<string | undefined>();
-  const [to, setTo] = useState<string | undefined>();
+  const [from, setFrom] = useState<string | undefined>(() => defaultDashboardDateRange().from);
+  const [to, setTo] = useState<string | undefined>(() => defaultDashboardDateRange().to);
   const [searchQuery, setSearchQuery] = useState("");
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [previewJob, setPreviewJob] = useState<any | null>(null);
@@ -86,7 +86,7 @@ export function ScenariosPage({ kind }: Props) {
 
   const { data, isLoading, isError, error, refetch } = useQuery({
     queryKey: ["scenarios", kind, page, from, to, driverFilter],
-    queryFn: () => fetchScenarios(kind, page, driverFilter || undefined),
+    queryFn: () => fetchScenarios(kind, page, driverFilter || undefined, from, to),
     retry: 1
   });
 
@@ -156,7 +156,7 @@ export function ScenariosPage({ kind }: Props) {
 
           <div className="hidden sm:block w-[1px] h-6 bg-admin-line mx-1" />
 
-          {/* DateRangePicker already renders its own All Time/Today/7 Days/30 Days
+          {/* DateRangePicker already renders its own Today/7 Days/30 Days
               preset chips alongside the calendar inputs -- a second, separately-driven
               set of the same four chips used to sit here too. */}
           <DateRangePicker from={from} to={to} onChange={(f, t) => { setFrom(f); setTo(t); setPage(1); }} />

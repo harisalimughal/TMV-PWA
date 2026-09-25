@@ -10,6 +10,7 @@ import {
   FileDown,
   Download,
   ChevronDown,
+  ChevronRight,
   Loader2
 } from "lucide-react";
 import {
@@ -21,14 +22,15 @@ import {
   ResponsiveContainer
 } from "recharts";
 import { fetchSummary, fetchJobs, fetchDrivers } from "../api";
-import { DateRangePicker } from "../components/DateRangePicker";
+import { DateRangePicker, defaultDashboardDateRange } from "../components/DateRangePicker";
 import { PrintPortal } from "../components/PrintPortal";
 import { PaperAnalyticsReport } from "../components/PaperAnalyticsReport";
 import { waitForPrintImages } from "../utils/printReady";
 import { sounds } from "../utils/audio";
 import { toCsv, downloadCsv, stampForFilename } from "../utils/csv";
-import { formatLondonDate } from "../utils/date";
+import { formatLondonDate, formatLondonDateTime } from "../utils/date";
 import { completionRate, formatDuration } from "../utils/kpi";
+import { jobServiceType, jobsForDriver } from "../utils/workBreakdown";
 import { NormalizedJob, SummaryResponse, DriverSummaryItem } from "../types";
 import { Button, Spinner, SegmentedControl } from "../../../../ui";
 
@@ -39,8 +41,8 @@ interface Props {
 type OverviewTab = "overview" | "breakdown";
 
 export function OverviewPage({ onSelectSection }: Props) {
-  const [from, setFrom] = useState<string | undefined>();
-  const [to, setTo] = useState<string | undefined>();
+  const [from, setFrom] = useState<string | undefined>(() => defaultDashboardDateRange().from);
+  const [to, setTo] = useState<string | undefined>(() => defaultDashboardDateRange().to);
   // Defaults to Work Breakdown -- OverviewSummary/WorkBreakdown below are rendered
   // as a ternary, not both at once, so whichever one isn't the active tab never
   // mounts and never fires its useQuery. Overview's KPI/chart fetch (summary +
@@ -280,6 +282,7 @@ function OverviewSummary({
  */
 function WorkBreakdown({ from, to }: { from?: string; to?: string }) {
   const [driver, setDriver] = useState("all");
+  const [expandedDriver, setExpandedDriver] = useState<string | null>(null);
   const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
   const [isExportOpen, setIsExportOpen] = useState(false);
   const exportRef = useRef<HTMLDivElement>(null);
@@ -301,8 +304,37 @@ function WorkBreakdown({ from, to }: { from?: string; to?: string }) {
     queryFn: () => fetchDrivers(from, to)
   });
 
+  const { data: breakdownJobs = [], isLoading: jobsLoading } = useQuery({
+    queryKey: ["work_breakdown_jobs", from, to, driver],
+    queryFn: async () => {
+      const pageSize = 500;
+      const all: NormalizedJob[] = [];
+      let page = 1;
+      while (true) {
+        const res = await fetchJobs({
+          from,
+          to,
+          driver: driver !== "all" ? driver : undefined,
+          status: "COMPLETED",
+          page,
+          pageSize,
+          sort: "bookedStart",
+          dir: "asc"
+        });
+        all.push(...res.items);
+        if (!res.pagination.hasMore) break;
+        page += 1;
+      }
+      return all;
+    }
+  });
+
   const allDrivers = driversData?.drivers ?? [];
   const rows = driver !== "all" ? allDrivers.filter(d => d.initials.toLowerCase() === driver.toLowerCase()) : allDrivers;
+
+  useEffect(() => {
+    setExpandedDriver(null);
+  }, [from, to, driver]);
 
   // The dropdown offers real drivers to filter down to -- not every code this
   // endpoint returns. A job with a driverInitials value that doesn't match any
@@ -323,6 +355,9 @@ function WorkBreakdown({ from, to }: { from?: string; to?: string }) {
       { header: "Driver", value: r => r.fullName },
       { header: "Code", value: r => r.initials },
       { header: "Completed Jobs", value: r => r.completed },
+      { header: "Congestion (£)", value: r => r.congestionChargePounds.toFixed(2) },
+      { header: "Tunnel (£)", value: r => r.tunnelChargePounds.toFixed(2) },
+      { header: "Overtime Hours", value: r => formatDuration(r.overtimeMinutes) },
       { header: "Moving Hours", value: r => formatDuration(r.totalDurationMinutes) },
       { header: "Cash (£)", value: r => r.cashCollectedPounds.toFixed(2) },
       { header: "Card (£)", value: r => r.cardCollectedPounds.toFixed(2) },
@@ -433,6 +468,9 @@ function WorkBreakdown({ from, to }: { from?: string; to?: string }) {
               <tr className="border-b border-admin-line">
                 <th className="py-2.5 px-3 font-semibold text-admin-muted">Driver</th>
                 <th className="py-2.5 px-3 font-semibold text-admin-muted text-right">Completed Jobs</th>
+                <th className="py-2.5 px-3 font-semibold text-admin-muted text-right">Congestion (£)</th>
+                <th className="py-2.5 px-3 font-semibold text-admin-muted text-right">Tunnel (£)</th>
+                <th className="py-2.5 px-3 font-semibold text-admin-muted text-right">Overtime Hours</th>
                 <th className="py-2.5 px-3 font-semibold text-admin-muted text-right">Moving Hours</th>
                 <th className="py-2.5 px-3 font-semibold text-admin-muted text-right">Cash (£)</th>
                 <th className="py-2.5 px-3 font-semibold text-admin-muted text-right">Card (£)</th>
@@ -444,27 +482,92 @@ function WorkBreakdown({ from, to }: { from?: string; to?: string }) {
             <tbody className="divide-y divide-admin-line/60">
               {isLoading ? (
                 <tr>
-                  <td colSpan={8} className="py-8 text-center text-admin-muted">
+                  <td colSpan={11} className="py-8 text-center text-admin-muted">
                     <Loader2 className="w-4 h-4 animate-spin inline-block mr-2" /> Loading…
                   </td>
                 </tr>
               ) : rows.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="py-8 text-center text-admin-muted">No drivers found for this range.</td>
+                  <td colSpan={11} className="py-8 text-center text-admin-muted">No drivers found for this range.</td>
                 </tr>
               ) : (
-                rows.map(r => (
-                  <tr key={r.initials}>
-                    <td className="py-2.5 px-3 font-semibold text-admin-ink">{r.fullName} <span className="text-admin-muted font-mono font-normal">({r.initials})</span></td>
-                    <td className="py-2.5 px-3 text-right">{r.completed}</td>
-                    <td className="py-2.5 px-3 text-right font-mono">{formatDuration(r.totalDurationMinutes)}</td>
-                    <td className="py-2.5 px-3 text-right font-mono">{r.cashCollectedPounds.toFixed(2)}</td>
-                    <td className="py-2.5 px-3 text-right font-mono">{r.cardCollectedPounds.toFixed(2)}</td>
-                    <td className="py-2.5 px-3 text-right font-mono">{r.bankCollectedPounds.toFixed(2)}</td>
-                    <td className="py-2.5 px-3 text-right font-mono">{r.invoiceCollectedPounds.toFixed(2)}</td>
-                    <td className="py-2.5 px-3 text-right font-mono font-bold">{r.revenuePounds.toFixed(2)}</td>
-                  </tr>
-                ))
+                rows.map(r => {
+                  const isExpanded = expandedDriver === r.initials;
+                  const driverJobs = isExpanded ? jobsForDriver(breakdownJobs, r.initials) : [];
+                  return (
+                    <React.Fragment key={r.initials}>
+                      <tr
+                        className="cursor-pointer bg-white hover:bg-admin-surface/70 transition"
+                        onClick={() => setExpandedDriver(isExpanded ? null : r.initials)}
+                      >
+                        <td className="py-2.5 px-3 font-semibold text-admin-ink">
+                          <span className="inline-flex items-center gap-2">
+                            {isExpanded ? <ChevronDown className="w-3.5 h-3.5 text-admin-muted" /> : <ChevronRight className="w-3.5 h-3.5 text-admin-muted" />}
+                            <span>{r.fullName} <span className="text-admin-muted font-mono font-normal">({r.initials})</span></span>
+                          </span>
+                        </td>
+                        <td className="py-2.5 px-3 text-right">{r.completed}</td>
+                        <td className="py-2.5 px-3 text-right font-mono">{r.congestionChargePounds.toFixed(2)}</td>
+                        <td className="py-2.5 px-3 text-right font-mono">{r.tunnelChargePounds.toFixed(2)}</td>
+                        <td className="py-2.5 px-3 text-right font-mono">{formatDuration(r.overtimeMinutes)}</td>
+                        <td className="py-2.5 px-3 text-right font-mono">{formatDuration(r.totalDurationMinutes)}</td>
+                        <td className="py-2.5 px-3 text-right font-mono">{r.cashCollectedPounds.toFixed(2)}</td>
+                        <td className="py-2.5 px-3 text-right font-mono">{r.cardCollectedPounds.toFixed(2)}</td>
+                        <td className="py-2.5 px-3 text-right font-mono">{r.bankCollectedPounds.toFixed(2)}</td>
+                        <td className="py-2.5 px-3 text-right font-mono">{r.invoiceCollectedPounds.toFixed(2)}</td>
+                        <td className="py-2.5 px-3 text-right font-mono font-bold">{r.revenuePounds.toFixed(2)}</td>
+                      </tr>
+                      {isExpanded && (
+                        <tr>
+                          <td colSpan={11} className="bg-admin-surface/50 p-3">
+                            {jobsLoading ? (
+                              <div className="py-6 text-center text-admin-muted">
+                                <Loader2 className="w-4 h-4 animate-spin inline-block mr-2" /> Loading job breakdown...
+                              </div>
+                            ) : driverJobs.length === 0 ? (
+                              <div className="py-6 text-center text-admin-muted">No completed jobs found for this driver in the selected range.</div>
+                            ) : (
+                              <div className="overflow-x-auto rounded-card border border-admin-line bg-white">
+                                <table className="w-full min-w-[980px] text-left text-[12px] border-collapse">
+                                  <thead className="bg-white">
+                                    <tr className="border-b border-admin-line">
+                                      <th className="py-2 px-3 font-semibold text-admin-muted">Job</th>
+                                      <th className="py-2 px-3 font-semibold text-admin-muted">Date</th>
+                                      <th className="py-2 px-3 font-semibold text-admin-muted">Customer</th>
+                                      <th className="py-2 px-3 font-semibold text-admin-muted">Service Type</th>
+                                      <th className="py-2 px-3 font-semibold text-admin-muted text-right">Congestion (£)</th>
+                                      <th className="py-2 px-3 font-semibold text-admin-muted text-right">Tunnel (£)</th>
+                                      <th className="py-2 px-3 font-semibold text-admin-muted text-right">Overtime</th>
+                                      <th className="py-2 px-3 font-semibold text-admin-muted text-right">Moving</th>
+                                      <th className="py-2 px-3 font-semibold text-admin-muted">Payment</th>
+                                      <th className="py-2 px-3 font-semibold text-admin-muted text-right">Total (£)</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody className="divide-y divide-admin-line/60">
+                                    {driverJobs.map(job => (
+                                      <tr key={job.jobId}>
+                                        <td className="py-2 px-3 font-mono font-semibold text-admin-brand">{job.jobId}</td>
+                                        <td className="py-2 px-3 text-admin-muted whitespace-nowrap">{formatLondonDateTime(job.bookedStart || job.actualStart)}</td>
+                                        <td className="py-2 px-3 font-medium text-admin-ink">{job.customerName || "Not recorded"}</td>
+                                        <td className="py-2 px-3">{jobServiceType(job)}</td>
+                                        <td className="py-2 px-3 text-right font-mono">{((job.congestionCharge || 0) / 100).toFixed(2)}</td>
+                                        <td className="py-2 px-3 text-right font-mono">{((job.tunnelCharge || 0) / 100).toFixed(2)}</td>
+                                        <td className="py-2 px-3 text-right font-mono">{formatDuration(job.overtimeMinutes || 0)}</td>
+                                        <td className="py-2 px-3 text-right font-mono">{formatDuration(job.actualMinutes || 0)}</td>
+                                        <td className="py-2 px-3">{job.paymentMethod || "Not recorded"}</td>
+                                        <td className="py-2 px-3 text-right font-mono font-bold">{((job.amountCharged || 0) / 100).toFixed(2)}</td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              </div>
+                            )}
+                          </td>
+                        </tr>
+                      )}
+                    </React.Fragment>
+                  );
+                })
               )}
             </tbody>
           </table>

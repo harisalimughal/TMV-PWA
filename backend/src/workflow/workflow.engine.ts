@@ -32,6 +32,28 @@ function crewRateKey(crewSize: number): string {
   return `CREW_RATE_${crewSize}_MAN`;
 }
 
+function bookingMentionsPacking(job: Job): boolean {
+  const text = [job.extraRequest, job.rawTitle, job.rawDescription].filter(Boolean).join("\n").toLowerCase();
+  return /\b(pack|packing|full packing|packing service)\b/.test(text);
+}
+
+function calendarOvertimeRate(extraChargeText: string): { rate: number; unitMins: number } | null {
+  const text = extraChargeText.trim().toLowerCase();
+  if (!text) return null;
+
+  const amountMatch = text.match(/(?:£|gbp\s*)\s*(\d+(?:\.\d+)?)/i) ?? text.match(/\b(\d+(?:\.\d+)?)\s*(?:pounds?|gbp)\b/i);
+  const rate = amountMatch ? Number(amountMatch[1]) : NaN;
+  if (!Number.isFinite(rate) || rate <= 0) return null;
+
+  if (/\b(?:half\s+(?:an?\s+)?hour|30\s*(?:mins?|minutes?))\b/i.test(text)) {
+    return { rate, unitMins: 30 };
+  }
+  if (/\b(?:full\s+hour|hours?|hrs?|hourly)\b/i.test(text)) {
+    return { rate, unitMins: 60 };
+  }
+  return null;
+}
+
 async function extraChargeAmount(job: Job): Promise<number> {
   let total = 0;
   if (job.extraCharges.includes(ExtraChargeType.CONGESTION)) {
@@ -67,6 +89,18 @@ const PHOTO_FOLDER: Record<string, EvidenceType> = {
   [WorkflowState.WAITING_STOP_BY_PHOTO]: "StopBy",
   [WorkflowState.WAITING_EMPTY_VAN_PHOTO]: "EmptyVan"
 };
+
+export function maxPhotosForWorkflowState(state: WorkflowState): number {
+  switch (state) {
+    case WorkflowState.WAITING_LOADED_PHOTO:
+    case WorkflowState.WAITING_STOP_BY_PHOTO:
+      return 5;
+    case WorkflowState.WAITING_EMPTY_VAN_PHOTO:
+      return 2;
+    default:
+      return 2;
+  }
+}
 
 export interface UploadedPhoto {
   buffer: Buffer;
@@ -104,8 +138,9 @@ export async function handlePhotoStep(
   if (!PHOTO_STATES.has(state)) {
     throw new ValidationError("A photo is not expected at the current workflow step.");
   }
-  if (state === WorkflowState.WAITING_LOADED_PHOTO && photos.length > 2) {
-    throw new ValidationError("Proof Of Van Loaded accepts 1 or 2 photos at this step.");
+  const maxPhotos = maxPhotosForWorkflowState(state);
+  if (photos.length > maxPhotos) {
+    throw new ValidationError(`This step accepts at most ${maxPhotos} photo${maxPhotos === 1 ? "" : "s"}.`);
   }
 
   const evidenceType = PHOTO_FOLDER[state];
@@ -298,7 +333,7 @@ export async function handleAction(
         overtimeCrewSize === 3 ? env.crewRate3Man :
         env.crewRate3Man;
 
-      const isPackingService = job.extraCharges.includes(ExtraChargeType.PACKING);
+      const isPackingService = job.extraCharges.includes(ExtraChargeType.PACKING) || bookingMentionsPacking(job);
       const defaultRateStr = isPackingService
         ? await getSetting("PACKING_RATE", String(env.packingRate))
         : await getSetting(rateKey, String(rateFallback));
@@ -311,13 +346,12 @@ export async function handleAction(
       // OVERTIME_RATE_PER_30 setting is a real override; otherwise always use the
       // crew-size (or packing) rate, exactly as documented in admin/settings-spec.ts's
       // hint for this key.
+      const calendarRate = calendarOvertimeRate(job.extraChargeText);
       const otRateStr = await getSetting("OVERTIME_RATE_PER_30", "");
-      const otRate = otRateStr ? (parseFloat(otRateStr) || defaultRate) : defaultRate;
+      const otRate = calendarRate?.rate ?? (otRateStr ? (parseFloat(otRateStr) || defaultRate) : defaultRate);
 
-      const unitStr = isPackingService
-        ? await getSetting("PACKING_BILLING_UNIT", env.packingBillingUnit)
-        : await getSetting("CREW_BILLING_UNIT", env.crewBillingUnit);
-      const unitMins = unitStr.toLowerCase().includes("hour") ? 60 : 30;
+      const unitStr = isPackingService ? "Per 30 minutes" : await getSetting("CREW_BILLING_UNIT", env.crewBillingUnit);
+      const unitMins = calendarRate?.unitMins ?? (unitStr.toLowerCase().includes("hour") ? 60 : 30);
 
       const chargeableMinutes = Math.max(0, reconciledMinutes - otGrace);
       job.overtimeCharge = chargeableMinutes === 0 ? 0 : Math.ceil(chargeableMinutes / unitMins) * otRate;
@@ -353,8 +387,7 @@ export async function handleAction(
       job.paymentMethod = methods.join(", ");
       job.paymentStatus = methods.includes(PaymentMethod.INVOICE) ? "Outstanding" : "Recorded";
       const from = job.currentState;
-      // After Payment the next step is the Empty Van photo directly.
-      job.currentState = WorkflowState.WAITING_EMPTY_VAN_PHOTO;
+      job.currentState = WorkflowState.WAITING_REVIEW_CHECK;
       return saveJob(job, driver, action, from, job.paymentMethod);
     }
 
@@ -364,7 +397,7 @@ export async function handleAction(
       const noneTarget: Partial<Record<WorkflowState, WorkflowState>> = {
         [WorkflowState.WAITING_ARRIVAL_ISSUES_CHECK]: WorkflowState.WAITING_LOADED_PHOTO,
         [WorkflowState.WAITING_STOP_BY_ISSUES_CHECK]: WorkflowState.WAITING_EMPTY_VAN_ISSUES_CHECK,
-        [WorkflowState.WAITING_EMPTY_VAN_ISSUES_CHECK]: WorkflowState.WAITING_EXTRA_CHARGES
+        [WorkflowState.WAITING_EMPTY_VAN_ISSUES_CHECK]: WorkflowState.WAITING_EMPTY_VAN_PHOTO
       };
       const yesTarget: Partial<Record<WorkflowState, WorkflowState>> = {
         [WorkflowState.WAITING_ARRIVAL_ISSUES_CHECK]: WorkflowState.WAITING_ARRIVAL_ISSUES_CHOICE,
@@ -398,7 +431,7 @@ export async function handleAction(
       const from = job.currentState as WorkflowState;
       const target =
         from === WorkflowState.WAITING_ARRIVAL_ISSUES_CHOICE ? WorkflowState.WAITING_LOADED_PHOTO
-        : from === WorkflowState.WAITING_EMPTY_VAN_ISSUES_CHOICE ? WorkflowState.WAITING_EXTRA_CHARGES
+        : from === WorkflowState.WAITING_EMPTY_VAN_ISSUES_CHOICE ? WorkflowState.WAITING_EMPTY_VAN_PHOTO
         : null;
       if (!target) throw new ValidationError(`This action is not valid at the current step (${from}).`);
       job.currentState = target;
@@ -460,17 +493,16 @@ const BACK_TARGET: Partial<Record<WorkflowState, WorkflowState | ((job: Job) => 
   [WorkflowState.WAITING_EMPTY_VAN_ISSUES_CHECK]: job =>
     job.stopBy?.trim() ? WorkflowState.WAITING_STOP_BY_ISSUES_CHECK : WorkflowState.WAITING_LOADED_PHOTO,
   [WorkflowState.WAITING_EMPTY_VAN_ISSUES_CHOICE]: WorkflowState.WAITING_EMPTY_VAN_ISSUES_CHECK,
-  // Extra Charges is reached from the drop-off issues check, so Back returns there.
-  [WorkflowState.WAITING_EXTRA_CHARGES]: WorkflowState.WAITING_EMPTY_VAN_ISSUES_CHECK,
+  [WorkflowState.WAITING_EMPTY_VAN_PHOTO]: WorkflowState.WAITING_EMPTY_VAN_ISSUES_CHECK,
+  [WorkflowState.WAITING_CLIENT_CONFIRMATION]: WorkflowState.WAITING_EMPTY_VAN_PHOTO,
+  [WorkflowState.WAITING_EXTRA_CHARGES]: WorkflowState.WAITING_CLIENT_CONFIRMATION,
   [WorkflowState.WAITING_OVERTIME]: WorkflowState.WAITING_EXTRA_CHARGES,
   [WorkflowState.WAITING_TOTAL_CHARGES]: job =>
     job.extraCharges?.includes(ExtraChargeType.EXTRA_TIME)
       ? WorkflowState.WAITING_OVERTIME
       : WorkflowState.WAITING_EXTRA_CHARGES,
   [WorkflowState.WAITING_PAYMENT]: WorkflowState.WAITING_TOTAL_CHARGES,
-  [WorkflowState.WAITING_EMPTY_VAN_PHOTO]: WorkflowState.WAITING_PAYMENT,
-  [WorkflowState.WAITING_CLIENT_CONFIRMATION]: WorkflowState.WAITING_EMPTY_VAN_PHOTO,
-  [WorkflowState.WAITING_REVIEW_CHECK]: WorkflowState.WAITING_CLIENT_CONFIRMATION,
+  [WorkflowState.WAITING_REVIEW_CHECK]: WorkflowState.WAITING_PAYMENT,
   [WorkflowState.WAITING_REVIEW_SEND]: WorkflowState.WAITING_REVIEW_CHECK
 };
 
@@ -504,7 +536,7 @@ export async function submitDrawnSignature(
   const from = job.currentState;
   job.clientConfirmedBy = name;
   job.signatureUrl = signatureUrl;
-  job.currentState = WorkflowState.WAITING_REVIEW_CHECK;
+  job.currentState = WorkflowState.WAITING_EXTRA_CHARGES;
 
   return saveJob(job, driver, "SUBMIT_CLIENT_CONFIRMATION", from, name);
 }

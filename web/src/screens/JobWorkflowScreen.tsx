@@ -781,8 +781,16 @@ const photoCapture: { open: (() => void) | null } = { open: null };
 
 /** Max photos the current photo step accepts — the dock uses it to stop offering
  *  "Take photo" once the step is full. */
-function photoMaxFor(state: string): number {
-  return state === "WAITING_EMPTY_VAN_PHOTO" ? 1 : 2;
+export function photoMaxFor(state: string): number {
+  switch (state) {
+    case "WAITING_LOADED_PHOTO":
+    case "WAITING_STOP_BY_PHOTO":
+      return 5;
+    case "WAITING_EMPTY_VAN_PHOTO":
+      return 2;
+    default:
+      return 2;
+  }
 }
 
 /** The server evidence type a photo step's photos belong to (so a driver stepping
@@ -1273,7 +1281,7 @@ function StepBody({
                 3-column grid keeps them a consistent, generous size, always 3 to a
                 row, rather than wrapping at whatever width the labels happen to be. */}
             <div className="grid grid-cols-3 gap-2.5">
-              {["0", "15", "30", "45", "60", "90"].map(value => (
+              {["0", "30", "60", "90"].map(value => (
                 <button
                   key={value}
                   onClick={() => {

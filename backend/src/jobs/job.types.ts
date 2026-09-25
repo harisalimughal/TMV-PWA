@@ -64,9 +64,8 @@ export interface Job {
   hireDurationText: string;
   extraRequest: string;
   inventory: string;
-  /** The booking's stated overtime rate, e.g. "£55 per half an hour". Displayed as a
-   *  reference for the driver on the extra-charges step; the actual overtime figure
-   *  still comes from admin Pricing Settings. */
+  /** The booking's stated overtime rate, e.g. "£55 per half an hour". Used first for
+   *  overtime pricing when parseable; admin Pricing Settings are the fallback. */
   extraChargeText: string;
   basePrice: number;
   paidOnline: boolean;

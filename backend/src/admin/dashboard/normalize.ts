@@ -196,6 +196,8 @@ export async function normalizeMongoDataset(dataset: MongoDataset): Promise<Norm
 
     const basePrice = safePence(job.basePrice);
     const extraChargeSelections = Array.isArray(job.extraCharges) ? job.extraCharges : [];
+    const congestionChargePence = extraChargeSelections.includes(ExtraChargeType.CONGESTION) ? fromPounds(congestionCharge) : pence(0);
+    const tunnelChargePence = extraChargeSelections.includes(ExtraChargeType.TUNNEL) ? fromPounds(tunnelCharge) : pence(0);
     let extraChargesPounds = 0;
     if (extraChargeSelections.includes(ExtraChargeType.CONGESTION)) extraChargesPounds += congestionCharge;
     if (extraChargeSelections.includes(ExtraChargeType.TUNNEL)) extraChargesPounds += tunnelCharge;
@@ -270,7 +272,8 @@ export async function normalizeMongoDataset(dataset: MongoDataset): Promise<Norm
       crewSize: job.crewSize || 1,
       driverInitials, driverName, driverEmail,
       status, currentState, workflowCompletionPct,
-      basePrice, extraChargeSelections, extraCharges, overtimeMinutes, overtimeCharge, calculatedTotalCharges, totalCharges, amountCharged, reconciled,
+      basePrice, extraChargeSelections, extraCharges, congestionCharge: congestionChargePence, tunnelCharge: tunnelChargePence,
+      overtimeMinutes, overtimeCharge, calculatedTotalCharges, totalCharges, amountCharged, reconciled,
       paymentMethod: job.paymentMethod || "Not recorded",
       paymentStatus: job.paymentStatus || "Not recorded",
       managerReviewStatus: job.managerReviewStatus || "Pending",

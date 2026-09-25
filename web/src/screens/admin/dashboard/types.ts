@@ -122,6 +122,8 @@ export interface NormalizedJob {
   basePrice: number;
   extraChargeSelections: string[];
   extraCharges: number;
+  congestionCharge: number;
+  tunnelCharge: number;
   overtimeMinutes: number;
   overtimeCharge: number;
   calculatedTotalCharges: number;
@@ -228,6 +230,9 @@ export interface DriverSummaryItem {
   cardCollectedPounds: number;
   bankCollectedPounds: number;
   invoiceCollectedPounds: number;
+  congestionChargePounds: number;
+  tunnelChargePounds: number;
+  overtimeMinutes: number;
   missingEvidenceCount: number;
   overtimeCount: number;
 }

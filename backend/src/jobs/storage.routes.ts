@@ -7,9 +7,13 @@ import { parsePhotoMeta, parseSignatureMeta } from "./photo-meta";
 import { ValidationError } from "../workflow/validation.engine";
 import { log } from "../utils/logger";
 
+export const STORAGE_PHOTO_UPLOAD_MAX_FILES = 30;
+export const STORAGE_UPLOAD_MAX_FILES = STORAGE_PHOTO_UPLOAD_MAX_FILES + 1;
+
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: env.maxImageBytes, files: 2 }, // 1 item photo + 1 signature
+  // 30 evidence photos + 1 signature. Keep this aligned with check-in/out photoMax.
+  limits: { fileSize: env.maxImageBytes, files: STORAGE_UPLOAD_MAX_FILES },
   fileFilter: (_req, file, cb) => {
     if (!file.mimetype.startsWith("image/")) {
       cb(new Error("Only image uploads are accepted."));
@@ -45,7 +49,7 @@ export function storageRoutes(): Router {
 
   router.post(
     "/:scenario",
-    upload.fields([{ name: "photos", maxCount: 1 }, { name: "signature", maxCount: 1 }]),
+    upload.fields([{ name: "photos", maxCount: STORAGE_PHOTO_UPLOAD_MAX_FILES }, { name: "signature", maxCount: 1 }]),
     async (req: Request, res: Response) => {
       try {
         const scenario = String(req.params.scenario || "");

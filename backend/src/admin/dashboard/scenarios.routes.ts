@@ -95,6 +95,8 @@ export function dashboardScenariosRoutes(): Router {
       const driverFilter = typeof req.query.driver === "string" && req.query.driver
         ? req.query.driver.trim().toUpperCase()
         : undefined;
+      const from = typeof req.query.from === "string" ? req.query.from : undefined;
+      const to = typeof req.query.to === "string" ? req.query.to : undefined;
 
       // listScenarioSubmissionsByKind returns newest-first already; the source built
       // the "event N of M" labelling off an oldest-first pass, so pull everything for
@@ -106,6 +108,8 @@ export function dashboardScenariosRoutes(): Router {
       if (driverFilter) {
         rows = rows.filter(r => resolveDriver(r.driver).initials === driverFilter);
       }
+      if (from) rows = rows.filter(r => r.submittedAt >= from);
+      if (to) rows = rows.filter(r => r.submittedAt <= to);
 
       const jobCounts = new Map<string, number>();
       for (const r of rows) jobCounts.set(r.jobId, (jobCounts.get(r.jobId) || 0) + 1);

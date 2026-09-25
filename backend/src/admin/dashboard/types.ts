@@ -129,6 +129,8 @@ export interface NormalizedJob {
   basePrice: Pence;
   extraChargeSelections: string[];
   extraCharges: Pence;
+  congestionCharge: Pence;
+  tunnelCharge: Pence;
   overtimeMinutes: number;
   overtimeCharge: Pence;
   calculatedTotalCharges: Pence;

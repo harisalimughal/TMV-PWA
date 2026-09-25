@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { AlertTriangle, Box, Clock, Loader2, Plus, Save, Users } from "lucide-react";
+import { AlertTriangle, Box, Clock, Loader2, Plus, ReceiptText, Save, Users } from "lucide-react";
 import { fetchSettings, saveSetting, type EditableSetting } from "../api";
 import { Button } from "../../../../ui";
 
@@ -69,7 +69,7 @@ export function PricingSettingsPage() {
   function customCrewSpec(crewSize: number): EditableSetting {
     return {
       key: crewRateKey(crewSize),
-      label: `Crew Rate — ${crewSize} Man (£)`,
+      label: `Normal Service — ${crewSize} Man (£)`,
       type: "number",
       fallback: byKey("CREW_RATE_3_MAN")?.fallback ?? "65",
       hint: "Custom crew-size rate.",
@@ -111,7 +111,7 @@ export function PricingSettingsPage() {
       <div className="bg-white p-6 rounded-module border border-admin-line shadow-sm flex items-start justify-between">
         <div>
           <p className="text-[14px] text-admin-muted max-w-3xl">
-            Configure crew rates, packing service pricing, and overtime rules. Changes apply to all new jobs
+            Configure normal service rates, full/packing service pricing, and fixed extra charges. Changes apply to jobs
             immediately — no developer or redeployment required.
           </p>
         </div>
@@ -130,7 +130,7 @@ export function PricingSettingsPage() {
       )}
 
       <div className="space-y-6">
-        <SettingsCard icon={<Users className="w-4 h-4 text-admin-brand" />} title="Base Crew Rates">
+        <SettingsCard icon={<Users className="w-4 h-4 text-admin-brand" />} title="Normal Service">
           <div className="space-y-5">
             {crewSettings.map(spec => {
               const key = spec.key;
@@ -180,21 +180,31 @@ export function PricingSettingsPage() {
           </div>
         </SettingsCard>
 
-        <SettingsCard icon={<Box className="w-4 h-4 text-admin-brand" />} title="Full / Packing Service">
+        <SettingsCard icon={<Box className="w-4 h-4 text-admin-brand" />} title="Full/Packing Service">
           <div className="flex flex-wrap md:flex-nowrap items-start gap-4 p-4 rounded-card border border-admin-brand/20 bg-admin-brand-soft/40">
             <div className="w-full md:w-1/3">
-              <label className="block text-eyebrow text-fg-subtle tracking-wider mb-1.5">Service Rate (£)</label>
+              <label className="block text-eyebrow text-fg-subtle tracking-wider mb-1.5">Rate per 30 min (£)</label>
               <MoneyInput value={values.PACKING_RATE ?? ""} placeholder={byKey("PACKING_RATE")?.fallback} onChange={v => setValue("PACKING_RATE", v)} />
             </div>
-            <div className="w-full md:w-1/3">
-              <label className="block text-eyebrow text-fg-subtle tracking-wider mb-1.5">Billing Unit</label>
-              <input
-                type="text"
-                value={values.PACKING_BILLING_UNIT ?? ""}
-                onChange={e => setValue("PACKING_BILLING_UNIT", e.target.value)}
-                placeholder={byKey("PACKING_BILLING_UNIT")?.fallback}
-                className="w-full h-10 px-3 rounded-card border border-admin-line bg-white text-[13px] text-admin-ink outline-none focus:border-admin-brand transition"
-              />
+            <div className="w-full md:w-2/3">
+              <p className="text-[12px] text-admin-muted leading-relaxed mt-6">
+                Applied when the Calendar booking mentions packing or full packing. This rate is always billed per 30 minutes.
+              </p>
+            </div>
+          </div>
+        </SettingsCard>
+
+        <SettingsCard icon={<ReceiptText className="w-4 h-4 text-admin-brand" />} title="Fixed Extra Charges">
+          <div className="flex flex-wrap md:flex-nowrap items-start gap-6">
+            <div className="w-full md:w-1/2">
+              <label className="block text-eyebrow text-fg-subtle tracking-wider mb-1.5">Congestion Charge (£)</label>
+              <MoneyInput value={values.CONGESTION_CHARGE ?? ""} placeholder={byKey("CONGESTION_CHARGE")?.fallback} onChange={v => setValue("CONGESTION_CHARGE", v)} />
+              <p className="text-[11px] text-admin-muted mt-1.5">Added when the driver selects London Congestion charge.</p>
+            </div>
+            <div className="w-full md:w-1/2">
+              <label className="block text-eyebrow text-fg-subtle tracking-wider mb-1.5">Tunnel Charge (£)</label>
+              <MoneyInput value={values.TUNNEL_CHARGE ?? ""} placeholder={byKey("TUNNEL_CHARGE")?.fallback} onChange={v => setValue("TUNNEL_CHARGE", v)} />
+              <p className="text-[11px] text-admin-muted mt-1.5">Added when the driver selects Tunnel Charges.</p>
             </div>
           </div>
         </SettingsCard>

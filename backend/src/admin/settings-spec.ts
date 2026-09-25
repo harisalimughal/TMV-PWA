@@ -36,10 +36,16 @@ export const SETTINGS_SPEC: SettingFieldSpec[] = [
     fallback: REVIEW_REQUEST_EMAIL_TEMPLATE,
     hint: "Sent only if the driver opts in on the review step. Placeholders: {NAME} {customerName} {companyName} {pickup} {dropoff} {driverPhone} {vanRegistration} {driver_name} {job_time} {job_date}"
   },
-  { key: "CREW_RATE_1_MAN", label: "Crew Rate — 1 Man (£)", type: "number", fallback: String(env.crewRate1Man) },
-  { key: "CREW_RATE_2_MAN", label: "Crew Rate — 2 Man (£)", type: "number", fallback: String(env.crewRate2Man) },
-  { key: "CREW_RATE_3_MAN", label: "Crew Rate — 3 Man (£)", type: "number", fallback: String(env.crewRate3Man) },
-  { key: "PACKING_RATE", label: "Packing Rate (£)", type: "number", fallback: String(env.packingRate) },
+  { key: "CREW_RATE_1_MAN", label: "Normal Service — 1 Man (£)", type: "number", fallback: String(env.crewRate1Man) },
+  { key: "CREW_RATE_2_MAN", label: "Normal Service — 2 Man (£)", type: "number", fallback: String(env.crewRate2Man) },
+  { key: "CREW_RATE_3_MAN", label: "Normal Service — 3 Man (£)", type: "number", fallback: String(env.crewRate3Man) },
+  {
+    key: "PACKING_RATE",
+    label: "Full/Packing Service Rate per 30 min (£)",
+    type: "number",
+    fallback: String(env.packingRate),
+    hint: "Used when the booking mentions packing/full packing. Always billed per 30 minutes."
+  },
   {
     key: "PACKING_BILLING_UNIT",
     label: "Packing Billing Unit",
@@ -132,7 +138,7 @@ export function crewRateKey(crewSize: number): string {
 }
 
 export function crewRateLabel(crewSize: number): string {
-  return `Crew Rate — ${crewSize} Man (£)`;
+  return `Normal Service — ${crewSize} Man (£)`;
 }
 
 export function isCustomSettingKey(key: string): boolean {

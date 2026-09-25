@@ -34,6 +34,49 @@ type ScenarioPhotoReportPage = {
   locationName?: string;
 };
 
+type ReportPageItem =
+  | { kind: "evidence"; evidence: EvidenceReportPage }
+  | {
+      kind: "scenario";
+      scenario: NormalizedJob["scenarios"][number];
+      photo: ScenarioPhotoReportPage;
+      photoIndex: number;
+    };
+
+const EVIDENCE_FALLBACK_ORDER: Record<string, number> = {
+  Arrival: 100,
+  VanLoaded: 300,
+  StopBy: 400,
+  EmptyVan: 700,
+  Organized: 800,
+  Signature: 900,
+  Documents: 950,
+  Photos: 999
+};
+
+const SCENARIO_FALLBACK_ORDER: Record<ScenarioKind, number> = {
+  checkin: 50,
+  liability: 500,
+  parking: 520,
+  checkout: 850
+};
+
+function timeValue(value?: string): number | null {
+  if (!value) return null;
+  const parsed = new Date(value).getTime();
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function reportPageSortValue(item: ReportPageItem, fallbackBaseMs: number): number {
+  if (item.kind === "evidence") {
+    const timed = timeValue(item.evidence.capturedAt) ?? timeValue(item.evidence.receivedAt) ?? timeValue(item.evidence.completedAt);
+    return timed ?? fallbackBaseMs + (EVIDENCE_FALLBACK_ORDER[item.evidence.category] ?? 999) * 60_000;
+  }
+
+  const timed = timeValue(item.photo.capturedAt) ?? timeValue(item.scenario.timestamp);
+  return timed ?? fallbackBaseMs + (SCENARIO_FALLBACK_ORDER[item.scenario.kind] ?? 999) * 60_000;
+}
+
 export function PaperDossierReport({ job, isPreview = false }: Props) {
   const now = new Date().toISOString();
   
@@ -55,14 +98,16 @@ export function PaperDossierReport({ job, isPreview = false }: Props) {
   // If there are NO photos, create a fake empty array with 1 item so we still render the structure
   // but with a "Not captured" state as requested by the user.
   const photoPages: EvidenceReportPage[] = photos.length > 0 ? photos : [{ category: "Photos", fileId: null }];
-  const scenarioPages: Array<{
-    scenario: NormalizedJob["scenarios"][number];
-    photo: ScenarioPhotoReportPage;
-    photoIndex: number;
-  }> = (job.scenarios || []).flatMap(scenario => {
+  const scenarioPages = (job.scenarios || []).flatMap(scenario => {
     const scenarioPhotos = scenario.photos.length ? scenario.photos : [{ fileId: `${scenario.id}-missing`, thumbUrl: "" }];
     return scenarioPhotos.map((photo, photoIndex) => ({ scenario, photo, photoIndex }));
   });
+  const fallbackBaseMs = timeValue(job.bookedStart) ?? timeValue(job.created) ?? 0;
+  const reportPages: ReportPageItem[] = [
+    ...photoPages.map(evidence => ({ kind: "evidence" as const, evidence })),
+    ...scenarioPages.map(page => ({ kind: "scenario" as const, ...page }))
+  ].sort((a, b) => reportPageSortValue(a, fallbackBaseMs) - reportPageSortValue(b, fallbackBaseMs));
+  const lastEvidenceReportIndex = reportPages.reduce((last, item, index) => item.kind === "evidence" ? index : last, -1);
 
   const submitterName = job.driverName || "Unknown Driver";
   const submitterInitials = job.driverInitials || "UN";
@@ -227,7 +272,7 @@ export function PaperDossierReport({ job, isPreview = false }: Props) {
     </div>
   );
 
-  const totalPages = Math.max(photoPages.length, 1) + scenarioPages.length;
+  const totalPages = Math.max(reportPages.length, 1);
 
   return (
     <div className={`font-sans ${isPreview ? 'w-full' : 'block'}`}>
@@ -255,8 +300,29 @@ export function PaperDossierReport({ job, isPreview = false }: Props) {
         }
       `}</style>
 
-      {photoPages.map((p, index) => {
+      {reportPages.map((item, index) => {
         const pageNum = index + 1;
+        if (item.kind === "scenario") {
+          const { scenario, photo, photoIndex } = item;
+          const label = SCENARIO_LABELS[scenario.kind] || "Scenario";
+          const src = photo.thumbUrl || null;
+
+          return (
+            <Page key={`${scenario.id}-${photo.fileId || photoIndex}`} page={pageNum} totalPages={totalPages}>
+              <PhotoSection
+                title={`${label} Evidence${scenario.photos.length > 1 ? ` ${photoIndex + 1}` : ""}`}
+                src={src}
+                capturedAt={photo.capturedAt}
+                fallbackAt={scenario.timestamp}
+                location={photo.location}
+                locationName={photo.locationName}
+              />
+              {photoIndex === 0 && <ScenarioDetails scenario={scenario} showSignature={true} />}
+            </Page>
+          );
+        }
+
+        const p = item.evidence;
         // thumbProxyUrl first: it's our own authenticated proxy that returns raw image
         // bytes. driveUrl is a Google Drive "view" page, not embeddable as an <img> src.
         const src = p.fileId ? (p.thumbProxyUrl || `/admin/api/jobs/${encodeURIComponent(job.jobId)}/photos/${encodeURIComponent(p.fileId)}`) : null;
@@ -318,7 +384,7 @@ export function PaperDossierReport({ job, isPreview = false }: Props) {
               </div>
             )}
 
-            {(pageNum === totalPages || (pageNum === 3 && totalPages >= 3)) && index === photoPages.length - 1 && (
+            {(pageNum === totalPages || (pageNum === 3 && totalPages >= 3)) && index === lastEvidenceReportIndex && (
               <div className="mb-3 shrink-0">
                 <h2 className="text-label font-medium text-fg-muted mb-1.5">Client Signature:</h2>
                 <div className="border border-[#E5E7EB] rounded-card p-4 bg-[#F8F9FA] flex flex-col items-center justify-center min-h-[100px]">
@@ -332,25 +398,6 @@ export function PaperDossierReport({ job, isPreview = false }: Props) {
                 </div>
               </div>
             )}
-          </Page>
-        );
-      })}
-
-      {scenarioPages.map(({ scenario, photo, photoIndex }, index) => {
-        const pageNum = photoPages.length + index + 1;
-        const label = SCENARIO_LABELS[scenario.kind] || "Scenario";
-        const src = photo.thumbUrl || null;
-
-        return (
-          <Page key={`${scenario.id}-${photo.fileId || photoIndex}`} page={pageNum} totalPages={totalPages}>
-            <PhotoSection
-              title={`${label} Evidence${scenario.photos.length > 1 ? ` ${photoIndex + 1}` : ""}`}
-              src={src}
-              capturedAt={photo.capturedAt}
-              location={photo.location}
-              locationName={photo.locationName}
-            />
-            {photoIndex === 0 && <ScenarioDetails scenario={scenario} showSignature={true} />}
           </Page>
         );
       })}

@@ -109,36 +109,36 @@ export const STEPS: Record<string, StepMeta> = {
   WAITING_EXTRA_CHARGES: {
     label: "Extra charges",
     hint: "Select everything that applies. Pick “No Extras Time” if there were none.",
-    order: 7,
+    order: 9,
     shortLabel: "Check out"
   },
   WAITING_OVERTIME: {
     label: "Extra Time Needed and Paid",
     hint: "Minutes worked beyond the booked window",
-    order: 8,
+    order: 10,
     shortLabel: "Overtime"
   },
   WAITING_TOTAL_CHARGES: {
     label: "Total charges",
     hint: "The final amount for this job, including any extras and overtime.",
-    order: 9,
+    order: 11,
     shortLabel: "Total Charges"
   },
   WAITING_PAYMENT: {
     label: "How customer Paid ?",
-    order: 10,
+    order: 12,
     shortLabel: "How customer paid ?"
   },
   WAITING_EMPTY_VAN_PHOTO: {
     label: "Empty van photo (drop-off point)",
     hint: "Show the van empty at the drop-off — proof nothing was left behind.",
-    order: 11,
+    order: 7,
     shortLabel: "Empty Van Photo"
   },
   WAITING_CLIENT_CONFIRMATION: {
     label: "Customer sign-off",
     hint: "Hand your phone to the customer to review and sign.",
-    order: 12,
+    order: 8,
     shortLabel: "Customer Sign-off"
   },
   WAITING_REVIEW_CHECK: {

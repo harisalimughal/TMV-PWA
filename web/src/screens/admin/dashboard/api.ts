@@ -146,9 +146,17 @@ export async function fetchFinance(from?: string, to?: string, groupBy = "day"):
   return res.json();
 }
 
-export async function fetchScenarios(kind: string, page = 1, driver?: string): Promise<{ kind: string; items: ScenarioItem[]; pagination: PaginationMeta }> {
+export async function fetchScenarios(
+  kind: string,
+  page = 1,
+  driver?: string,
+  from?: string,
+  to?: string
+): Promise<{ kind: string; items: ScenarioItem[]; pagination: PaginationMeta }> {
   const params = new URLSearchParams({ page: String(page) });
   if (driver) params.set("driver", driver);
+  if (from) params.set("from", from);
+  if (to) params.set("to", to);
   const res = await apiFetch(`/api/admin/scenarios/${encodeURIComponent(kind)}?${params.toString()}`);
   if (!res.ok) throw await apiError(res, `Failed to load scenario ${kind}`);
   return res.json();

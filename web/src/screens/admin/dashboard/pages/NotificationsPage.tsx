@@ -14,7 +14,7 @@ import {
   Trash2
 } from "lucide-react";
 import { dismissNotifications, fetchNotifications, NotificationRow } from "../api";
-import { DateRangePicker } from "../components/DateRangePicker";
+import { DateRangePicker, defaultDashboardDateRange } from "../components/DateRangePicker";
 import { ApiErrorState } from "../components/ApiErrorState";
 import { BulkDismissModal } from "../components/BulkDismissModal";
 import { formatLondonDateTime } from "../utils/date";
@@ -57,8 +57,8 @@ const normalizePhone = (phone?: string) => {
 export function NotificationsPage() {
   const [page, setPage] = useState(1);
   const pageSize = 25;
-  const [from, setFrom] = useState<string | undefined>();
-  const [to, setTo] = useState<string | undefined>();
+  const [from, setFrom] = useState<string | undefined>(() => defaultDashboardDateRange().from);
+  const [to, setTo] = useState<string | undefined>(() => defaultDashboardDateRange().to);
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("All");
   const [broadcastModalOpen, setBroadcastModalOpen] = useState(false);

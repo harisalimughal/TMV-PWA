@@ -12,6 +12,8 @@ import { getDashboardDataset } from "./dataset-cache";
 import { listJobsInRange } from "../../db/jobs.repo";
 import { listEvidenceForJobs } from "../../db/evidence.repo";
 import { normalizeMongoDataset } from "./normalize";
+import { DriverProfile } from "../../jobs/job.types";
+import { NormalizedJob } from "./types";
 
 interface DriverStat {
   initials: string;
@@ -38,8 +40,99 @@ interface DriverStat {
   cardCollectedPence: number;
   bankCollectedPence: number;
   invoiceCollectedPence: number;
+  congestionChargePence: number;
+  tunnelChargePence: number;
+  overtimeMinutes: number;
   missingEvidenceCount: number;
   overtimeCount: number;
+}
+
+export function summarizeDrivers(drivers: DriverProfile[], jobs: NormalizedJob[]) {
+  const driverStats = new Map<string, DriverStat>();
+
+  // Seed from the roster so an inactive/unassigned driver still shows up with zeroes.
+  for (const d of drivers) {
+    if (!d.initials) continue;
+    driverStats.set(d.initials, {
+      initials: d.initials, fullName: d.fullName, email: d.email || undefined,
+      phone: d.phone || undefined, vanRegistration: d.vanRegistration || undefined,
+      imei: d.imei || undefined, active: d.active,
+      hasAccount: true,
+      assignedCount: 0, completedCount: 0, cancelledCount: 0,
+      totalDurationMinutes: 0, durationJobsCount: 0, totalDelayMinutes: 0, delayJobsCount: 0,
+      revenuePence: 0, cashCollectedPence: 0, cardCollectedPence: 0, bankCollectedPence: 0,
+      invoiceCollectedPence: 0, congestionChargePence: 0, tunnelChargePence: 0, overtimeMinutes: 0,
+      missingEvidenceCount: 0, overtimeCount: 0
+    });
+  }
+
+  for (const j of jobs) {
+    const init = j.driverInitials || "UNASSIGNED";
+    let stat = driverStats.get(init);
+    if (!stat) {
+      stat = {
+        initials: init, fullName: j.driverName || init, email: j.driverEmail, active: true,
+        hasAccount: false,
+        assignedCount: 0, completedCount: 0, cancelledCount: 0,
+        totalDurationMinutes: 0, durationJobsCount: 0, totalDelayMinutes: 0, delayJobsCount: 0,
+        revenuePence: 0, cashCollectedPence: 0, cardCollectedPence: 0, bankCollectedPence: 0,
+        invoiceCollectedPence: 0, congestionChargePence: 0, tunnelChargePence: 0, overtimeMinutes: 0,
+        missingEvidenceCount: 0, overtimeCount: 0
+      };
+      driverStats.set(init, stat);
+    }
+
+    stat.assignedCount++;
+    if (j.status === "COMPLETED") {
+      stat.completedCount++;
+      stat.revenuePence += j.amountCharged;
+      stat.congestionChargePence += j.congestionCharge || 0;
+      stat.tunnelChargePence += j.tunnelCharge || 0;
+      stat.overtimeMinutes += j.overtimeMinutes || 0;
+      // Same substring categorization as finance.routes.ts's company-wide totals,
+      // just kept per-driver here -- so this and the Finance page always agree.
+      const method = j.paymentMethod.toLowerCase();
+      if (method.includes("cash")) stat.cashCollectedPence += j.amountCharged;
+      else if (method.includes("card")) stat.cardCollectedPence += j.amountCharged;
+      else if (method.includes("bank")) stat.bankCollectedPence += j.amountCharged;
+      else if (method.includes("invoice")) stat.invoiceCollectedPence += j.amountCharged;
+    } else if (j.status === "CANCELLED") {
+      stat.cancelledCount++;
+    }
+
+    if (j.actualMinutes && j.actualMinutes > 0) { stat.totalDurationMinutes += j.actualMinutes; stat.durationJobsCount++; }
+    if (j.delayMinutes !== undefined) { stat.totalDelayMinutes += j.delayMinutes; stat.delayJobsCount++; }
+    if (j.overtimeMinutes > 0) stat.overtimeCount++;
+
+    const comp = j.evidenceCompleteness;
+    const missing = [comp.arrival, comp.vanLoaded, comp.emptyVan, comp.signature].filter(
+      s => s === "MISSING" || s === "FAILED"
+    ).length;
+    stat.missingEvidenceCount += missing;
+  }
+
+  return [...driverStats.values()].map(s => {
+    const effectiveAssigned = s.assignedCount - s.cancelledCount;
+    const completionRate = effectiveAssigned > 0 ? Math.round((s.completedCount / effectiveAssigned) * 100) : 0;
+    const avgDuration = s.durationJobsCount > 0 ? Math.round(s.totalDurationMinutes / s.durationJobsCount) : 0;
+    const avgDelay = s.delayJobsCount > 0 ? Math.round(s.totalDelayMinutes / s.delayJobsCount) : 0;
+
+    return {
+      initials: s.initials, fullName: s.fullName, email: s.email, phone: s.phone,
+      vanRegistration: s.vanRegistration, imei: s.imei, active: s.active, hasAccount: s.hasAccount,
+      assigned: s.assignedCount, completed: s.completedCount, cancelled: s.cancelledCount, completionRate,
+      avgDurationMinutes: avgDuration, totalDurationMinutes: s.totalDurationMinutes, avgDelayMinutes: avgDelay,
+      revenuePounds: toPounds(pence(s.revenuePence)), revenueFormatted: formatGBP(pence(s.revenuePence)),
+      cashCollectedPounds: toPounds(pence(s.cashCollectedPence)),
+      cardCollectedPounds: toPounds(pence(s.cardCollectedPence)),
+      bankCollectedPounds: toPounds(pence(s.bankCollectedPence)),
+      invoiceCollectedPounds: toPounds(pence(s.invoiceCollectedPence)),
+      congestionChargePounds: toPounds(pence(s.congestionChargePence)),
+      tunnelChargePounds: toPounds(pence(s.tunnelChargePence)),
+      overtimeMinutes: s.overtimeMinutes,
+      missingEvidenceCount: s.missingEvidenceCount, overtimeCount: s.overtimeCount
+    };
+  }).sort((a, b) => b.completed - a.completed);
 }
 
 export function dashboardDriversSummaryRoutes(): Router {
@@ -72,83 +165,7 @@ export function dashboardDriversSummaryRoutes(): Router {
         fetchedAt = dataset.fetchedAt;
       }
 
-      const driverStats = new Map<string, DriverStat>();
-
-      // Seed from the roster so an inactive/unassigned driver still shows up with zeroes.
-      for (const d of drivers) {
-        if (!d.initials) continue;
-        driverStats.set(d.initials, {
-          initials: d.initials, fullName: d.fullName, email: d.email || undefined,
-          phone: d.phone || undefined, vanRegistration: d.vanRegistration || undefined,
-          imei: d.imei || undefined, active: d.active,
-          hasAccount: true,
-          assignedCount: 0, completedCount: 0, cancelledCount: 0,
-          totalDurationMinutes: 0, durationJobsCount: 0, totalDelayMinutes: 0, delayJobsCount: 0,
-          revenuePence: 0, cashCollectedPence: 0, cardCollectedPence: 0, bankCollectedPence: 0,
-          invoiceCollectedPence: 0, missingEvidenceCount: 0, overtimeCount: 0
-        });
-      }
-
-      for (const j of jobs) {
-        const init = j.driverInitials || "UNASSIGNED";
-        let stat = driverStats.get(init);
-        if (!stat) {
-          stat = {
-            initials: init, fullName: j.driverName || init, email: j.driverEmail, active: true,
-            hasAccount: false,
-            assignedCount: 0, completedCount: 0, cancelledCount: 0,
-            totalDurationMinutes: 0, durationJobsCount: 0, totalDelayMinutes: 0, delayJobsCount: 0,
-            revenuePence: 0, cashCollectedPence: 0, cardCollectedPence: 0, bankCollectedPence: 0,
-            invoiceCollectedPence: 0, missingEvidenceCount: 0, overtimeCount: 0
-          };
-          driverStats.set(init, stat);
-        }
-
-        stat.assignedCount++;
-        if (j.status === "COMPLETED") {
-          stat.completedCount++;
-          stat.revenuePence += j.amountCharged;
-          // Same substring categorization as finance.routes.ts's company-wide totals,
-          // just kept per-driver here -- so this and the Finance page always agree.
-          const method = j.paymentMethod.toLowerCase();
-          if (method.includes("cash")) stat.cashCollectedPence += j.amountCharged;
-          else if (method.includes("card")) stat.cardCollectedPence += j.amountCharged;
-          else if (method.includes("bank")) stat.bankCollectedPence += j.amountCharged;
-          else if (method.includes("invoice")) stat.invoiceCollectedPence += j.amountCharged;
-        } else if (j.status === "CANCELLED") {
-          stat.cancelledCount++;
-        }
-
-        if (j.actualMinutes && j.actualMinutes > 0) { stat.totalDurationMinutes += j.actualMinutes; stat.durationJobsCount++; }
-        if (j.delayMinutes !== undefined) { stat.totalDelayMinutes += j.delayMinutes; stat.delayJobsCount++; }
-        if (j.overtimeMinutes > 0) stat.overtimeCount++;
-
-        const comp = j.evidenceCompleteness;
-        const missing = [comp.arrival, comp.vanLoaded, comp.emptyVan, comp.signature].filter(
-          s => s === "MISSING" || s === "FAILED"
-        ).length;
-        stat.missingEvidenceCount += missing;
-      }
-
-      const items = [...driverStats.values()].map(s => {
-        const effectiveAssigned = s.assignedCount - s.cancelledCount;
-        const completionRate = effectiveAssigned > 0 ? Math.round((s.completedCount / effectiveAssigned) * 100) : 0;
-        const avgDuration = s.durationJobsCount > 0 ? Math.round(s.totalDurationMinutes / s.durationJobsCount) : 0;
-        const avgDelay = s.delayJobsCount > 0 ? Math.round(s.totalDelayMinutes / s.delayJobsCount) : 0;
-
-        return {
-          initials: s.initials, fullName: s.fullName, email: s.email, phone: s.phone,
-          vanRegistration: s.vanRegistration, imei: s.imei, active: s.active, hasAccount: s.hasAccount,
-          assigned: s.assignedCount, completed: s.completedCount, cancelled: s.cancelledCount, completionRate,
-          avgDurationMinutes: avgDuration, totalDurationMinutes: s.totalDurationMinutes, avgDelayMinutes: avgDelay,
-          revenuePounds: toPounds(pence(s.revenuePence)), revenueFormatted: formatGBP(pence(s.revenuePence)),
-          cashCollectedPounds: toPounds(pence(s.cashCollectedPence)),
-          cardCollectedPounds: toPounds(pence(s.cardCollectedPence)),
-          bankCollectedPounds: toPounds(pence(s.bankCollectedPence)),
-          invoiceCollectedPounds: toPounds(pence(s.invoiceCollectedPence)),
-          missingEvidenceCount: s.missingEvidenceCount, overtimeCount: s.overtimeCount
-        };
-      }).sort((a, b) => b.completed - a.completed);
+      const items = summarizeDrivers(drivers, jobs);
 
       return res.status(200).json({ drivers: items, meta: { fetchedAt } });
     } catch (error) {

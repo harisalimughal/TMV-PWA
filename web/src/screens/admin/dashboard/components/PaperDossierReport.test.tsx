@@ -35,6 +35,31 @@ const checkinScenario: JobScenarioSubmission = {
   }
 };
 
+const liabilityScenario: JobScenarioSubmission = {
+  id: "scenario-liability",
+  kind: "liability",
+  timestamp: "2026-09-22T10:45:00.000Z",
+  driver: "TI",
+  clientName: "Tom Hostick",
+  clientPhone: "07815695889",
+  clientEmail: "hosticktom@gmail.com",
+  containerNumber: "",
+  address: "",
+  damageCategories: "Wall mark",
+  clientPresent: "Yes",
+  rawRecord: {},
+  photos: [
+    {
+      fileId: "liability-photo-1",
+      thumbUrl: "/liability-photo.jpg",
+      capturedAt: "2026-09-22T10:45:00.000Z",
+      location: { lat: 51.5, lng: -0.12, accuracy: 14 },
+      locationName: "Pickup address"
+    }
+  ],
+  signature: null
+};
+
 const job = {
   jobId: "TMV-TEST123",
   calendarEventId: "calendar-1",
@@ -59,6 +84,8 @@ const job = {
   basePrice: 17500,
   extraChargeSelections: [],
   extraCharges: 0,
+  congestionCharge: 0,
+  tunnelCharge: 0,
   overtimeMinutes: 0,
   overtimeCharge: 0,
   calculatedTotalCharges: 17500,
@@ -120,5 +147,35 @@ describe("PaperDossierReport", () => {
     expect(screen.getByText("CONT-123")).toBeInTheDocument();
     expect(screen.getByText(/22\/09\/26.*16:45/)).toBeInTheDocument();
     expect(screen.getAllByText("2 Mercers Place, London").length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("prints evidence and scenario submissions in the order the driver submitted them", () => {
+    const jobWithMidFlowLiability: NormalizedJob = {
+      ...job,
+      evidenceItems: [
+        job.evidenceItems[0],
+        {
+          id: "evidence-van-loaded",
+          category: "VanLoaded",
+          state: "COMPLETED",
+          fileId: "van-loaded-file",
+          thumbProxyUrl: "/van-loaded.jpg",
+          provenance: "recorded",
+          capturedAt: "2026-09-22T11:15:00.000Z",
+          location: { lat: 51.51, lng: -0.13, accuracy: 16 },
+          locationName: "Loaded address"
+        }
+      ],
+      scenarios: [liabilityScenario]
+    };
+
+    render(<PaperDossierReport job={jobWithMidFlowLiability} isPreview />);
+
+    const arrival = screen.getByText("Arrival");
+    const liability = screen.getByText("Liability Report Evidence");
+    const vanLoaded = screen.getByText("VanLoaded");
+
+    expect(arrival.compareDocumentPosition(liability) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(liability.compareDocumentPosition(vanLoaded) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 });

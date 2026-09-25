@@ -8,56 +8,46 @@ interface Props {
   onChange: (from?: string, to?: string) => void;
 }
 
-type Preset = "today" | "yesterday" | "7d" | "30d" | "all";
+type Preset = "today" | "yesterday" | "7d" | "30d";
 
 function isoDay(date: Date): string {
   return date.toISOString().slice(0, 10);
 }
 
+export function dateRangeForPreset(preset: Preset): { from?: string; to?: string } {
+  const now = new Date();
+  const todayStr = isoDay(now);
+
+  if (preset === "today") {
+    return { from: `${todayStr}T00:00:00.000Z`, to: `${todayStr}T23:59:59.999Z` };
+  }
+  if (preset === "yesterday") {
+    const y = new Date(now.getTime() - 86400000);
+    const yStr = isoDay(y);
+    return { from: `${yStr}T00:00:00.000Z`, to: `${yStr}T23:59:59.999Z` };
+  }
+  const days = preset === "7d" ? 7 : 30;
+  const start = new Date(now.getTime() - days * 86400000);
+  return { from: start.toISOString(), to: now.toISOString() };
+}
+
+export const defaultDashboardDateRange = () => dateRangeForPreset("today");
+
 export function DateRangePicker({ from, to, onChange }: Props) {
-  const rangeForPreset = (preset: Preset): { from?: string; to?: string } => {
-    const now = new Date();
-    const todayStr = isoDay(now);
-
-    if (preset === "all") {
-      return { from: undefined, to: undefined };
-    }
-    if (preset === "today") {
-      return { from: `${todayStr}T00:00:00.000Z`, to: `${todayStr}T23:59:59.999Z` };
-    }
-    if (preset === "yesterday") {
-      const y = new Date(now.getTime() - 86400000);
-      const yStr = isoDay(y);
-      return { from: `${yStr}T00:00:00.000Z`, to: `${yStr}T23:59:59.999Z` };
-    }
-    const days = preset === "7d" ? 7 : 30;
-    const start = new Date(now.getTime() - days * 86400000);
-    return { from: start.toISOString(), to: now.toISOString() };
-  };
-
   const setPreset = (preset: Preset) => {
-    const range = rangeForPreset(preset);
+    const range = dateRangeForPreset(preset);
     onChange(range.from, range.to);
   };
 
   const isPresetActive = (preset: Preset): boolean => {
-    if (preset === "all") return !from && !to;
     if (!from || !to) return false;
-    const range = rangeForPreset(preset);
+    const range = dateRangeForPreset(preset);
     return from.slice(0, 10) === range.from?.slice(0, 10) && to.slice(0, 10) === range.to?.slice(0, 10);
   };
 
   return (
     <div className="flex flex-wrap items-center gap-2 text-xs">
       <div className="flex items-center gap-1 bg-admin-surface p-1 rounded-card border border-admin-line">
-        <button
-          onClick={() => setPreset("all")}
-          className={`px-2.5 py-1 rounded-control font-medium transition ${
-            isPresetActive("all") ? "bg-white text-admin-brand shadow-sm font-bold" : "text-admin-muted hover:text-admin-ink"
-          }`}
-        >
-          All Time
-        </button>
         {(["today", "7d", "30d"] as const).map(preset => (
           <button
             key={preset}

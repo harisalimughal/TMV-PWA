@@ -22,9 +22,13 @@ import { getSetting } from "../db/settings.repo";
 import { reverseGeocode } from "../integrations/geocode";
 import { log } from "../utils/logger";
 
+export const JOB_EVIDENCE_UPLOAD_MAX_FILES = 5;
+export const SCENARIO_PHOTO_UPLOAD_MAX_FILES = 30;
+export const SCENARIO_UPLOAD_MAX_FILES = SCENARIO_PHOTO_UPLOAD_MAX_FILES + 1;
+
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: env.maxImageBytes, files: 2 },
+  limits: { fileSize: env.maxImageBytes, files: JOB_EVIDENCE_UPLOAD_MAX_FILES },
   fileFilter: (_req, file, cb) => {
     if (!file.mimetype.startsWith("image/")) {
       cb(new Error("Only image uploads are accepted."));
@@ -34,11 +38,10 @@ const upload = multer({
   }
 });
 
-// Liability Report allows up to 8 photos, the widest of the 4 scenario forms, +1 for
-// the signature.
+// Check In/Out allow up to 30 photos, the widest scenario forms, +1 for signature.
 const scenarioUpload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: env.maxImageBytes, files: 9 },
+  limits: { fileSize: env.maxImageBytes, files: SCENARIO_UPLOAD_MAX_FILES },
   fileFilter: (_req, file, cb) => {
     if (!file.mimetype.startsWith("image/")) {
       cb(new Error("Only image uploads are accepted."));
@@ -234,10 +237,10 @@ export function jobsRoutes(): Router {
     }
   });
 
-  // Field name "photos" -- 1 photo for Arrival/EmptyVan, 1 or 2 for VanLoaded (see
-  // handlePhotoStep's own check). Which evidence type this becomes is driven entirely
+  // Field name "photos" -- the route accepts the largest job-evidence batch (5);
+  // handlePhotoStep applies the exact per-step cap. Which evidence type this becomes is driven entirely
   // by the job's current workflow state, not a client-supplied field.
-  router.post("/:jobId/evidence", upload.array("photos", 2), async (req: Request, res: Response) => {
+  router.post("/:jobId/evidence", upload.array("photos", JOB_EVIDENCE_UPLOAD_MAX_FILES), async (req: Request, res: Response) => {
     try {
       const files = (req.files as Express.Multer.File[] | undefined) ?? [];
       const metas = parsePhotoMeta(req.body?.photoMeta);
@@ -323,12 +326,9 @@ export function jobsRoutes(): Router {
   // Chat-bot's multi-step progress tracking.
   router.post(
     "/:jobId/scenarios/:scenario",
-    // 50 -- Check In/Out have no app-level photoMax (as many as the driver wants);
-    // this is only the hard technical ceiling multer needs a number for, well above
-    // Liability Report's 8 and Parking Liability's 4 so neither is ever the binding
-    // constraint. Multer rejects the whole request if this cap is under what a
-    // scenario's own spec allows.
-    scenarioUpload.fields([{ name: "photos", maxCount: 50 }, { name: "signature", maxCount: 1 }]),
+    // Multer rejects the whole request if this cap is under what a scenario's own
+    // spec allows, so keep it aligned with Check In/Out's 30-photo max.
+    scenarioUpload.fields([{ name: "photos", maxCount: SCENARIO_PHOTO_UPLOAD_MAX_FILES }, { name: "signature", maxCount: 1 }]),
     async (req: Request, res: Response) => {
       try {
         const scenario = req.params.scenario as ScenarioKey;

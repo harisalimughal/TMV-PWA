@@ -14,7 +14,7 @@ import {
 import { getAvatarColor, formatVanReg } from "../utils/drivers";
 import { AddDriverModal } from "../components/AddDriverModal";
 import { ApiErrorState } from "../components/ApiErrorState";
-import { DateRangePicker } from "../components/DateRangePicker";
+import { DateRangePicker, defaultDashboardDateRange } from "../components/DateRangePicker";
 import { DriverSummaryItem } from "../types";
 import { Button } from "../../../../ui";
 import { formatDuration } from "../utils/kpi";
@@ -23,8 +23,8 @@ export function DriversPage() {
   const queryClient = useQueryClient();
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [editingDriver, setEditingDriver] = useState<DriverSummaryItem | null>(null);
-  const [from, setFrom] = useState<string | undefined>();
-  const [to, setTo] = useState<string | undefined>();
+  const [from, setFrom] = useState<string | undefined>(() => defaultDashboardDateRange().from);
+  const [to, setTo] = useState<string | undefined>(() => defaultDashboardDateRange().to);
 
   // Real roster + real per-driver stats (assigned/completed/revenue/missing evidence,
   // avg delay/duration) -- all computed server-side against actual job data, not the

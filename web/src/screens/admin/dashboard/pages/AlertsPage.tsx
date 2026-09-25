@@ -4,7 +4,7 @@ import { DateTime } from "luxon";
 import { Search, ShieldAlert, Car, HelpCircle, LogIn, LogOut, Activity, Trash2 } from "lucide-react";
 import { dismissAlerts, fetchAlerts, AlertCategory } from "../api";
 import { ApiErrorState } from "../components/ApiErrorState";
-import { DateRangePicker } from "../components/DateRangePicker";
+import { DateRangePicker, defaultDashboardDateRange } from "../components/DateRangePicker";
 import { BulkDismissModal } from "../components/BulkDismissModal";
 import { getAvatarColor } from "../utils/drivers";
 
@@ -81,8 +81,8 @@ function cleanDescription(desc: string): string {
 export function AlertsPage() {
   const [categoryFilter, setCategoryFilter] = useState<"All" | AlertCategory>("All");
   const [searchQuery, setSearchQuery] = useState("");
-  const [from, setFrom] = useState<string | undefined>();
-  const [to, setTo] = useState<string | undefined>();
+  const [from, setFrom] = useState<string | undefined>(() => defaultDashboardDateRange().from);
+  const [to, setTo] = useState<string | undefined>(() => defaultDashboardDateRange().to);
   const [selectedRows, setSelectedRows] = useState<Set<string>>(new Set());
   const [confirmingDelete, setConfirmingDelete] = useState(false);
 

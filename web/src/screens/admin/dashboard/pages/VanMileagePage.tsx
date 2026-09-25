@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Camera, Download, Fuel, Loader2, Pencil, RefreshCw, Search, ShieldCheck, Trash2, Wrench, X } from "lucide-react";
-import { DateRangePicker } from "../components/DateRangePicker";
+import { DateRangePicker, defaultDashboardDateRange } from "../components/DateRangePicker";
 import { ApiErrorState } from "../components/ApiErrorState";
 import { fetchVanDriverRecords, saveVanCompliance, deleteVanRecord } from "../api";
 import { VanComplianceItem, VanDriverRecordItem, VanRecordItem, VanRecordType } from "../types";
@@ -79,8 +79,8 @@ function ComplianceCell({ compliance }: { compliance: VanComplianceItem | null }
 
 export function VanMileagePage() {
   const [page, setPage] = useState(1);
-  const [from, setFrom] = useState<string | undefined>();
-  const [to, setTo] = useState<string | undefined>();
+  const [from, setFrom] = useState<string | undefined>(() => defaultDashboardDateRange().from);
+  const [to, setTo] = useState<string | undefined>(() => defaultDashboardDateRange().to);
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState<VanDriverRecordItem | null>(null);
 
