@@ -119,10 +119,30 @@ describe("checkout flow order", () => {
     });
   });
 
-  it("moves from drop-off issues to empty van photo before checkout charges", async () => {
-    getJob.mockResolvedValue(job());
+  it("moves from arrival photo straight to van loaded photo", async () => {
+    getJob.mockResolvedValue(job({ currentState: WorkflowState.WAITING_ARRIVAL_PHOTO }));
 
-    const updated = await handleAction("ISSUES_NONE", "TMV-FLOW", "abi@example.com", {});
+    const updated = await handlePhotoStep("TMV-FLOW", "abi@example.com", [
+      { buffer: Buffer.from("image"), contentType: "image/jpeg", fileName: "arrival.jpg" }
+    ]);
+
+    expect(updated.currentState).toBe(WorkflowState.WAITING_LOADED_PHOTO);
+  });
+
+  it("moves from no stop-by straight to empty van photo", async () => {
+    getJob.mockResolvedValue(job({ currentState: WorkflowState.WAITING_STOP_BY_CHECK }));
+
+    const updated = await handleAction("STOP_BY_NONE", "TMV-FLOW", "abi@example.com", {});
+
+    expect(updated.currentState).toBe(WorkflowState.WAITING_EMPTY_VAN_PHOTO);
+  });
+
+  it("moves from stop-by photo straight to empty van photo", async () => {
+    getJob.mockResolvedValue(job({ currentState: WorkflowState.WAITING_STOP_BY_PHOTO }));
+
+    const updated = await handlePhotoStep("TMV-FLOW", "abi@example.com", [
+      { buffer: Buffer.from("image"), contentType: "image/jpeg", fileName: "stopby.jpg" }
+    ]);
 
     expect(updated.currentState).toBe(WorkflowState.WAITING_EMPTY_VAN_PHOTO);
   });

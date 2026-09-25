@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { AlertTriangle, MapPin } from "lucide-react";
 import type { PhotoCaptureMeta } from "../lib/geo";
 import { formatCapturedTime, formatLocationLabel, mapsUrlForLocation } from "../lib/geo";
+import { photoLocationBlockedReason } from "../lib/photoLocation";
 import { PhotoPicker, type RemotePhoto } from "./PhotoPicker";
 
 export interface PhotoUploaderProps {
@@ -87,6 +88,7 @@ export function PhotoUploader({
     (latestRemote?.capturedAt
       ? { capturedAt: latestRemote.capturedAt, location: latestRemote.location ?? null, locationName: latestRemote.locationName }
       : null);
+  const waitingForLocation = photoLocationBlockedReason(files.length, meta);
 
   return (
     <div className="flex flex-col gap-4">
@@ -157,9 +159,15 @@ export function PhotoUploader({
               {formatLocationLabel(captureCaption.location, captureCaption.locationName)}
             </a>
           ) : (
-            <span className="pl-5">Location unavailable</span>
+            <span className="pl-5">{waitingForLocation ?? "Location unavailable"}</span>
           )}
         </div>
+      )}
+
+      {waitingForLocation && !captureCaption && (
+        <p className="text-helper font-medium text-warning" role="status" aria-live="polite">
+          {waitingForLocation}
+        </p>
       )}
     </div>
   );

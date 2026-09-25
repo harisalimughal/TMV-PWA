@@ -114,6 +114,16 @@ export interface EvidenceItem {
   locationName?: string;
 }
 
+export interface ScenarioSubmission {
+  id?: string;
+  jobId: string;
+  scenario: string;
+  fields: Record<string, string>;
+  photoUrls: string[];
+  signatureUrl?: string;
+  submittedAt: string;
+}
+
 export interface JobUpdateResult {
   job: Job;
   suggestedTotal?: number;
@@ -142,6 +152,10 @@ export function fetchJobDetail(jobId: string): Promise<{
   confirmationText: string;
 }> {
   return request(`/api/jobs/${encodeURIComponent(jobId)}`);
+}
+
+export function fetchJobScenarios(jobId: string): Promise<{ submissions: ScenarioSubmission[] }> {
+  return request(`/api/jobs/${encodeURIComponent(jobId)}/scenarios`);
 }
 
 /** Removes one already-uploaded photo. Returns the job's remaining photo set. */

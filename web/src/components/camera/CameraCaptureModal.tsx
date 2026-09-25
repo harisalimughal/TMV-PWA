@@ -43,7 +43,7 @@ export function canUseLocationForCapture(
   fallback: CapturedLocation | null,
   requireLocation: boolean
 ): boolean {
-  return !requireLocation || Boolean(locationForCapture(current, fallback, requireLocation));
+  return true;
 }
 
 function hasRememberedCameraPermission(): boolean {
@@ -184,10 +184,9 @@ export function CameraCaptureModal({
   if (!open || typeof document === "undefined") return null;
 
   const captureLocation = locationForCapture(locationRef.current, fallbackLocation, requireLocation);
-  const locationReady = canUseLocationForCapture(locationRef.current, fallbackLocation, requireLocation);
+  const locationPending = requireLocation && !captureLocation;
 
   function handleCapture() {
-    if (!locationReady) return;
     const video = videoRef.current;
     const canvas = canvasRef.current;
     if (!video || !canvas || !video.videoWidth) return;
@@ -407,7 +406,7 @@ export function CameraCaptureModal({
             <button
               type="button"
               onClick={handleCapture}
-              disabled={status !== "ready" || capturing || !locationReady}
+              disabled={status !== "ready" || capturing}
               aria-label="Take photo"
               className="grid size-[74px] place-items-center rounded-pill border-[3px] border-white/85 bg-white/15 transition-transform active:scale-95 disabled:opacity-40 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-white"
             >
@@ -422,9 +421,9 @@ export function CameraCaptureModal({
           </div>
         )}
 
-        {phase === "live" && requireLocation && !locationReady && !failed && (
+        {phase === "live" && locationPending && !failed && (
           <p className="mt-3 text-center text-[13px] font-medium text-white/75" role="status" aria-live="polite">
-            Getting current location...
+            Getting location in background...
           </p>
         )}
 

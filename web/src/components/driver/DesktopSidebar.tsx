@@ -1,5 +1,5 @@
 import React from "react";
-import { ClipboardList, LogOut, Settings, Truck } from "lucide-react";
+import { ClipboardList, FileWarning, LogOut, Settings, Truck } from "lucide-react";
 import { cx } from "../../ui";
 import type { DriverProfile } from "../../api/auth";
 import type { TabId } from "./BottomNav";
@@ -8,6 +8,7 @@ import { NotificationBell } from "./NotificationBell";
 
 const NAV: Array<{ id: TabId; label: string; icon: React.ComponentType<{ className?: string }> }> = [
   { id: "jobs", label: "Jobs", icon: ClipboardList },
+  { id: "liability", label: "Liability", icon: FileWarning },
   { id: "van", label: "Van", icon: Truck },
   { id: "profile", label: "Settings", icon: Settings }
 ];

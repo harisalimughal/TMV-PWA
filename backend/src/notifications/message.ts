@@ -3,11 +3,9 @@ import { env } from "../config/env";
 import { DriverProfile, Job } from "../jobs/job.types";
 
 /**
- * The driver-introduction message, shared verbatim between the email body
- * (google/gmail.ts) and the SMS body (integrations/firetext.ts) -- one admin-editable
- * block of text (see /admin's Settings tab), not two templates that can drift apart.
- * Sent when the driver taps Start Job (see jobs.service.ts's sendJobStartedSmsIfAny /
- * sendJobStartedEmailIfAny). Introduces the driver and gives the customer a contact
+ * Default driver-introduction message used by both customer "I'm on the Way"
+ * channels until an admin customizes their separate SMS/email Messaging templates.
+ * Introduces the driver and gives the customer a contact
  * number and the booked time -- deliberately NOT framed as "I'm on the way" (that
  * implies the driver is already en route, which isn't necessarily true the moment
  * they tap Start). This is only the fallback shown until an admin overrides it.
@@ -31,7 +29,7 @@ export const REVIEW_REQUEST_EMAIL_TEMPLATE =
 /**
  * Flat placeholder substitution — a plain block of text an admin edits as a whole,
  * not a templating engine with conditionals. Shared by every customer-facing
- * message template in the app, not just the "job started" one.
+ * message template in the app, not just the "I'm on the Way" one.
  *
  * Available placeholders:
  *   {customerName}     — customer's name from the booking

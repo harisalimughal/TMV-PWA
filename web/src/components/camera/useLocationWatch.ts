@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { CapturedLocation } from "../../lib/geo";
 
 /**
@@ -11,6 +11,7 @@ import type { CapturedLocation } from "../../lib/geo";
  */
 export function useLocationWatch(active: boolean): React.RefObject<CapturedLocation | null> {
   const locationRef = useRef<CapturedLocation | null>(null);
+  const [, rerender] = useState(0);
 
   useEffect(() => {
     locationRef.current = null;
@@ -24,6 +25,7 @@ export function useLocationWatch(active: boolean): React.RefObject<CapturedLocat
           lng: position.coords.longitude,
           accuracy: position.coords.accuracy
         };
+        rerender(v => v + 1);
       },
       () => {
         /* Denied / unavailable / timed out — stay null, the photo still works. */

@@ -43,31 +43,26 @@ export const PHOTO_STATES = new Set<WorkflowState>([
  * scenario.engine.ts's finalizeScenario(). Same targets ISSUES_NONE jumps to directly
  * when the driver has no issue to report.
  *
- * The checkpoints sit in different positions relative to their photo: Arrival's is
- * right after the Arrival photo (resume -> the next photo step, Loaded); Stop-by's is
- * right after the Stop-by photo (resume -> the drop-off issues check); Empty Van's is
- * right before the Empty Van photo -- resume there is the Empty Van photo step itself,
- * not past it.
+ * Legacy only: issue reports now live in the driver's Liability tab, outside the main
+ * workflow. These targets are kept so old jobs already sitting in an _ISSUES_CHOICE
+ * state can recover cleanly.
  */
 export const RESUME_AFTER_ISSUES: Partial<Record<WorkflowState, WorkflowState>> = {
   [WorkflowState.WAITING_ARRIVAL_ISSUES_CHOICE]: WorkflowState.WAITING_LOADED_PHOTO,
-  [WorkflowState.WAITING_STOP_BY_ISSUES_CHOICE]: WorkflowState.WAITING_EMPTY_VAN_ISSUES_CHECK,
+  [WorkflowState.WAITING_STOP_BY_ISSUES_CHOICE]: WorkflowState.WAITING_EMPTY_VAN_PHOTO,
   [WorkflowState.WAITING_EMPTY_VAN_ISSUES_CHOICE]: WorkflowState.WAITING_EMPTY_VAN_PHOTO
 };
 
 export function nextAfterPhoto(state: WorkflowState): WorkflowState {
   switch (state) {
     case WorkflowState.WAITING_ARRIVAL_PHOTO:
-      return WorkflowState.WAITING_ARRIVAL_ISSUES_CHECK;
+      return WorkflowState.WAITING_LOADED_PHOTO;
     case WorkflowState.WAITING_LOADED_PHOTO:
       // Every job is asked "is there a stop-by point?" next, regardless of whether
       // Job.stopBy is set -- see WAITING_STOP_BY_CHECK's own comment.
       return WorkflowState.WAITING_STOP_BY_CHECK;
     case WorkflowState.WAITING_STOP_BY_PHOTO:
-      // After the stop-by photo the driver is asked "Any issues here?" (same check
-      // as Arrival/Empty Van). ISSUES_NONE / the scenario detour both resume at
-      // WAITING_EMPTY_VAN_ISSUES_CHECK.
-      return WorkflowState.WAITING_STOP_BY_ISSUES_CHECK;
+      return WorkflowState.WAITING_EMPTY_VAN_PHOTO;
     case WorkflowState.WAITING_EMPTY_VAN_PHOTO:
       return WorkflowState.WAITING_CLIENT_CONFIRMATION;
     default:

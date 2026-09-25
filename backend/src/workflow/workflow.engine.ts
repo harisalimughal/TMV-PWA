@@ -400,7 +400,7 @@ export async function handleAction(
       const from = job.currentState as WorkflowState;
       const noneTarget: Partial<Record<WorkflowState, WorkflowState>> = {
         [WorkflowState.WAITING_ARRIVAL_ISSUES_CHECK]: WorkflowState.WAITING_LOADED_PHOTO,
-        [WorkflowState.WAITING_STOP_BY_ISSUES_CHECK]: WorkflowState.WAITING_EMPTY_VAN_ISSUES_CHECK,
+        [WorkflowState.WAITING_STOP_BY_ISSUES_CHECK]: WorkflowState.WAITING_EMPTY_VAN_PHOTO,
         [WorkflowState.WAITING_EMPTY_VAN_ISSUES_CHECK]: WorkflowState.WAITING_EMPTY_VAN_PHOTO
       };
       const yesTarget: Partial<Record<WorkflowState, WorkflowState>> = {
@@ -416,14 +416,14 @@ export async function handleAction(
 
     // "Is there a stop-by point?" -- asked after every Van Loaded photo, independent
     // of Job.stopBy (Calendar isn't always kept current for a stop decided on the
-    // day). Yes opens the same proof-photo -> "any issues?" detour Arrival/Empty Van
-    // already have, just for the stop; No skips straight to the drop-off issues check.
+    // day). Yes opens the proof photo at the stop. No skips straight to the empty-van
+    // photo; issue reports live in the separate Liability tab.
     case "STOP_BY_YES":
     case "STOP_BY_NONE": {
       assertState(job.currentState, WorkflowState.WAITING_STOP_BY_CHECK);
       const from = job.currentState;
       job.currentState =
-        action === "STOP_BY_YES" ? WorkflowState.WAITING_STOP_BY_PHOTO : WorkflowState.WAITING_EMPTY_VAN_ISSUES_CHECK;
+        action === "STOP_BY_YES" ? WorkflowState.WAITING_STOP_BY_PHOTO : WorkflowState.WAITING_EMPTY_VAN_PHOTO;
       return saveJob(job, driver, action, from);
     }
 
@@ -435,6 +435,7 @@ export async function handleAction(
       const from = job.currentState as WorkflowState;
       const target =
         from === WorkflowState.WAITING_ARRIVAL_ISSUES_CHOICE ? WorkflowState.WAITING_LOADED_PHOTO
+        : from === WorkflowState.WAITING_STOP_BY_ISSUES_CHOICE ? WorkflowState.WAITING_EMPTY_VAN_PHOTO
         : from === WorkflowState.WAITING_EMPTY_VAN_ISSUES_CHOICE ? WorkflowState.WAITING_EMPTY_VAN_PHOTO
         : null;
       if (!target) throw new ValidationError(`This action is not valid at the current step (${from}).`);
@@ -486,18 +487,17 @@ const BACK_TARGET: Partial<Record<WorkflowState, WorkflowState | ((job: Job) => 
   [WorkflowState.WAITING_ARRIVAL_PHOTO]: WorkflowState.READY,
   [WorkflowState.WAITING_ARRIVAL_ISSUES_CHECK]: WorkflowState.WAITING_ARRIVAL_PHOTO,
   [WorkflowState.WAITING_ARRIVAL_ISSUES_CHOICE]: WorkflowState.WAITING_ARRIVAL_ISSUES_CHECK,
-  [WorkflowState.WAITING_LOADED_PHOTO]: WorkflowState.WAITING_ARRIVAL_ISSUES_CHECK,
+  [WorkflowState.WAITING_LOADED_PHOTO]: WorkflowState.WAITING_ARRIVAL_PHOTO,
   [WorkflowState.IN_PROGRESS]: WorkflowState.WAITING_LOADED_PHOTO,
   [WorkflowState.WAITING_STOP_BY_CHECK]: WorkflowState.WAITING_LOADED_PHOTO,
   [WorkflowState.WAITING_STOP_BY_PHOTO]: WorkflowState.WAITING_STOP_BY_CHECK,
   [WorkflowState.WAITING_STOP_BY_ISSUES_CHECK]: WorkflowState.WAITING_STOP_BY_PHOTO,
   [WorkflowState.WAITING_STOP_BY_ISSUES_CHOICE]: WorkflowState.WAITING_STOP_BY_ISSUES_CHECK,
-  // A job with a stop retraces through its issues check; one without skips straight
-  // back to the van-loaded photo, same as before this feature existed.
   [WorkflowState.WAITING_EMPTY_VAN_ISSUES_CHECK]: job =>
-    job.stopBy?.trim() ? WorkflowState.WAITING_STOP_BY_ISSUES_CHECK : WorkflowState.WAITING_LOADED_PHOTO,
+    job.stopBy?.trim() ? WorkflowState.WAITING_STOP_BY_PHOTO : WorkflowState.WAITING_LOADED_PHOTO,
   [WorkflowState.WAITING_EMPTY_VAN_ISSUES_CHOICE]: WorkflowState.WAITING_EMPTY_VAN_ISSUES_CHECK,
-  [WorkflowState.WAITING_EMPTY_VAN_PHOTO]: WorkflowState.WAITING_EMPTY_VAN_ISSUES_CHECK,
+  [WorkflowState.WAITING_EMPTY_VAN_PHOTO]: job =>
+    job.stopBy?.trim() ? WorkflowState.WAITING_STOP_BY_PHOTO : WorkflowState.WAITING_STOP_BY_CHECK,
   [WorkflowState.WAITING_CLIENT_CONFIRMATION]: WorkflowState.WAITING_EMPTY_VAN_PHOTO,
   [WorkflowState.WAITING_EXTRA_CHARGES]: WorkflowState.WAITING_CLIENT_CONFIRMATION,
   [WorkflowState.WAITING_OVERTIME]: WorkflowState.WAITING_EXTRA_CHARGES,

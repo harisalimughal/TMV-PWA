@@ -33,7 +33,7 @@ export function BottomActionBar({ children, note, noteTone = "muted", className 
     <div
       className={cx(
         "shrink-0 border-t border-line bg-surface/95 px-4 pt-3 shadow-dock backdrop-blur",
-        "pb-[calc(env(safe-area-inset-bottom)+12px)]",
+        "pb-[calc(var(--bottom-nav-h,0px)+env(safe-area-inset-bottom)+12px)]",
         className
       )}
     >

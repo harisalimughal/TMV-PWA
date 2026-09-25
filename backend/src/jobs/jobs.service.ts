@@ -381,9 +381,8 @@ function sendJobStartedSmsIfAny(job: Job, driver: DriverProfile): void {
     .catch(err => log.warn("job started SMS failure audit failed", { job_id: job.jobId, error: String(err) }));
 }
 
-/** Same driver-introduction wording as the SMS above, sent by email too -- one
- *  message, both channels, so a customer who only gave an email still gets
- *  introduced to their driver (see notifications/message.ts's doc comment).
+/** Driver-introduction email sent alongside the SMS. Its Messaging template is
+ *  separate from the SMS template, so admins can tune channel wording independently.
  *  Independent of the SMS: a missing/unconfigured Firetext key never blocks this, and
  *  a Gmail failure never blocks the SMS. */
 function sendJobStartedEmailIfAny(job: Job, driver: DriverProfile): void {
@@ -406,7 +405,7 @@ function sendJobStartedEmailIfAny(job: Job, driver: DriverProfile): void {
           action: "CLIENT_JOB_STARTED_EMAIL_SKIPPED", detail: "Disabled in admin Messaging settings"
         });
       }
-      return getSetting("JOB_STARTED_MESSAGE_TEXT", JOB_STARTED_MESSAGE_TEMPLATE)
+      return getSetting("JOB_STARTED_EMAIL_MESSAGE_TEXT", JOB_STARTED_MESSAGE_TEMPLATE)
         .then(template => sendJobStartedEmail(job, template, driver))
         .then(() => appendActivity({
           jobId: job.jobId,

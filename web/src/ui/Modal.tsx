@@ -19,6 +19,8 @@ export interface ModalProps {
   footer?: React.ReactNode;
   /** Set false to keep Esc / backdrop click from closing (e.g. mid-submit). */
   dismissible?: boolean;
+  /** `responsive` keeps the current mobile bottom-sheet behavior; `center` is always a dialog. */
+  placement?: "responsive" | "center";
   children: React.ReactNode;
 }
 
@@ -42,6 +44,7 @@ export function Modal({
   size = "md",
   footer,
   dismissible = true,
+  placement = "responsive",
   children
 }: ModalProps) {
   const panelRef = useRef<HTMLDivElement>(null);
@@ -88,7 +91,10 @@ export function Modal({
 
   return (
     <div
-      className="fixed inset-0 z-[100] flex items-end justify-center sm:items-center p-0 sm:p-4"
+      className={cx(
+        "fixed inset-0 z-[100] flex justify-center",
+        placement === "center" ? "items-center p-4" : "items-end p-0 sm:items-center sm:p-4"
+      )}
       onMouseDown={event => {
         if (dismissible && event.target === event.currentTarget) onClose();
       }}
@@ -102,8 +108,8 @@ export function Modal({
         tabIndex={-1}
         className={cx(
           "relative flex w-full flex-col overflow-hidden bg-surface outline-none",
-          "rounded-t-panel sm:rounded-panel shadow-md",
-          "max-h-[92vh] animate-in slide-in-from-bottom-5 sm:zoom-in-95",
+          placement === "center" ? "rounded-panel shadow-md" : "rounded-t-panel sm:rounded-panel shadow-md",
+          placement === "center" ? "max-h-[92vh] animate-in zoom-in-95" : "max-h-[92vh] animate-in slide-in-from-bottom-5 sm:zoom-in-95",
           SIZES[size]
         )}
       >
@@ -116,7 +122,18 @@ export function Modal({
 
         <div className="min-h-0 flex-1 overflow-y-auto scroll-touch px-4 py-4">{children}</div>
 
-        {footer && <div className="border-t border-line px-4 py-3 pb-safe">{footer}</div>}
+        {footer && (
+          <div
+            className={cx(
+              "border-t border-line px-4 py-3",
+              placement === "center"
+                ? "pb-3"
+                : "pb-[calc(var(--bottom-nav-h,0px)+env(safe-area-inset-bottom)+12px)]"
+            )}
+          >
+            {footer}
+          </div>
+        )}
       </div>
     </div>
   );

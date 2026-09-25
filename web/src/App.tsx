@@ -6,6 +6,7 @@ import { ForgotPasswordScreen } from "./screens/ForgotPasswordScreen";
 import { ResetPasswordScreen } from "./screens/ResetPasswordScreen";
 import { JobListScreen } from "./screens/JobListScreen";
 import { JobWorkflowScreen } from "./screens/JobWorkflowScreen";
+import { LiabilityScreen, type LiabilityCheckpoint } from "./screens/LiabilityScreen";
 import { AccountSettingsScreen } from "./screens/AccountSettingsScreen";
 import { PwaSettingsScreen } from "./screens/pwa-settings/PwaSettingsScreen";
 import { VanScreen } from "./screens/VanScreen";
@@ -72,6 +73,7 @@ type View =
   | { name: "forgot-password" }
   // ---- tab destinations (chrome: sidebar on desktop, bottom nav on mobile) ----
   | { name: "jobs"; driver: DriverProfile }
+  | { name: "liability"; driver: DriverProfile; checkpoint?: LiabilityCheckpoint; jobId?: string }
   | { name: "van"; driver: DriverProfile }
   | { name: "settings"; driver: DriverProfile }
   // ---- drill-in flows (own the whole screen, no tab chrome) -------------------
@@ -81,6 +83,7 @@ type View =
 const TAB_FOR_VIEW: Record<string, TabId> = {
   jobs: "jobs",
   job: "jobs",
+  liability: "liability",
   van: "van",
   settings: "profile"
 };
@@ -312,7 +315,19 @@ export function App() {
 
     case "job":
       screen = (
-        <JobWorkflowScreen jobId={view.jobId} onBack={() => setView({ name: "jobs", driver: view.driver })} />
+        <JobWorkflowScreen
+          jobId={view.jobId}
+          onBack={() => setView({ name: "jobs", driver: view.driver })}
+        />
+      );
+      break;
+
+    case "liability":
+      screen = (
+        <LiabilityScreen
+          initialCheckpoint={view.checkpoint}
+          initialJobId={view.jobId}
+        />
       );
       break;
 
@@ -355,13 +370,18 @@ export function App() {
     view.name === "forgot-password" ||
     view.name === "reset-password";
 
-  const isTabView = view.name === "jobs" || view.name === "van" || view.name === "settings";
+  const isTabView =
+    view.name === "jobs" ||
+    view.name === "liability" ||
+    view.name === "van" ||
+    view.name === "settings" ||
+    view.name === "job";
 
   let framed: React.ReactNode;
   if (isAuthView) {
     framed = screen;
   } else if (isTabView && "driver" in view) {
-    // Jobs / Van / Profile get the sidebar (desktop) + bottom nav (mobile).
+    // Jobs / Liability / Van / Profile get the sidebar (desktop) + bottom nav (mobile).
     // The keyed wrapper gives each tab a subtle entry transition; the sidebar and
     // bottom nav sit outside it and stay put.
     framed = (
@@ -369,10 +389,19 @@ export function App() {
         active={TAB_FOR_VIEW[view.name]}
         onSelect={tab => {
           const d = view.driver;
-          setView(tab === "jobs" ? { name: "jobs", driver: d } : tab === "van" ? { name: "van", driver: d } : { name: "settings", driver: d });
+          setView(
+            tab === "jobs"
+              ? { name: "jobs", driver: d }
+              : tab === "liability"
+                ? { name: "liability", driver: d }
+                : tab === "van"
+                  ? { name: "van", driver: d }
+                  : { name: "settings", driver: d }
+          );
         }}
         driver={view.driver}
         onLogout={() => setConfirmLogout(true)}
+        showTopBar={view.name !== "job"}
       >
         <div key={view.name} className="screen-enter h-full">
           {screen}

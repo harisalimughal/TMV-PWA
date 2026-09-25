@@ -3,7 +3,6 @@ import {
   AlertTriangle,
   Camera,
   Car,
-  Check,
   FileWarning,
   PackageMinus,
   PackagePlus,
@@ -32,7 +31,6 @@ import {
   AnimatedSuccessTick,
   CompletionSummary,
   IssueChoiceCard,
-  IssueDecision,
   JobDetailsToggle,
   RawBookingText,
   JobHeader,
@@ -44,6 +42,7 @@ import { ScenarioFormScreen } from "./ScenarioFormScreen";
 import { useOnline } from "../lib/net";
 import { htmlToPlainText } from "../lib/htmlText";
 import { formatCalendarWindow } from "../lib/calendarWindow";
+import { photoLocationBlockedReason } from "../lib/photoLocation";
 import type { ScenarioKey } from "../scenarioSpec";
 import {
   CONGESTION_CHARGE,
@@ -84,10 +83,8 @@ const STAY_ON_SCREEN_ACTIONS = new Set([
   "REVIEW_NONE",
   "REVIEW_YES",
   // Saying "yes" to a stop-by goes straight into its photo step -- the same
-  // "answering yes opens the next thing to do" pattern as ISSUES_YES, which fires
-  // separately (see openIssueScenarioFromCheck) since it opens a scenario form
-  // rather than re-rendering StepBody for a new state. STOP_BY_NONE keeps the
-  // default (bounces home), matching every other "no issues"-style answer.
+  // "answering yes opens the next thing to do" pattern. STOP_BY_NONE keeps the
+  // default (bounces home), matching the other no-op style answers.
   "STOP_BY_YES"
 ]);
 
@@ -208,6 +205,7 @@ export function JobWorkflowScreen({ jobId, onBack }: JobWorkflowScreenProps) {
 
   const autoSkippedFrom = useRef<string | null>(null);
   const autoReviewSendFrom = useRef<string | null>(null);
+  const autoIssueSkipFrom = useRef<string | null>(null);
 
   const openFirstIssueScenario = useCallback((scenario: ScenarioKey) => {
     setCompletedIssueScenarios([]);
@@ -278,20 +276,6 @@ export function JobWorkflowScreen({ jobId, onBack }: JobWorkflowScreenProps) {
     [online, toast, onBack]
   );
 
-  /** The Liability step's first pick (any of the 4 cards) -- fires ISSUES_YES to mark
-   *  this checkpoint as "the driver is doing something here, not just passing through"
-   *  before opening the chosen form. Submitting that form is what actually resumes the
-   *  main flow (see backend's RESUME_AFTER_ISSUES) -- every scenario type shares this
-   *  same detour, whether it's a liability report or a stock check-in/out. */
-  const openIssueScenarioFromCheck = useCallback(
-    async (scenario: ScenarioKey) => {
-      if (!job) return;
-      const ok = await run(() => sendAction(job.jobId, "ISSUES_YES"), undefined, { home: false });
-      if (ok) openFirstIssueScenario(scenario);
-    },
-    [job, openFirstIssueScenario, run]
-  );
-
   const cancelScenario = useCallback(() => {
     if (!job || !openScenario) {
       setOpenScenario(null);
@@ -337,6 +321,17 @@ export function JobWorkflowScreen({ jobId, onBack }: JobWorkflowScreenProps) {
     void run(() => sendAction(job.jobId, "SEND_REVIEW_EMAIL"), "Review email sent", { home: false });
   }, [job, busy, online, run]);
 
+  useEffect(() => {
+    if (!job || !isIssueWorkflowState(job.currentState)) {
+      autoIssueSkipFrom.current = null;
+      return;
+    }
+    if (busy || !online || autoIssueSkipFrom.current === `${job.jobId}:${job.currentState}`) return;
+    autoIssueSkipFrom.current = `${job.jobId}:${job.currentState}`;
+    const action = isIssueChoiceState(job.currentState) ? "ISSUES_RESUME" : "ISSUES_NONE";
+    void run(() => sendAction(job.jobId, action), undefined, { home: false });
+  }, [job, busy, online, run]);
+
   if (loading) {
     return (
       <AppShell header={<PageHeader title="Loading job…" onBack={onBack} backLabel="Back to jobs" />}>
@@ -378,6 +373,7 @@ export function JobWorkflowScreen({ jobId, onBack }: JobWorkflowScreenProps) {
           customerName: job.customerName,
           customerEmail: job.customerEmail,
           customerPhone: job.customerPhone,
+          clientNamePostcode: job.clientNamePostcode,
           rawDescription: job.rawDescription,
           rawTitle: job.rawTitle,
           bookedStart: job.bookedStart,
@@ -510,6 +506,7 @@ export function JobWorkflowScreen({ jobId, onBack }: JobWorkflowScreenProps) {
             online={online}
             uploadProgress={uploadProgress}
             photoRemoteCount={stepRemotePhotos.length}
+            photoMeta={formState.photoMeta}
             onAction={(action, input, message) =>
               run(() => sendAction(job.jobId, action, input), message, {
                 home: !STAY_ON_SCREEN_ACTIONS.has(action)
@@ -613,7 +610,6 @@ export function JobWorkflowScreen({ jobId, onBack }: JobWorkflowScreenProps) {
                 remotePhotos={stepRemotePhotos}
                 onRemoveRemotePhoto={removeRemotePhoto}
                 onOpenScenario={openFirstIssueScenario}
-                onReportIssue={openIssueScenarioFromCheck}
                 onFormChange={bumpForm}
               />
 
@@ -810,6 +806,23 @@ function evidenceTypeForState(state: string): string | null {
   }
 }
 
+function isIssueChoiceState(state: string): boolean {
+  return (
+    state === "WAITING_ARRIVAL_ISSUES_CHOICE" ||
+    state === "WAITING_STOP_BY_ISSUES_CHOICE" ||
+    state === "WAITING_EMPTY_VAN_ISSUES_CHOICE"
+  );
+}
+
+function isIssueWorkflowState(state: string): boolean {
+  return (
+    isIssueChoiceState(state) ||
+    state === "WAITING_ARRIVAL_ISSUES_CHECK" ||
+    state === "WAITING_STOP_BY_ISSUES_CHECK" ||
+    state === "WAITING_EMPTY_VAN_ISSUES_CHECK"
+  );
+}
+
 /** Which checkpoint of the move a Parking Liability / Liability Report is being filed
  *  from, given the workflow state the moment the form opens — so the submission (and
  *  Parking Liability's address default) reflects where the driver actually is,
@@ -911,7 +924,6 @@ function StepBody({
   remotePhotos,
   onRemoveRemotePhoto,
   onOpenScenario,
-  onReportIssue,
   onFormChange
 }: {
   job: Job;
@@ -927,7 +939,6 @@ function StepBody({
   remotePhotos: RemotePhoto[];
   onRemoveRemotePhoto: (evidenceId: string) => void;
   onOpenScenario: (scenario: ScenarioKey) => void;
-  onReportIssue: (scenario: ScenarioKey) => void;
   onFormChange: () => void;
 }) {
   // Re-renders the whole workflow screen -- not just this subtree -- so the docked
@@ -992,39 +1003,27 @@ function StepBody({
 
     case "WAITING_LOADED_PHOTO":
       return (
-        <div className="flex flex-col gap-4">
-          <PhotoUploader
-            key={state}
-            label="Van Loaded Photo (pick up point)"
-            hint="Up to 2 - show how the load is stacked and secured."
-            maxPhotos={2}
-            submitting={busy}
-            progress={uploadProgress}
-            error={error}
-            registerCapture={registerPhotoCapture}
-            initialFiles={formState.photosByStep[state] ?? []}
-            initialMeta={formState.photoMetaByStep[state] ?? []}
-            remoteFiles={remotePhotos}
-            onRemoveRemote={onRemoveRemotePhoto}
-            onFilesChange={(files, metas) => {
-              formState.photos = files;
-              formState.photosByStep[state] = files;
-              formState.photoMeta = metas;
-              formState.photoMetaByStep[state] = metas;
-              tick();
-            }}
-          />
-
-          <Button
-            fullWidth
-            size="lg"
-            variant="secondary"
-            iconLeft={<FileWarning aria-hidden />}
-            onClick={() => onOpenScenario("liability")}
-          >
-            Other liability issues ?
-          </Button>
-        </div>
+        <PhotoUploader
+          key={state}
+          label="Van Loaded Photo (pick up point)"
+          hint="Up to 2 - show how the load is stacked and secured."
+          maxPhotos={2}
+          submitting={busy}
+          progress={uploadProgress}
+          error={error}
+          registerCapture={registerPhotoCapture}
+          initialFiles={formState.photosByStep[state] ?? []}
+          initialMeta={formState.photoMetaByStep[state] ?? []}
+          remoteFiles={remotePhotos}
+          onRemoveRemote={onRemoveRemotePhoto}
+          onFilesChange={(files, metas) => {
+            formState.photos = files;
+            formState.photosByStep[state] = files;
+            formState.photoMeta = metas;
+            formState.photoMetaByStep[state] = metas;
+            tick();
+          }}
+        />
       );
 
     case "WAITING_STOP_BY_CHECK":
@@ -1090,94 +1089,9 @@ function StepBody({
       );
 
     case "WAITING_ARRIVAL_ISSUES_CHECK":
-      return (
-        <div className="flex flex-col gap-3">
-          <IssueChoiceCard
-            icon={<Car aria-hidden />}
-            title="Parking Liability"
-            description="Restricted bay, red route, or anywhere a PCN could land. The customer accepts the charge."
-            onClick={() => onReportIssue("parking")}
-          />
-          <IssueChoiceCard
-            icon={<FileWarning aria-hidden />}
-            title="Liability Report"
-            description="Existing damage, item condition, access risk, or anything that needs evidence."
-            onClick={() => onReportIssue("liability")}
-          />
-          <IssueChoiceCard
-            icon={<PackagePlus aria-hidden />}
-            title="Check in"
-            description="Record items entering storage."
-            onClick={() => onReportIssue("checkin")}
-          />
-          <IssueChoiceCard
-            icon={<PackageMinus aria-hidden />}
-            title="Check out"
-            description="Release items from storage."
-            onClick={() => onReportIssue("checkout")}
-          />
-        </div>
-      );
-
     case "WAITING_STOP_BY_ISSUES_CHECK":
-      return (
-        <div className="flex flex-col gap-3">
-          <IssueChoiceCard
-            icon={<Car aria-hidden />}
-            title="Parking Liability"
-            description="Restricted bay, red route, or anywhere a PCN could land. The customer accepts the charge."
-            onClick={() => onReportIssue("parking")}
-          />
-          <IssueChoiceCard
-            icon={<FileWarning aria-hidden />}
-            title="Liability Report"
-            description="Damage, unprotected items, or anything that needs evidence at the stop-by address."
-            onClick={() => onReportIssue("liability")}
-          />
-          <IssueChoiceCard
-            icon={<PackagePlus aria-hidden />}
-            title="Check in"
-            description="Record items entering storage."
-            onClick={() => onReportIssue("checkin")}
-          />
-          <IssueChoiceCard
-            icon={<PackageMinus aria-hidden />}
-            title="Check out"
-            description="Release items from storage."
-            onClick={() => onReportIssue("checkout")}
-          />
-        </div>
-      );
-
     case "WAITING_EMPTY_VAN_ISSUES_CHECK":
-      return (
-        <div className="flex flex-col gap-3">
-          <IssueChoiceCard
-            icon={<Car aria-hidden />}
-            title="Parking Liability"
-            description="Restricted bay, red route, or anywhere a PCN could land. The customer accepts the charge."
-            onClick={() => onReportIssue("parking")}
-          />
-          <IssueChoiceCard
-            icon={<FileWarning aria-hidden />}
-            title="Liability Report"
-            description="Damage, unprotected items, or anything that needs evidence at the drop-off."
-            onClick={() => onReportIssue("liability")}
-          />
-          <IssueChoiceCard
-            icon={<PackagePlus aria-hidden />}
-            title="Check in"
-            description="Record items entering storage."
-            onClick={() => onReportIssue("checkin")}
-          />
-          <IssueChoiceCard
-            icon={<PackageMinus aria-hidden />}
-            title="Check out"
-            description="Release items from storage."
-            onClick={() => onReportIssue("checkout")}
-          />
-        </div>
-      );
+      return null;
 
     // Recovery path: a driver who left the app mid-detour (ISSUES_YES already fired,
     // no form ever submitted) lands back here with `openScenario` reset to null on
@@ -1549,6 +1463,7 @@ interface StepDockProps {
   uploadProgress: number | null;
   /** Photos already uploaded for the current photo step — count toward the step max. */
   photoRemoteCount: number;
+  photoMeta: Array<PhotoCaptureMeta | null>;
   onAction: (action: string, input?: Record<string, string[]>, message?: string) => void;
   onUploadPhotos: (files: File[], metas: Array<PhotoCaptureMeta | null>) => void;
   onOpenSignature: () => void;
@@ -1573,6 +1488,7 @@ function StepDock({
   online,
   uploadProgress,
   photoRemoteCount,
+  photoMeta,
   onAction,
   onUploadPhotos,
   onOpenSignature,
@@ -1595,6 +1511,7 @@ function StepDock({
       // Local (just taken) + remote (already uploaded) photos both count toward the step.
       const photoTotal = formState.photos.length + photoRemoteCount;
       const photosFull = photoTotal >= photoMaxFor(state);
+      const waitingForLocation = photoLocationBlockedReason(formState.photos.length, photoMeta);
       return (
         <BottomActionBar>
           {/* Two equal, same-style buttons side by side: open the camera (left) +
@@ -1614,7 +1531,7 @@ function StepDock({
               className="!rounded-[10px]"
               loading={busy}
               blockedReason={
-                offlineReason ?? (photoTotal === 0 ? "Take a photo first." : undefined)
+                offlineReason ?? (photoTotal === 0 ? "Take a photo first." : waitingForLocation)
               }
               onBlocked={onBlocked}
               onClick={() => onUploadPhotos(formState.photos, formState.photoMeta)}
@@ -1654,23 +1571,7 @@ function StepDock({
     case "WAITING_ARRIVAL_ISSUES_CHECK":
     case "WAITING_STOP_BY_ISSUES_CHECK":
     case "WAITING_EMPTY_VAN_ISSUES_CHECK":
-      return (
-        <BottomActionBar>
-          <Button
-            fullWidth
-            size="lg"
-            variant="success"
-            className="!rounded-[10px]"
-            loading={busy}
-            blockedReason={offlineReason}
-            onBlocked={onBlocked}
-            iconLeft={<Check aria-hidden />}
-            onClick={() => onAction("ISSUES_NONE")}
-          >
-            No Issues
-          </Button>
-        </BottomActionBar>
-      );
+      return null;
 
     case "IN_PROGRESS":
       return (

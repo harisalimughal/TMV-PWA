@@ -136,6 +136,30 @@ describe("sendOnMyWay email notification", () => {
     })));
   });
 
+  it("uses the email-specific template separately from the SMS template", async () => {
+    getSetting.mockImplementation((key: string, fallback: string) => {
+      if (key === "JOB_STARTED_MESSAGE_TEXT") return Promise.resolve("SMS only {vanRegistration}");
+      if (key === "JOB_STARTED_EMAIL_MESSAGE_TEXT") return Promise.resolve("Email only {driver_name}");
+      return Promise.resolve(fallback);
+    });
+    getJob.mockResolvedValue(job());
+
+    await sendOnMyWay("TMV-SMS", "abi@example.com");
+
+    await vi.waitFor(() => expect(sendJobStartedSms).toHaveBeenCalledTimes(1));
+    await vi.waitFor(() => expect(sendJobStartedEmail).toHaveBeenCalledTimes(1));
+    expect(sendJobStartedSms).toHaveBeenCalledWith(
+      expect.objectContaining({ jobId: "TMV-SMS" }),
+      "SMS only {vanRegistration}",
+      driver
+    );
+    expect(sendJobStartedEmail).toHaveBeenCalledWith(
+      expect.objectContaining({ jobId: "TMV-SMS" }),
+      "Email only {driver_name}",
+      driver
+    );
+  });
+
   it("skips the email (but still sends SMS) when the booking has no customer email", async () => {
     getJob.mockResolvedValue(job({ customerEmail: "" }));
 

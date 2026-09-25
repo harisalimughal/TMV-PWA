@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AlertTriangle, Camera, Check, CloudOff, MapPin, Search, X } from "lucide-react";
-import { fetchLiabilityDamageCategories, submitScenario, type ApiError } from "../api/jobs";
-import { MULTISELECT_DELIMITER, SCENARIOS, type ScenarioFieldSpec, type ScenarioKey } from "../scenarioSpec";
+import { fetchLiabilityDamageCategories, submitScenario, type ApiError, type ScenarioSubmission } from "../api/jobs";
+import { MULTISELECT_DELIMITER, SCENARIOS, type ScenarioFieldSpec, type ScenarioKey, type ScenarioSpec } from "../scenarioSpec";
 import { PhotoPicker } from "../components/PhotoPicker";
 import { JobDetailsToggle } from "../components/driver";
 import { formatCapturedTime, formatLocationLabel, mapsUrlForLocation, type PhotoCaptureMeta } from "../lib/geo";
@@ -25,6 +25,7 @@ import {
   cx
 } from "../ui";
 import { useOnline } from "../lib/net";
+import { photoLocationBlockedReason } from "../lib/photoLocation";
 
 /** Shape resolved to a standalone (no `jobId`) storage form's caller so it can show a
  *  completion summary -- see the `onDone` prop below. Job-scoped check-in/out (opened
@@ -57,6 +58,7 @@ interface ScenarioFormScreenProps {
     customerName?: string;
     customerEmail?: string;
     customerPhone?: string;
+    clientNamePostcode?: string;
     rawDescription?: string;
     rawTitle?: string;
     bookedStart?: string;
@@ -71,10 +73,75 @@ interface ScenarioFormScreenProps {
    * stop-by / waypoint address.
    */
   reportedAt?: { label: "Pickup" | "Stop-by" | "Drop-off"; address?: string };
+  /** Latest existing submission for this same job/scenario/checkpoint, shown in-place
+   *  so persistence lives with the option, not as a separate global list. */
+  existingSubmission?: ScenarioSubmission;
   /** For a standalone storage form, resolves with a summary for the completion
    *  screen. For a job-scoped scenario it resolves with nothing. */
   onDone: (result?: { summary: StorageSummary }) => void;
   onCancel: () => void;
+}
+
+interface ScenarioJobPrefill {
+  customerName?: string;
+  customerEmail?: string;
+  customerPhone?: string;
+  clientNamePostcode?: string;
+  rawDescription?: string;
+}
+
+function trimmed(value: string | undefined): string {
+  return value?.trim() ?? "";
+}
+
+function labelledValue(text: string | undefined, labels: string[]): string {
+  const raw = trimmed(text);
+  if (!raw) return "";
+  const escaped = labels.map(label => label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|");
+  const match = raw.match(new RegExp(`(?:^|\\n)\\s*(?:${escaped})\\s*:\\s*([^\\n\\r]+)`, "i"));
+  return trimmed(match?.[1]);
+}
+
+function customerNameForPrefill(job?: ScenarioJobPrefill): string {
+  return (
+    trimmed(job?.customerName) ||
+    labelledValue(job?.rawDescription, ["Client name", "Customer name", "Full name", "Contact name", "Customer", "Client", "Name"]) ||
+    trimmed(job?.clientNamePostcode)
+  );
+}
+
+export function scenarioInitialFields(spec: ScenarioSpec, job?: ScenarioJobPrefill): Record<string, string> {
+  const initial: Record<string, string> = {};
+  for (const field of spec.fields) {
+    if (field.type === "date") initial[field.name] = todayInLondon();
+  }
+
+  const customerName = customerNameForPrefill(job);
+  if (customerName && spec.fields.some(f => f.name === "client_name")) {
+    initial.client_name = customerName;
+  }
+
+  const customerEmail = trimmed(job?.customerEmail);
+  if (customerEmail && spec.fields.some(f => f.name === "client_email")) {
+    initial.client_email = customerEmail;
+  }
+
+  const customerPhone = trimmed(job?.customerPhone);
+  if (customerPhone && spec.fields.some(f => f.name === "client_phone")) {
+    initial.client_phone = customerPhone;
+  }
+
+  return initial;
+}
+
+function scenarioFieldsForSpec(spec: ScenarioSpec, fields: Record<string, string> | undefined): Record<string, string> {
+  if (!fields) return {};
+  const allowed = new Set(spec.fields.map(field => field.name));
+  const next: Record<string, string> = {};
+  for (const [key, value] of Object.entries(fields)) {
+    if (allowed.has(key)) next[key] = value;
+  }
+  return next;
 }
 
 /** Which section heading each storage field sits under. Anything unlisted (the
@@ -124,6 +191,7 @@ export function ScenarioFormScreen({
   scenario,
   job,
   reportedAt,
+  existingSubmission,
   onDone,
   onCancel
 }: ScenarioFormScreenProps) {
@@ -162,28 +230,10 @@ export function ScenarioFormScreen({
     };
   }, [scenario]);
 
-  const [fields, setFields] = useState<Record<string, string>>(() => {
-    const initial: Record<string, string> = {};
-    for (const field of spec.fields) {
-      if (field.type === "date") initial[field.name] = todayInLondon();
-    }
-    // Pre-fill what the booking already tells us for job-scoped scenarios -- still
-    // editable, since whoever's actually checking items in/out isn't always the
-    // booking contact.
-    const customerName = job?.customerName?.trim();
-    if (customerName && spec.fields.some(f => f.name === "client_name")) {
-      initial.client_name = customerName;
-    }
-    const customerEmail = job?.customerEmail?.trim();
-    if (customerEmail && spec.fields.some(f => f.name === "client_email")) {
-      initial.client_email = customerEmail;
-    }
-    const customerPhone = job?.customerPhone?.trim();
-    if (customerPhone && spec.fields.some(f => f.name === "client_phone")) {
-      initial.client_phone = customerPhone;
-    }
-    return initial;
-  });
+  const [fields, setFields] = useState<Record<string, string>>(() => ({
+    ...scenarioInitialFields(spec, job),
+    ...scenarioFieldsForSpec(spec, existingSubmission?.fields)
+  }));
   const [photos, setPhotos] = useState<File[]>([]);
   // Parallel to `photos` -- where/when each was taken (null for library uploads).
   const [photoMeta, setPhotoMeta] = useState<Array<PhotoCaptureMeta | null>>([]);
@@ -195,6 +245,7 @@ export function ScenarioFormScreen({
   }, []);
   const [signatureBlob, setSignatureBlob] = useState<Blob | null>(null);
   const [signaturePreviewUrl, setSignaturePreviewUrl] = useState<string | null>(null);
+  const [existingSignatureCleared, setExistingSignatureCleared] = useState(false);
   const [signatureModalOpen, setSignatureModalOpen] = useState(false);
   // Watches position while the pad's open so a fix is already on hand the instant the
   // customer taps Save -- same approach the camera uses for photos (useLocationWatch).
@@ -209,16 +260,46 @@ export function ScenarioFormScreen({
   const toast = useToast();
   const online = useOnline();
 
-  const hasSignature = signatureBlob !== null;
+  const existingPhotoCount = existingSubmission?.photoUrls?.length ?? 0;
+  const existingSignatureUrl = existingSignatureCleared ? null : existingSubmission?.signatureUrl ?? null;
+  const shownSignatureUrl = signaturePreviewUrl ?? existingSignatureUrl;
+  const hasSignature = signatureBlob !== null || Boolean(existingSignatureUrl);
   // The most recent capture worth showing a caption for -- older/removed photos with
   // no recorded location just show nothing rather than a misleading blank line.
   const captureCaption = photoMeta.length > 0 ? photoMeta[photoMeta.length - 1] : null;
+  const waitingForPhotoLocation = photoLocationBlockedReason(photos.length, photoMeta);
 
   // Revoke the preview object URL when it's replaced or the screen unmounts.
   useEffect(() => {
     if (!signaturePreviewUrl) return;
     return () => URL.revokeObjectURL(signaturePreviewUrl);
   }, [signaturePreviewUrl]);
+
+  useEffect(() => {
+    const prefill = {
+      ...scenarioInitialFields(spec, job),
+      ...scenarioFieldsForSpec(spec, existingSubmission?.fields)
+    };
+    setFields(prev => {
+      let changed = false;
+      const next = { ...prev };
+      for (const [key, value] of Object.entries(prefill)) {
+        if (!value) continue;
+        if ((next[key] ?? "").trim()) continue;
+        next[key] = value;
+        changed = true;
+      }
+      return changed ? next : prev;
+    });
+  }, [
+    spec,
+    job?.customerName,
+    job?.customerEmail,
+    job?.customerPhone,
+    job?.clientNamePostcode,
+    job?.rawDescription,
+    existingSubmission?.submittedAt
+  ]);
 
   function setField(name: string, value: string) {
     setFields(prev => ({ ...prev, [name]: value }));
@@ -227,6 +308,7 @@ export function ScenarioFormScreen({
   function handleSignatureSave(blob: Blob) {
     setSignatureBlob(blob);
     setSignaturePreviewUrl(URL.createObjectURL(blob));
+    setExistingSignatureCleared(false);
     setSignatureMeta({ capturedAt: new Date().toISOString(), location: signatureLocationRef.current });
     setSignatureModalOpen(false);
   }
@@ -234,6 +316,7 @@ export function ScenarioFormScreen({
   function handleSignatureClear() {
     setSignatureBlob(null);
     setSignaturePreviewUrl(null);
+    setExistingSignatureCleared(true);
     setSignatureMeta(null);
   }
 
@@ -257,12 +340,18 @@ export function ScenarioFormScreen({
       }
     }
 
-    if (photos.length < spec.photoMin) {
-      const missing = spec.photoMin - photos.length;
+    const totalPhotos = photos.length + existingPhotoCount;
+    if (totalPhotos < spec.photoMin) {
+      const missing = spec.photoMin - totalPhotos;
       list.push({
         key: "photos",
         message: spec.photoMin === 1 ? "A photo is needed" : `${missing} more photo${missing === 1 ? "" : "s"} needed`
       });
+    }
+
+    const locationBlockedReason = photoLocationBlockedReason(photos.length, photoMeta);
+    if (locationBlockedReason) {
+      list.push({ key: "photos", message: locationBlockedReason });
     }
 
     if (needsSignature && !hasSignature) {
@@ -270,7 +359,7 @@ export function ScenarioFormScreen({
     }
 
     return list;
-  }, [fields, photos.length, hasSignature, spec, needsSignature]);
+  }, [fields, photos.length, photoMeta, hasSignature, spec, needsSignature, existingPhotoCount]);
 
   const dirty =
     photos.length > 0 ||
@@ -487,6 +576,10 @@ export function ScenarioFormScreen({
                   setPhotoMeta(metas);
                 }}
                 registerCapture={registerCapture}
+                remoteFiles={(existingSubmission?.photoUrls ?? []).map((url, index) => ({
+                  id: `${existingSubmission?.submittedAt ?? "submitted"}-${index}`,
+                  url
+                }))}
               />
               {/* Small, quiet proof-of-place line -- where/when the most recently taken
                   photo was, not shown at all when nothing's been captured yet. Time and
@@ -510,9 +603,14 @@ export function ScenarioFormScreen({
                       {formatLocationLabel(captureCaption.location, captureCaption.locationName)}
                     </a>
                   ) : (
-                    <span className="pl-5">Location unavailable</span>
+                    <span className="pl-5">{waitingForPhotoLocation ?? "Location unavailable"}</span>
                   )}
                 </div>
+              )}
+              {waitingForPhotoLocation && !captureCaption && (
+                <p className="mt-3 text-helper font-medium text-warning" role="status" aria-live="polite">
+                  {waitingForPhotoLocation}
+                </p>
               )}
             </div>
           </Section>
@@ -536,7 +634,7 @@ export function ScenarioFormScreen({
                 )}
                 <SignatureField
                   signed={hasSignature}
-                  previewUrl={signaturePreviewUrl}
+                  previewUrl={shownSignatureUrl}
                   onOpen={() => setSignatureModalOpen(true)}
                   onClear={handleSignatureClear}
                   instruction="The customer signs to accept the terms above."

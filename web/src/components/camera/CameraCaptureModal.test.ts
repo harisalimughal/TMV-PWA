@@ -6,8 +6,8 @@ const current: CapturedLocation = { lat: 51.5, lng: -0.12, accuracy: 5 };
 const stepFallback: CapturedLocation = { lat: 51.6, lng: -0.13, accuracy: 9 };
 
 describe("camera capture location requirement", () => {
-  it("requires a current location for the first photo in a step", () => {
-    expect(canUseLocationForCapture(null, null, true)).toBe(false);
+  it("allows capture immediately even when current location is still pending", () => {
+    expect(canUseLocationForCapture(null, null, true)).toBe(true);
     expect(locationForCapture(null, null, true)).toBeNull();
   });
 

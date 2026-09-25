@@ -42,6 +42,7 @@ export function ConfirmDialog({
       onClose={onClose}
       title={title}
       size="sm"
+      placement="center"
       dismissible={!busy}
       footer={
         <div className="flex justify-end gap-2">

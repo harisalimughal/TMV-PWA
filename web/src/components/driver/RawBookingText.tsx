@@ -34,6 +34,23 @@ function looksLikePhone(label: string): boolean {
   return PHONE_LABEL_KEYWORDS.some(keyword => l.includes(keyword));
 }
 
+const NAME_LABEL_KEYWORDS = ["customer name", "client name", "contact name", "full name", "customer", "client", "name"];
+const EMAIL_LABEL_KEYWORDS = ["email", "e-mail", "mail"];
+
+function looksLikeName(label: string): boolean {
+  const l = label.toLowerCase();
+  return NAME_LABEL_KEYWORDS.some(keyword => l === keyword || l.includes(keyword));
+}
+
+function looksLikeEmail(label: string): boolean {
+  const l = label.toLowerCase();
+  return EMAIL_LABEL_KEYWORDS.some(keyword => l.includes(keyword));
+}
+
+function isCopyableField(label: string, value: string): boolean {
+  return Boolean(value) && (looksLikeAddress(label) || looksLikeName(label) || looksLikeEmail(label) || looksLikePhone(label));
+}
+
 /** A bare URL, e.g. a pasted Gmail thread link -- checked before LABEL_LINE because
  *  "https://..." would otherwise itself match as a "https" label with the rest of
  *  the URL as its value (":" right after "https" satisfies the label/value split). */
@@ -117,9 +134,8 @@ export interface RawBookingTextProps {
  * readability, none touching the words themselves: a "Label: value" line bolds its
  * label (the value stays normal weight, so labels stay the visual anchor); the
  * source's own blank-line paragraph breaks become light dividers instead of bare
- * vertical gaps; and an address-looking line (pickup/drop-off/stop-by, by label
- * wording -- see ADDRESS_LABEL_KEYWORDS) gets a tap-to-copy icon in front of its
- * value, same copy-to-clipboard pattern as JobRoute's address rows.
+ * vertical gaps; and contact/address-looking lines get a tap-to-copy icon in
+ * front of their value, same copy-to-clipboard pattern as JobRoute's address rows.
  */
 export function RawBookingText({ text, className }: RawBookingTextProps) {
   const [copied, setCopied] = useState<string | null>(null);
@@ -157,7 +173,7 @@ export function RawBookingText({ text, className }: RawBookingTextProps) {
                 </p>
               );
             }
-            const isAddress = looksLikeAddress(line.label) && Boolean(line.value);
+            const canCopy = isCopyableField(line.label, line.value);
             const isCopied = copied === line.value;
             // A divider right after Phone, same as the section dividers above --
             // unless Phone is already the last line here, where that border would
@@ -168,7 +184,7 @@ export function RawBookingText({ text, className }: RawBookingTextProps) {
                 <p className="text-body leading-relaxed [overflow-wrap:anywhere]">
                   <span className="font-semibold text-fg">{line.label}:</span>{" "}
                   <span className="text-fg-muted">{linkifyText(line.value)}</span>
-                  {isAddress && (
+                  {canCopy && (
                     <button
                       type="button"
                       onClick={() => copyValue(line.value)}

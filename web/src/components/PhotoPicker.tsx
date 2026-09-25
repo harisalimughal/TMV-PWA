@@ -6,6 +6,7 @@ import type { CapturedLocation, PhotoCaptureMeta } from "../lib/geo";
 import { reverseGeocodeLive } from "../api/jobs";
 import { cx } from "../ui";
 import { CameraCaptureModal } from "./camera";
+import { useLocationWatch } from "./camera/useLocationWatch";
 
 export interface PhotoPickerProps {
   label: string;
@@ -107,6 +108,8 @@ export function PhotoPicker({
   const [stepLocation, setStepLocation] = useState<CapturedLocation | null>(
     () => initialMeta?.find(meta => meta?.location)?.location ?? null
   );
+  const hasLocalPhotoMissingLocation = previews.some(preview => preview.meta && !preview.meta.location);
+  const backgroundLocationRef = useLocationWatch(cameraOpen || hasLocalPhotoMissingLocation);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   // Hand a camera-open trigger to the caller (e.g. a docked "Take photo" button),
@@ -140,6 +143,26 @@ export function PhotoPicker({
       });
     });
   }
+
+  useEffect(() => {
+    const location = backgroundLocationRef.current;
+    if (!location) return;
+    setStepLocation(location);
+    setPreviews(current => {
+      let changed = false;
+      const updatedUrls: string[] = [];
+      const next = current.map(preview => {
+        if (!preview.meta || preview.meta.location) return preview;
+        changed = true;
+        updatedUrls.push(preview.url);
+        return { ...preview, meta: { ...preview.meta, location } };
+      });
+      if (!changed) return current;
+      onChange(next.map(p => p.file), next.map(p => p.meta));
+      for (const url of updatedUrls) resolveLocationName(url, location);
+      return next;
+    });
+  }, [backgroundLocationRef.current, onChange]);
 
   async function addFiles(files: File[], metas: Array<PhotoCaptureMeta | null> = files.map(() => null)) {
     setProcessing(true);
