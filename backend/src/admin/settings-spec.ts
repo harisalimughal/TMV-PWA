@@ -75,7 +75,7 @@ export const SETTINGS_SPEC: SettingFieldSpec[] = [
     label: "Customer Message — Driver Introduction",
     type: "textarea",
     fallback: JOB_STARTED_MESSAGE_TEMPLATE,
-    hint: "Sent by SMS and email when the driver starts a job. Placeholders: {customerName} {companyName} " +
+    hint: "Sent by SMS when the driver taps I'm on the Way. The email text is separate in Messaging. Placeholders: {customerName} {companyName} " +
       "{pickup} {dropoff} {driverPhone} {vanRegistration} {driver_name} {job_date}."
   },
   {

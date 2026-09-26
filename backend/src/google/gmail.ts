@@ -185,8 +185,7 @@ export async function sendJobStartedEmail(
 ): Promise<void> {
   if (!job.customerEmail) return;
   // Subject is email-only (SMS has no equivalent concept), so it stays fixed rather
-  // than living in the shared admin-editable template. The body is exactly the same
-  // rendered text sent as the SMS -- one wording, both channels, no drift.
+  // than living in the admin-editable body template.
   const subject = `Your ${env.notificationFromName} team has started your job`;
   await sendPlainTextEmail(job.customerEmail, subject, renderMessageTemplate(template, job, driver));
 }

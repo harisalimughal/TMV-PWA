@@ -52,11 +52,11 @@ describe("liability flow helpers", () => {
     expect(liabilityCheckpointOptions.map(option => option.label)).toEqual(["Pickup", "Stop-by", "Drop-off"]);
   });
 
-  it("uses the requested job when opening Liability from the main job flow", () => {
+  it("uses the requested job only when it is today's active job", () => {
     const active = job({ jobId: "active", status: "IN_PROGRESS" });
-    const requested = job({ jobId: "requested", status: "READY" });
+    const requested = job({ jobId: "requested", status: "IN_PROGRESS" });
 
-    expect(pickLiabilityJob({ today: [active], past: [], next: [requested] }, "requested")?.jobId).toBe("requested");
+    expect(pickLiabilityJob({ today: [active, requested], past: [], next: [] }, "requested")?.jobId).toBe("requested");
   });
 
   it("falls back to the current in-progress job when Liability is opened from the tab", () => {
@@ -64,6 +64,12 @@ describe("liability flow helpers", () => {
     const active = job({ jobId: "active", status: "IN_PROGRESS" });
 
     expect(pickLiabilityJob({ today: [ready, active], past: [], next: [] })?.jobId).toBe("active");
+  });
+
+  it("does not treat an old in-progress job as the current liability job", () => {
+    const oldActive = job({ jobId: "old-active", status: "IN_PROGRESS" });
+
+    expect(pickLiabilityJob({ today: [], past: [oldActive], next: [] })).toBeNull();
   });
 
   it("records the selected checkpoint location in scenario fields", () => {

@@ -15,12 +15,12 @@ export interface LiabilityJobBuckets {
 }
 
 export function pickLiabilityJob(buckets: LiabilityJobBuckets, requestedJobId?: string): Job | null {
-  const all = [...buckets.today, ...buckets.next, ...buckets.past];
+  const activeTodayJobs = buckets.today.filter(job => job.status === "IN_PROGRESS");
   if (requestedJobId) {
-    const requested = all.find(job => job.jobId === requestedJobId);
+    const requested = activeTodayJobs.find(job => job.jobId === requestedJobId);
     if (requested) return requested;
   }
-  return all.find(job => job.status === "IN_PROGRESS") ?? null;
+  return activeTodayJobs[0] ?? null;
 }
 
 export function reportedAtForLiabilityCheckpoint(

@@ -73,6 +73,7 @@ function job(overrides: Partial<any> = {}) {
 describe("sendOnMyWay SMS notification", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    getSetting.mockResolvedValue("On my way {vanRegistration}");
     getDriverProfile.mockResolvedValue(driver);
     listActivityForJob.mockResolvedValue([]);
   });
@@ -109,6 +110,7 @@ describe("sendOnMyWay SMS notification", () => {
 describe("sendOnMyWay email notification", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    getSetting.mockResolvedValue("On my way {vanRegistration}");
     getDriverProfile.mockResolvedValue(driver);
     listActivityForJob.mockResolvedValue([]);
   });
@@ -185,6 +187,7 @@ describe("sendOnMyWay email notification", () => {
 describe("startJob", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    getSetting.mockResolvedValue("On my way {vanRegistration}");
     getDriverProfile.mockResolvedValue(driver);
     listActivityForJob.mockResolvedValue([]);
   });

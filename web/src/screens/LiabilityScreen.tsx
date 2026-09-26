@@ -165,8 +165,8 @@ export function LiabilityScreen({ initialCheckpoint, initialJobId }: LiabilitySc
             )}
 
             {!activeJob && (
-              <Alert tone="warning" title="Please start the job to use liability tab">
-                Liability reports are saved against the job that is currently in progress.
+              <Alert tone="warning" title="No active job">
+                Start a job first to use the Liability tab. Reports are saved against the job currently in progress.
               </Alert>
             )}
 
