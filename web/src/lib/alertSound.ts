@@ -6,11 +6,15 @@
  * page has seen a user gesture, in which case this silently does nothing rather than
  * throwing -- a missed chirp is fine, the popup itself still shows and stays on screen.
  */
+function createAudioContext(): AudioContext | null {
+  const AudioContextCtor = window.AudioContext || (window as any).webkitAudioContext;
+  return AudioContextCtor ? new AudioContextCtor() : null;
+}
+
 export function playZoneAlertSound(): void {
   try {
-    const AudioContextCtor = window.AudioContext || (window as any).webkitAudioContext;
-    if (!AudioContextCtor) return;
-    const ctx = new AudioContextCtor();
+    const ctx = createAudioContext();
+    if (!ctx) return;
 
     const playTone = (freq: number, startAt: number, duration: number) => {
       const osc = ctx.createOscillator();
@@ -33,6 +37,46 @@ export function playZoneAlertSound(): void {
     playTone(660, 0.77, 0.18);
 
     setTimeout(() => ctx.close().catch(() => {}), 1500);
+  } catch {
+    // best-effort only
+  }
+}
+
+/**
+ * Louder, longer ring for persistent driver popups (admin broadcast, congestion and
+ * tunnel alerts). Browsers still cap output volume and may block autoplay before a
+ * user gesture; this keeps the app side as attention-grabbing as the platform allows.
+ */
+export function playPersistentAlertSound(): void {
+  try {
+    const ctx = createAudioContext();
+    if (!ctx) return;
+    const master = ctx.createGain();
+    master.gain.setValueAtTime(0.0001, ctx.currentTime);
+    master.gain.exponentialRampToValueAtTime(0.85, ctx.currentTime + 0.04);
+    master.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 3.4);
+    master.connect(ctx.destination);
+
+    const playRing = (startAt: number) => {
+      for (const freq of [988, 1245]) {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = "square";
+        osc.frequency.value = freq;
+        gain.gain.setValueAtTime(0.0001, ctx.currentTime + startAt);
+        gain.gain.exponentialRampToValueAtTime(0.38, ctx.currentTime + startAt + 0.03);
+        gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + startAt + 0.48);
+        osc.connect(gain);
+        gain.connect(master);
+        osc.start(ctx.currentTime + startAt);
+        osc.stop(ctx.currentTime + startAt + 0.52);
+      }
+    };
+
+    // Five urgent rings, spaced like a phone/alarm cadence rather than a subtle ping.
+    [0, 0.62, 1.24, 1.86, 2.48].forEach(playRing);
+
+    setTimeout(() => ctx.close().catch(() => {}), 3800);
   } catch {
     // best-effort only
   }

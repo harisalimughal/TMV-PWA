@@ -2,8 +2,10 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { ToastProvider } from "./ui/Toast";
 import { InAppNotificationListener } from "./InAppNotificationListener";
+import { playPersistentAlertSound } from "../lib/alertSound";
 
 vi.mock("../lib/alertSound", () => ({
+  playPersistentAlertSound: vi.fn(),
   playZoneAlertSound: vi.fn()
 }));
 
@@ -50,6 +52,7 @@ describe("InAppNotificationListener", () => {
     const alert = await screen.findByRole("alert");
     expect(alert).toHaveTextContent("Traffic update");
     expect(alert).toHaveTextContent("Use the north entrance today.");
+    expect(playPersistentAlertSound).toHaveBeenCalledOnce();
 
     await waitFor(() => expect(screen.queryByRole("status")).not.toHaveTextContent("Traffic update"));
 

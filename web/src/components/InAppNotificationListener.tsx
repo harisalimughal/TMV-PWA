@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import { ShieldAlert, X } from "lucide-react";
 import { useToast } from "./ui/Toast";
 import { notifyJobsRefresh } from "../lib/jobsRefresh";
-import { playZoneAlertSound } from "../lib/alertSound";
+import { playPersistentAlertSound } from "../lib/alertSound";
 
 interface ZoneAlert {
   id: number;
@@ -37,9 +37,7 @@ export function InAppNotificationListener(): React.ReactElement | null {
 
       if (kind === "broadcast_message" || kind === "congestion_zone" || kind === "tunnel_zone") {
         setZoneAlerts(prev => [...prev, { id: nextZoneAlertId++, title, body }]);
-        if (kind === "congestion_zone" || kind === "tunnel_zone") {
-          playZoneAlertSound();
-        }
+        playPersistentAlertSound();
       } else {
         toast.info(`${title}: ${body}`, url ? { onClick: () => { window.location.href = url; } } : undefined);
       }
