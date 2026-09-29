@@ -2,10 +2,11 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { ToastProvider } from "./ui/Toast";
 import { InAppNotificationListener } from "./InAppNotificationListener";
-import { playPersistentAlertSound } from "../lib/alertSound";
+import { playPersistentAlertSound, primePersistentAlertSound } from "../lib/alertSound";
 
 vi.mock("../lib/alertSound", () => ({
   playPersistentAlertSound: vi.fn(),
+  primePersistentAlertSound: vi.fn(),
   playZoneAlertSound: vi.fn()
 }));
 
@@ -40,6 +41,14 @@ function renderListener() {
 }
 
 describe("InAppNotificationListener", () => {
+  it("primes alert audio on the first driver gesture so later popup sounds can play", () => {
+    renderListener();
+
+    window.dispatchEvent(new Event("pointerdown"));
+
+    expect(primePersistentAlertSound).toHaveBeenCalledOnce();
+  });
+
   it("shows admin broadcast messages as persistent top popups until the close button is clicked", async () => {
     const { sendPush } = renderListener();
 

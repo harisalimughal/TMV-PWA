@@ -11,6 +11,39 @@ function createAudioContext(): AudioContext | null {
   return AudioContextCtor ? new AudioContextCtor() : null;
 }
 
+let persistentCtx: AudioContext | null = null;
+
+function getPersistentAudioContext(): AudioContext | null {
+  if (persistentCtx && persistentCtx.state !== "closed") return persistentCtx;
+  persistentCtx = createAudioContext();
+  return persistentCtx;
+}
+
+/**
+ * Mobile browsers, especially iOS installed PWAs, often require Web Audio to be
+ * started inside a user gesture before later programmatic alert sounds can play.
+ * This primes a shared context with a near-silent blip on the driver's first tap/key.
+ */
+export function primePersistentAlertSound(): void {
+  try {
+    const ctx = getPersistentAudioContext();
+    if (!ctx) return;
+    void ctx.resume?.();
+
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = "sine";
+    osc.frequency.value = 440;
+    gain.gain.setValueAtTime(0.0001, ctx.currentTime);
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start(ctx.currentTime);
+    osc.stop(ctx.currentTime + 0.03);
+  } catch {
+    // best-effort only
+  }
+}
+
 export function playZoneAlertSound(): void {
   try {
     const ctx = createAudioContext();
@@ -49,8 +82,9 @@ export function playZoneAlertSound(): void {
  */
 export function playPersistentAlertSound(): void {
   try {
-    const ctx = createAudioContext();
+    const ctx = getPersistentAudioContext() ?? createAudioContext();
     if (!ctx) return;
+    void ctx.resume?.();
     const master = ctx.createGain();
     master.gain.setValueAtTime(0.0001, ctx.currentTime);
     master.gain.exponentialRampToValueAtTime(0.85, ctx.currentTime + 0.04);
@@ -76,7 +110,9 @@ export function playPersistentAlertSound(): void {
     // Five urgent rings, spaced like a phone/alarm cadence rather than a subtle ping.
     [0, 0.62, 1.24, 1.86, 2.48].forEach(playRing);
 
-    setTimeout(() => ctx.close().catch(() => {}), 3800);
+    if (ctx !== persistentCtx) {
+      setTimeout(() => ctx.close().catch(() => {}), 3800);
+    }
   } catch {
     // best-effort only
   }

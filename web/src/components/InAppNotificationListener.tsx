@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import { ShieldAlert, X } from "lucide-react";
 import { useToast } from "./ui/Toast";
 import { notifyJobsRefresh } from "../lib/jobsRefresh";
-import { playPersistentAlertSound } from "../lib/alertSound";
+import { playPersistentAlertSound, primePersistentAlertSound } from "../lib/alertSound";
 
 interface ZoneAlert {
   id: number;
@@ -22,6 +22,11 @@ export function InAppNotificationListener(): React.ReactElement | null {
   const [zoneAlerts, setZoneAlerts] = useState<ZoneAlert[]>([]);
 
   useEffect(() => {
+    const primeAudio = () => primePersistentAlertSound();
+    window.addEventListener("pointerdown", primeAudio, { once: true, passive: true });
+    window.addEventListener("keydown", primeAudio, { once: true });
+    window.addEventListener("touchstart", primeAudio, { once: true, passive: true });
+
     // 1. BroadcastChannel listener (from service worker / push-worker.js)
     // Tapping the toast takes the driver/admin to whatever the notification was
     // about -- the same place tapping the real OS notification goes (push-worker.js's
@@ -69,6 +74,9 @@ export function InAppNotificationListener(): React.ReactElement | null {
     }
 
     return () => {
+      window.removeEventListener("pointerdown", primeAudio);
+      window.removeEventListener("keydown", primeAudio);
+      window.removeEventListener("touchstart", primeAudio);
       if (channel) channel.close();
       if ("serviceWorker" in navigator) {
         navigator.serviceWorker.removeEventListener("message", onSwMessage);
