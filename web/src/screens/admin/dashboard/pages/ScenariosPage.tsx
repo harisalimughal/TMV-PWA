@@ -14,13 +14,14 @@ import { SubmissionDetailDrawer } from "../components/SubmissionDetailDrawer";
 import { Button } from "../../../../ui";
 import { PaperDossierReport } from "../components/PaperDossierReport";
 import { NormalizedJob } from "../types";
-import { fetchScenarios, fetchDrivers } from "../api";
+import { fetchScenarios } from "../api";
 import { PaperScenarioReport } from "../components/PaperScenarioReport";
 import { formatLondonDateTime } from "../utils/date";
 import { DateRangePicker, defaultDashboardDateRange } from "../components/DateRangePicker";
 import { LiabilityConfigModal } from "../components/LiabilityConfigModal";
 import { ApiErrorState } from "../components/ApiErrorState";
 import { Settings2 } from "lucide-react";
+import { useDriverOptions } from "../hooks/useDriverOptions";
 
 interface Props {
   kind: "checkin" | "checkout" | "parking" | "liability";
@@ -94,10 +95,7 @@ export function ScenariosPage({ kind }: Props) {
   // with a real account, resolved server-side against driver_accounts (see
   // scenarios.routes.ts's resolveDriverInitials), not the free-text `driver` field a
   // submission was stamped with.
-  const { data: driversData } = useQuery({ queryKey: ["drivers_summary"], queryFn: () => fetchDrivers() });
-  const driverOptions = (driversData?.drivers || [])
-    .filter(d => d.initials && d.initials !== "UNASSIGNED" && d.hasAccount)
-    .sort((a, b) => (a.fullName || a.initials).localeCompare(b.fullName || b.initials));
+  const { options: driverOptions, isLoading: driverOptionsLoading } = useDriverOptions();
 
   useEffect(() => {
     setPage(1);
@@ -134,10 +132,11 @@ export function ScenariosPage({ kind }: Props) {
           <select
             value={driverFilter}
             onChange={e => { setDriverFilter(e.target.value); setPage(1); }}
+            disabled={driverOptionsLoading}
             className="shrink-0 h-9 px-3 rounded-control border border-admin-line bg-admin-surface text-[13px] font-medium text-admin-ink outline-none focus:border-admin-brand"
           >
-            <option value="">All drivers</option>
-            {driverOptions.map(d => (
+            <option value="">{driverOptionsLoading ? "Loading drivers..." : "All drivers"}</option>
+            {!driverOptionsLoading && driverOptions.map(d => (
               <option key={d.initials} value={d.initials}>{d.fullName || d.initials}</option>
             ))}
           </select>

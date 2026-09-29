@@ -18,6 +18,7 @@ import { DateRangePicker, defaultDashboardDateRange } from "../components/DateRa
 import { DriverSummaryItem } from "../types";
 import { Button } from "../../../../ui";
 import { formatDuration } from "../utils/kpi";
+import { DRIVER_OPTIONS_QUERY_KEY } from "../hooks/useDriverOptions";
 
 export function DriversPage() {
   const queryClient = useQueryClient();
@@ -59,6 +60,7 @@ export function DriversPage() {
       active: false
     });
     queryClient.invalidateQueries({ queryKey: ["drivers_summary"] });
+    queryClient.invalidateQueries({ queryKey: DRIVER_OPTIONS_QUERY_KEY });
   };
 
   const handleDelete = async (driver: DriverSummaryItem) => {
@@ -73,6 +75,7 @@ export function DriversPage() {
     try {
       await deleteDriver(driver.email);
       queryClient.invalidateQueries({ queryKey: ["drivers_summary"] });
+      queryClient.invalidateQueries({ queryKey: DRIVER_OPTIONS_QUERY_KEY });
     } catch (err: any) {
       window.alert(err?.message || "Failed to delete driver.");
     }

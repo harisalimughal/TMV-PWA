@@ -21,6 +21,7 @@ interface Props {
   driverFilter?: string;
   onDriverFilterChange?: (initials: string) => void;
   driverOptions?: Array<{ initials: string; fullName?: string }>;
+  driverOptionsLoading?: boolean;
   from?: string;
   to?: string;
   onDateChange: (f?: string, t?: string) => void;
@@ -48,7 +49,7 @@ interface Props {
 export function SubmissionPageTemplate({
   title, icon: Icon, status = "Published", statusColor = "green",
   search, onSearchChange, searchPlaceholder = "Search...",
-  driverFilter, onDriverFilterChange, driverOptions,
+  driverFilter, onDriverFilterChange, driverOptions, driverOptionsLoading = false,
   from, to, onDateChange,
   itemCount, isFetching, onRefresh,
   page, pageSize, totalItems, onPageChange,
@@ -85,10 +86,11 @@ export function SubmissionPageTemplate({
               <select
                 value={driverFilter || ""}
                 onChange={e => onDriverFilterChange(e.target.value)}
+                disabled={driverOptionsLoading}
                 className="shrink-0 h-9 px-3 rounded-card bg-admin-surface border border-admin-line text-[13px] font-medium text-admin-ink outline-none focus:border-admin-brand"
               >
-                <option value="">All drivers</option>
-                {(driverOptions || []).map(d => (
+                <option value="">{driverOptionsLoading ? "Loading drivers..." : "All drivers"}</option>
+                {!driverOptionsLoading && (driverOptions || []).map(d => (
                   <option key={d.initials} value={d.initials}>{d.fullName || d.initials}</option>
                 ))}
               </select>

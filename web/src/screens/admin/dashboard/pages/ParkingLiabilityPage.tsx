@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { fetchScenarios, fetchDrivers } from "../api";
+import { fetchScenarios } from "../api";
 import { formatLondonDateTime } from "../utils/date";
 import { resolveDriver } from "../utils/drivers";
 import { evidencePhotoCount } from "../utils/evidence";
@@ -9,6 +9,7 @@ import { SubmissionPageTemplate } from "../components/SubmissionPageTemplate";
 import { ApiErrorState } from "../components/ApiErrorState";
 import { defaultDashboardDateRange } from "../components/DateRangePicker";
 import { ClipboardList, Search } from "lucide-react";
+import { useDriverOptions } from "../hooks/useDriverOptions";
 
 export function ParkingLiabilityPage() {
   const [search, setSearch] = useState("");
@@ -28,10 +29,7 @@ export function ParkingLiabilityPage() {
 
   // Same roster + filter pattern as Finished Jobs' driver filter -- resolved
   // server-side against driver_accounts (see scenarios.routes.ts).
-  const { data: driversData } = useQuery({ queryKey: ["drivers_summary"], queryFn: () => fetchDrivers() });
-  const driverOptions = (driversData?.drivers || [])
-    .filter(d => d.initials && d.initials !== "UNASSIGNED" && d.hasAccount)
-    .sort((a, b) => (a.fullName || a.initials).localeCompare(b.fullName || b.initials));
+  const { options: driverOptions, isLoading: driverOptionsLoading } = useDriverOptions();
 
   const processedData = useMemo(() => {
     if (!response?.items) return [];
@@ -209,6 +207,7 @@ export function ParkingLiabilityPage() {
         driverFilter={driverFilter}
         onDriverFilterChange={v => { setDriverFilter(v); setPage(1); }}
         driverOptions={driverOptions}
+        driverOptionsLoading={driverOptionsLoading}
         from={from}
         to={to}
         onDateChange={(f, t) => { setFrom(f); setTo(t); setPage(1); }}

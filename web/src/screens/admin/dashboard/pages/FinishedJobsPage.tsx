@@ -18,7 +18,7 @@ import { PaperDossierReport } from "../components/PaperDossierReport";
 import { BulkDeleteModal } from "../components/BulkDeleteModal";
 import { DriverViewedDot } from "../components/DriverViewedDot";
 import { FileText } from "lucide-react";
-import { fetchJobs, fetchDrivers, fetchJobDetail } from "../api";
+import { fetchJobs, fetchJobDetail } from "../api";
 import { NormalizedJob, formatGBP, toPounds } from "../types";
 import { DateRangePicker, defaultDashboardDateRange } from "../components/DateRangePicker";
 import { ApiErrorState } from "../components/ApiErrorState";
@@ -26,6 +26,7 @@ import { formatLondonDateTime } from "../utils/date";
 import { DelayBandBadge, JobStatusBadge } from "../components/StatusBadge";
 const isTestOrIncomplete = (job: any) => { return job.customerName === "hh" || String(job.pickup).includes("test") || String(job.dropoff).includes("test"); };
 import { resolveDriver, formatVanReg } from "../utils/drivers";
+import { useDriverOptions } from "../hooks/useDriverOptions";
 
 export function FinishedJobsPage() {
   const [viewMode, setViewMode] = useState<"table" | "cards">("cards");
@@ -55,10 +56,7 @@ export function FinishedJobsPage() {
   // "UNASSIGNED" and any driverInitials code that only exists because it's typed on a
   // job (or a deleted driver's old jobs) with no actual driver_accounts doc behind it
   // -- those aren't in the Drivers tab, so they shouldn't be selectable here either.
-  const { data: driversData } = useQuery({ queryKey: ["drivers_summary"], queryFn: () => fetchDrivers() });
-  const driverOptions = (driversData?.drivers || [])
-    .filter(d => d.initials && d.initials !== "UNASSIGNED" && d.hasAccount)
-    .sort((a, b) => (a.fullName || a.initials).localeCompare(b.fullName || b.initials));
+  const { options: driverOptions, isLoading: driverOptionsLoading } = useDriverOptions();
 
   const isTestOrIncomplete = (job: NormalizedJob) => {
     const cust = (job.customerName || "").toLowerCase();
@@ -151,10 +149,11 @@ export function FinishedJobsPage() {
           <select
             value={driverFilter}
             onChange={e => { setDriverFilter(e.target.value); setPage(1); }}
+            disabled={driverOptionsLoading}
             className="shrink-0 h-10 px-3 rounded-control border border-line-strong bg-surface text-fg text-button shadow-sm outline-none focus:border-admin-brand"
           >
-            <option value="">All drivers</option>
-            {driverOptions.map(d => (
+            <option value="">{driverOptionsLoading ? "Loading drivers..." : "All drivers"}</option>
+            {!driverOptionsLoading && driverOptions.map(d => (
               <option key={d.initials} value={d.initials}>{d.fullName || d.initials}</option>
             ))}
           </select>

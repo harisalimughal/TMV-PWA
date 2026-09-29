@@ -4,6 +4,7 @@ import { X, AlertTriangle, CheckCircle2 } from "lucide-react";
 import { fetchDrivers, fetchLiveFleet, saveDriver } from "../api";
 import { DriverSummaryItem } from "../types";
 import { Button, IconButton } from "../../../../ui";
+import { DRIVER_OPTIONS_QUERY_KEY } from "../hooks/useDriverOptions";
 
 interface Props {
   isOpen: boolean;
@@ -142,6 +143,7 @@ export function AddDriverModal({ isOpen, onClose, driverToEdit }: Props) {
         };
       });
       queryClient.invalidateQueries({ queryKey: ["drivers_summary"] });
+      queryClient.invalidateQueries({ queryKey: DRIVER_OPTIONS_QUERY_KEY });
       if (result.warning) {
         // Stay open so the warning is actually seen -- the Sheets save did succeed,
         // this isn't a failure, but silently closing would hide that the password

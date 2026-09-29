@@ -11,6 +11,7 @@ import { DriverViewedDot } from "../components/DriverViewedDot";
 import { formatLondonDateTime } from "../utils/date";
 import { downloadCsv, stampForFilename, toCsv } from "../utils/csv";
 import { resolveDriver, formatVanReg } from "../utils/drivers";
+import { useDriverOptions } from "../hooks/useDriverOptions";
 import {
   Search,
   Download,
@@ -96,10 +97,7 @@ export function JobsPage() {
 
   // Same roster + filter pattern as Finished Jobs' driver filter -- every driver with
   // a real account, resolved server-side by jobs.routes.ts's own driver filter.
-  const { data: driversData } = useQuery({ queryKey: ["drivers_summary"], queryFn: () => fetchDrivers() });
-  const driverOptions = (driversData?.drivers || [])
-    .filter(d => d.initials && d.initials !== "UNASSIGNED" && d.hasAccount)
-    .sort((a, b) => (a.fullName || a.initials).localeCompare(b.fullName || b.initials));
+  const { options: driverOptions, isLoading: driverOptionsLoading } = useDriverOptions();
 
   // Debounce search
   useEffect(() => {
@@ -285,10 +283,11 @@ export function JobsPage() {
           <select
             value={driverFilter}
             onChange={e => { setDriverFilter(e.target.value); setPage(1); }}
+            disabled={driverOptionsLoading}
             className="shrink-0 h-10 px-3 rounded-card border border-admin-line/50 bg-admin-surface text-[13px] font-medium text-admin-ink outline-none focus:border-admin-brand"
           >
-            <option value="">All drivers</option>
-            {driverOptions.map(d => (
+            <option value="">{driverOptionsLoading ? "Loading drivers..." : "All drivers"}</option>
+            {!driverOptionsLoading && driverOptions.map(d => (
               <option key={d.initials} value={d.initials}>{d.fullName || d.initials}</option>
             ))}
           </select>
@@ -899,13 +898,13 @@ function BulkReassignModal({
   onClose: () => void;
   onDone: () => void;
 }) {
-  const { data, isLoading: driversLoading } = useQuery({ queryKey: ["drivers_summary"], queryFn: () => fetchDrivers() });
+  const { options, isLoading: driversLoading } = useDriverOptions();
   const [initials, setInitials] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState(0);
 
-  const drivers = (data?.drivers || []).filter(d => d.initials && d.initials !== "UN" && d.active && d.hasAccount);
+  const drivers = options.filter(d => d.active);
 
   async function handleConfirm() {
     if (!initials || busy) return;
