@@ -12,6 +12,22 @@ import { getDriverAccount } from "../auth/driver-account.service";
 import { requireAdminAuth } from "../auth/require-admin-auth";
 import { readAdminSessionCookie, verifyAdminSessionToken } from "../auth/admin-session";
 import { log } from "../utils/logger";
+import type { PushNotificationPayload } from "./push.service";
+
+interface AdminBroadcastInput {
+  title: string;
+  body: string;
+  url?: string;
+}
+
+export function createAdminBroadcastPayload(input: AdminBroadcastInput): PushNotificationPayload {
+  return {
+    title: input.title,
+    body: input.body,
+    url: input.url || "/",
+    data: { kind: "broadcast_message" }
+  };
+}
 
 export function pushRoutes(): Router {
   const router = Router();
@@ -158,11 +174,7 @@ export function pushRoutes(): Router {
         return res.status(400).json({ error: "Title and body are required" });
       }
 
-      const payload = {
-        title,
-        body,
-        url: url || "/"
-      };
+      const payload = createAdminBroadcastPayload({ title, body, url });
 
       if (driverInitials) {
         const result = await sendPushToDriver(driverInitials, payload);

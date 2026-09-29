@@ -35,9 +35,11 @@ export function InAppNotificationListener(): React.ReactElement | null {
       const url = payload.url;
       const kind = payload.data?.kind;
 
-      if (kind === "congestion_zone" || kind === "tunnel_zone") {
+      if (kind === "broadcast_message" || kind === "congestion_zone" || kind === "tunnel_zone") {
         setZoneAlerts(prev => [...prev, { id: nextZoneAlertId++, title, body }]);
-        playZoneAlertSound();
+        if (kind === "congestion_zone" || kind === "tunnel_zone") {
+          playZoneAlertSound();
+        }
       } else {
         toast.info(`${title}: ${body}`, url ? { onClick: () => { window.location.href = url; } } : undefined);
       }
