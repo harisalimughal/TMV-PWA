@@ -21,6 +21,10 @@ export interface MessageDef {
   titleFallback?: string;
   bodyKey: string;
   bodyFallback: string;
+  /** Email only: optional HTML body. Empty/missing means send the plain body as
+   *  text-only, preserving existing behaviour until an admin opts into HTML. */
+  htmlKey?: string;
+  htmlFallback?: string;
   variables: string[];
 }
 
@@ -65,6 +69,8 @@ export const MESSAGE_CATALOG: MessageDef[] = [
     defaultEnabled: true,
     bodyKey: "JOB_STARTED_EMAIL_MESSAGE_TEXT",
     bodyFallback: JOB_STARTED_MESSAGE_TEMPLATE,
+    htmlKey: "JOB_STARTED_EMAIL_HTML",
+    htmlFallback: "",
     variables: SHARED_VARIABLES
   },
   {
@@ -77,6 +83,8 @@ export const MESSAGE_CATALOG: MessageDef[] = [
     defaultEnabled: true,
     bodyKey: "REVIEW_REQUEST_EMAIL_TEXT",
     bodyFallback: REVIEW_REQUEST_EMAIL_TEMPLATE,
+    htmlKey: "REVIEW_REQUEST_EMAIL_HTML",
+    htmlFallback: "",
     variables: ["{NAME}", ...SHARED_VARIABLES]
   },
 
@@ -98,6 +106,8 @@ export const MESSAGE_CATALOG: MessageDef[] = [
       "Drop-off: {dropoff}\n" +
       "Booked: {job_date}\n" +
       "Job ID: {jobId}\n",
+    htmlKey: "DRIVER_JOB_ASSIGNMENT_EMAIL_HTML",
+    htmlFallback: "",
     variables: ["{customerName}", "{pickup}", "{dropoff}", "{job_date}", "{jobId}"]
   },
   {
@@ -181,6 +191,19 @@ export async function getMessageBody(
   const def = findMessageDef(id);
   if (!def) return "";
   const raw = await getSetting(def.bodyKey, def.bodyFallback);
+  return job ? renderMessageTemplate(raw, job, driver, extra) : raw;
+}
+
+export async function getMessageHtml(
+  id: string,
+  job?: Job,
+  driver?: Pick<DriverProfile, "phone" | "vanRegistration" | "fullName">,
+  extra?: Record<string, string>
+): Promise<string> {
+  const def = findMessageDef(id);
+  if (!def?.htmlKey) return "";
+  const raw = await getSetting(def.htmlKey, def.htmlFallback || "");
+  if (!raw.trim()) return "";
   return job ? renderMessageTemplate(raw, job, driver, extra) : raw;
 }
 

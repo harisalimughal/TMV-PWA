@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { ExtraChargeType, JobStatus, PaymentMethod } from "../src/jobs/job.types";
+import { EvidenceStatus, ExtraChargeType, JobStatus, PaymentMethod } from "../src/jobs/job.types";
 import { WorkflowState } from "../src/workflow/workflow.states";
 
 vi.mock("../src/auth/driver-account.service", () => ({
@@ -13,6 +13,225 @@ vi.mock("../src/db/settings.repo", () => ({
 import { normalizeMongoDataset } from "../src/admin/dashboard/normalize";
 
 describe("normalizeMongoDataset", () => {
+  it("includes the total adjustment note for admin displays", async () => {
+    const [job] = await normalizeMongoDataset({
+      jobs: [{
+        jobId: "TMV-ADJUSTED",
+        calendarEventId: "cal-adjusted",
+        driverInitials: "AB",
+        customerName: "Client",
+        customerEmail: "",
+        customerPhone: "",
+        pickup: "A",
+        dropoff: "B",
+        crewSize: 2,
+        basePrice: 100,
+        paidOnline: false,
+        bookedStart: "2026-09-25T09:00:00.000Z",
+        bookedFinish: "2026-09-25T11:00:00.000Z",
+        actualStart: "2026-09-25T09:00:00.000Z",
+        actualFinish: "2026-09-25T11:00:00.000Z",
+        bookedMinutes: 120,
+        actualMinutes: 120,
+        differenceMinutes: 0,
+        delayStatus: "On time",
+        extraCharges: [],
+        overtimeMinutes: 0,
+        overtimeCharge: 0,
+        calculatedTotalCharges: 100,
+        totalCharges: 100,
+        amountCharged: 80,
+        totalAdjustmentNote: "Discount agreed with office",
+        paymentMethod: "Card",
+        paymentStatus: "Recorded",
+        clientNamePostcode: "",
+        clientConfirmedBy: "",
+        signatureUrl: "",
+        driveFolderId: "",
+        driveFolderUrl: "",
+        status: JobStatus.COMPLETED,
+        currentState: WorkflowState.COMPLETED,
+        rawTitle: "",
+        rawDescription: "",
+        createdAt: "2026-09-25T08:00:00.000Z",
+        updatedAt: "2026-09-25T11:00:00.000Z"
+      } as any],
+      evidence: [],
+      activity: [],
+      exceptions: [],
+      scenarioSubmissions: [],
+      fetchedAt: "2026-09-25T11:05:00.000Z",
+      durationMs: 0
+    });
+
+    expect(job.totalAdjustmentNote).toBe("Discount agreed with office");
+  });
+
+  it("flags van loaded photos that were uploaded more than 15 minutes after pickup arrival", async () => {
+    const [job] = await normalizeMongoDataset({
+      jobs: [{
+        jobId: "TMV-LOAD-LATE",
+        calendarEventId: "cal-load-late",
+        driverInitials: "AB",
+        customerName: "Client",
+        customerEmail: "",
+        customerPhone: "",
+        pickup: "A",
+        dropoff: "B",
+        crewSize: 2,
+        basePrice: 100,
+        paidOnline: false,
+        bookedStart: "2026-09-25T09:00:00.000Z",
+        bookedFinish: "2026-09-25T11:00:00.000Z",
+        actualStart: "2026-09-25T09:00:00.000Z",
+        actualFinish: "",
+        bookedMinutes: 120,
+        actualMinutes: 0,
+        differenceMinutes: 0,
+        delayStatus: "Waiting",
+        extraCharges: [],
+        overtimeMinutes: 0,
+        overtimeCharge: 0,
+        totalCharges: 100,
+        amountCharged: 0,
+        paymentMethod: "",
+        paymentStatus: "",
+        clientNamePostcode: "",
+        clientConfirmedBy: "",
+        signatureUrl: "",
+        driveFolderId: "",
+        driveFolderUrl: "",
+        status: JobStatus.IN_PROGRESS,
+        currentState: WorkflowState.WAITING_EMPTY_VAN_PHOTO,
+        rawTitle: "",
+        rawDescription: "",
+        createdAt: "2026-09-25T08:00:00.000Z",
+        updatedAt: "2026-09-25T09:18:00.000Z"
+      } as any],
+      evidence: [
+        {
+          evidenceId: "arrival-1",
+          jobId: "TMV-LOAD-LATE",
+          driverEmail: "driver@example.com",
+          evidenceType: "Arrival",
+          contentType: "image/jpeg",
+          fileName: "arrival.jpg",
+          status: EvidenceStatus.COMPLETED,
+          receivedAt: "2026-09-25T09:01:00.000Z",
+          processingStartedAt: "2026-09-25T09:01:00.000Z",
+          processingCompletedAt: "2026-09-25T09:02:00.000Z",
+          cloudinaryPublicId: "arrival",
+          cloudinaryUrl: "https://example.com/arrival.jpg",
+          retryCount: 0,
+          lastError: "",
+          capturedAt: "2026-09-25T09:00:00.000Z"
+        },
+        {
+          evidenceId: "loaded-1",
+          jobId: "TMV-LOAD-LATE",
+          driverEmail: "driver@example.com",
+          evidenceType: "VanLoaded",
+          contentType: "image/jpeg",
+          fileName: "loaded.jpg",
+          status: EvidenceStatus.COMPLETED,
+          receivedAt: "2026-09-25T09:18:00.000Z",
+          processingStartedAt: "2026-09-25T09:18:00.000Z",
+          processingCompletedAt: "2026-09-25T09:19:00.000Z",
+          cloudinaryPublicId: "loaded",
+          cloudinaryUrl: "https://example.com/loaded.jpg",
+          retryCount: 0,
+          lastError: "",
+          capturedAt: "2026-09-25T09:18:00.000Z"
+        }
+      ],
+      activity: [],
+      exceptions: [],
+      scenarioSubmissions: [],
+      fetchedAt: "2026-09-25T09:20:00.000Z",
+      durationMs: 0
+    });
+
+    expect(job.pickupArrivalAt).toBe("2026-09-25T09:00:00.000Z");
+    expect(job.vanLoadedAt).toBe("2026-09-25T09:18:00.000Z");
+    expect(job.vanLoadDelayMinutes).toBe(18);
+    expect(job.vanLoadLate).toBe(true);
+    expect(job.vanLoadOverdue).toBe(false);
+  });
+
+  it("flags jobs where pickup arrival is recorded but van loaded is still missing after 15 minutes", async () => {
+    const [job] = await normalizeMongoDataset({
+      jobs: [{
+        jobId: "TMV-LOAD-OVERDUE",
+        calendarEventId: "cal-load-overdue",
+        driverInitials: "AB",
+        customerName: "Client",
+        customerEmail: "",
+        customerPhone: "",
+        pickup: "A",
+        dropoff: "B",
+        crewSize: 2,
+        basePrice: 100,
+        paidOnline: false,
+        bookedStart: "2026-09-25T09:00:00.000Z",
+        bookedFinish: "2026-09-25T11:00:00.000Z",
+        actualStart: "2026-09-25T09:00:00.000Z",
+        actualFinish: "",
+        bookedMinutes: 120,
+        actualMinutes: 0,
+        differenceMinutes: 0,
+        delayStatus: "Waiting",
+        extraCharges: [],
+        overtimeMinutes: 0,
+        overtimeCharge: 0,
+        totalCharges: 100,
+        amountCharged: 0,
+        paymentMethod: "",
+        paymentStatus: "",
+        clientNamePostcode: "",
+        clientConfirmedBy: "",
+        signatureUrl: "",
+        driveFolderId: "",
+        driveFolderUrl: "",
+        status: JobStatus.IN_PROGRESS,
+        currentState: WorkflowState.WAITING_LOADED_PHOTO,
+        rawTitle: "",
+        rawDescription: "",
+        createdAt: "2026-09-25T08:00:00.000Z",
+        updatedAt: "2026-09-25T09:18:00.000Z"
+      } as any],
+      evidence: [
+        {
+          evidenceId: "arrival-1",
+          jobId: "TMV-LOAD-OVERDUE",
+          driverEmail: "driver@example.com",
+          evidenceType: "Arrival",
+          contentType: "image/jpeg",
+          fileName: "arrival.jpg",
+          status: EvidenceStatus.COMPLETED,
+          receivedAt: "2026-09-25T09:01:00.000Z",
+          processingStartedAt: "2026-09-25T09:01:00.000Z",
+          processingCompletedAt: "2026-09-25T09:02:00.000Z",
+          cloudinaryPublicId: "arrival",
+          cloudinaryUrl: "https://example.com/arrival.jpg",
+          retryCount: 0,
+          lastError: "",
+          capturedAt: "2026-09-25T09:00:00.000Z"
+        }
+      ],
+      activity: [],
+      exceptions: [],
+      scenarioSubmissions: [],
+      fetchedAt: "2026-09-25T09:16:00.000Z",
+      durationMs: 0
+    });
+
+    expect(job.pickupArrivalAt).toBe("2026-09-25T09:00:00.000Z");
+    expect(job.vanLoadedAt).toBeUndefined();
+    expect(job.vanLoadDelayMinutes).toBe(16);
+    expect(job.vanLoadLate).toBe(false);
+    expect(job.vanLoadOverdue).toBe(true);
+  });
+
   it("normalizes payment and extra charge breakdowns for admin views", async () => {
     const [job] = await normalizeMongoDataset({
       jobs: [{

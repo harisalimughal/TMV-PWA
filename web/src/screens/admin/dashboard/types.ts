@@ -104,6 +104,11 @@ export interface NormalizedJob {
   bookedFinish: string;
   actualStart?: string;
   actualFinish?: string;
+  pickupArrivalAt?: string;
+  vanLoadedAt?: string;
+  vanLoadDelayMinutes?: number;
+  vanLoadLate?: boolean;
+  vanLoadOverdue?: boolean;
   /** When the driver's "I'm on the Way" tap sent the customer SMS/email -- distinct
    *  from actualStart (the Arrival photo's timestamp). */
   onMyWayAt?: string;
@@ -138,6 +143,7 @@ export interface NormalizedJob {
   calculatedTotalCharges: number;
   totalCharges: number;
   amountCharged: number;
+  totalAdjustmentNote?: string;
   reconciled: boolean;
   paymentMethod: string;
   paymentBreakdown?: MoneyBreakdownItem[];
@@ -236,6 +242,7 @@ export interface DriverSummaryItem {
   avgDurationMinutes: number;
   totalDurationMinutes: number;
   avgDelayMinutes: number;
+  totalChargesPounds: number;
   revenuePounds: number;
   revenueFormatted: string;
   cashCollectedPounds: number;

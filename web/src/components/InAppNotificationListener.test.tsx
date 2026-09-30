@@ -1,5 +1,5 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ToastProvider } from "./ui/Toast";
 import { InAppNotificationListener } from "./InAppNotificationListener";
 import { playPersistentAlertSound, primePersistentAlertSound } from "../lib/alertSound";
@@ -41,6 +41,10 @@ function renderListener() {
 }
 
 describe("InAppNotificationListener", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
   it("primes alert audio on the first driver gesture so later popup sounds can play", () => {
     renderListener();
 
@@ -68,5 +72,20 @@ describe("InAppNotificationListener", () => {
     fireEvent.click(screen.getByRole("button", { name: "Close" }));
 
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("shows van loaded overdue warnings as persistent top popups", async () => {
+    const { sendPush } = renderListener();
+
+    sendPush({
+      title: "Van loaded photo overdue",
+      body: "More than 15 min has passed, you didn't upload van loaded pic. Hurry up.",
+      data: { kind: "van_loaded_overdue" }
+    });
+
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("Van loaded photo overdue");
+    expect(alert).toHaveTextContent("Hurry up");
+    expect(playPersistentAlertSound).toHaveBeenCalledOnce();
   });
 });

@@ -224,7 +224,7 @@ export function FinishedJobsPage() {
               const paymentSummary = paymentBreakdownSummary(job);
               const extrasSummary = extraChargeBreakdownSummary(job);
               const isSelected = selectedRows.has(job.jobId);
-              const finishedTime = job.actualFinish ? formatLondonDateTime(job.actualFinish) : (job.actualStart ? formatLondonDateTime(job.actualStart) : "Not recorded");
+              const emptyVanPhotoTime = job.actualFinish ? formatLondonDateTime(job.actualFinish) : "Not recorded";
               return (
                 <article
                   key={job.jobId}
@@ -274,7 +274,7 @@ export function FinishedJobsPage() {
                               {driver.name}
                             </span>
                             <span className="text-[11px] text-admin-muted truncate block">
-                              {finishedTime}
+                              {emptyVanPhotoTime}
                             </span>
                           </span>
                         </span>
@@ -328,8 +328,8 @@ export function FinishedJobsPage() {
                   <th className="py-4 px-4 font-semibold text-eyebrow text-fg-subtle tracking-[0.03em]">Driver</th>
                   <th className="py-4 px-4 font-semibold text-eyebrow text-fg-subtle tracking-[0.03em]">Customer</th>
                   <th className="py-4 px-4 font-semibold text-eyebrow text-fg-subtle tracking-[0.03em] min-w-[240px]">Pickup → Drop-off</th>
-                  <th className="py-4 px-4 font-semibold text-eyebrow text-fg-subtle tracking-[0.03em]">Started</th>
-                  <th className="py-4 px-4 font-semibold text-eyebrow text-fg-subtle tracking-[0.03em]">Finished</th>
+                  <th className="py-4 px-4 font-semibold text-eyebrow text-fg-subtle tracking-[0.03em]">Timing</th>
+                  <th className="py-4 px-4 font-semibold text-eyebrow text-fg-subtle tracking-[0.03em]">Empty Van Photo</th>
                   <th className="py-4 px-4 font-semibold text-eyebrow text-fg-subtle tracking-[0.03em]">Punctuality</th>
                   <th className="py-4 px-6 font-semibold text-eyebrow text-fg-subtle tracking-[0.03em] text-right">Amount Charged (£)</th>
                   <th className="py-4 px-4 font-semibold text-eyebrow text-fg-subtle tracking-[0.03em] text-center">Photos</th>
@@ -346,10 +346,11 @@ export function FinishedJobsPage() {
                   const total = totalCharges(job);
                   const rowNumber = (page - 1) * pageSize + index + 1;
 
-                  const startedTime = job.actualStart ? formatLondonDateTime(job.actualStart) : "—";
                   const finishedTime = job.actualFinish ? formatLondonDateTime(job.actualFinish) : "—";
                   const onMyWayTime = job.onMyWayAt ? formatLondonDateTime(job.onMyWayAt) : null;
                   const customerSignatureTime = job.clientSignatureAt ? formatLondonDateTime(job.clientSignatureAt) : null;
+                  const pickupArrivalTime = job.pickupArrivalAt ? formatLondonDateTime(job.pickupArrivalAt) : null;
+                  const vanLoadedTime = job.vanLoadedAt ? formatLondonDateTime(job.vanLoadedAt) : null;
 
                   const p = job.pickup || <span className="text-[14px] font-normal text-[#B0B0B0] italic">Not recorded</span>;
                   const d = job.dropoff || <span className="text-[14px] font-normal text-[#B0B0B0] italic">Not recorded</span>;
@@ -420,12 +421,24 @@ export function FinishedJobsPage() {
                         </td>
 
                         <td className="px-4 text-[13px] font-normal text-admin-muted tabular-nums whitespace-nowrap">
-                          {startedTime}
                           {onMyWayTime && (
                             <span className="block text-[11px] text-admin-muted/70 mt-0.5">On my way: {onMyWayTime}</span>
                           )}
                           {customerSignatureTime && (
                             <span className="block text-[11px] text-admin-muted/70 mt-0.5">Customer signed: {customerSignatureTime}</span>
+                          )}
+                          {pickupArrivalTime && (
+                            <span className="block text-[11px] text-admin-muted/70 mt-0.5">Pickup arrival: {pickupArrivalTime}</span>
+                          )}
+                          {vanLoadedTime && (
+                            <span className="block text-[11px] text-admin-muted/70 mt-0.5">Van loaded: {vanLoadedTime}</span>
+                          )}
+                          {(job.vanLoadLate || job.vanLoadOverdue) && (
+                            <span className="mt-1 inline-flex rounded-control bg-admin-status-red-bg px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.03em] text-admin-status-red">
+                              {job.vanLoadLate
+                                ? `Mismatch ${job.vanLoadDelayMinutes ?? 0} min`
+                                : `Overdue ${job.vanLoadDelayMinutes ?? 0} min`}
+                            </span>
                           )}
                         </td>
                         <td className="px-4 text-[13px] font-normal text-admin-muted tabular-nums whitespace-nowrap">{finishedTime}</td>

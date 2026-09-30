@@ -398,8 +398,15 @@ function sendJobStartedEmailIfAny(job: Job, driver: DriverProfile): void {
           action: "CLIENT_JOB_STARTED_EMAIL_SKIPPED", detail: "Disabled in admin Messaging settings"
         });
       }
-      return getSetting("JOB_STARTED_EMAIL_MESSAGE_TEXT", JOB_STARTED_MESSAGE_TEMPLATE)
-        .then(template => sendJobStartedEmail(job, template, driver))
+      return Promise.all([
+        getSetting("JOB_STARTED_EMAIL_MESSAGE_TEXT", JOB_STARTED_MESSAGE_TEMPLATE),
+        getSetting("JOB_STARTED_EMAIL_HTML", "")
+      ])
+        .then(([template, htmlTemplate]) => (
+          htmlTemplate.trim()
+            ? sendJobStartedEmail(job, template, driver, htmlTemplate)
+            : sendJobStartedEmail(job, template, driver)
+        ))
         .then(() => appendActivity({
           jobId: job.jobId,
           driver: actor,

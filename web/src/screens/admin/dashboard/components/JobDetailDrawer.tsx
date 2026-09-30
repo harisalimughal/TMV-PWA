@@ -258,6 +258,37 @@ export function JobDetailDrawer({ job: initialJob, isOpen, onClose, onUpdated }:
                   {job.clientSignatureAt ? formatLondonDateTime(job.clientSignatureAt) : "Not recorded"}
                 </span>
               </div>
+              <div className="mt-2 border-t border-admin-line pt-2">
+                <span className="block text-[10px] font-bold uppercase tracking-wider text-admin-muted">
+                  Pickup arrival
+                </span>
+                <span className="mt-0.5 block text-[12px] font-semibold text-admin-ink">
+                  {job.pickupArrivalAt ? formatLondonDateTime(job.pickupArrivalAt) : "Not recorded"}
+                </span>
+              </div>
+              <div className="mt-2 border-t border-admin-line pt-2">
+                <span className="block text-[10px] font-bold uppercase tracking-wider text-admin-muted">
+                  Van loaded photo
+                </span>
+                <span className="mt-0.5 block text-[12px] font-semibold text-admin-ink">
+                  {job.vanLoadedAt ? formatLondonDateTime(job.vanLoadedAt) : "Not recorded"}
+                </span>
+                {(job.vanLoadLate || job.vanLoadOverdue) && (
+                  <span className="mt-1 inline-flex rounded-control bg-admin-status-red-bg px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.03em] text-admin-status-red">
+                    {job.vanLoadLate
+                      ? `Mismatch ${job.vanLoadDelayMinutes ?? 0} min`
+                      : `Overdue ${job.vanLoadDelayMinutes ?? 0} min`}
+                  </span>
+                )}
+              </div>
+              <div className="mt-2 border-t border-admin-line pt-2">
+                <span className="block text-[10px] font-bold uppercase tracking-wider text-admin-muted">
+                  Empty van photo
+                </span>
+                <span className="mt-0.5 block text-[12px] font-semibold text-admin-ink">
+                  {job.actualFinish ? formatLondonDateTime(job.actualFinish) : "Not recorded"}
+                </span>
+              </div>
             </div>
 
             <div className="bg-white p-4 rounded-module border border-admin-line shadow-[0_2px_10px_rgb(0,0,0,0.02)] flex flex-col justify-between">

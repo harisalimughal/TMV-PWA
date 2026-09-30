@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { jobServiceType, jobsForDriver } from "./workBreakdown";
+import {
+  adjustmentReason,
+  extraChargeBreakdownLines,
+  jobServiceType,
+  jobsForDriver,
+  paymentBreakdownLines,
+  totalChargesForJob
+} from "./workBreakdown";
 import type { NormalizedJob } from "../types";
 
 const baseJob = {
@@ -38,4 +45,54 @@ describe("work breakdown helpers", () => {
 
     expect(jobsForDriver(jobs, "TI").map(job => job.jobId)).toEqual(["TMV-NEW", "TMV-MID", "TMV-OLD"]);
   });
+
+  it("formats each payment method with its own amount", () => {
+    expect(paymentBreakdownLines({
+      ...baseJob,
+      paymentMethod: "Cash, Card",
+      paymentBreakdown: [
+        { method: "Cash", amount: 0 },
+        { method: "Card", amount: 8000 }
+      ]
+    })).toEqual(["Cash £0.00", "Card £80.00"]);
+  });
+  it("splits legacy combined payment methods instead of showing one ambiguous line", () => {
+    expect(paymentBreakdownLines({
+      ...baseJob,
+      paymentMethod: "Cash, Card",
+      paymentBreakdown: [
+        { method: "Cash, Card", amount: 8000 }
+      ]
+    })).toEqual(["Cash", "Card"]);
+  });
+
+  it("uses calculated total charges when the stored total is missing", () => {
+    expect(totalChargesForJob({
+      ...baseJob,
+      totalCharges: 0,
+      calculatedTotalCharges: 12000,
+      basePrice: 8000,
+      extraCharges: 3000,
+      overtimeCharge: 1000
+    })).toBe(12000);
+  });
+
+  it("shows a fallback adjustment reason when no driver note was needed", () => {
+    expect(adjustmentReason({ ...baseJob, totalAdjustmentNote: "Discount agreed with office" })).toBe("Discount agreed with office");
+    expect(adjustmentReason({ ...baseJob, totalAdjustmentNote: "   " })).toBe("None");
+    expect(adjustmentReason(baseJob)).toBe("None");
+  });
+
+  it("formats extra charges as separate visible lines", () => {
+    expect(extraChargeBreakdownLines({
+      ...baseJob,
+      extraChargeBreakdown: [
+        { label: "Tunnel", amount: 1500 },
+        { label: "Overtime (2 hrs)", amount: 12000 }
+      ]
+    })).toEqual(["Tunnel £15.00", "Overtime (2 hrs) £120.00"]);
+    expect(extraChargeBreakdownLines(baseJob)).toEqual(["None"]);
+  });
 });
+
+

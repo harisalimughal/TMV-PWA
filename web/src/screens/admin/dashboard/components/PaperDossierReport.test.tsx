@@ -189,13 +189,24 @@ describe("PaperDossierReport", () => {
     render(<PaperDossierReport job={{
       ...job,
       onMyWayAt: "2026-09-22T09:45:00.000Z",
-      clientSignatureAt: "2026-09-22T14:20:00.000Z"
+      clientSignatureAt: "2026-09-22T14:20:00.000Z",
+      pickupArrivalAt: "2026-09-22T10:30:00.000Z",
+      vanLoadedAt: "2026-09-22T10:48:00.000Z",
+      actualFinish: "2026-09-22T16:00:00.000Z",
+      vanLoadDelayMinutes: 18,
+      vanLoadLate: true
     }} isPreview />);
 
     expect(screen.getByText("On my way")).toBeInTheDocument();
     expect(screen.getByText(/22\/09\/26.*10:45/)).toBeInTheDocument();
     expect(screen.getByText("Customer signature time")).toBeInTheDocument();
     expect(screen.getAllByText(/22\/09\/26.*15:20/).length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText("Pickup arrival time")).toBeInTheDocument();
+    expect(screen.getByText("Van loaded photo time")).toBeInTheDocument();
+    expect(screen.getByText("Empty van photo time")).toBeInTheDocument();
+    expect(screen.getAllByText(/22\/09\/26.*17:00/).length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText("Van loaded mismatch")).toBeInTheDocument();
+    expect(screen.getByText("18 min after arrival")).toBeInTheDocument();
   });
 
   it("prints evidence and scenario submissions in the order the driver submitted them", () => {
@@ -234,13 +245,24 @@ describe("PaperJobReport", () => {
     render(<PaperJobReport job={{
       ...job,
       onMyWayAt: "2026-09-22T09:45:00.000Z",
-      clientSignatureAt: "2026-09-22T14:20:00.000Z"
+      clientSignatureAt: "2026-09-22T14:20:00.000Z",
+      pickupArrivalAt: "2026-09-22T10:30:00.000Z",
+      vanLoadedAt: "2026-09-22T10:48:00.000Z",
+      actualFinish: "2026-09-22T16:00:00.000Z",
+      vanLoadDelayMinutes: 18,
+      vanLoadLate: true
     }} />);
 
     expect(screen.getByText("On my way")).toBeInTheDocument();
     expect(screen.getByText(/22\/09\/26.*10:45/)).toBeInTheDocument();
     expect(screen.getByText("Customer signature time")).toBeInTheDocument();
     expect(screen.getAllByText(/22\/09\/26.*15:20/).length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText("Pickup arrival time")).toBeInTheDocument();
+    expect(screen.getByText("Van loaded photo time")).toBeInTheDocument();
+    expect(screen.getByText("Empty van photo time")).toBeInTheDocument();
+    expect(screen.getAllByText(/22\/09\/26.*17:00/).length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText("Van loaded mismatch")).toBeInTheDocument();
+    expect(screen.getByText("18 min after arrival")).toBeInTheDocument();
   });
 });
 
@@ -251,7 +273,11 @@ describe("JobDetailDrawer", () => {
         job={{
           ...job,
           onMyWayAt: "2026-09-22T09:45:00.000Z",
-          clientSignatureAt: "2026-09-22T14:20:00.000Z"
+          clientSignatureAt: "2026-09-22T14:20:00.000Z",
+          pickupArrivalAt: "2026-09-22T10:30:00.000Z",
+          vanLoadedAt: "2026-09-22T10:48:00.000Z",
+          vanLoadDelayMinutes: 18,
+          vanLoadLate: true
         }}
         isOpen
         onClose={vi.fn()}
@@ -262,5 +288,9 @@ describe("JobDetailDrawer", () => {
     expect(screen.getByText(/22\/09\/26.*10:45/)).toBeInTheDocument();
     expect(screen.getByText("Customer signature time")).toBeInTheDocument();
     expect(screen.getByText(/22\/09\/26.*15:20/)).toBeInTheDocument();
+    expect(screen.getByText("Pickup arrival")).toBeInTheDocument();
+    expect(screen.getByText("Van loaded photo")).toBeInTheDocument();
+    expect(screen.getByText("Empty van photo")).toBeInTheDocument();
+    expect(screen.getByText("Mismatch 18 min")).toBeInTheDocument();
   });
 });

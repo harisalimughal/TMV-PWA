@@ -2,6 +2,7 @@ import React from "react";
 import { NormalizedJob, DriverSummaryItem } from "../types";
 import { formatLondonDate, formatLondonDateTime } from "../utils/date";
 import { formatDuration } from "../utils/kpi";
+import { totalChargesForJob } from "../utils/workBreakdown";
 
 interface Props {
   reportType: string;
@@ -134,7 +135,8 @@ export function PaperAnalyticsReport({ reportType, from, to, driver, jobs = [], 
                   <th className="p-2 border border-[#E5E7EB] font-bold text-right">Card (£)</th>
                   <th className="p-2 border border-[#E5E7EB] font-bold text-right">Bank (£)</th>
                   <th className="p-2 border border-[#E5E7EB] font-bold text-right">Invoice (£)</th>
-                  <th className="p-2 border border-[#E5E7EB] font-bold text-right">Total (£)</th>
+                  <th className="p-2 border border-[#E5E7EB] font-bold text-right">Total Charges (GBP)</th>
+                  <th className="p-2 border border-[#E5E7EB] font-bold text-right">Driver Charged (GBP)</th>
                 </tr>
               </thead>
               <tbody>
@@ -151,6 +153,7 @@ export function PaperAnalyticsReport({ reportType, from, to, driver, jobs = [], 
                     <td className="p-2 border border-[#E5E7EB] text-right font-mono">{d.cardCollectedPounds.toFixed(2)}</td>
                     <td className="p-2 border border-[#E5E7EB] text-right font-mono">{d.bankCollectedPounds.toFixed(2)}</td>
                     <td className="p-2 border border-[#E5E7EB] text-right font-mono">{d.invoiceCollectedPounds.toFixed(2)}</td>
+                    <td className="p-2 border border-[#E5E7EB] text-right font-mono font-bold">{d.totalChargesPounds.toFixed(2)}</td>
                     <td className="p-2 border border-[#E5E7EB] text-right font-mono font-bold">{d.revenuePounds.toFixed(2)}</td>
                   </tr>
                 ))}
@@ -170,7 +173,8 @@ export function PaperAnalyticsReport({ reportType, from, to, driver, jobs = [], 
                 <th className="p-1.5 border border-[#E5E7EB] font-bold">Driver</th>
                 <th className="p-1.5 border border-[#E5E7EB] font-bold">Booked Time</th>
                 <th className="p-1.5 border border-[#E5E7EB] font-bold">Status</th>
-                <th className="p-1.5 border border-[#E5E7EB] font-bold text-right">Total (£)</th>
+                <th className="p-1.5 border border-[#E5E7EB] font-bold text-right">Total Charges (GBP)</th>
+                <th className="p-1.5 border border-[#E5E7EB] font-bold text-right">Driver Charged (GBP)</th>
               </tr>
             </thead>
             <tbody>
@@ -191,13 +195,16 @@ export function PaperAnalyticsReport({ reportType, from, to, driver, jobs = [], 
                     </span>
                   </td>
                   <td className="p-1.5 border border-[#E5E7EB] text-right font-mono font-semibold">
+                    £{(totalChargesForJob(j) / 100).toFixed(2)}
+                  </td>
+                  <td className="p-1.5 border border-[#E5E7EB] text-right font-mono font-semibold">
                     £{((j.amountCharged || 0) / 100).toFixed(2)}
                   </td>
                 </tr>
               ))}
               {displayJobs.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="p-4 text-center text-[#6B7280] italic">
+                  <td colSpan={7} className="p-4 text-center text-[#6B7280] italic">
                     No bookings found matching the selected criteria.
                   </td>
                 </tr>

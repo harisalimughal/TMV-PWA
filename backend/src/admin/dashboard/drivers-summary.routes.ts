@@ -35,6 +35,7 @@ interface DriverStat {
   durationJobsCount: number;
   totalDelayMinutes: number;
   delayJobsCount: number;
+  totalChargesPence: number;
   revenuePence: number;
   cashCollectedPence: number;
   cardCollectedPence: number;
@@ -60,7 +61,7 @@ export function summarizeDrivers(drivers: DriverProfile[], jobs: NormalizedJob[]
       hasAccount: true,
       assignedCount: 0, completedCount: 0, cancelledCount: 0,
       totalDurationMinutes: 0, durationJobsCount: 0, totalDelayMinutes: 0, delayJobsCount: 0,
-      revenuePence: 0, cashCollectedPence: 0, cardCollectedPence: 0, bankCollectedPence: 0,
+      totalChargesPence: 0, revenuePence: 0, cashCollectedPence: 0, cardCollectedPence: 0, bankCollectedPence: 0,
       invoiceCollectedPence: 0, congestionChargePence: 0, tunnelChargePence: 0, overtimeMinutes: 0,
       missingEvidenceCount: 0, overtimeCount: 0
     });
@@ -75,7 +76,7 @@ export function summarizeDrivers(drivers: DriverProfile[], jobs: NormalizedJob[]
         hasAccount: false,
         assignedCount: 0, completedCount: 0, cancelledCount: 0,
         totalDurationMinutes: 0, durationJobsCount: 0, totalDelayMinutes: 0, delayJobsCount: 0,
-        revenuePence: 0, cashCollectedPence: 0, cardCollectedPence: 0, bankCollectedPence: 0,
+        totalChargesPence: 0, revenuePence: 0, cashCollectedPence: 0, cardCollectedPence: 0, bankCollectedPence: 0,
         invoiceCollectedPence: 0, congestionChargePence: 0, tunnelChargePence: 0, overtimeMinutes: 0,
         missingEvidenceCount: 0, overtimeCount: 0
       };
@@ -85,6 +86,7 @@ export function summarizeDrivers(drivers: DriverProfile[], jobs: NormalizedJob[]
     stat.assignedCount++;
     if (j.status === "COMPLETED") {
       stat.completedCount++;
+      stat.totalChargesPence += j.totalCharges || j.calculatedTotalCharges || 0;
       stat.revenuePence += j.amountCharged;
       stat.congestionChargePence += j.congestionCharge || 0;
       stat.tunnelChargePence += j.tunnelCharge || 0;
@@ -122,6 +124,7 @@ export function summarizeDrivers(drivers: DriverProfile[], jobs: NormalizedJob[]
       vanRegistration: s.vanRegistration, imei: s.imei, active: s.active, hasAccount: s.hasAccount,
       assigned: s.assignedCount, completed: s.completedCount, cancelled: s.cancelledCount, completionRate,
       avgDurationMinutes: avgDuration, totalDurationMinutes: s.totalDurationMinutes, avgDelayMinutes: avgDelay,
+      totalChargesPounds: toPounds(pence(s.totalChargesPence)),
       revenuePounds: toPounds(pence(s.revenuePence)), revenueFormatted: formatGBP(pence(s.revenuePence)),
       cashCollectedPounds: toPounds(pence(s.cashCollectedPence)),
       cardCollectedPounds: toPounds(pence(s.cardCollectedPence)),

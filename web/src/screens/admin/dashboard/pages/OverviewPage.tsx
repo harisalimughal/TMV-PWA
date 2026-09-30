@@ -30,7 +30,14 @@ import { sounds } from "../utils/audio";
 import { toCsv, downloadCsv, stampForFilename } from "../utils/csv";
 import { formatLondonDate, formatLondonDateTime } from "../utils/date";
 import { completionRate, formatDuration } from "../utils/kpi";
-import { jobServiceType, jobsForDriver } from "../utils/workBreakdown";
+import {
+  adjustmentReason,
+  extraChargeBreakdownLines,
+  jobServiceType,
+  jobsForDriver,
+  paymentBreakdownLines,
+  totalChargesForJob
+} from "../utils/workBreakdown";
 import { NormalizedJob, SummaryResponse, DriverSummaryItem } from "../types";
 import { Button, Spinner, SegmentedControl } from "../../../../ui";
 
@@ -41,13 +48,7 @@ interface Props {
 type OverviewTab = "overview" | "breakdown";
 
 function paymentBreakdownSummary(job: NormalizedJob): string {
-  if (!job.paymentBreakdown?.length) return job.paymentMethod || "Not recorded";
-  return job.paymentBreakdown
-    .map(row => {
-      if ((row.method || "").toLowerCase() === "invoice" && row.amount === 0) return "Invoice outstanding";
-      return `${row.method || "Not recorded"} £${((row.amount || 0) / 100).toFixed(2)}`;
-    })
-    .join(" · ");
+  return paymentBreakdownLines(job).join(" | ");
 }
 
 function extraChargeBreakdownSummary(job: NormalizedJob): string {
@@ -382,7 +383,8 @@ function WorkBreakdown({ from, to }: { from?: string; to?: string }) {
       { header: "Card (£)", value: r => r.cardCollectedPounds.toFixed(2) },
       { header: "Bank (£)", value: r => r.bankCollectedPounds.toFixed(2) },
       { header: "Invoice (£)", value: r => r.invoiceCollectedPounds.toFixed(2) },
-      { header: "Total (£)", value: r => r.revenuePounds.toFixed(2) }
+      { header: "Total Charges (GBP)", value: r => r.totalChargesPounds.toFixed(2) },
+      { header: "Driver Charged (GBP)", value: r => r.revenuePounds.toFixed(2) }
     ]);
     downloadCsv(`TMV_Driver_Settlement_${stampForFilename()}.csv`, csv);
   };
@@ -495,19 +497,20 @@ function WorkBreakdown({ from, to }: { from?: string; to?: string }) {
                 <th className="py-2.5 px-3 font-semibold text-admin-muted text-right">Card (£)</th>
                 <th className="py-2.5 px-3 font-semibold text-admin-muted text-right">Bank (£)</th>
                 <th className="py-2.5 px-3 font-semibold text-admin-muted text-right">Invoice (£)</th>
-                <th className="py-2.5 px-3 font-semibold text-admin-muted text-right">Total (£)</th>
+                <th className="py-2.5 px-3 font-semibold text-admin-muted text-right">Total Charges (GBP)</th>
+                <th className="py-2.5 px-3 font-semibold text-admin-muted text-right">Driver Charged (GBP)</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-admin-line/60">
               {isLoading ? (
                 <tr>
-                  <td colSpan={11} className="py-8 text-center text-admin-muted">
+                  <td colSpan={12} className="py-8 text-center text-admin-muted">
                     <Loader2 className="w-4 h-4 animate-spin inline-block mr-2" /> Loading…
                   </td>
                 </tr>
               ) : rows.length === 0 ? (
                 <tr>
-                  <td colSpan={11} className="py-8 text-center text-admin-muted">No drivers found for this range.</td>
+                  <td colSpan={12} className="py-8 text-center text-admin-muted">No drivers found for this range.</td>
                 </tr>
               ) : (
                 rows.map(r => {
@@ -534,11 +537,12 @@ function WorkBreakdown({ from, to }: { from?: string; to?: string }) {
                         <td className="py-2.5 px-3 text-right font-mono">{r.cardCollectedPounds.toFixed(2)}</td>
                         <td className="py-2.5 px-3 text-right font-mono">{r.bankCollectedPounds.toFixed(2)}</td>
                         <td className="py-2.5 px-3 text-right font-mono">{r.invoiceCollectedPounds.toFixed(2)}</td>
+                        <td className="py-2.5 px-3 text-right font-mono font-bold">{r.totalChargesPounds.toFixed(2)}</td>
                         <td className="py-2.5 px-3 text-right font-mono font-bold">{r.revenuePounds.toFixed(2)}</td>
                       </tr>
                       {isExpanded && (
                         <tr>
-                          <td colSpan={11} className="bg-admin-surface/50 p-3">
+                          <td colSpan={12} className="bg-admin-surface/50 p-3">
                             {jobsLoading ? (
                               <div className="py-6 text-center text-admin-muted">
                                 <Loader2 className="w-4 h-4 animate-spin inline-block mr-2" /> Loading job breakdown...
@@ -547,20 +551,23 @@ function WorkBreakdown({ from, to }: { from?: string; to?: string }) {
                               <div className="py-6 text-center text-admin-muted">No completed jobs found for this driver in the selected range.</div>
                             ) : (
                               <div className="max-w-full overflow-x-auto rounded-card border border-admin-line bg-white">
-                                <table className="w-full min-w-[1080px] text-left text-[12px] border-collapse">
+                                <table className="w-full min-w-[1280px] text-left text-[12px] border-collapse">
                                   <thead className="bg-white">
                                     <tr className="border-b border-admin-line">
                                       <th className="py-2 px-3 font-semibold text-admin-muted">Job</th>
                                       <th className="py-2 px-3 font-semibold text-admin-muted">Date</th>
                                       <th className="py-2 px-3 font-semibold text-admin-muted">Customer</th>
                                       <th className="py-2 px-3 font-semibold text-admin-muted">Service Type</th>
+                                      <th className="py-2 px-3 font-semibold text-admin-muted">Timing</th>
                                       <th className="py-2 px-3 font-semibold text-admin-muted text-right">Congestion (£)</th>
                                       <th className="py-2 px-3 font-semibold text-admin-muted text-right">Tunnel (£)</th>
                                       <th className="py-2 px-3 font-semibold text-admin-muted text-right">Overtime</th>
                                       <th className="py-2 px-3 font-semibold text-admin-muted text-right">Moving</th>
-                                      <th className="py-2 px-3 font-semibold text-admin-muted">Payment</th>
+                                      <th className="py-2 px-3 font-semibold text-admin-muted">Payment Method(s)</th>
                                       <th className="py-2 px-3 font-semibold text-admin-muted">Extras</th>
-                                      <th className="py-2 px-3 font-semibold text-admin-muted text-right">Total (£)</th>
+                                      <th className="py-2 px-3 font-semibold text-admin-muted text-right">Total Charges (GBP)</th>
+                                      <th className="py-2 px-3 font-semibold text-admin-muted text-right">Driver Charged (GBP)</th>
+                                      <th className="py-2 px-3 font-semibold text-admin-muted">Adjustment Reason</th>
                                     </tr>
                                   </thead>
                                   <tbody className="divide-y divide-admin-line/60">
@@ -570,17 +577,41 @@ function WorkBreakdown({ from, to }: { from?: string; to?: string }) {
                                         <td className="py-2 px-3 text-admin-muted whitespace-nowrap">{formatLondonDateTime(job.bookedStart || job.actualStart)}</td>
                                         <td className="py-2 px-3 font-medium text-admin-ink">{job.customerName || "Not recorded"}</td>
                                         <td className="py-2 px-3">{jobServiceType(job)}</td>
+                                        <td className="py-2 px-3 text-[11px] text-admin-muted whitespace-nowrap">
+                                          <ul className="list-disc space-y-0.5 pl-4">
+                                            <li>Pickup: {job.pickupArrivalAt ? formatLondonDateTime(job.pickupArrivalAt) : "Not recorded"}</li>
+                                            <li>Van loaded: {job.vanLoadedAt ? formatLondonDateTime(job.vanLoadedAt) : "Not recorded"}</li>
+                                            <li>Empty van: {job.actualFinish ? formatLondonDateTime(job.actualFinish) : "Not recorded"}</li>
+                                            <li>Customer signed: {job.clientSignatureAt ? formatLondonDateTime(job.clientSignatureAt) : "Not recorded"}</li>
+                                          </ul>
+                                        </td>
                                         <td className="py-2 px-3 text-right font-mono">{((job.congestionCharge || 0) / 100).toFixed(2)}</td>
                                         <td className="py-2 px-3 text-right font-mono">{((job.tunnelCharge || 0) / 100).toFixed(2)}</td>
                                         <td className="py-2 px-3 text-right font-mono">{formatDuration(job.overtimeMinutes || 0)}</td>
                                         <td className="py-2 px-3 text-right font-mono">{formatDuration(job.actualMinutes || 0)}</td>
-                                        <td className="py-2 px-3 max-w-[240px] truncate" title={paymentBreakdownSummary(job)}>
-                                          {paymentBreakdownSummary(job)}
+                                        <td className="py-2 px-3 max-w-[240px]" title={paymentBreakdownSummary(job)}>
+                                          <ul className="list-disc space-y-0.5 pl-4">
+                                            {paymentBreakdownLines(job).map((line, index) => (
+                                              <li key={`${job.jobId}-payment-${index}`} className="whitespace-nowrap">
+                                                {line}
+                                              </li>
+                                            ))}
+                                          </ul>
                                         </td>
-                                        <td className="py-2 px-3 max-w-[260px] truncate" title={extraChargeBreakdownSummary(job) || "None"}>
-                                          {extraChargeBreakdownSummary(job) || "None"}
+                                        <td className="py-2 px-3 max-w-[260px]" title={extraChargeBreakdownSummary(job) || "None"}>
+                                          <ul className="list-disc space-y-0.5 pl-4">
+                                            {extraChargeBreakdownLines(job).map((line, index) => (
+                                              <li key={`${job.jobId}-extra-${index}`} className="whitespace-nowrap">
+                                                {line}
+                                              </li>
+                                            ))}
+                                          </ul>
                                         </td>
+                                        <td className="py-2 px-3 text-right font-mono font-bold">{(totalChargesForJob(job) / 100).toFixed(2)}</td>
                                         <td className="py-2 px-3 text-right font-mono font-bold">{((job.amountCharged || 0) / 100).toFixed(2)}</td>
+                                        <td className="py-2 px-3 max-w-[220px] whitespace-normal" title={adjustmentReason(job)}>
+                                          {adjustmentReason(job)}
+                                        </td>
                                       </tr>
                                     ))}
                                   </tbody>

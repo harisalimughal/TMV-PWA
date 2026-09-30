@@ -106,6 +106,16 @@ export interface NormalizedJob {
   bookedFinish: string; // ISO UTC
   actualStart?: string; // ISO UTC
   actualFinish?: string; // ISO UTC
+  /** Arrival photo timestamp used for the pickup -> van loaded SLA. */
+  pickupArrivalAt?: string;
+  /** Van loaded photo timestamp used for the pickup -> van loaded SLA. */
+  vanLoadedAt?: string;
+  /** Minutes between pickup arrival and van loaded, or current overdue minutes while missing. */
+  vanLoadDelayMinutes?: number;
+  /** True when van loaded was submitted more than 15 minutes after pickup arrival. */
+  vanLoadLate?: boolean;
+  /** True while pickup arrival is older than 15 minutes and van loaded is still missing. */
+  vanLoadOverdue?: boolean;
   /** ISO UTC timestamp of the driver's "I'm on the Way" tap -- when the customer
    *  SMS/email actually went out, distinct from actualStart (the Arrival photo). */
   onMyWayAt?: string;
@@ -145,6 +155,7 @@ export interface NormalizedJob {
   calculatedTotalCharges: Pence;
   totalCharges: Pence;
   amountCharged: Pence;
+  totalAdjustmentNote?: string;
   reconciled: boolean;
 
   paymentMethod: string;

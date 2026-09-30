@@ -204,20 +204,38 @@ async function sendPlainTextEmail(to: string, subject: string, body: string): Pr
   await sendEmail(to, subject, { text: body });
 }
 
+export function renderTemplatedEmailContent(
+  template: string,
+  job: Job,
+  driver?: Pick<DriverProfile, "phone" | "vanRegistration" | "fullName">,
+  htmlTemplate?: string
+): EmailContent {
+  const html = htmlTemplate?.trim()
+    ? renderMessageTemplate(htmlTemplate, job, driver)
+    : undefined;
+  return {
+    text: renderMessageTemplate(template, job, driver),
+    html
+  };
+}
+
 export async function sendJobStartedEmail(
-  job: Job, template: string, driver: Pick<DriverProfile, "phone" | "vanRegistration" | "fullName">
+  job: Job,
+  template: string,
+  driver: Pick<DriverProfile, "phone" | "vanRegistration" | "fullName">,
+  htmlTemplate?: string
 ): Promise<void> {
   if (!job.customerEmail) return;
   // Subject is email-only (SMS has no equivalent concept), so it stays fixed rather
   // than living in the admin-editable body template.
   const subject = `Your ${env.notificationFromName} team has started your job`;
-  await sendPlainTextEmail(job.customerEmail, subject, renderMessageTemplate(template, job, driver));
+  await sendEmail(job.customerEmail, subject, renderTemplatedEmailContent(template, job, driver, htmlTemplate));
 }
 
-export async function sendReviewRequestEmail(job: Job, template: string): Promise<void> {
+export async function sendReviewRequestEmail(job: Job, template: string, htmlTemplate?: string): Promise<void> {
   if (!job.customerEmail) return;
   const subject = "We'd love your feedback";
-  await sendPlainTextEmail(job.customerEmail, subject, renderMessageTemplate(template, job));
+  await sendEmail(job.customerEmail, subject, renderTemplatedEmailContent(template, job, undefined, htmlTemplate));
 }
 
 export async function sendOpsJobCompletionEmail(
@@ -243,10 +261,10 @@ export async function sendOpsVanLoadedEmail(
  *  rendered -- driver-notify.ts resolves it via message-catalog.ts's getMessageBody,
  *  which does the same renderMessageTemplate() call itself, so doing it again here
  *  would be a harmless but pointless no-op every {placeholder} has already resolved. */
-export async function sendDriverJobAssignmentEmail(driverEmail: string, job: Job, body: string): Promise<void> {
+export async function sendDriverJobAssignmentEmail(driverEmail: string, job: Job, body: string, htmlBody?: string): Promise<void> {
   if (!driverEmail) return;
   const subject = `New job assigned — ${job.customerName || "your next job"}`;
-  await sendPlainTextEmail(driverEmail, subject, body);
+  await sendEmail(driverEmail, subject, { text: body, html: htmlBody?.trim() || undefined });
 }
 
 /** Sent from POST /api/auth/forgot-password. The link is valid for 30 minutes (see

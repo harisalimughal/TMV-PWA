@@ -441,14 +441,25 @@ export function SubmissionDetailDrawer({ job: initialJob, isOpen, onClose, onNav
               value={normalizedJob.onMyWayAt ? formatLondonDateTime(normalizedJob.onMyWayAt) : "Not recorded"}
             />
             <DetailRow
-              label="Started"
-              value={normalizedJob.actualStart ? formatLondonDateTime(normalizedJob.actualStart) : "Not recorded"}
+              label="Pickup arrival time"
+              value={normalizedJob.pickupArrivalAt ? formatLondonDateTime(normalizedJob.pickupArrivalAt) : "Not recorded"}
             />
             <DetailRow
-              label="Finished"
+              label="Van loaded photo time"
+              value={normalizedJob.vanLoadedAt ? formatLondonDateTime(normalizedJob.vanLoadedAt) : "Not recorded"}
+            />
+            <DetailRow
+              label="Empty van photo time"
               value={normalizedJob.actualFinish ? formatLondonDateTime(normalizedJob.actualFinish) : "Not recorded"}
             />
           </div>
+          {(normalizedJob.vanLoadLate || normalizedJob.vanLoadOverdue) && (
+            <div className="mt-4 inline-flex rounded-control bg-admin-status-red-bg px-3 py-1.5 text-[12px] font-bold uppercase tracking-[0.03em] text-admin-status-red">
+              {normalizedJob.vanLoadLate
+                ? `Van loaded mismatch: ${normalizedJob.vanLoadDelayMinutes ?? 0} min`
+                : `Van loaded overdue: ${normalizedJob.vanLoadDelayMinutes ?? 0} min`}
+            </div>
+          )}
         </div>
       )}
 

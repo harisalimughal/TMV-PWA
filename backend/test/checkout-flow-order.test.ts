@@ -251,17 +251,24 @@ describe("checkout flow order", () => {
     ]);
   });
 
-  it("rejects a non-invoice payment breakdown that does not match the amount charged", async () => {
+  it("allows payment amounts to differ from the final amount charged", async () => {
     getJob.mockResolvedValue(job({
       currentState: WorkflowState.WAITING_PAYMENT,
       amountCharged: 150
     }));
 
-    await expect(handleAction("SUBMIT_PAYMENT", "TMV-FLOW", "abi@example.com", {
+    const updated = await handleAction("SUBMIT_PAYMENT", "TMV-FLOW", "abi@example.com", {
       payment_method: [PaymentMethod.CARD, PaymentMethod.CASH],
       payment_amount_Card: ["80"],
       payment_amount_Cash: ["20"]
-    })).rejects.toThrow("Payment amounts must add up to the final amount charged.");
+    });
+
+    expect(updated.currentState).toBe(WorkflowState.WAITING_REVIEW_CHECK);
+    expect(updated.paymentStatus).toBe("Recorded");
+    expect(updated.paymentBreakdown).toEqual([
+      { method: "Card", amount: 80 },
+      { method: "Cash", amount: 20 }
+    ]);
   });
 
   it("goes back through payment, totals, charges, signature, then empty van photo", async () => {

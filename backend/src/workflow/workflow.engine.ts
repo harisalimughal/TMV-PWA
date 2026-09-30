@@ -85,25 +85,13 @@ function paymentAmountKey(method: PaymentMethod): string {
 
 function validatePaymentBreakdown(
   methods: PaymentMethod[],
-  input: Record<string, string[]>,
-  amountCharged?: number
+  input: Record<string, string[]>
 ): Array<{ method: PaymentMethod; amount: number }> {
-  const rows = methods.map(method => {
+  return methods.map(method => {
     if (method === PaymentMethod.INVOICE) return { method, amount: 0 };
     const raw = input[paymentAmountKey(method)]?.[0] ?? "";
     return { method, amount: validateCurrency(raw) };
   });
-
-  const paidTotal = rows.reduce((sum, row) => sum + row.amount, 0);
-  const expected = amountCharged ?? 0;
-  if (!methods.includes(PaymentMethod.INVOICE) && Math.round(paidTotal * 100) !== Math.round(expected * 100)) {
-    throw new ValidationError("Payment amounts must add up to the final amount charged.");
-  }
-  if (methods.includes(PaymentMethod.INVOICE) && paidTotal > expected) {
-    throw new ValidationError("Payment amounts cannot be more than the final amount charged.");
-  }
-
-  return rows;
 }
 
 export async function beginJob(jobId: string, identifier: string): Promise<Job> {
@@ -284,8 +272,12 @@ async function sendReviewRequestIfAny(job: Job, jobId: string, actor: string, fr
     return;
   }
   try {
-    const reviewTemplate = await getSetting("REVIEW_REQUEST_EMAIL_TEXT", REVIEW_REQUEST_EMAIL_TEMPLATE);
-    await sendReviewRequestEmail(job, reviewTemplate);
+    const [reviewTemplate, reviewHtmlTemplate] = await Promise.all([
+      getSetting("REVIEW_REQUEST_EMAIL_TEXT", REVIEW_REQUEST_EMAIL_TEMPLATE),
+      getSetting("REVIEW_REQUEST_EMAIL_HTML", "")
+    ]);
+    if (reviewHtmlTemplate.trim()) await sendReviewRequestEmail(job, reviewTemplate, reviewHtmlTemplate);
+    else await sendReviewRequestEmail(job, reviewTemplate);
     await appendActivity({
       jobId, driver: actor, action: "CLIENT_REVIEW_EMAIL_SENT", fromState: from, toState: from, detail: job.customerEmail
     });
@@ -440,7 +432,7 @@ export async function handleAction(
     case "SUBMIT_PAYMENT": {
       assertState(job.currentState, WorkflowState.WAITING_PAYMENT);
       const methods = validatePaymentMethods(input.payment_method ?? []);
-      const paymentBreakdown = validatePaymentBreakdown(methods, input, job.amountCharged);
+      const paymentBreakdown = validatePaymentBreakdown(methods, input);
       job.paymentMethod = methods.join(", ");
       job.paymentBreakdown = paymentBreakdown;
       job.paymentStatus = methods.includes(PaymentMethod.INVOICE) ? "Outstanding" : "Recorded";

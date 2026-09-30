@@ -43,6 +43,7 @@ import { useOnline } from "../lib/net";
 import { htmlToPlainText } from "../lib/htmlText";
 import { formatCalendarWindow } from "../lib/calendarWindow";
 import { photoLocationBlockedReason } from "../lib/photoLocation";
+import { getVanLoadTiming, vanLoadOverdueBody } from "../lib/vanLoadTiming";
 import type { ScenarioKey } from "../scenarioSpec";
 import {
   CONGESTION_CHARGE,
@@ -162,6 +163,7 @@ export function JobWorkflowScreen({ jobId, onBack }: JobWorkflowScreenProps) {
     last: ScenarioKey;
     completed: ScenarioKey[];
   } | null>(null);
+  const [now, setNow] = useState(() => new Date());
   const scrollRef = useRef<HTMLDivElement>(null);
   const toast = useToast();
   const online = useOnline();
@@ -195,6 +197,11 @@ export function JobWorkflowScreen({ jobId, onBack }: JobWorkflowScreenProps) {
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    const id = window.setInterval(() => setNow(new Date()), 60000);
+    return () => window.clearInterval(id);
+  }, []);
 
   // Defensive: never let one job's half-filled form leak into the next.
   useEffect(() => () => resetFormState(), []);
@@ -337,6 +344,31 @@ export function JobWorkflowScreen({ jobId, onBack }: JobWorkflowScreenProps) {
     autoLegacyStopBySkipFrom.current = `${job.jobId}:${job.currentState}`;
     void run(() => sendAction(job.jobId, "STOP_BY_NONE"), undefined, { home: false });
   }, [job, busy, online, run]);
+
+  useEffect(() => {
+    if (!job) return;
+    if (job.currentState !== "WAITING_LOADED_PHOTO") return;
+    const timing = getVanLoadTiming(evidenceItems, now, job.actualStart || undefined, {
+      requireArrivalEvidence: true
+    });
+    if (!timing.overdue) return;
+    if (typeof BroadcastChannel === "undefined") return;
+
+    const storageKey = `tmv:van-loaded-overdue:${job.jobId}`;
+    if (window.sessionStorage.getItem(storageKey)) return;
+    window.sessionStorage.setItem(storageKey, "1");
+
+    const channel = new BroadcastChannel("tmv_in_app_notifications");
+    channel.postMessage({
+      type: "PUSH_NOTIFICATION_RECEIVED",
+      payload: {
+        title: "Van loaded photo overdue",
+        body: vanLoadOverdueBody(),
+        data: { kind: "van_loaded_overdue", jobId: job.jobId }
+      }
+    });
+    window.setTimeout(() => channel.close(), 0);
+  }, [evidenceItems, job, now]);
 
   if (loading) {
     return (

@@ -39,6 +39,8 @@ const DETAIL_LABELS = [
   "Duration of van hire", "Notes", "Extra request", "Inventory item"
 ];
 
+const VAN_LOAD_THRESHOLD_MINUTES = 15;
+
 function field(description: string, labels: string[], multiline = false): string {
   const lines = htmlToText(description).split(/\r?\n/).map(l => l.trim()).filter(Boolean);
   for (const label of labels) {
@@ -97,6 +99,51 @@ function buildPaymentBreakdown(job: Job, amountCharged: Pence): NormalizedJob["p
   const method = job.paymentMethod || "";
   if (!method) return [];
   return [{ method, amount: amountCharged }];
+}
+
+function evidenceTimestamp(item: NormalizedEvidenceItem | undefined): string | undefined {
+  return item?.capturedAt || item?.completedAt || item?.receivedAt;
+}
+
+function minutesBetween(start: string, finish: string): number | undefined {
+  const startMs = new Date(start).getTime();
+  const finishMs = new Date(finish).getTime();
+  if (!Number.isFinite(startMs) || !Number.isFinite(finishMs) || finishMs < startMs) return undefined;
+  return Math.floor((finishMs - startMs) / 60000);
+}
+
+function calculateVanLoadTiming(
+  items: NormalizedEvidenceItem[],
+  actualStart: string | undefined,
+  fetchedAt: string
+): Pick<NormalizedJob, "pickupArrivalAt" | "vanLoadedAt" | "vanLoadDelayMinutes" | "vanLoadLate" | "vanLoadOverdue"> {
+  const arrivalItem = items.find(item => item.category === "Arrival" && item.state === "COMPLETED");
+  const vanLoadedItem = items.find(item => item.category === "VanLoaded" && item.state === "COMPLETED");
+  const pickupArrivalAt = evidenceTimestamp(arrivalItem) || actualStart;
+  const vanLoadedAt = evidenceTimestamp(vanLoadedItem);
+
+  if (!pickupArrivalAt) {
+    return { vanLoadLate: false, vanLoadOverdue: false };
+  }
+
+  if (vanLoadedAt) {
+    const vanLoadDelayMinutes = minutesBetween(pickupArrivalAt, vanLoadedAt);
+    return {
+      pickupArrivalAt,
+      vanLoadedAt,
+      vanLoadDelayMinutes,
+      vanLoadLate: typeof vanLoadDelayMinutes === "number" && vanLoadDelayMinutes > VAN_LOAD_THRESHOLD_MINUTES,
+      vanLoadOverdue: false
+    };
+  }
+
+  const vanLoadDelayMinutes = minutesBetween(pickupArrivalAt, fetchedAt);
+  return {
+    pickupArrivalAt,
+    vanLoadDelayMinutes,
+    vanLoadLate: false,
+    vanLoadOverdue: typeof vanLoadDelayMinutes === "number" && vanLoadDelayMinutes > VAN_LOAD_THRESHOLD_MINUTES
+  };
 }
 
 function buildExtraChargeBreakdown(
@@ -284,6 +331,7 @@ export async function normalizeMongoDataset(dataset: MongoDataset): Promise<Norm
     const jobEvidence = evidenceByJob.get(jobId) || [];
     const jobScenarios = scenariosByJob.get(jobId) || [];
     const { completeness, items } = classifyEvidence(jobId, jobEvidence, job.signatureUrl, jobScenarios);
+    const vanLoadTiming = calculateVanLoadTiming(items, actualStart, dataset.fetchedAt);
 
     const activity = activityByJob.get(jobId) || [];
     const driverViewedAt = activity
@@ -315,7 +363,7 @@ export async function normalizeMongoDataset(dataset: MongoDataset): Promise<Norm
     normalizedJobs.push({
       jobId,
       calendarEventId: job.calendarEventId || "",
-      bookedStart, bookedFinish, actualStart, actualFinish, onMyWayAt, driverViewedAt,
+      bookedStart, bookedFinish, actualStart, actualFinish, ...vanLoadTiming, onMyWayAt, driverViewedAt,
       bookedMinutes, actualMinutes, delayMinutes, delayBand, timingTrustworthy,
       customerName: job.customerName || "Not recorded",
       customerEmail: job.customerEmail || undefined,
@@ -329,6 +377,7 @@ export async function normalizeMongoDataset(dataset: MongoDataset): Promise<Norm
       status, currentState, workflowCompletionPct,
       basePrice, extraChargeSelections, extraCharges, congestionCharge: congestionChargePence, tunnelCharge: tunnelChargePence,
       overtimeMinutes, overtimeCharge, calculatedTotalCharges, totalCharges, amountCharged, reconciled,
+      totalAdjustmentNote: job.totalAdjustmentNote?.trim() || "",
       paymentMethod: job.paymentMethod || "Not recorded",
       paymentBreakdown,
       extraChargeBreakdown,

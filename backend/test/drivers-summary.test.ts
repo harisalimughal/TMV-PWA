@@ -46,4 +46,45 @@ describe("summarizeDrivers", () => {
     expect(row.tunnelChargePounds).toBe(15);
     expect(row.overtimeMinutes).toBe(45);
   });
+
+  it("rolls up total charges separately from driver charged revenue", () => {
+    const [row] = summarizeDrivers(
+      [{
+        initials: "TI",
+        fullName: "Tiago",
+        email: "tiago@example.com",
+        chatUserName: "",
+        active: true,
+        role: "Driver",
+        phone: "",
+        vanRegistration: "",
+        imei: ""
+      }],
+      [
+        {
+          driverInitials: "TI",
+          driverName: "Tiago",
+          driverEmail: "tiago@example.com",
+          status: JobStatus.COMPLETED,
+          totalCharges: 12000,
+          amountCharged: 10000,
+          paymentMethod: "Card",
+          actualMinutes: 120,
+          delayMinutes: 0,
+          overtimeMinutes: 0,
+          evidenceCompleteness: {
+            arrival: "COMPLETED",
+            vanLoaded: "COMPLETED",
+            stopBy: "MISSING",
+            emptyVan: "COMPLETED",
+            organized: "MISSING",
+            signature: "COMPLETED"
+          }
+        } as any
+      ]
+    );
+
+    expect(row.totalChargesPounds).toBe(120);
+    expect(row.revenuePounds).toBe(100);
+  });
 });

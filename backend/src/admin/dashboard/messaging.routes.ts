@@ -17,10 +17,11 @@ export function dashboardMessagingRoutes(): Router {
   router.get("/", async (_req, res) => {
     try {
       const items = await Promise.all(MESSAGE_CATALOG.map(async def => {
-        const [enabled, body, title] = await Promise.all([
+        const [enabled, body, title, html] = await Promise.all([
           isMessageEnabled(def.id),
           getSetting(def.bodyKey, def.bodyFallback),
-          def.titleKey ? getSetting(def.titleKey, def.titleFallback || "") : Promise.resolve(undefined)
+          def.titleKey ? getSetting(def.titleKey, def.titleFallback || "") : Promise.resolve(undefined),
+          def.htmlKey ? getSetting(def.htmlKey, def.htmlFallback || "") : Promise.resolve(undefined)
         ]);
         return {
           id: def.id,
@@ -31,10 +32,13 @@ export function dashboardMessagingRoutes(): Router {
           variables: def.variables,
           enabled,
           hasTitle: Boolean(def.titleKey),
+          hasHtml: Boolean(def.htmlKey),
           title,
           titleFallback: def.titleFallback,
           body,
-          bodyFallback: def.bodyFallback
+          bodyFallback: def.bodyFallback,
+          html,
+          htmlFallback: def.htmlFallback
         };
       }));
       res.status(200).json({ items });
@@ -62,6 +66,7 @@ export function dashboardMessagingRoutes(): Router {
     }
     if (typeof req.body?.body === "string") await setSetting(def.bodyKey, req.body.body);
     if (def.titleKey && typeof req.body?.title === "string") await setSetting(def.titleKey, req.body.title);
+    if (def.htmlKey && typeof req.body?.html === "string") await setSetting(def.htmlKey, req.body.html);
     res.status(200).json({ ok: true });
   });
 

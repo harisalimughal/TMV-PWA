@@ -34,7 +34,7 @@ vi.mock("../src/jobs/booking.service", () => ({
   syncTodayBookings: vi.fn().mockResolvedValue([])
 }));
 
-import { getJobsGroupedForDriver, getNextJobForDriver } from "../src/jobs/jobs.service";
+import { getJobsGroupedForDriver, getNextJobForDriver, getTomorrowJobsForDriver } from "../src/jobs/jobs.service";
 
 const driver = {
   initials: "HE",
@@ -102,6 +102,32 @@ describe("driver job lists are scoped to that driver's own initials", () => {
     const { next } = await getJobsGroupedForDriver("helena@example.com");
 
     expect(next.map(j => j.jobId)).toEqual(["TMV-TOMORROW"]);
+  });
+
+  it("shows assigned tomorrow endpoint jobs before 21:00 London", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-09-23T19:59:00.000Z")); // 20:59 Europe/London
+    listJobs.mockResolvedValue([
+      {
+        jobId: "TMV-TOMORROW",
+        driverInitials: "HE",
+        status: JobStatus.READY,
+        currentState: WorkflowState.READY,
+        bookedStart: "2026-09-24T09:00:00.000Z"
+      },
+      {
+        jobId: "TMV-UNASSIGNED",
+        driverInitials: "",
+        status: JobStatus.READY,
+        currentState: WorkflowState.READY,
+        bookedStart: "2026-09-24T10:00:00.000Z"
+      }
+    ]);
+
+    const { jobs, unassignedCount } = await getTomorrowJobsForDriver("helena@example.com");
+
+    expect(jobs.map(j => j.jobId)).toEqual(["TMV-TOMORROW"]);
+    expect(unassignedCount).toBe(1);
   });
 
   it("does not show jobs beyond tomorrow even after 21:00 London", async () => {

@@ -12,7 +12,7 @@ export function PaperJobReport({ job, onClose }: Props) {
   const totalCharges = job.totalCharges || job.calculatedTotalCharges || job.basePrice + job.extraCharges + job.overtimeCharge;
   const formatPounds = (pence: number | undefined) => `£${((pence || 0) / 100).toFixed(2)}`;
   const photoCategories = [
-    { key: "Arrival", label: "Arrival and Start the Job !" },
+    { key: "Arrival", label: "Arrival / Pickup" },
     { key: "Loaded", label: "Proof Of Van Loaded" },
     { key: "StopBy", label: "Stop-by Point" },
     { key: "Empty", label: "Empty Van / Unloaded ?" },
@@ -195,6 +195,34 @@ export function PaperJobReport({ job, onClose }: Props) {
                   {job.clientSignatureAt ? formatLondonDateTime(job.clientSignatureAt) : "Not recorded"}
                 </span>
               </div>
+              <div className="flex justify-between py-1 border-b border-admin-line/50">
+                <span className="text-[12px] text-[#8A8A8A]">Pickup arrival time</span>
+                <span className="text-[12px] font-medium text-[#1A1A1A]">
+                  {job.pickupArrivalAt ? formatLondonDateTime(job.pickupArrivalAt) : "Not recorded"}
+                </span>
+              </div>
+              <div className="flex justify-between py-1 border-b border-admin-line/50">
+                <span className="text-[12px] text-[#8A8A8A]">Van loaded photo time</span>
+                <span className="text-[12px] font-medium text-[#1A1A1A]">
+                  {job.vanLoadedAt ? formatLondonDateTime(job.vanLoadedAt) : "Not recorded"}
+                </span>
+              </div>
+              <div className="flex justify-between py-1 border-b border-admin-line/50">
+                <span className="text-[12px] text-[#8A8A8A]">Empty van photo time</span>
+                <span className="text-[12px] font-medium text-[#1A1A1A]">
+                  {job.actualFinish ? formatLondonDateTime(job.actualFinish) : "Not recorded"}
+                </span>
+              </div>
+              {(job.vanLoadLate || job.vanLoadOverdue) && (
+                <div className="flex justify-between py-1 border-b border-admin-line/50">
+                  <span className="text-[12px] font-semibold text-admin-status-red">Van loaded mismatch</span>
+                  <span className="text-[12px] font-bold text-admin-status-red">
+                    {job.vanLoadLate
+                      ? `${job.vanLoadDelayMinutes ?? 0} min after arrival`
+                      : `${job.vanLoadDelayMinutes ?? 0} min overdue`}
+                  </span>
+                </div>
+              )}
               <div className="flex justify-between py-1 border-b border-admin-line/50">
                 <span className="text-[12px] text-[#8A8A8A]">Actual Duration</span>
                 <span className="text-[12px] font-medium text-[#1A1A1A]">{job.actualMinutes ? `${job.actualMinutes}m` : "—"}</span>
