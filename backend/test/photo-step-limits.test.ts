@@ -7,7 +7,6 @@ import { WorkflowState } from "../src/workflow/workflow.states";
 describe("photo step limits", () => {
   it("allows the requested number of job evidence photos per workflow step", () => {
     expect(maxPhotosForWorkflowState(WorkflowState.WAITING_LOADED_PHOTO)).toBe(5);
-    expect(maxPhotosForWorkflowState(WorkflowState.WAITING_STOP_BY_PHOTO)).toBe(5);
     expect(maxPhotosForWorkflowState(WorkflowState.WAITING_EMPTY_VAN_PHOTO)).toBe(2);
   });
 

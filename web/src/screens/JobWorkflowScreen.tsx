@@ -81,11 +81,7 @@ const STAY_ON_SCREEN_ACTIONS = new Set([
   "SUBMIT_TOTAL_CHARGES",
   "SUBMIT_PAYMENT",
   "REVIEW_NONE",
-  "REVIEW_YES",
-  // Saying "yes" to a stop-by goes straight into its photo step -- the same
-  // "answering yes opens the next thing to do" pattern. STOP_BY_NONE keeps the
-  // default (bounces home), matching the other no-op style answers.
-  "STOP_BY_YES"
+  "REVIEW_YES"
 ]);
 
 /** The near-final "you're basically done" moment — a bigger heading than every
@@ -206,6 +202,7 @@ export function JobWorkflowScreen({ jobId, onBack }: JobWorkflowScreenProps) {
   const autoSkippedFrom = useRef<string | null>(null);
   const autoReviewSendFrom = useRef<string | null>(null);
   const autoIssueSkipFrom = useRef<string | null>(null);
+  const autoLegacyStopBySkipFrom = useRef<string | null>(null);
 
   const openFirstIssueScenario = useCallback((scenario: ScenarioKey) => {
     setCompletedIssueScenarios([]);
@@ -284,7 +281,6 @@ export function JobWorkflowScreen({ jobId, onBack }: JobWorkflowScreenProps) {
 
     const issueChoiceState =
       job.currentState === "WAITING_ARRIVAL_ISSUES_CHOICE" ||
-      job.currentState === "WAITING_STOP_BY_ISSUES_CHOICE" ||
       job.currentState === "WAITING_EMPTY_VAN_ISSUES_CHOICE";
 
     setOpenScenario(null);
@@ -330,6 +326,16 @@ export function JobWorkflowScreen({ jobId, onBack }: JobWorkflowScreenProps) {
     autoIssueSkipFrom.current = `${job.jobId}:${job.currentState}`;
     const action = isIssueChoiceState(job.currentState) ? "ISSUES_RESUME" : "ISSUES_NONE";
     void run(() => sendAction(job.jobId, action), undefined, { home: false });
+  }, [job, busy, online, run]);
+
+  useEffect(() => {
+    if (!job || !isLegacyStopByState(job.currentState)) {
+      autoLegacyStopBySkipFrom.current = null;
+      return;
+    }
+    if (busy || !online || autoLegacyStopBySkipFrom.current === `${job.jobId}:${job.currentState}`) return;
+    autoLegacyStopBySkipFrom.current = `${job.jobId}:${job.currentState}`;
+    void run(() => sendAction(job.jobId, "STOP_BY_NONE"), undefined, { home: false });
   }, [job, busy, online, run]);
 
   if (loading) {
@@ -440,15 +446,6 @@ export function JobWorkflowScreen({ jobId, onBack }: JobWorkflowScreenProps) {
       .finally(() => setBusy(false));
   };
 
-  // job.stopBy is only ever a hint from Calendar -- the driver is asked "is there a
-  // stop-by point?" regardless of it (see WAITING_STOP_BY_CHECK), so a stop decided
-  // on the day with nothing in Calendar wouldn't otherwise show its progress slot
-  // while the driver is actually in the middle of it.
-  const hasStop =
-    Boolean(job.stopBy && job.stopBy.trim()) ||
-    state === "WAITING_STOP_BY_PHOTO" ||
-    state === "WAITING_STOP_BY_ISSUES_CHECK" ||
-    state === "WAITING_STOP_BY_ISSUES_CHOICE";
   const routeExpanded = state === "READY";
   // Every photo/issue-check step used to show a single-address reminder card (or, for
   // the money/sign-off steps, nothing) instead of the full route -- redundant now that
@@ -466,7 +463,7 @@ export function JobWorkflowScreen({ jobId, onBack }: JobWorkflowScreenProps) {
     state === "WAITING_EXTRA_CHARGES"
       ? overtimeApplies(formState.extraCharges)
       : overtimeApplies(job.extraCharges);
-  const progress = workflowProgress(state, { overtime, hasStop });
+  const progress = workflowProgress(state, { overtime });
   // WAITING_ARRIVAL_PHOTO's own GO_BACK target is READY (see backend's BACK_TARGET) --
   // but READY is no longer a screen this app ever shows (see JobListScreen.tsx's
   // FeaturedJobCard, which replaced it). Walking back into it here would just
@@ -519,7 +516,9 @@ export function JobWorkflowScreen({ jobId, onBack }: JobWorkflowScreenProps) {
                 "Photos uploaded",
                 // Empty Van Photo runs straight into Customer sign-off, no home
                 // bounce -- Arrival/Van Loaded Photo keep the default (bounce home).
-                submittedAt === "WAITING_EMPTY_VAN_PHOTO" ? { home: false } : undefined
+                submittedAt === "WAITING_LOADED_PHOTO" || submittedAt === "WAITING_EMPTY_VAN_PHOTO"
+                  ? { home: false }
+                  : undefined
               );
               // Once the server has them, drop the local staging for that step so a
               // later trip back doesn't re-submit the same files.
@@ -731,6 +730,7 @@ const formState: {
   extraCharges: string[];
   overtimeMinutes: string;
   payment: string[];
+  paymentAmounts: Record<string, string>;
   photos: File[];
   /** Photos staged for each photo step, kept by workflow state so stepping away and
    *  back (GO_BACK / forward) restores exactly what the driver had taken and not yet
@@ -747,6 +747,7 @@ const formState: {
   extraCharges: [],
   overtimeMinutes: "",
   payment: [],
+  paymentAmounts: {},
   photos: [],
   photosByStep: {},
   photoMeta: [],
@@ -760,6 +761,7 @@ function resetFormState() {
   formState.extraCharges = [];
   formState.overtimeMinutes = "";
   formState.payment = [];
+  formState.paymentAmounts = {};
   formState.photos = [];
   formState.photosByStep = {};
   formState.photoMeta = [];
@@ -780,7 +782,6 @@ const photoCapture: { open: (() => void) | null } = { open: null };
 export function photoMaxFor(state: string): number {
   switch (state) {
     case "WAITING_LOADED_PHOTO":
-    case "WAITING_STOP_BY_PHOTO":
       return 5;
     case "WAITING_EMPTY_VAN_PHOTO":
       return 2;
@@ -797,8 +798,6 @@ function evidenceTypeForState(state: string): string | null {
       return "Arrival";
     case "WAITING_LOADED_PHOTO":
       return "VanLoaded";
-    case "WAITING_STOP_BY_PHOTO":
-      return "StopBy";
     case "WAITING_EMPTY_VAN_PHOTO":
       return "EmptyVan";
     default:
@@ -809,7 +808,6 @@ function evidenceTypeForState(state: string): string | null {
 function isIssueChoiceState(state: string): boolean {
   return (
     state === "WAITING_ARRIVAL_ISSUES_CHOICE" ||
-    state === "WAITING_STOP_BY_ISSUES_CHOICE" ||
     state === "WAITING_EMPTY_VAN_ISSUES_CHOICE"
   );
 }
@@ -818,25 +816,30 @@ function isIssueWorkflowState(state: string): boolean {
   return (
     isIssueChoiceState(state) ||
     state === "WAITING_ARRIVAL_ISSUES_CHECK" ||
-    state === "WAITING_STOP_BY_ISSUES_CHECK" ||
     state === "WAITING_EMPTY_VAN_ISSUES_CHECK"
+  );
+}
+
+function isLegacyStopByState(state: string): boolean {
+  return (
+    state === "WAITING_STOP_BY_CHECK" ||
+    state === "WAITING_STOP_BY_PHOTO" ||
+    state === "WAITING_STOP_BY_ISSUES_CHECK" ||
+    state === "WAITING_STOP_BY_ISSUES_CHOICE"
   );
 }
 
 /** Which checkpoint of the move a Parking Liability / Liability Report is being filed
  *  from, given the workflow state the moment the form opens — so the submission (and
- *  Parking Liability's address default) reflects where the driver actually is,
- *  including a stop-by / waypoint address, without asking them to say so themselves. */
+ *  Parking Liability's address default) reflects where the driver actually is. */
 function reportedAtForState(
   state: string,
-  job: Pick<Job, "pickup" | "stopBy" | "dropoff">
-): { label: "Pickup" | "Stop-by" | "Drop-off"; address?: string } | undefined {
+  job: Pick<Job, "pickup" | "dropoff">
+): { label: "Pickup" | "Drop-off"; address?: string } | undefined {
   switch (state) {
     case "WAITING_ARRIVAL_ISSUES_CHOICE":
     case "WAITING_LOADED_PHOTO":
       return { label: "Pickup", address: job.pickup };
-    case "WAITING_STOP_BY_ISSUES_CHOICE":
-      return { label: "Stop-by", address: job.stopBy };
     case "WAITING_EMPTY_VAN_ISSUES_CHOICE":
       return { label: "Drop-off", address: job.dropoff };
     default:
@@ -911,6 +914,43 @@ function totalChargesInput(): Record<string, string[]> | undefined {
     total_charges: [formState.totalChargesAmount],
     total_adjustment_note: [formState.totalChargesNote.trim()]
   };
+}
+
+export function paymentMethodTakesAmount(method: string): boolean {
+  return method !== "Invoice";
+}
+
+function paymentAmountInputName(method: string): string {
+  return `payment_amount_${method}`;
+}
+
+export function paymentActionInput(
+  methods: string[],
+  amounts: Record<string, string>
+): Record<string, string[]> {
+  const input: Record<string, string[]> = { payment_method: methods };
+  for (const method of methods) {
+    if (!paymentMethodTakesAmount(method)) continue;
+    input[paymentAmountInputName(method)] = [amounts[method] ?? ""];
+  }
+  return input;
+}
+
+export function paymentBlockedReasonFor(
+  methods: string[],
+  amounts: Record<string, string>,
+  offlineReason?: string
+): string | undefined {
+  if (offlineReason) return offlineReason;
+  if (methods.length === 0) return "Choose at least one payment method.";
+  for (const method of methods) {
+    if (!paymentMethodTakesAmount(method)) continue;
+    const raw = amounts[method]?.trim() ?? "";
+    if (!raw) return `Enter the amount taken by ${method}.`;
+    const amount = Number(raw);
+    if (!Number.isFinite(amount) || amount < 0) return `Enter a valid amount taken by ${method}.`;
+  }
+  return undefined;
 }
 
 function StepBody({
@@ -1026,40 +1066,6 @@ function StepBody({
         />
       );
 
-    case "WAITING_STOP_BY_CHECK":
-      return (
-        <div className="rounded-card border border-line bg-surface px-4 py-6 text-center">
-          <p className="text-body text-fg-muted">
-            A stop-by is any extra address on the way to drop-off — dropping something off, picking
-            up more items, anything beyond the booked pickup and drop-off.
-          </p>
-        </div>
-      );
-
-    case "WAITING_STOP_BY_PHOTO":
-      return (
-        <PhotoUploader
-          key={state}
-          label="Stop-by pictures"
-          maxPhotos={2}
-          submitting={busy}
-          progress={uploadProgress}
-          error={error}
-          registerCapture={registerPhotoCapture}
-          initialFiles={formState.photosByStep[state] ?? []}
-          initialMeta={formState.photoMetaByStep[state] ?? []}
-          remoteFiles={remotePhotos}
-          onRemoveRemote={onRemoveRemotePhoto}
-          onFilesChange={(files, metas) => {
-            formState.photos = files;
-            formState.photosByStep[state] = files;
-            formState.photoMeta = metas;
-            formState.photoMetaByStep[state] = metas;
-            tick();
-          }}
-        />
-      );
-
     case "WAITING_EMPTY_VAN_PHOTO":
       return (
         <div className="flex flex-col gap-4">
@@ -1089,7 +1095,6 @@ function StepBody({
       );
 
     case "WAITING_ARRIVAL_ISSUES_CHECK":
-    case "WAITING_STOP_BY_ISSUES_CHECK":
     case "WAITING_EMPTY_VAN_ISSUES_CHECK":
       return null;
 
@@ -1098,7 +1103,6 @@ function StepBody({
     // remount. These call onOpenScenario directly -- ISSUES_YES already happened, so
     // re-firing it would just error against the backend's state machine.
     case "WAITING_ARRIVAL_ISSUES_CHOICE":
-    case "WAITING_STOP_BY_ISSUES_CHOICE":
     case "WAITING_EMPTY_VAN_ISSUES_CHOICE":
       return (
         <div className="flex flex-col gap-3">
@@ -1334,11 +1338,35 @@ function StepBody({
                   formState.payment = formState.payment.includes(option)
                     ? formState.payment.filter(value => value !== option)
                     : [...formState.payment, option];
+                  if (!formState.payment.includes(option)) {
+                    delete formState.paymentAmounts[option];
+                  }
                   tick();
                 }}
               />
             ))}
           </ChoiceGroup>
+          {formState.payment.some(paymentMethodTakesAmount) && (
+            <div className="flex flex-col gap-3 rounded-card border border-line bg-surface px-4 py-3.5">
+              <p className="text-label text-fg-muted">Amount taken by payment method</p>
+              {formState.payment.filter(paymentMethodTakesAmount).map(method => (
+                <Field key={method} label={method} required>
+                  {control => (
+                    <Input
+                      {...control}
+                      prefix="£"
+                      inputMode="decimal"
+                      value={formState.paymentAmounts[method] ?? ""}
+                      onChange={event => {
+                        formState.paymentAmounts[method] = event.target.value;
+                        tick();
+                      }}
+                    />
+                  )}
+                </Field>
+              ))}
+            </div>
+          )}
           {/* Invoice jobs: Invoice is pre-selected (see the reset effect above) but
               the driver can still see/change it here; the extras recap is a reminder
               of what's actually going on the invoice. */}
@@ -1506,7 +1534,6 @@ function StepDock({
 
     case "WAITING_ARRIVAL_PHOTO":
     case "WAITING_LOADED_PHOTO":
-    case "WAITING_STOP_BY_PHOTO":
     case "WAITING_EMPTY_VAN_PHOTO": {
       // Local (just taken) + remote (already uploaded) photos both count toward the step.
       const photoTotal = formState.photos.length + photoRemoteCount;
@@ -1547,29 +1574,7 @@ function StepDock({
       );
     }
 
-    case "WAITING_STOP_BY_CHECK":
-      return (
-        <BottomActionBar>
-          <div className="grid grid-cols-2 gap-3">
-            <Button
-              variant="secondary"
-              size="lg"
-              loading={busy}
-              blockedReason={offlineReason}
-              onBlocked={onBlocked}
-              onClick={() => onAction("STOP_BY_NONE")}
-            >
-              No
-            </Button>
-            <Button size="lg" loading={busy} blockedReason={offlineReason} onBlocked={onBlocked} onClick={() => onAction("STOP_BY_YES")}>
-              Yes
-            </Button>
-          </div>
-        </BottomActionBar>
-      );
-
     case "WAITING_ARRIVAL_ISSUES_CHECK":
-    case "WAITING_STOP_BY_ISSUES_CHECK":
     case "WAITING_EMPTY_VAN_ISSUES_CHECK":
       return null;
 
@@ -1656,9 +1661,9 @@ function StepDock({
             fullWidth
             size="lg"
             loading={busy}
-            blockedReason={offlineReason ?? (formState.payment.length === 0 ? "Choose at least one payment method." : undefined)}
+            blockedReason={paymentBlockedReasonFor(formState.payment, formState.paymentAmounts, offlineReason)}
             onBlocked={onBlocked}
-            onClick={() => onAction("SUBMIT_PAYMENT", { payment_method: formState.payment })}
+            onClick={() => onAction("SUBMIT_PAYMENT", paymentActionInput(formState.payment, formState.paymentAmounts))}
           >
             Continue
           </Button>

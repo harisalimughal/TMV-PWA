@@ -242,6 +242,22 @@ export function JobDetailDrawer({ job: initialJob, isOpen, onClose, onUpdated }:
               <span className="text-[14px] font-bold text-admin-ink truncate block">
                 {job.bookedStart ? formatLondonDateTime(job.bookedStart) : "Not scheduled"}
               </span>
+              <div className="mt-2 border-t border-admin-line pt-2">
+                <span className="block text-[10px] font-bold uppercase tracking-wider text-admin-muted">
+                  On my way
+                </span>
+                <span className="mt-0.5 block text-[12px] font-semibold text-admin-ink">
+                  {job.onMyWayAt ? formatLondonDateTime(job.onMyWayAt) : "Not recorded"}
+                </span>
+              </div>
+              <div className="mt-2 border-t border-admin-line pt-2">
+                <span className="block text-[10px] font-bold uppercase tracking-wider text-admin-muted">
+                  Customer signature time
+                </span>
+                <span className="mt-0.5 block text-[12px] font-semibold text-admin-ink">
+                  {job.clientSignatureAt ? formatLondonDateTime(job.clientSignatureAt) : "Not recorded"}
+                </span>
+              </div>
             </div>
 
             <div className="bg-white p-4 rounded-module border border-admin-line shadow-[0_2px_10px_rgb(0,0,0,0.02)] flex flex-col justify-between">

@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { NormalizedJob, ScenarioKind } from "../types";
 import { formatLondonDateTime } from "../utils/date";
 import { formatLocationLabel, type CapturedLocation } from "../../../../lib/geo";
+import { scenarioPointFromRecord } from "../utils/scenarioPoint";
 
 interface Props {
   job: NormalizedJob;
@@ -200,47 +201,51 @@ export function PaperDossierReport({ job, isPreview = false }: Props) {
   }: {
     scenario: NormalizedJob["scenarios"][number];
     showSignature: boolean;
-  }) => (
-    <div className="mb-3 grid grid-cols-1 gap-3 shrink-0">
-      <div className="border border-[#E5E7EB] rounded-card overflow-hidden">
-        <DetailsRow label="Submitted" value={`${formatLondonDateTime(scenario.timestamp)} | ${scenario.driver || "Driver not recorded"}`} />
-        <DetailsRow label="Client Name" value={scenario.clientName || "Not recorded"} />
-        <DetailsRow label="Client Phone" value={scenario.clientPhone} />
-        <DetailsRow label="Client Email" value={scenario.clientEmail} />
-        {(scenario.kind === "checkin" || scenario.kind === "checkout") && (
-          <DetailsRow label="Container Number" value={scenario.containerNumber || "Not recorded"} />
-        )}
-        {scenario.kind === "parking" && <DetailsRow label="Address" value={scenario.address || "Not recorded"} />}
-        {scenario.kind === "liability" && (
-          <DetailsRow label="Damage Categories" value={scenario.damageCategories || "Not recorded"} />
-        )}
-        <DetailsRow label="Client Present" value={scenario.clientPresent} />
-      </div>
-
-      {showSignature && (
-        <div className="mb-3 shrink-0">
-          <h2 className="text-label font-medium text-fg-muted mb-1.5">Scenario Signature:</h2>
-          <div className="border border-[#E5E7EB] rounded-card p-4 bg-[#F8F9FA] flex flex-col items-center justify-center min-h-[100px]">
-            {scenario.signature ? (
-              <img src={scenario.signature.thumbUrl} alt="Scenario signature" className="max-h-[70px] object-contain mix-blend-multiply" />
-            ) : (
-              <span className="text-[13px] font-semibold text-admin-muted italic">Not captured</span>
-            )}
-            {scenario.signature?.capturedAt && (
-              <span className="text-[10px] font-medium text-admin-muted mt-2">
-                Signed: {formatLondonDateTime(scenario.signature.capturedAt)}
-              </span>
-            )}
-            {scenario.signature?.location && (
-              <span className="text-[10px] font-medium text-admin-muted">
-                {formatLocationLabel(scenario.signature.location, scenario.signature.locationName)}
-              </span>
-            )}
-          </div>
+  }) => {
+    const scenarioPoint = scenarioPointFromRecord(scenario);
+    return (
+      <div className="mb-3 grid grid-cols-1 gap-3 shrink-0">
+        <div className="border border-[#E5E7EB] rounded-card overflow-hidden">
+          <DetailsRow label="Submitted" value={`${formatLondonDateTime(scenario.timestamp)} | ${scenario.driver || "Driver not recorded"}`} />
+          {scenarioPoint && <DetailsRow label="Reported At" value={scenarioPoint.full} />}
+          <DetailsRow label="Client Name" value={scenario.clientName || "Not recorded"} />
+          <DetailsRow label="Client Phone" value={scenario.clientPhone} />
+          <DetailsRow label="Client Email" value={scenario.clientEmail} />
+          {(scenario.kind === "checkin" || scenario.kind === "checkout") && (
+            <DetailsRow label="Container Number" value={scenario.containerNumber || "Not recorded"} />
+          )}
+          {scenario.kind === "parking" && <DetailsRow label="Address" value={scenario.address || "Not recorded"} />}
+          {scenario.kind === "liability" && (
+            <DetailsRow label="Damage Categories" value={scenario.damageCategories || "Not recorded"} />
+          )}
+          <DetailsRow label="Client Present" value={scenario.clientPresent} />
         </div>
-      )}
-    </div>
-  );
+
+        {showSignature && (
+          <div className="mb-3 shrink-0">
+            <h2 className="text-label font-medium text-fg-muted mb-1.5">Scenario Signature:</h2>
+            <div className="border border-[#E5E7EB] rounded-card p-4 bg-[#F8F9FA] flex flex-col items-center justify-center min-h-[100px]">
+              {scenario.signature ? (
+                <img src={scenario.signature.thumbUrl} alt="Scenario signature" className="max-h-[70px] object-contain mix-blend-multiply" />
+              ) : (
+                <span className="text-[13px] font-semibold text-admin-muted italic">Not captured</span>
+              )}
+              {scenario.signature?.capturedAt && (
+                <span className="text-[10px] font-medium text-admin-muted mt-2">
+                  Signed: {formatLondonDateTime(scenario.signature.capturedAt)}
+                </span>
+              )}
+              {scenario.signature?.location && (
+                <span className="text-[10px] font-medium text-admin-muted">
+                  {formatLocationLabel(scenario.signature.location, scenario.signature.locationName)}
+                </span>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
 
   // Common wrapper for each page. display:flex used to live directly on this element
   // -- the one page-break-after:always boundary Chromium's print engine has to
@@ -305,12 +310,13 @@ export function PaperDossierReport({ job, isPreview = false }: Props) {
         if (item.kind === "scenario") {
           const { scenario, photo, photoIndex } = item;
           const label = SCENARIO_LABELS[scenario.kind] || "Scenario";
+          const scenarioPoint = scenarioPointFromRecord(scenario);
           const src = photo.thumbUrl || null;
 
           return (
             <Page key={`${scenario.id}-${photo.fileId || photoIndex}`} page={pageNum} totalPages={totalPages}>
               <PhotoSection
-                title={`${label} Evidence${scenario.photos.length > 1 ? ` ${photoIndex + 1}` : ""}`}
+                title={`${label}${scenarioPoint ? ` (${scenarioPoint.point})` : ""} Evidence${scenario.photos.length > 1 ? ` ${photoIndex + 1}` : ""}`}
                 src={src}
                 capturedAt={photo.capturedAt}
                 fallbackAt={scenario.timestamp}
@@ -345,6 +351,18 @@ export function PaperDossierReport({ job, isPreview = false }: Props) {
                   <div className="flex items-center justify-between p-3 border-b border-[#E5E7EB] bg-white">
                     <span className="text-label font-medium text-fg-muted">Customer Name</span>
                     <span className="text-[13px] font-bold text-admin-ink">{job.customerName || "N/A"}</span>
+                  </div>
+                  <div className="flex items-center justify-between p-3 border-b border-[#E5E7EB] bg-white">
+                    <span className="text-label font-medium text-fg-muted">On my way</span>
+                    <span className="text-[13px] font-bold text-admin-ink">
+                      {job.onMyWayAt ? formatLondonDateTime(job.onMyWayAt) : "Not recorded"}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between p-3 border-b border-[#E5E7EB] bg-white">
+                    <span className="text-label font-medium text-fg-muted">Customer signature time</span>
+                    <span className="text-[13px] font-bold text-admin-ink">
+                      {job.clientSignatureAt ? formatLondonDateTime(job.clientSignatureAt) : "Not recorded"}
+                    </span>
                   </div>
                   <div className="flex items-center justify-between p-3 border-b border-[#E5E7EB] bg-white">
                     <span className="text-label font-medium text-fg-muted">Pickup</span>
@@ -394,7 +412,9 @@ export function PaperDossierReport({ job, isPreview = false }: Props) {
                     <span className="text-[13px] font-semibold text-admin-muted italic">Not captured</span>
                   )}
                   <span className="text-[11px] font-medium text-admin-muted mt-2">Confirmed By: {job.clientConfirmedName || "N/A"}</span>
-                  <span className="text-[10px] font-medium text-admin-muted mt-0.5">Signed: {formattedTime}</span>
+                  <span className="text-[10px] font-medium text-admin-muted mt-0.5">
+                    Signed: {job.clientSignatureAt ? formatLondonDateTime(job.clientSignatureAt) : formattedTime}
+                  </span>
                 </div>
               </div>
             )}

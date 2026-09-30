@@ -22,6 +22,7 @@ import { LiabilityConfigModal } from "../components/LiabilityConfigModal";
 import { ApiErrorState } from "../components/ApiErrorState";
 import { Settings2 } from "lucide-react";
 import { useDriverOptions } from "../hooks/useDriverOptions";
+import { scenarioPointFromRecord } from "../utils/scenarioPoint";
 
 interface Props {
   kind: "checkin" | "checkout" | "parking" | "liability";
@@ -155,7 +156,7 @@ export function ScenariosPage({ kind }: Props) {
 
           <div className="hidden sm:block w-[1px] h-6 bg-admin-line mx-1" />
 
-          {/* DateRangePicker already renders its own Today/7 Days/30 Days
+          {/* DateRangePicker already renders its own Today/Tomorrow/7 Days
               preset chips alongside the calendar inputs -- a second, separately-driven
               set of the same four chips used to sit here too. */}
           <DateRangePicker from={from} to={to} onChange={(f, t) => { setFrom(f); setTo(t); setPage(1); }} />
@@ -263,6 +264,7 @@ export function ScenariosPage({ kind }: Props) {
                   if (kind === "parking") refText = item.address || raw["Address"] || "—";
                   if (kind === "liability") refText = item.damageCategories || "—";
                   
+                  const scenarioPoint = scenarioPointFromRecord(item);
                   const isTestRef = isTestGibberish(refText);
 
                   // Extract Media
@@ -281,11 +283,31 @@ export function ScenariosPage({ kind }: Props) {
 
                         <td className="px-4">
                           {jobId !== "—" ? (
-                            <button className="font-medium text-[#2563EB] hover:underline text-[14px]" onClick={(e) => { e.stopPropagation(); }}>
-                              {jobId}
-                            </button>
+                            <div className="flex flex-col items-start gap-1">
+                              <button className="font-medium text-[#2563EB] hover:underline text-[14px]" onClick={(e) => { e.stopPropagation(); }}>
+                                {jobId}
+                              </button>
+                              {scenarioPoint && (
+                                <span
+                                  title={scenarioPoint.full}
+                                  className="rounded-control border border-admin-brand/20 bg-admin-brand-soft px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.03em] text-admin-brand"
+                                >
+                                  {scenarioPoint.point}
+                                </span>
+                              )}
+                            </div>
                           ) : (
-                            <span className="text-admin-muted italic text-[13px]">Not recorded</span>
+                            <div className="flex flex-col items-start gap-1">
+                              <span className="text-admin-muted italic text-[13px]">Not recorded</span>
+                              {scenarioPoint && (
+                                <span
+                                  title={scenarioPoint.full}
+                                  className="rounded-control border border-admin-brand/20 bg-admin-brand-soft px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.03em] text-admin-brand"
+                                >
+                                  {scenarioPoint.point}
+                                </span>
+                              )}
+                            </div>
                           )}
                         </td>
                         

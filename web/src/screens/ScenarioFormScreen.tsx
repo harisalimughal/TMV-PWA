@@ -134,6 +134,10 @@ export function scenarioInitialFields(spec: ScenarioSpec, job?: ScenarioJobPrefi
   return initial;
 }
 
+export function reportedAtChipLabel(reportedAt?: { label: string; address?: string }): string {
+  return reportedAt?.label ?? "";
+}
+
 function scenarioFieldsForSpec(spec: ScenarioSpec, fields: Record<string, string> | undefined): Record<string, string> {
   if (!fields) return {};
   const allowed = new Set(spec.fields.map(field => field.name));
@@ -459,6 +463,7 @@ export function ScenarioFormScreen({
     : jobId
       ? `Job ${jobId}`
       : "Storage form";
+  const checkpointChip = reportedAtChipLabel(reportedAt);
 
   const submitVerb = scenario === "checkin" ? "check in" : scenario === "checkout" ? "check out" : null;
   const idleSubmitLabel = !online
@@ -529,6 +534,14 @@ export function ScenarioFormScreen({
             bookedStart={job?.bookedStart}
             bookedFinish={job?.bookedFinish}
           />
+
+          {checkpointChip && (
+            <div className="flex">
+              <span className="rounded-pill border border-brand-line bg-brand-subtle px-3 py-1.5 text-meta font-bold uppercase tracking-[0.04em] text-brand-subtle-fg">
+                {checkpointChip}
+              </span>
+            </div>
+          )}
 
           {spec.noticeText && <NoticeCard title={spec.noticeTitle} text={spec.noticeText} />}
 

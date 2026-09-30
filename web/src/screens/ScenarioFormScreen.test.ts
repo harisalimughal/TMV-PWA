@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { SCENARIOS } from "../scenarioSpec";
-import { scenarioInitialFields } from "./ScenarioFormScreen";
+import { reportedAtChipLabel, scenarioInitialFields } from "./ScenarioFormScreen";
 
 describe("ScenarioFormScreen initial fields", () => {
   it("prefills check-in and checkout client name from the job customer name", () => {
@@ -37,5 +37,13 @@ describe("ScenarioFormScreen initial fields", () => {
         clientNamePostcode: "Wrong Fallback SW18"
       }).client_name
     ).toBe("Suchi S Stark");
+  });
+});
+
+describe("reportedAtChipLabel", () => {
+  it("shows only the selected checkpoint label, not the address", () => {
+    expect(reportedAtChipLabel({ label: "Pickup", address: "10 High Street" })).toBe("Pickup");
+    expect(reportedAtChipLabel({ label: "Drop-off", address: "20 Low Street" })).toBe("Drop-off");
+    expect(reportedAtChipLabel(undefined)).toBe("");
   });
 });

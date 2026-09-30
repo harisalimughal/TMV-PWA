@@ -3,6 +3,7 @@ import { LogIn, LogOut, AlertCircle, ShieldAlert } from "lucide-react";
 import { JobScenarioSubmission, ScenarioKind } from "../types";
 import { formatLondonDateTime } from "../utils/date";
 import { formatLocationLabel, mapsUrlForLocation, type CapturedLocation } from "../../../../lib/geo";
+import { scenarioPointFromRecord } from "../utils/scenarioPoint";
 
 const KIND_META: Record<ScenarioKind, { label: string; icon: React.ComponentType<{ className?: string }> }> = {
   checkin: { label: "Check In", icon: LogIn },
@@ -55,12 +56,23 @@ function EvidenceMeta({
 function ScenarioCard({ item }: { item: JobScenarioSubmission }) {
   const meta = KIND_META[item.kind];
   const Icon = meta.icon;
+  const scenarioPoint = scenarioPointFromRecord(item);
   return (
     <div className="rounded-card border border-admin-line bg-admin-surface/40 p-3">
       <div className="flex items-center justify-between gap-3 mb-2.5 flex-wrap">
-        <span className="flex items-center gap-1.5 text-[12px] font-bold text-admin-ink">
-          <Icon className="w-3.5 h-3.5 text-admin-brand" /> {meta.label}
-        </span>
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="flex items-center gap-1.5 text-[12px] font-bold text-admin-ink">
+            <Icon className="w-3.5 h-3.5 text-admin-brand" /> {meta.label}
+          </span>
+          {scenarioPoint && (
+            <span
+              title={scenarioPoint.full}
+              className="rounded-control border border-admin-brand/20 bg-admin-brand-soft px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.03em] text-admin-brand"
+            >
+              {scenarioPoint.point}
+            </span>
+          )}
+        </div>
         <span className="text-[11px] text-admin-muted">
           {formatLondonDateTime(item.timestamp)} &bull; {item.driver}
         </span>
@@ -75,6 +87,7 @@ function ScenarioCard({ item }: { item: JobScenarioSubmission }) {
         <Field label="Client Name" value={item.clientName} />
         <Field label="Client Phone" value={item.clientPhone} />
         <Field label="Client Present" value={item.clientPresent} />
+        {scenarioPoint && <Field label="Reported At" value={scenarioPoint.full} span2 />}
       </div>
 
       {item.photos.length > 0 && (

@@ -86,27 +86,9 @@ describe("driver job lists are scoped to that driver's own initials", () => {
     expect(job?.jobId).toBe("TMV-1");
   });
 
-  it("does not show tomorrow jobs in Upcoming before 21:00 London", async () => {
+  it("shows assigned tomorrow jobs in Upcoming before 21:00 London", async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-09-23T19:59:00.000Z")); // 20:59 Europe/London
-    listJobs.mockResolvedValue([
-      {
-        jobId: "TMV-TOMORROW",
-        driverInitials: "HE",
-        status: JobStatus.READY,
-        currentState: WorkflowState.READY,
-        bookedStart: "2026-09-24T09:00:00.000Z"
-      }
-    ]);
-
-    const { next } = await getJobsGroupedForDriver("helena@example.com");
-
-    expect(next.map(j => j.jobId)).toEqual([]);
-  });
-
-  it("shows tomorrow jobs in Upcoming from 21:00 London", async () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date("2026-09-23T20:00:00.000Z")); // 21:00 Europe/London
     listJobs.mockResolvedValue([
       {
         jobId: "TMV-TOMORROW",

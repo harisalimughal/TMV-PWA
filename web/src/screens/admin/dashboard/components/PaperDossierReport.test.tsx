@@ -1,8 +1,25 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { JobScenarioSection } from "./JobScenarioSection";
+import { JobDetailDrawer } from "./JobDetailDrawer";
 import { PaperDossierReport } from "./PaperDossierReport";
+import { PaperJobReport } from "./PaperJobReport";
 import type { JobScenarioSubmission, NormalizedJob } from "../types";
+import { vi } from "vitest";
+
+vi.mock("../../../../api/admin", () => ({
+  fetchDrivers: vi.fn().mockResolvedValue([])
+}));
+
+vi.mock("../api", async importOriginal => {
+  const actual = await importOriginal<typeof import("../api")>();
+  return {
+    ...actual,
+    reassignJob: vi.fn(),
+    deleteEvidencePhoto: vi.fn(),
+    markJobFinishedManually: vi.fn()
+  };
+});
 
 const checkinScenario: JobScenarioSubmission = {
   id: "scenario-1",
@@ -136,17 +153,49 @@ describe("JobScenarioSection", () => {
     expect(screen.getAllByText("2 Mercers Place, London").length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText(/22\/09\/26.*16:47/)).toBeInTheDocument();
   });
+
+  it("shows the checkpoint tag for job-linked scenario submissions", () => {
+    render(<JobScenarioSection scenarios={[{
+      ...checkinScenario,
+      reportedAt: "Pickup — 2 Mercers Place",
+      reportedAtPoint: "Pickup"
+    }]} />);
+
+    expect(screen.getByText("Pickup")).toBeInTheDocument();
+  });
 });
 
 describe("PaperDossierReport", () => {
   it("prints evidence metadata and linked job scenario submissions", () => {
-    render(<PaperDossierReport job={job} isPreview />);
+    render(<PaperDossierReport job={{
+      ...job,
+      scenarios: [{
+        ...checkinScenario,
+        reportedAt: "Pickup — 2 Mercers Place",
+        reportedAtPoint: "Pickup"
+      }]
+    }} isPreview />);
 
     expect(screen.getByText(/22\/09\/26.*11:30.*London/)).toBeInTheDocument();
-    expect(screen.getByText("Check In Evidence")).toBeInTheDocument();
+    expect(screen.getByText("Check In (Pickup) Evidence")).toBeInTheDocument();
     expect(screen.getByText("CONT-123")).toBeInTheDocument();
+    expect(screen.getByText("Reported At")).toBeInTheDocument();
+    expect(screen.getByText("Pickup — 2 Mercers Place")).toBeInTheDocument();
     expect(screen.getByText(/22\/09\/26.*16:45/)).toBeInTheDocument();
     expect(screen.getAllByText("2 Mercers Place, London").length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("prints the driver's on-my-way timestamp in the job dossier preview", () => {
+    render(<PaperDossierReport job={{
+      ...job,
+      onMyWayAt: "2026-09-22T09:45:00.000Z",
+      clientSignatureAt: "2026-09-22T14:20:00.000Z"
+    }} isPreview />);
+
+    expect(screen.getByText("On my way")).toBeInTheDocument();
+    expect(screen.getByText(/22\/09\/26.*10:45/)).toBeInTheDocument();
+    expect(screen.getByText("Customer signature time")).toBeInTheDocument();
+    expect(screen.getAllByText(/22\/09\/26.*15:20/).length).toBeGreaterThanOrEqual(1);
   });
 
   it("prints evidence and scenario submissions in the order the driver submitted them", () => {
@@ -177,5 +226,41 @@ describe("PaperDossierReport", () => {
 
     expect(arrival.compareDocumentPosition(liability) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(liability.compareDocumentPosition(vanLoaded) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+});
+
+describe("PaperJobReport", () => {
+  it("prints the driver's on-my-way timestamp in the finished job preview", () => {
+    render(<PaperJobReport job={{
+      ...job,
+      onMyWayAt: "2026-09-22T09:45:00.000Z",
+      clientSignatureAt: "2026-09-22T14:20:00.000Z"
+    }} />);
+
+    expect(screen.getByText("On my way")).toBeInTheDocument();
+    expect(screen.getByText(/22\/09\/26.*10:45/)).toBeInTheDocument();
+    expect(screen.getByText("Customer signature time")).toBeInTheDocument();
+    expect(screen.getAllByText(/22\/09\/26.*15:20/).length).toBeGreaterThanOrEqual(1);
+  });
+});
+
+describe("JobDetailDrawer", () => {
+  it("shows the driver's on-my-way timestamp in active job details", () => {
+    render(
+      <JobDetailDrawer
+        job={{
+          ...job,
+          onMyWayAt: "2026-09-22T09:45:00.000Z",
+          clientSignatureAt: "2026-09-22T14:20:00.000Z"
+        }}
+        isOpen
+        onClose={vi.fn()}
+      />
+    );
+
+    expect(screen.getByText("On my way")).toBeInTheDocument();
+    expect(screen.getByText(/22\/09\/26.*10:45/)).toBeInTheDocument();
+    expect(screen.getByText("Customer signature time")).toBeInTheDocument();
+    expect(screen.getByText(/22\/09\/26.*15:20/)).toBeInTheDocument();
   });
 });

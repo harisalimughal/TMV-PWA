@@ -14,6 +14,11 @@ describe("driver workflow step order", () => {
       "WAITING_REVIEW_CHECK"
     ];
 
-    expect(sequence.map(state => STEPS[state].order)).toEqual([6, 7, 8, 9, 10, 11, 12, 13]);
+    expect(sequence.map(state => STEPS[state].order)).toEqual([5, 6, 7, 8, 9, 10, 11, 12]);
+  });
+
+  it("uses the new home-screen action labels for arrival and loaded proof", () => {
+    expect(STEPS.WAITING_ARRIVAL_PHOTO.shortLabel).toBe("Proof of Arrival");
+    expect(STEPS.WAITING_LOADED_PHOTO.shortLabel).toBe("Load Finished (Take Picture)");
   });
 });

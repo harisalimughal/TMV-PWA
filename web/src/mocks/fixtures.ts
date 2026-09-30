@@ -119,6 +119,7 @@ export function makeJob(over: Partial<Job> & { jobId: string }): Job {
     customerEmail: "customer@example.com",
     customerPhone: "+44 7700 900123",
     pickup: "12 Maple Street, London SW1A 1AA",
+    pickupLocation: { lat: 51.501, lng: -0.1416 },
     dropoff: "48 Oak Avenue, Reading RG1 2AB",
     crewSize: 2,
     basePrice: 320,
@@ -201,6 +202,7 @@ export function seedStore(): MockStore {
       customerName: "Priya Shah",
       customerPhone: "+44 7700 900201",
       pickup: "7 Larch Close, London N1 7DP",
+      pickupLocation: { lat: 51.5394, lng: -0.1027 },
       dropoff: "22 Bridge Road, St Albans AL1 3RX",
       crewSize: 2,
       basePrice: 285,
@@ -214,21 +216,22 @@ export function seedStore(): MockStore {
       customerName: "Tom Fletcher",
       customerPhone: "+44 7700 900202",
       pickup: "The Wharf, 1 Dock Street, London E1 8AL",
+      pickupLocation: { lat: 51.5087, lng: -0.0716 },
       dropoff: "5 Kingfisher Way, Slough SL2 5GH",
       crewSize: 3,
       basePrice: 540,
       paidOnline: true,
       bookedStart: iso(0, 13, 30),
       bookedFinish: iso(0, 17, 0),
-      actualStart: iso(0, 13, 41),
-      status: "IN_PROGRESS",
-      currentState: "WAITING_LOADED_PHOTO"
+      status: "READY",
+      currentState: "READY"
     }),
     makeJob({
       jobId: "10228",
       customerName: "Grace Owusu",
       customerPhone: "+44 7700 900203",
       pickup: "40 Elm Grove, London SE15 5DE",
+      pickupLocation: { lat: 51.472, lng: -0.066 },
       dropoff: "12 Sherwood Rise, Nottingham NG5 1AA",
       crewSize: 2,
       basePrice: 300,
@@ -243,6 +246,7 @@ export function seedStore(): MockStore {
       customerName: "Daniel Reed",
       customerPhone: "+44 7700 900204",
       pickup: "3 Priory Court, Bristol BS1 6QT",
+      pickupLocation: { lat: 51.4545, lng: -2.5879 },
       dropoff: "88 Cathedral Road, Cardiff CF11 9LL",
       crewSize: 2,
       basePrice: 265,
@@ -256,6 +260,7 @@ export function seedStore(): MockStore {
       customerName: "Aisha Khan",
       customerPhone: "+44 7700 900205",
       pickup: "14 Canal Street, Manchester M1 3HE",
+      pickupLocation: { lat: 53.4753, lng: -2.2374 },
       dropoff: "9 Vernon Road, Leeds LS6 1AA",
       crewSize: 2,
       basePrice: 310,
@@ -269,6 +274,7 @@ export function seedStore(): MockStore {
       customerName: "Marco Rossi",
       customerPhone: "+44 7700 900206",
       pickup: "2 Harbour View, Brighton BN1 1AA",
+      pickupLocation: { lat: 50.8225, lng: -0.1372 },
       dropoff: "31 Millers Way, Oxford OX1 2AB",
       crewSize: 3,
       basePrice: 480,
@@ -296,10 +302,6 @@ export function seedStore(): MockStore {
     },
     activity: {},
     settings: {},
-    // 10232 is mid-flow (WAITING_LOADED_PHOTO), so it already has arrival photos — step
-    // back to the arrival step in dev to see them, delete one, add another.
-    evidence: {
-      "10232": [makeEvidenceItem("Arrival"), makeEvidenceItem("Arrival")]
-    }
+    evidence: {}
   };
 }

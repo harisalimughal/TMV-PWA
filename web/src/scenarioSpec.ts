@@ -124,7 +124,7 @@ export const SCENARIOS: Record<ScenarioKey, ScenarioSpec> = {
     ],
     photoLabel: "Parking restriction photos",
     photoMin: 1,
-    photoMax: 4
+    photoMax: 30
   },
   liability: {
     key: "liability",
@@ -138,7 +138,7 @@ export const SCENARIOS: Record<ScenarioKey, ScenarioSpec> = {
     },
     photoLabel: "Pictures — take as many as needed",
     photoMin: 1,
-    photoMax: 8,
+    photoMax: 30,
     signatureText: LIABILITY_REPORT_SIGNATURE_TEXT
   }
 };

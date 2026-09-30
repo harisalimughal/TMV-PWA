@@ -10,6 +10,7 @@ const getSetting = vi.fn();
 const readEvidenceSummary = vi.fn();
 const uploadEvidence = vi.fn().mockResolvedValue(undefined);
 const sendPushToAdmins = vi.fn().mockResolvedValue(undefined);
+const sendOpsVanLoadedEmail = vi.fn().mockResolvedValue(undefined);
 
 vi.mock("../src/db/jobs.repo", () => ({
   getJob: (...args: any[]) => getJob(...args),
@@ -35,7 +36,8 @@ vi.mock("../src/jobs/evidence.service", () => ({
 vi.mock("../src/google/gmail", () => ({
   sendReviewRequestEmail: vi.fn(),
   sendJobStartedEmail: vi.fn(),
-  sendOpsJobCompletionEmail: vi.fn()
+  sendOpsJobCompletionEmail: vi.fn(),
+  sendOpsVanLoadedEmail: (...args: any[]) => sendOpsVanLoadedEmail(...args)
 }));
 vi.mock("../src/push/push.service", () => ({
   sendPushToAdmins: (...args: any[]) => sendPushToAdmins(...args)
@@ -129,22 +131,53 @@ describe("checkout flow order", () => {
     expect(updated.currentState).toBe(WorkflowState.WAITING_LOADED_PHOTO);
   });
 
-  it("moves from no stop-by straight to empty van photo", async () => {
-    getJob.mockResolvedValue(job({ currentState: WorkflowState.WAITING_STOP_BY_CHECK }));
-
-    const updated = await handleAction("STOP_BY_NONE", "TMV-FLOW", "abi@example.com", {});
-
-    expect(updated.currentState).toBe(WorkflowState.WAITING_EMPTY_VAN_PHOTO);
-  });
-
-  it("moves from stop-by photo straight to empty van photo", async () => {
-    getJob.mockResolvedValue(job({ currentState: WorkflowState.WAITING_STOP_BY_PHOTO }));
+  it("moves from van loaded photo straight to drop-off issues", async () => {
+    getJob.mockResolvedValue(job({ currentState: WorkflowState.WAITING_LOADED_PHOTO }));
 
     const updated = await handlePhotoStep("TMV-FLOW", "abi@example.com", [
-      { buffer: Buffer.from("image"), contentType: "image/jpeg", fileName: "stopby.jpg" }
+      { buffer: Buffer.from("image"), contentType: "image/jpeg", fileName: "loaded.jpg" }
     ]);
 
-    expect(updated.currentState).toBe(WorkflowState.WAITING_EMPTY_VAN_PHOTO);
+    expect(updated.currentState).toBe(WorkflowState.WAITING_EMPTY_VAN_ISSUES_CHECK);
+  });
+
+  it("sends a best-effort ops email after van loaded photos are accepted", async () => {
+    getJob.mockResolvedValue(job({
+      currentState: WorkflowState.WAITING_LOADED_PHOTO,
+      customerName: "Mary Major"
+    }));
+
+    await handlePhotoStep("TMV-FLOW", "abi@example.com", [
+      { buffer: Buffer.from("image"), contentType: "image/jpeg", fileName: "loaded.jpg" }
+    ]);
+
+    await vi.waitFor(() => expect(sendOpsVanLoadedEmail).toHaveBeenCalledWith(
+      expect.objectContaining({ jobId: "TMV-FLOW", customerName: "Mary Major" }),
+      expect.objectContaining({ fullName: "Abi Driver", email: "abi@example.com" })
+    ));
+    await vi.waitFor(() => expect(appendActivity).toHaveBeenCalledWith(expect.objectContaining({
+      jobId: "TMV-FLOW",
+      action: "OPS_VAN_LOADED_EMAIL_SENT",
+      detail: "info@themanvan.co.uk"
+    })));
+  });
+
+  it("does not send the van-loaded ops email for other photo steps", async () => {
+    getJob.mockResolvedValue(job({ currentState: WorkflowState.WAITING_ARRIVAL_PHOTO }));
+
+    await handlePhotoStep("TMV-FLOW", "abi@example.com", [
+      { buffer: Buffer.from("image"), contentType: "image/jpeg", fileName: "arrival.jpg" }
+    ]);
+
+    expect(sendOpsVanLoadedEmail).not.toHaveBeenCalled();
+  });
+
+  it("recovers old jobs already parked on the removed stop-by check", async () => {
+    getJob.mockResolvedValue(job({ currentState: WorkflowState.WAITING_STOP_BY_CHECK }));
+
+    const updated = await handleAction("ISSUES_NONE", "TMV-FLOW", "abi@example.com", {});
+
+    expect(updated.currentState).toBe(WorkflowState.WAITING_EMPTY_VAN_ISSUES_CHECK);
   });
 
   it("moves from customer signature to extra charges before total and payment", async () => {
@@ -153,6 +186,23 @@ describe("checkout flow order", () => {
     const updated = await submitDrawnSignature("TMV-FLOW", "abi@example.com", "Client", "https://example.com/sig.png");
 
     expect(updated.currentState).toBe(WorkflowState.WAITING_EXTRA_CHARGES);
+  });
+
+  it("records when the customer final signature is captured", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-09-24T12:34:56.000Z"));
+    getJob.mockResolvedValue(job({ currentState: WorkflowState.WAITING_CLIENT_CONFIRMATION }));
+
+    try {
+      const updated = await submitDrawnSignature("TMV-FLOW", "abi@example.com", "Client", "https://example.com/sig.png");
+
+      expect(updated.clientSignatureAt).toBe("2026-09-24T12:34:56.000Z");
+      expect(upsertJob).toHaveBeenCalledWith(expect.objectContaining({
+        clientSignatureAt: "2026-09-24T12:34:56.000Z"
+      }));
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("keeps checkout charges, total charges, payment, then review after sign-off", async () => {
@@ -170,13 +220,48 @@ describe("checkout flow order", () => {
 
     getJob.mockResolvedValueOnce(afterTotal);
     const afterPayment = await handleAction("SUBMIT_PAYMENT", "TMV-FLOW", "abi@example.com", {
-      payment_method: [PaymentMethod.CARD]
+      payment_method: [PaymentMethod.CARD],
+      payment_amount_Card: [String(afterTotal.amountCharged)]
     });
     const afterPaymentState = afterPayment.currentState;
 
     expect(afterChargesState).toBe(WorkflowState.WAITING_TOTAL_CHARGES);
     expect(afterTotalState).toBe(WorkflowState.WAITING_PAYMENT);
     expect(afterPaymentState).toBe(WorkflowState.WAITING_REVIEW_CHECK);
+  });
+
+  it("stores payment amounts for paid methods and leaves invoice as outstanding", async () => {
+    getJob.mockResolvedValue(job({
+      currentState: WorkflowState.WAITING_PAYMENT,
+      amountCharged: 150
+    }));
+
+    const updated = await handleAction("SUBMIT_PAYMENT", "TMV-FLOW", "abi@example.com", {
+      payment_method: [PaymentMethod.CARD, PaymentMethod.CASH, PaymentMethod.INVOICE],
+      payment_amount_Card: ["80"],
+      payment_amount_Cash: ["20"]
+    });
+
+    expect(updated.paymentMethod).toBe("Card, Cash, Invoice");
+    expect(updated.paymentStatus).toBe("Outstanding");
+    expect(updated.paymentBreakdown).toEqual([
+      { method: "Card", amount: 80 },
+      { method: "Cash", amount: 20 },
+      { method: "Invoice", amount: 0 }
+    ]);
+  });
+
+  it("rejects a non-invoice payment breakdown that does not match the amount charged", async () => {
+    getJob.mockResolvedValue(job({
+      currentState: WorkflowState.WAITING_PAYMENT,
+      amountCharged: 150
+    }));
+
+    await expect(handleAction("SUBMIT_PAYMENT", "TMV-FLOW", "abi@example.com", {
+      payment_method: [PaymentMethod.CARD, PaymentMethod.CASH],
+      payment_amount_Card: ["80"],
+      payment_amount_Cash: ["20"]
+    })).rejects.toThrow("Payment amounts must add up to the final amount charged.");
   });
 
   it("goes back through payment, totals, charges, signature, then empty van photo", async () => {

@@ -27,7 +27,7 @@ export interface StepMeta {
   shortLabel: string;
 }
 
-export const TOTAL_STEPS = 13;
+export const TOTAL_STEPS = 12;
 
 export const STEPS: Record<string, StepMeta> = {
   READY: {
@@ -58,7 +58,7 @@ export const STEPS: Record<string, StepMeta> = {
     label: "Van Loaded Photo (pick up point)",
     hint: "Show how the load is stacked and secured. Add a liability report first if anything needs sign-off.",
     order: 4,
-    shortLabel: "Van Loaded Photo"
+    shortLabel: "Load Finished (Take Picture)"
   },
   IN_PROGRESS: {
     label: "Move in progress",
@@ -66,100 +66,67 @@ export const STEPS: Record<string, StepMeta> = {
     order: 4,
     shortLabel: "Finish Move"
   },
-  // Asked on every job after the van-loaded photo, regardless of job.stopBy (Calendar
-  // isn't always kept current for a stop decided on the day) -- but the whole
-  // check -> photo -> issues-check -> issues-choice episode shares one progress slot,
-  // collapsed to 0 steps for a job that turns out to have no stop (see STOP_BY_ORDER).
-  WAITING_STOP_BY_CHECK: {
-    label: "Is there a stop-by point?",
-    hint: "Say yes if you're stopping anywhere on the way to drop-off -- we'll grab a quick photo there.",
-    order: 5,
-    shortLabel: "Any Stop by ?"
-  },
-  WAITING_STOP_BY_PHOTO: {
-    label: "Stop-by Photo",
-    hint: "Take up to 2 photos of the property or load at the stop-by point.",
-    order: 5,
-    shortLabel: "Stop-by Photo"
-  },
-  WAITING_STOP_BY_ISSUES_CHECK: {
-    label: "Nice! We're at the stop-by point now — any issue to report ?",
-    hint: "Choose a report if needed, or continue with no issues.",
-    order: 5,
-    shortLabel: "Any Issues ? (Stop-by)"
-  },
-  WAITING_STOP_BY_ISSUES_CHOICE: {
-    label: "Record the issue",
-    hint: "Pick the form that matches what happened at the stop-by address.",
-    order: 5,
-    shortLabel: "Any Issues ? (Stop-by)"
-  },
   WAITING_EMPTY_VAN_ISSUES_CHECK: {
     label: "Well done, you're almost finished! We're at the drop-off point now — any issues to report?",
     hint: "Choose a report if needed, or continue with no issues.",
-    order: 6,
+    order: 5,
     shortLabel: "Any Issues ? (Drop-off)"
   },
   WAITING_EMPTY_VAN_ISSUES_CHOICE: {
     label: "Record the issue",
     hint: "Pick the form that matches what happened.",
-    order: 6,
+    order: 5,
     shortLabel: "Any Issues ? (Drop-off)"
   },
   WAITING_EXTRA_CHARGES: {
     label: "Extra charges",
     hint: "Select everything that applies. Pick “No Extras Time” if there were none.",
-    order: 9,
+    order: 8,
     shortLabel: "Check out"
   },
   WAITING_OVERTIME: {
     label: "Extra Time Needed and Paid",
     hint: "Minutes worked beyond the booked window",
-    order: 10,
+    order: 9,
     shortLabel: "Overtime"
   },
   WAITING_TOTAL_CHARGES: {
     label: "Total charges",
     hint: "The final amount for this job, including any extras and overtime.",
-    order: 11,
+    order: 10,
     shortLabel: "Total Charges"
   },
   WAITING_PAYMENT: {
     label: "How customer Paid ?",
-    order: 12,
+    order: 11,
     shortLabel: "How customer paid ?"
   },
   WAITING_EMPTY_VAN_PHOTO: {
     label: "Empty van photo (drop-off point)",
     hint: "Show the van empty at the drop-off — proof nothing was left behind.",
-    order: 7,
+    order: 6,
     shortLabel: "Empty Van Photo"
   },
   WAITING_CLIENT_CONFIRMATION: {
     label: "Customer sign-off",
     hint: "Hand your phone to the customer to review and sign.",
-    order: 8,
+    order: 7,
     shortLabel: "Customer Sign-off"
   },
   WAITING_REVIEW_CHECK: {
     label: "Ask for a review ?",
     hint: "Only if the customer is happy to leave one.",
-    order: 13,
+    order: 12,
     shortLabel: "Ask for a Review"
   },
   WAITING_REVIEW_SEND: {
     label: "Send review email",
     hint: "This finishes the job.",
-    order: 13,
+    order: 12,
     shortLabel: "Ask for a Review"
   },
   COMPLETED: { label: "Job complete", order: TOTAL_STEPS, shortLabel: "Job Complete" }
 };
-
-/** Position of the whole conditional stop-by episode (check -> photo -> issues-check
- *  -> issues-choice, all sharing this one slot) — used to collapse it for jobs that
- *  turn out to have no stop, the same way Overtime's slot collapses. */
-export const STOP_BY_ORDER = 5;
 
 /** Steps a driver can safely reverse out of -- all pure data-entry, nothing that has
  *  already been sent to the customer or stamped as a time. */
@@ -200,21 +167,17 @@ export function overtimeApplies(extraCharges: readonly string[] | undefined | nu
 }
 
 /**
- * Displayed "Step N of M" for a given state. Two slots are conditional and collapse
- * when they don't apply, each shifting every later step down by one:
- *  - the stop-by issues check (only for jobs with a mid-route stop), and
- *  - Overtime (only when "Extra time / Charges" was selected).
+ * Displayed "Step N of M" for a given state. Overtime is conditional and collapses
+ * when "Extra time / Charges" was not selected.
  */
 export function workflowProgress(
   state: string,
-  opts: { overtime: boolean; hasStop?: boolean }
+  opts: { overtime: boolean }
 ): { current: number; total: number } {
   let total = TOTAL_STEPS;
-  if (!opts.hasStop) total -= 1;
   if (!opts.overtime) total -= 1;
 
   let current = STEPS[state]?.order ?? 1;
-  if (!opts.hasStop && current > STOP_BY_ORDER) current -= 1;
   if (!opts.overtime && current > STEPS.WAITING_OVERTIME.order) current -= 1;
   return { current: Math.min(current, total), total };
 }

@@ -1,10 +1,9 @@
 import type { Job } from "../api/jobs";
 
-export type LiabilityCheckpoint = "pickup" | "stopby" | "dropoff";
+export type LiabilityCheckpoint = "pickup" | "dropoff";
 
 export const liabilityCheckpointOptions: Array<{ value: LiabilityCheckpoint; label: string }> = [
   { value: "pickup", label: "Pickup" },
-  { value: "stopby", label: "Stop-by" },
   { value: "dropoff", label: "Drop-off" }
 ];
 
@@ -26,12 +25,10 @@ export function pickLiabilityJob(buckets: LiabilityJobBuckets, requestedJobId?: 
 export function reportedAtForLiabilityCheckpoint(
   checkpoint: LiabilityCheckpoint,
   job: Job
-): { label: "Pickup" | "Stop-by" | "Drop-off"; address?: string } {
+): { label: "Pickup" | "Drop-off"; address?: string } {
   switch (checkpoint) {
     case "pickup":
       return { label: "Pickup", address: job.pickup };
-    case "stopby":
-      return { label: "Stop-by", address: job.stopBy };
     case "dropoff":
       return { label: "Drop-off", address: job.dropoff };
   }
@@ -44,7 +41,7 @@ export function liabilityCheckpointForWorkflowState(state: string): LiabilityChe
       return "pickup";
     case "WAITING_STOP_BY_ISSUES_CHECK":
     case "WAITING_STOP_BY_ISSUES_CHOICE":
-      return "stopby";
+      return null;
     case "WAITING_EMPTY_VAN_ISSUES_CHECK":
     case "WAITING_EMPTY_VAN_ISSUES_CHOICE":
       return "dropoff";

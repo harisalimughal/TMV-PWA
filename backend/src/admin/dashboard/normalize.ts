@@ -81,6 +81,50 @@ function parseBookingDetails(job: Job): NormalizedJob["bookingDetails"] {
   };
 }
 
+function formatHours(minutes: number): string {
+  const hours = minutes / 60;
+  if (Number.isInteger(hours)) return `${hours} hr${hours === 1 ? "" : "s"}`;
+  return `${hours.toFixed(1)} hrs`;
+}
+
+function buildPaymentBreakdown(job: Job, amountCharged: Pence): NormalizedJob["paymentBreakdown"] {
+  if (Array.isArray(job.paymentBreakdown) && job.paymentBreakdown.length > 0) {
+    return job.paymentBreakdown.map(row => ({
+      method: row.method || "Not recorded",
+      amount: safePence(row.amount)
+    }));
+  }
+  const method = job.paymentMethod || "";
+  if (!method) return [];
+  return [{ method, amount: amountCharged }];
+}
+
+function buildExtraChargeBreakdown(
+  extraChargeSelections: string[],
+  congestionCharge: Pence,
+  tunnelCharge: Pence,
+  overtimeMinutes: number,
+  overtimeCharge: Pence
+): NormalizedJob["extraChargeBreakdown"] {
+  const rows: NormalizedJob["extraChargeBreakdown"] = [];
+  for (const charge of extraChargeSelections) {
+    if (charge === ExtraChargeType.NONE || charge === ExtraChargeType.EXTRA_TIME) continue;
+    const amount =
+      charge === ExtraChargeType.CONGESTION ? congestionCharge :
+      charge === ExtraChargeType.TUNNEL ? tunnelCharge :
+      pence(0);
+    rows.push({ label: charge, amount });
+  }
+  if (overtimeMinutes > 0 || overtimeCharge > pence(0)) {
+    rows.push({
+      label: overtimeMinutes > 0 ? `Overtime (${formatHours(overtimeMinutes)})` : "Overtime",
+      amount: overtimeCharge,
+      minutes: overtimeMinutes
+    });
+  }
+  return rows;
+}
+
 /** Same field mapping scenarios.routes.ts's GET /:kind already uses for the
  *  standalone Scenarios tabs, just scoped to one job's submissions across every
  *  kind instead of one kind across every job -- so a job's own Check In/Check
@@ -101,6 +145,8 @@ function buildJobScenarios(rows: MongoDataset["scenarioSubmissions"]): JobScenar
       address: r.fields.address || "",
       damageCategories: r.fields.damage_categories || "",
       clientPresent: r.fields.client_present || "—",
+      reportedAt: r.fields.reported_at || r.fields["Reported At"] || undefined,
+      reportedAtPoint: (r.fields.reported_at || r.fields["Reported At"] || "").split(/\s+[—-]\s+/)[0]?.trim() || undefined,
       rawRecord: r.fields,
       photos: r.photoUrls.map((url, i) => ({
         fileId: url,
@@ -186,6 +232,7 @@ export async function normalizeMongoDataset(dataset: MongoDataset): Promise<Norm
     const actualStart = job.actualStart ? toUtcIso(job.actualStart) : undefined;
     const actualFinish = job.actualFinish ? toUtcIso(job.actualFinish) : undefined;
     const onMyWayAt = job.onMyWayAt ? toUtcIso(job.onMyWayAt) : undefined;
+    const clientSignatureAt = job.clientSignatureAt ? toUtcIso(job.clientSignatureAt) : undefined;
 
     const bookedMinutes = job.bookedMinutes || calculateMinutes(bookedStart, bookedFinish);
     const actualMinutes = job.actualMinutes || (actualStart && actualFinish ? calculateMinutes(actualStart, actualFinish) : undefined);
@@ -225,6 +272,14 @@ export async function normalizeMongoDataset(dataset: MongoDataset): Promise<Norm
       ? (job.amountCharged !== undefined && job.amountCharged !== null ? safePence(job.amountCharged) : safePence(job.totalCharges))
       : pence(0);
     const reconciled = amountCharged === pence(0) || totalCharges === amountCharged;
+    const paymentBreakdown = buildPaymentBreakdown(job, amountCharged);
+    const extraChargeBreakdown = buildExtraChargeBreakdown(
+      extraChargeSelections,
+      congestionChargePence,
+      tunnelChargePence,
+      overtimeMinutes,
+      overtimeCharge
+    );
 
     const jobEvidence = evidenceByJob.get(jobId) || [];
     const jobScenarios = scenariosByJob.get(jobId) || [];
@@ -275,6 +330,8 @@ export async function normalizeMongoDataset(dataset: MongoDataset): Promise<Norm
       basePrice, extraChargeSelections, extraCharges, congestionCharge: congestionChargePence, tunnelCharge: tunnelChargePence,
       overtimeMinutes, overtimeCharge, calculatedTotalCharges, totalCharges, amountCharged, reconciled,
       paymentMethod: job.paymentMethod || "Not recorded",
+      paymentBreakdown,
+      extraChargeBreakdown,
       paymentStatus: job.paymentStatus || "Not recorded",
       managerReviewStatus: job.managerReviewStatus || "Pending",
       managerReviewNote: job.managerReviewNote || "",
@@ -284,6 +341,7 @@ export async function normalizeMongoDataset(dataset: MongoDataset): Promise<Norm
       evidenceItems: items,
       scenarios: buildJobScenarios(jobScenarios),
       clientConfirmedName: job.clientConfirmedBy || undefined,
+      clientSignatureAt,
       signatureUrl: job.signatureUrl || undefined,
       driveFolderId: undefined,
       driveFolderUrl: undefined,

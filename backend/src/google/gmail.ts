@@ -46,11 +46,11 @@ function pounds(value: number | undefined): string {
   return `£${amount.toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
-function dashboardJobUrl(jobId: string): string {
+function dashboardJobUrl(jobId: string, section = "finished"): string {
   const dashboardBase =
     process.env.TMV_DASHBOARD_URL?.trim().replace(/\/+$/, "") ||
     "https://dashboard.themanvan.co.uk";
-  return `${dashboardBase}/?section=finished&job=${encodeURIComponent(jobId)}`;
+  return `${dashboardBase}/?section=${encodeURIComponent(section)}&job=${encodeURIComponent(jobId)}`;
 }
 
 function evidenceLine(evidence?: EvidenceProgress): string {
@@ -138,6 +138,30 @@ export function renderOpsJobCompletionEmail(
   return { text: lines.join("\n"), html };
 }
 
+export function opsVanLoadedSubject(job: Pick<Job, "customerName">): string {
+  return `Van loaded - ${job.customerName || "Customer"}`;
+}
+
+export function renderOpsVanLoadedEmail(
+  job: Job,
+  driver: Pick<DriverProfile, "fullName" | "initials" | "email" | "vanRegistration">
+): EmailContent {
+  const viewUrl = dashboardJobUrl(job.jobId, "jobs");
+  const driverName = driver.fullName || driver.initials || driver.email || "Driver";
+  const customerName = job.customerName || "Customer";
+  const message = `${driverName} has loaded the van for ${customerName} job.`;
+  const text = [message, "", `View more: ${viewUrl}`].join("\n");
+  const html =
+    `<!doctype html><html><body style="margin:0;background:#f6f7f9;font-family:Arial,sans-serif;color:#101828;">` +
+    `<div style="max-width:560px;margin:0 auto;padding:24px;">` +
+    `<div style="background:#ffffff;border:1px solid #eaecf0;border-radius:12px;padding:22px;">` +
+    `<p style="margin:0 0 6px;color:#2563eb;font-size:12px;font-weight:700;text-transform:uppercase;">Van loaded</p>` +
+    `<h1 style="margin:0 0 16px;font-size:20px;line-height:1.3;">${escapeHtml(message)}</h1>` +
+    `<a href="${escapeHtml(viewUrl)}" style="display:inline-block;background:#111827;color:#ffffff;text-decoration:none;border-radius:8px;padding:11px 16px;font-size:14px;font-weight:700;">View More</a>` +
+    `</div></div></body></html>`;
+  return { text, html };
+}
+
 async function sendEmail(to: string, subject: string, content: EmailContent): Promise<void> {
   const gmail = await client();
   const boundary = `tmv-${Date.now().toString(36)}`;
@@ -203,6 +227,13 @@ export async function sendOpsJobCompletionEmail(
 ): Promise<void> {
   const subject = opsJobCompletionSubject(job, driver);
   await sendEmail("info@themanvan.co.uk", subject, renderOpsJobCompletionEmail(job, driver, evidence));
+}
+
+export async function sendOpsVanLoadedEmail(
+  job: Job,
+  driver: Pick<DriverProfile, "fullName" | "initials" | "email" | "vanRegistration">
+): Promise<void> {
+  await sendEmail("info@themanvan.co.uk", opsVanLoadedSubject(job), renderOpsVanLoadedEmail(job, driver));
 }
 
 /** Gated behind notifications/message-catalog.ts's DRIVER_JOB_ASSIGNMENT_EMAIL --

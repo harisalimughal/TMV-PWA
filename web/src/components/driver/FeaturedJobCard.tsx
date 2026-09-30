@@ -1,10 +1,11 @@
-import React, { useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { ArrowRight, Navigation } from "lucide-react";
 import { cx } from "../../ui";
 import { haptics } from "../../lib/haptics";
 import { useOnline } from "../../lib/net";
 import { markJobViewed, sendOnMyWay, startJob, type ApiError, type Job } from "../../api/jobs";
 import { notifyJobsRefresh } from "../../lib/jobsRefresh";
+import { isWithinArrivalRadius } from "../../lib/arrival";
 import { useToast } from "../ui/Toast";
 import { BookingWindowHeader } from "./BookingWindowHeader";
 import { CustomerIdentity } from "./CustomerIdentity";
@@ -39,17 +40,24 @@ export function FeaturedJobCard({ job, onStarted }: FeaturedJobCardProps) {
   // that's a network round trip; without this the button would flash back for the gap
   // between the send succeeding and the refetch landing.
   const [sentLocally, setSentLocally] = useState(false);
+  const autoStarted = useRef(false);
 
   // Once the job has actually moved past READY, the button names whatever step is
   // next rather than always reading "Start Job" -- that's what lets the driver
   // resume from here after each step now bounces back to Home (see
   // JobWorkflowScreen.tsx's run()).
   const inProgress = Boolean(job.currentState && job.currentState !== "READY" && job.currentState !== "COMPLETED");
-  const startLabel = inProgress ? STEPS[job.currentState]?.shortLabel ?? "Continue" : "Start Job";
+  const startLabel = inProgress
+    ? STEPS[job.currentState]?.shortLabel ?? "Continue"
+    : STEPS.WAITING_ARRIVAL_PHOTO.shortLabel;
   // The customer has to be told the driver's coming before the job can start (see
   // jobs.service.ts's startJob, which now rejects a start with no onMyWayAt) -- a job
   // already in progress always has this set already, from whenever it first started.
   const needsOnMyWay = job.status === "READY" && !job.onMyWayAt && !sentLocally;
+
+  useEffect(() => {
+    autoStarted.current = false;
+  }, [job.jobId]);
 
   function noteViewed() {
     if (viewedSent.current) return;
@@ -96,6 +104,48 @@ export function FeaturedJobCard({ job, onStarted }: FeaturedJobCardProps) {
     }
   }
 
+  useEffect(() => {
+    if (
+      job.status !== "READY" ||
+      needsOnMyWay ||
+      starting ||
+      notifying ||
+      autoStarted.current ||
+      !job.pickupLocation ||
+      typeof navigator === "undefined" ||
+      !navigator.geolocation
+    ) {
+      return;
+    }
+
+    const watchId = navigator.geolocation.watchPosition(
+      position => {
+        if (autoStarted.current) return;
+        const current = {
+          lat: position.coords.latitude,
+          lng: position.coords.longitude,
+          accuracy: position.coords.accuracy
+        };
+        if (!isWithinArrivalRadius(current, job.pickupLocation)) return;
+        autoStarted.current = true;
+        void handleStart();
+      },
+      () => {
+        /* Location unavailable -- the Proof of Arrival button remains the fallback. */
+      },
+      { enableHighAccuracy: true, maximumAge: 10_000, timeout: 15_000 }
+    );
+
+    return () => navigator.geolocation.clearWatch(watchId);
+  }, [
+    job.jobId,
+    job.status,
+    job.pickupLocation,
+    needsOnMyWay,
+    starting,
+    notifying
+  ]);
+
   return (
     <div
       onClick={noteViewed}
@@ -137,7 +187,7 @@ export function FeaturedJobCard({ job, onStarted }: FeaturedJobCardProps) {
         footer={
           needsOnMyWay ? (
             <p className="mt-4 text-center text-helper text-fg-subtle">
-              Tap "I'm on the Way" above to let the customer know, then Start Job appears here.
+              Tap "I'm on the Way" above to let the customer know, then Proof of Arrival appears here.
             </p>
           ) : (
             <button

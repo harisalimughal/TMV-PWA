@@ -8,7 +8,7 @@ interface Props {
   onChange: (from?: string, to?: string) => void;
 }
 
-type Preset = "today" | "yesterday" | "7d" | "30d";
+type Preset = "today" | "tomorrow" | "yesterday" | "7d";
 
 function isoDay(date: Date): string {
   return date.toISOString().slice(0, 10);
@@ -21,13 +21,17 @@ export function dateRangeForPreset(preset: Preset): { from?: string; to?: string
   if (preset === "today") {
     return { from: `${todayStr}T00:00:00.000Z`, to: `${todayStr}T23:59:59.999Z` };
   }
+  if (preset === "tomorrow") {
+    const tomorrow = new Date(now.getTime() + 86400000);
+    const tomorrowStr = isoDay(tomorrow);
+    return { from: `${tomorrowStr}T00:00:00.000Z`, to: `${tomorrowStr}T23:59:59.999Z` };
+  }
   if (preset === "yesterday") {
     const y = new Date(now.getTime() - 86400000);
     const yStr = isoDay(y);
     return { from: `${yStr}T00:00:00.000Z`, to: `${yStr}T23:59:59.999Z` };
   }
-  const days = preset === "7d" ? 7 : 30;
-  const start = new Date(now.getTime() - days * 86400000);
+  const start = new Date(now.getTime() - 7 * 86400000);
   return { from: start.toISOString(), to: now.toISOString() };
 }
 
@@ -48,7 +52,7 @@ export function DateRangePicker({ from, to, onChange }: Props) {
   return (
     <div className="flex flex-wrap items-center gap-2 text-xs">
       <div className="flex items-center gap-1 bg-admin-surface p-1 rounded-card border border-admin-line">
-        {(["today", "7d", "30d"] as const).map(preset => (
+        {(["today", "tomorrow", "7d"] as const).map(preset => (
           <button
             key={preset}
             onClick={() => setPreset(preset)}
@@ -56,7 +60,7 @@ export function DateRangePicker({ from, to, onChange }: Props) {
               isPresetActive(preset) ? "bg-white text-admin-brand shadow-sm font-bold" : "text-admin-muted hover:text-admin-ink"
             }`}
           >
-            {preset === "today" ? "Today" : preset === "7d" ? "7 Days" : "30 Days"}
+            {preset === "today" ? "Today" : preset === "tomorrow" ? "Tomorrow" : "7 Days"}
           </button>
         ))}
       </div>

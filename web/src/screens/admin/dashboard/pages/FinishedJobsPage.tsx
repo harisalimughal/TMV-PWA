@@ -28,6 +28,27 @@ const isTestOrIncomplete = (job: any) => { return job.customerName === "hh" || S
 import { resolveDriver, formatVanReg } from "../utils/drivers";
 import { useDriverOptions } from "../hooks/useDriverOptions";
 
+function paymentBreakdownSummary(job: NormalizedJob): string {
+  if (!job.paymentBreakdown?.length) return job.paymentMethod || "Not recorded";
+  return job.paymentBreakdown
+    .map(row => {
+      if ((row.method || "").toLowerCase() === "invoice" && row.amount === 0) return "Invoice outstanding";
+      return `${row.method || "Not recorded"} ${formatGBP(row.amount)}`;
+    })
+    .join(" · ");
+}
+
+function extraChargeBreakdownSummary(job: NormalizedJob): string {
+  if (job.extraChargeBreakdown?.length) {
+    return job.extraChargeBreakdown.map(row => `${row.label || "Extra"} ${formatGBP(row.amount)}`).join(" · ");
+  }
+  if ((job.extraCharges || 0) === 0 && (job.overtimeCharge || 0) === 0) return "";
+  const rows = [];
+  if (job.extraCharges) rows.push(`Extras ${formatGBP(job.extraCharges)}`);
+  if (job.overtimeCharge) rows.push(`Overtime ${formatGBP(job.overtimeCharge)}`);
+  return rows.join(" · ");
+}
+
 export function FinishedJobsPage() {
   const [viewMode, setViewMode] = useState<"table" | "cards">("cards");
   const [page, setPage] = useState(1);
@@ -200,6 +221,8 @@ export function FinishedJobsPage() {
               const driver = resolveDriver(job.driverName, job.driverInitials);
               const amount = toPounds(job.amountCharged);
               const total = totalCharges(job);
+              const paymentSummary = paymentBreakdownSummary(job);
+              const extrasSummary = extraChargeBreakdownSummary(job);
               const isSelected = selectedRows.has(job.jobId);
               const finishedTime = job.actualFinish ? formatLondonDateTime(job.actualFinish) : (job.actualStart ? formatLondonDateTime(job.actualStart) : "Not recorded");
               return (
@@ -262,6 +285,16 @@ export function FinishedJobsPage() {
                           <span className="text-[11px] font-semibold text-admin-muted">
                             Total {formatGBP(total)}
                           </span>
+                          {paymentSummary && (
+                            <span className="max-w-[180px] truncate text-[11px] font-medium text-admin-muted" title={paymentSummary}>
+                              {paymentSummary}
+                            </span>
+                          )}
+                          {extrasSummary && (
+                            <span className="max-w-[180px] truncate text-[11px] font-medium text-admin-muted" title={extrasSummary}>
+                              {extrasSummary}
+                            </span>
+                          )}
                         </span>
                       </div>
                     </button>
@@ -316,6 +349,7 @@ export function FinishedJobsPage() {
                   const startedTime = job.actualStart ? formatLondonDateTime(job.actualStart) : "—";
                   const finishedTime = job.actualFinish ? formatLondonDateTime(job.actualFinish) : "—";
                   const onMyWayTime = job.onMyWayAt ? formatLondonDateTime(job.onMyWayAt) : null;
+                  const customerSignatureTime = job.clientSignatureAt ? formatLondonDateTime(job.clientSignatureAt) : null;
 
                   const p = job.pickup || <span className="text-[14px] font-normal text-[#B0B0B0] italic">Not recorded</span>;
                   const d = job.dropoff || <span className="text-[14px] font-normal text-[#B0B0B0] italic">Not recorded</span>;
@@ -326,6 +360,8 @@ export function FinishedJobsPage() {
                   const resolvedDriver = resolveDriver(job.driverName, job.driverInitials);
                   const isUnassigned = resolvedDriver.code === "UN";
                   const isSelected = selectedRows.has(job.jobId);
+                  const paymentSummary = paymentBreakdownSummary(job);
+                  const extrasSummary = extraChargeBreakdownSummary(job);
 
                   return (
                     <React.Fragment key={job.jobId}>
@@ -388,6 +424,9 @@ export function FinishedJobsPage() {
                           {onMyWayTime && (
                             <span className="block text-[11px] text-admin-muted/70 mt-0.5">On my way: {onMyWayTime}</span>
                           )}
+                          {customerSignatureTime && (
+                            <span className="block text-[11px] text-admin-muted/70 mt-0.5">Customer signed: {customerSignatureTime}</span>
+                          )}
                         </td>
                         <td className="px-4 text-[13px] font-normal text-admin-muted tabular-nums whitespace-nowrap">{finishedTime}</td>
                         <td className="px-4 whitespace-nowrap">
@@ -401,6 +440,16 @@ export function FinishedJobsPage() {
                           <div className="mt-0.5 text-[11px] text-admin-muted tabular-nums">
                             Total Charges {formatGBP(total)}
                           </div>
+                          {paymentSummary && (
+                            <div className="mt-0.5 max-w-[220px] truncate text-[11px] text-admin-muted" title={paymentSummary}>
+                              {paymentSummary}
+                            </div>
+                          )}
+                          {extrasSummary && (
+                            <div className="mt-0.5 max-w-[220px] truncate text-[11px] text-admin-muted" title={extrasSummary}>
+                              {extrasSummary}
+                            </div>
+                          )}
                           <div className={job.reconciled ? "mt-0.5 text-[10px] font-bold uppercase tracking-[0.03em] text-admin-status-green" : "mt-0.5 text-[10px] font-bold uppercase tracking-[0.03em] text-admin-status-red"}>
                             {job.reconciled ? "Reconciled" : "Mismatch"}
                           </div>

@@ -26,7 +26,8 @@ vi.mock("../src/db/settings.repo", () => ({
 vi.mock("../src/google/gmail", () => ({
   sendReviewRequestEmail: (...args: any[]) => sendReviewRequestEmail(...args),
   sendJobStartedEmail: vi.fn(),
-  sendOpsJobCompletionEmail: vi.fn()
+  sendOpsJobCompletionEmail: vi.fn(),
+  sendOpsVanLoadedEmail: vi.fn()
 }));
 vi.mock("../src/push/push.service", () => ({
   sendPushToAdmins: (...args: any[]) => sendPushToAdmins(...args)

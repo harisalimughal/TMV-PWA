@@ -184,6 +184,18 @@ export function PaperJobReport({ job, onClose }: Props) {
                 <span className="text-[12px] font-medium text-[#1A1A1A]">{job.paymentMethod || "Not recorded"}</span>
               </div>
               <div className="flex justify-between py-1 border-b border-admin-line/50">
+                <span className="text-[12px] text-[#8A8A8A]">On my way</span>
+                <span className="text-[12px] font-medium text-[#1A1A1A]">
+                  {job.onMyWayAt ? formatLondonDateTime(job.onMyWayAt) : "Not recorded"}
+                </span>
+              </div>
+              <div className="flex justify-between py-1 border-b border-admin-line/50">
+                <span className="text-[12px] text-[#8A8A8A]">Customer signature time</span>
+                <span className="text-[12px] font-medium text-[#1A1A1A]">
+                  {job.clientSignatureAt ? formatLondonDateTime(job.clientSignatureAt) : "Not recorded"}
+                </span>
+              </div>
+              <div className="flex justify-between py-1 border-b border-admin-line/50">
                 <span className="text-[12px] text-[#8A8A8A]">Actual Duration</span>
                 <span className="text-[12px] font-medium text-[#1A1A1A]">{job.actualMinutes ? `${job.actualMinutes}m` : "—"}</span>
               </div>
@@ -231,7 +243,7 @@ export function PaperJobReport({ job, onClose }: Props) {
               )}
             </div>
             <div className="text-[12px] text-[#8A8A8A] mt-2">
-              Signed: {job.actualFinish ? formatLondonDateTime(job.actualFinish) : "—"}
+              Signed: {job.clientSignatureAt ? formatLondonDateTime(job.clientSignatureAt) : job.actualFinish ? formatLondonDateTime(job.actualFinish) : "—"}
             </div>
           </div>
 

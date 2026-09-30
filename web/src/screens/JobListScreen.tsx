@@ -43,6 +43,36 @@ interface JobsListState {
   next: Job[];
 }
 
+export interface VisibleDriverJobs {
+  today: Job | null;
+  upcomingGroups: ReturnType<typeof groupJobsByDate>;
+  counts: { today: number; upcoming: number; previous: number };
+}
+
+export function selectVisibleDriverJobs(jobsList: JobsListState): VisibleDriverJobs {
+  // Today shows exactly one job at a time -- whichever the driver is actually
+  // mid-way through (IN_PROGRESS), or the earliest still-READY one if none is
+  // started yet. Everything else booked for today is "later today" work the
+  // driver hasn't reached yet, so it reads the same as any other day still to
+  // come -- it moves into Upcoming, not sitting in Today ahead of its turn. Once
+  // the active job is COMPLETED it drops out of jobsList.today entirely (see the
+  // backend's getJobsGroupedForDriver), so the next-earliest one here becomes
+  // "Up next" on the very next load -- one at a time, automatically.
+  const orderedToday = [...jobsList.today].sort((a, b) => a.bookedStart.localeCompare(b.bookedStart));
+  const active = orderedToday.find(j => j.status === "IN_PROGRESS") ?? orderedToday[0] ?? null;
+  const laterToday = orderedToday.filter(j => j.jobId !== active?.jobId);
+
+  return {
+    today: active,
+    upcomingGroups: groupJobsByDate([...laterToday, ...jobsList.next]),
+    counts: {
+      today: active ? 1 : 0,
+      upcoming: laterToday.length + jobsList.next.length,
+      previous: jobsList.past.length
+    }
+  };
+}
+
 function readStoredFilter(): { filter: HomeFilter; hadStored: boolean } {
   try {
     const f = sessionStorage.getItem(FILTER_KEY);
@@ -120,28 +150,7 @@ export function JobListScreen({ driver, onOpenJob }: JobListScreenProps) {
     };
   }, [load]);
 
-  const filtered = useMemo(() => {
-    // Today shows exactly one job at a time -- whichever the driver is actually
-    // mid-way through (IN_PROGRESS), or the earliest still-READY one if none is
-    // started yet. Everything else booked for today is "later today" work the
-    // driver hasn't reached yet, so it reads the same as any other day still to
-    // come -- it moves into Upcoming, not sitting in Today ahead of its turn. Once
-    // the active job is COMPLETED it drops out of jobsList.today entirely (see the
-    // backend's getJobsGroupedForDriver), so the next-earliest one here becomes
-    // "Up next" on the very next load -- one at a time, automatically.
-    const active = jobsList.today.find(j => j.status === "IN_PROGRESS") ?? jobsList.today[0] ?? null;
-    const laterToday = jobsList.today.filter(j => j.jobId !== active?.jobId);
-
-    return {
-      today: active,
-      upcomingGroups: groupJobsByDate([...laterToday, ...jobsList.next]),
-      counts: {
-        today: active ? 1 : 0,
-        upcoming: laterToday.length + jobsList.next.length,
-        previous: jobsList.past.length
-      }
-    };
-  }, [jobsList]);
+  const filtered = useMemo(() => selectVisibleDriverJobs(jobsList), [jobsList]);
 
   // Persist the selection for this session.
   useEffect(() => {
@@ -238,11 +247,7 @@ export function JobListScreen({ driver, onOpenJob }: JobListScreenProps) {
 
 interface FilterViewProps {
   filter: HomeFilter;
-  filtered: {
-    today: Job | null;
-    upcomingGroups: ReturnType<typeof groupJobsByDate>;
-    counts: { today: number; upcoming: number; previous: number };
-  };
+  filtered: VisibleDriverJobs;
   onOpenJob: (jobId: string) => void;
   onRefresh: () => void;
 }

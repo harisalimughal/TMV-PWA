@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { opsJobCompletionSubject, renderOpsJobCompletionEmail } from "../src/google/gmail";
+import {
+  opsJobCompletionSubject,
+  opsVanLoadedSubject,
+  renderOpsJobCompletionEmail,
+  renderOpsVanLoadedEmail
+} from "../src/google/gmail";
 import { JobStatus, type Job } from "../src/jobs/job.types";
 import { WorkflowState } from "../src/workflow/workflow.states";
 
@@ -72,5 +77,21 @@ describe("renderOpsJobCompletionEmail", () => {
     expect(email.text).toContain("View more: https://dashboard.themanvan.co.uk/?section=finished&job=TMV-456");
     expect(email.html).toContain("View More");
     expect(email.html).toContain("https://dashboard.themanvan.co.uk/?section=finished&amp;job=TMV-456");
+  });
+});
+
+describe("renderOpsVanLoadedEmail", () => {
+  it("includes the driver, customer, and in-progress job View More link", () => {
+    const email = renderOpsVanLoadedEmail(
+      job(),
+      { initials: "HA", fullName: "Haris Ali", email: "driver@example.com", vanRegistration: "AB12 CDE" }
+    );
+
+    expect(opsVanLoadedSubject(job())).toBe("Van loaded - Mary Major");
+    expect(email.text).toContain("Haris Ali has loaded the van for Mary Major job.");
+    expect(email.text).toContain("View more: https://dashboard.themanvan.co.uk/?section=jobs&job=TMV-456");
+    expect(email.html).toContain("Haris Ali has loaded the van for Mary Major job.");
+    expect(email.html).toContain("View More");
+    expect(email.html).toContain("https://dashboard.themanvan.co.uk/?section=jobs&amp;job=TMV-456");
   });
 });

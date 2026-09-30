@@ -5,10 +5,12 @@ const listJobs = vi.fn();
 const upsertJob = vi.fn().mockResolvedValue(undefined);
 const getDriverProfileByInitials = vi.fn();
 const sendPushToDriver = vi.fn().mockResolvedValue({ total: 1, sent: 1, failed: 0, pruned: 0 });
+const getSetting = vi.fn((_key: string, fallback: string) => Promise.resolve(fallback));
 
 vi.mock("../src/db/jobs.repo", () => ({ listJobs: (...args: any[]) => listJobs(...args), upsertJob: (...args: any[]) => upsertJob(...args) }));
 vi.mock("../src/auth/driver-account.service", () => ({ getDriverProfileByInitials: (...args: any[]) => getDriverProfileByInitials(...args) }));
 vi.mock("../src/push/push.service", () => ({ sendPushToDriver: (...args: any[]) => sendPushToDriver(...args) }));
+vi.mock("../src/db/settings.repo", () => ({ getSetting: (...args: any[]) => getSetting(...args) }));
 
 import { sweepJobReminders } from "../src/jobs/reminder.service";
 import { JobStatus } from "../src/jobs/job.types";
@@ -30,6 +32,7 @@ function baseJob(overrides: Partial<any> = {}) {
 describe("sweepJobReminders", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    getSetting.mockImplementation((_key: string, fallback: string) => Promise.resolve(fallback));
     getDriverProfileByInitials.mockResolvedValue({ initials: "HE", email: "he@example.com", active: true });
   });
 

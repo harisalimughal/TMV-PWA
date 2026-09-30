@@ -61,6 +61,13 @@ export interface BookingDetails {
   extraChargeText?: string;
 }
 
+export interface MoneyBreakdownItem {
+  label?: string;
+  method?: string;
+  amount: Pence;
+  minutes?: number;
+}
+
 export type ScenarioKind = "checkin" | "checkout" | "parking" | "liability";
 
 /** A Check In/Check Out/Parking Liability/Liability Report submission filed against
@@ -78,6 +85,8 @@ export interface JobScenarioSubmission {
   address: string;
   damageCategories: string;
   clientPresent: string;
+  reportedAt?: string;
+  reportedAtPoint?: string;
   rawRecord: Record<string, string>;
   photos: Array<{
     fileId: string;
@@ -139,6 +148,8 @@ export interface NormalizedJob {
   reconciled: boolean;
 
   paymentMethod: string;
+  paymentBreakdown?: MoneyBreakdownItem[];
+  extraChargeBreakdown?: MoneyBreakdownItem[];
   paymentStatus: string;
   managerReviewStatus?: "Pending" | "Approved" | "Flagged";
   managerReviewNote?: string;
@@ -164,6 +175,7 @@ export interface NormalizedJob {
   scenarios: JobScenarioSubmission[];
 
   clientConfirmedName?: string;
+  clientSignatureAt?: string;
   signatureUrl?: string;
   driveFolderId?: string;
   driveFolderUrl?: string;

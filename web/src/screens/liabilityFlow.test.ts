@@ -49,7 +49,7 @@ function job(overrides: Partial<Job>): Job {
 
 describe("liability flow helpers", () => {
   it("keeps the liability checkpoint options in the driver-facing order", () => {
-    expect(liabilityCheckpointOptions.map(option => option.label)).toEqual(["Pickup", "Stop-by", "Drop-off"]);
+    expect(liabilityCheckpointOptions.map(option => option.label)).toEqual(["Pickup", "Drop-off"]);
   });
 
   it("uses the requested job only when it is today's active job", () => {
@@ -78,10 +78,6 @@ describe("liability flow helpers", () => {
     expect(reportedAtForLiabilityCheckpoint("pickup", sample)).toEqual({
       label: "Pickup",
       address: "Pickup address"
-    });
-    expect(reportedAtForLiabilityCheckpoint("stopby", sample)).toEqual({
-      label: "Stop-by",
-      address: "Stop-by address"
     });
     expect(reportedAtForLiabilityCheckpoint("dropoff", sample)).toEqual({
       label: "Drop-off",

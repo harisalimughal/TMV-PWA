@@ -13,6 +13,7 @@ import { formatCapturedTime, formatLocationLabel, mapsUrlForLocation } from "../
 import { htmlToPlainText } from "../../../../lib/htmlText";
 import { RawBookingText } from "../../../../components/driver/RawBookingText";
 import { JobScenarioSection } from "./JobScenarioSection";
+import { scenarioPointFromRecord } from "../utils/scenarioPoint";
 
 type ScenarioKind = "checkin" | "checkout" | "parking" | "liability";
 
@@ -61,6 +62,11 @@ function ChargeRow({
       </span>
     </div>
   );
+}
+
+function paymentBreakdownLabel(row: { method?: string; amount: number }) {
+  if ((row.method || "").toLowerCase() === "invoice" && row.amount === 0) return "Outstanding";
+  return formatGBP(row.amount);
 }
 
 function DetailRow({ label, value }: { label: string; value: React.ReactNode }) {
@@ -203,6 +209,7 @@ export function SubmissionDetailDrawer({ job: initialJob, isOpen, onClose, onNav
         ? formatLondonDateTime((job as NormalizedJob).actualFinish)
         : ((job as NormalizedJob).bookedStart ? formatLondonDateTime((job as NormalizedJob).bookedStart) : 'Unknown Time'));
   const normalizedJob = !isScenario ? (job as NormalizedJob) : null;
+  const scenarioPoint = isScenario ? scenarioPointFromRecord(scenarioItem) : null;
   const totalCharges = normalizedJob
     ? normalizedJob.totalCharges || normalizedJob.calculatedTotalCharges || normalizedJob.basePrice + normalizedJob.extraCharges + normalizedJob.overtimeCharge
     : 0;
@@ -426,6 +433,10 @@ export function SubmissionDetailDrawer({ job: initialJob, isOpen, onClose, onNav
             <DetailRow label="Payment status" value={normalizedJob.paymentStatus || "Not recorded"} />
             <DetailRow label="Customer confirmed by" value={normalizedJob.clientConfirmedName || "Not recorded"} />
             <DetailRow
+              label="Customer signature time"
+              value={normalizedJob.clientSignatureAt ? formatLondonDateTime(normalizedJob.clientSignatureAt) : "Not recorded"}
+            />
+            <DetailRow
               label="On my way (customer notified)"
               value={normalizedJob.onMyWayAt ? formatLondonDateTime(normalizedJob.onMyWayAt) : "Not recorded"}
             />
@@ -443,6 +454,26 @@ export function SubmissionDetailDrawer({ job: initialJob, isOpen, onClose, onNav
 
       {!isScenario && normalizedJob && (
         <div className="bg-white rounded-module p-4 sm:p-6 shadow-sm border border-admin-line">
+          <label className="text-[13px] font-semibold text-admin-muted block mb-4">Payment breakdown</label>
+          {normalizedJob.paymentBreakdown?.length ? (
+            <div className="divide-y divide-admin-line rounded-card border border-admin-line overflow-hidden">
+              {normalizedJob.paymentBreakdown.map((row, index) => (
+                <div key={`${row.method}-${index}`} className="flex items-center justify-between gap-4 bg-white px-3 py-2.5">
+                  <span className="text-[12px] font-medium text-admin-muted">{row.method || "Not recorded"}</span>
+                  <span className="font-mono text-[13px] font-semibold tabular-nums text-admin-ink">
+                    {paymentBreakdownLabel(row)}
+                  </span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-[13px] text-admin-muted">No payment breakdown recorded.</p>
+          )}
+        </div>
+      )}
+
+      {!isScenario && normalizedJob && (
+        <div className="bg-white rounded-module p-4 sm:p-6 shadow-sm border border-admin-line">
           <div className="flex items-start justify-between gap-3 mb-4">
             <label className="text-[13px] font-semibold text-admin-muted block">Charges</label>
             <span className={normalizedJob.reconciled ? "rounded-control bg-admin-status-green-bg px-2.5 py-1 text-[11px] font-bold uppercase tracking-[0.03em] text-admin-status-green" : "rounded-control bg-admin-status-red-bg px-2.5 py-1 text-[11px] font-bold uppercase tracking-[0.03em] text-admin-status-red"}>
@@ -451,8 +482,16 @@ export function SubmissionDetailDrawer({ job: initialJob, isOpen, onClose, onNav
           </div>
           <div className="divide-y divide-admin-line rounded-card border border-admin-line overflow-hidden">
             <ChargeRow label="Base price" value={normalizedJob.basePrice} />
-            <ChargeRow label="Extra charges" value={normalizedJob.extraCharges} />
-            <ChargeRow label="Overtime" value={normalizedJob.overtimeCharge} />
+            {normalizedJob.extraChargeBreakdown?.length ? (
+              normalizedJob.extraChargeBreakdown.map((row, index) => (
+                <ChargeRow key={`${row.label}-${index}`} label={row.label || "Extra charge"} value={row.amount} />
+              ))
+            ) : (
+              <>
+                <ChargeRow label="Extra charges" value={normalizedJob.extraCharges} />
+                <ChargeRow label="Overtime" value={normalizedJob.overtimeCharge} />
+              </>
+            )}
             <ChargeRow label="Total Charges" value={totalCharges} strong />
             <ChargeRow label="Amount Charged" value={normalizedJob.amountCharged} strong brand />
           </div>
@@ -596,7 +635,17 @@ export function SubmissionDetailDrawer({ job: initialJob, isOpen, onClose, onNav
              </div>
              <div className="min-w-0">
                <h2 className="text-card text-fg leading-tight truncate">{driverName || "Unknown"}</h2>
-               <div className="text-[12px] text-admin-muted mt-0.5 truncate">{formattedTime}, {isScenario ? "Ref" : "Job ID"}: {displayId}</div>
+               <div className="flex flex-wrap items-center gap-1.5 text-[12px] text-admin-muted mt-0.5">
+                 <span className="truncate">{formattedTime}, {isScenario ? "Ref" : "Job ID"}: {displayId}</span>
+                 {scenarioPoint && (
+                   <span
+                     title={scenarioPoint.full}
+                     className="rounded-control border border-admin-brand/20 bg-admin-brand-soft px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.03em] text-admin-brand"
+                   >
+                     {scenarioPoint.point}
+                   </span>
+                 )}
+               </div>
              </div>
           </div>
           <div className="flex items-center gap-2 sm:gap-3">

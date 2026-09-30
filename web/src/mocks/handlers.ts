@@ -34,9 +34,6 @@ const HAPPY_ORDER = [
   "WAITING_ARRIVAL_ISSUES_CHECK",
   "WAITING_LOADED_PHOTO",
   "IN_PROGRESS",
-  "WAITING_STOP_BY_CHECK",
-  "WAITING_STOP_BY_PHOTO",
-  "WAITING_STOP_BY_ISSUES_CHECK",
   "WAITING_EMPTY_VAN_ISSUES_CHECK",
   "WAITING_EXTRA_CHARGES",
   "WAITING_OVERTIME",
@@ -82,6 +79,16 @@ function logActivity(job: Job, action: string, fromState: string): void {
   (store.activity[job.jobId] ??= []).unshift(entry);
 }
 
+function sendMockOnMyWay(jobId: string): MockResponse {
+  const job = store.jobs[jobId];
+  if (!job) return err(404, "JOB_NOT_FOUND", "That job no longer exists.");
+  if (!job.onMyWayAt) {
+    const now = new Date().toISOString();
+    store.jobs[jobId] = { ...job, onMyWayAt: now, updatedAt: now };
+  }
+  return ok({ job: store.jobs[jobId] });
+}
+
 function bucketJobs(ids: string[]): Job[] {
   return ids.map(id => store.jobs[id]).filter(Boolean);
 }
@@ -103,7 +110,6 @@ function transition(jobId: string, trigger: WorkflowTrigger, input?: Record<stri
 const PHOTO_STATE_TYPE: Record<string, string> = {
   WAITING_ARRIVAL_PHOTO: "Arrival",
   WAITING_LOADED_PHOTO: "VanLoaded",
-  WAITING_STOP_BY_PHOTO: "StopBy",
   WAITING_EMPTY_VAN_PHOTO: "EmptyVan"
 };
 
@@ -238,6 +244,7 @@ export function handle(method: string, path: string, bodyText?: string): MockRes
         confirmationText: DEFAULT_CONFIRMATION_TEXT
       });
     }
+    if (sub === "/on-my-way" && method === "POST") return sendMockOnMyWay(jobId);
     if (sub === "/start" && method === "POST") return transition(jobId, "start");
     if (sub === "/evidence" && method === "POST") {
       recordMockEvidence(jobId);

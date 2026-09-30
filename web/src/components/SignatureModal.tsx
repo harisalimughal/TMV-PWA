@@ -82,11 +82,11 @@ export function SignatureModal({
         </div>
       }
     >
-      <div className="flex h-full flex-col gap-3">
+      <div className="flex min-h-full flex-col gap-3">
         <p className="text-body text-fg-muted">{instruction}</p>
 
         {agreementText && (
-          <div className="rounded-card border border-line bg-surface-sunken px-4 py-3">
+          <div className="max-h-28 overflow-y-auto rounded-card border border-line bg-surface-sunken px-4 py-3 scroll-touch sm:max-h-36">
             <p className="mb-1.5 text-eyebrow uppercase text-fg-subtle">
               Please read before signing
             </p>

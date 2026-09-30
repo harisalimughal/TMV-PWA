@@ -5,12 +5,8 @@ export enum WorkflowState {
   WAITING_ARRIVAL_ISSUES_CHOICE = "WAITING_ARRIVAL_ISSUES_CHOICE",
   WAITING_LOADED_PHOTO = "WAITING_LOADED_PHOTO",
   IN_PROGRESS = "IN_PROGRESS",
-  // "Is there a stop-by point?" -- asked on every job regardless of whether the
-  // Calendar description mentioned one (Job.stopBy, parsed in booking.service.ts,
-  // isn't always kept up to date for a stop decided on the day). Yes -> a proof
-  // photo at the stop (same shape as Arrival's), then the same "any issues here?"
-  // detour Arrival/Empty Van already get. No -> straight on to the drop-off
-  // issues check, same as a job with no stop at all.
+  // Legacy stop-by states are kept only so old in-progress jobs can be moved forward
+  // cleanly. The driver app no longer shows a stop-by step.
   WAITING_STOP_BY_CHECK = "WAITING_STOP_BY_CHECK",
   WAITING_STOP_BY_PHOTO = "WAITING_STOP_BY_PHOTO",
   WAITING_STOP_BY_ISSUES_CHECK = "WAITING_STOP_BY_ISSUES_CHECK",
@@ -28,12 +24,11 @@ export enum WorkflowState {
   COMPLETED = "COMPLETED"
 }
 
-/** Arrival, Van Loaded, Empty Van, and (conditionally) Stop-by are the states a photo
- *  actually advances -- "Organized" was removed (no longer collected). */
+/** Arrival, Van Loaded, and Empty Van are the states a photo actually advances --
+ *  "Organized" and driver-facing Stop-by were removed. */
 export const PHOTO_STATES = new Set<WorkflowState>([
   WorkflowState.WAITING_ARRIVAL_PHOTO,
   WorkflowState.WAITING_LOADED_PHOTO,
-  WorkflowState.WAITING_STOP_BY_PHOTO,
   WorkflowState.WAITING_EMPTY_VAN_PHOTO
 ]);
 
@@ -58,11 +53,7 @@ export function nextAfterPhoto(state: WorkflowState): WorkflowState {
     case WorkflowState.WAITING_ARRIVAL_PHOTO:
       return WorkflowState.WAITING_LOADED_PHOTO;
     case WorkflowState.WAITING_LOADED_PHOTO:
-      // Every job is asked "is there a stop-by point?" next, regardless of whether
-      // Job.stopBy is set -- see WAITING_STOP_BY_CHECK's own comment.
-      return WorkflowState.WAITING_STOP_BY_CHECK;
-    case WorkflowState.WAITING_STOP_BY_PHOTO:
-      return WorkflowState.WAITING_EMPTY_VAN_PHOTO;
+      return WorkflowState.WAITING_EMPTY_VAN_ISSUES_CHECK;
     case WorkflowState.WAITING_EMPTY_VAN_PHOTO:
       return WorkflowState.WAITING_CLIENT_CONFIRMATION;
     default:

@@ -4,7 +4,7 @@ vi.mock("../src/config/env", () => ({
   env: { notificationFromName: "The Man Van" }
 }));
 
-import { reverseGeocode } from "../src/integrations/geocode";
+import { geocodeAddress, reverseGeocode } from "../src/integrations/geocode";
 
 function jsonResponse(body: unknown, ok = true, status = 200): Response {
   return {
@@ -56,5 +56,32 @@ describe("reverseGeocode", () => {
   it("returns null (never throws) when the network call itself rejects", async () => {
     vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("network down")));
     await expect(reverseGeocode(1, 1)).resolves.toBeNull();
+  });
+});
+
+describe("geocodeAddress", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
+  it("returns the first Nominatim search result as lat/lng", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(jsonResponse([{ lat: "51.5394", lon: "-0.1027" }]))
+    );
+
+    const location = await geocodeAddress("7 Larch Close, London N1 7DP");
+
+    expect(location).toEqual({ lat: 51.5394, lng: -0.1027 });
+    const call = (fetch as any).mock.calls[0];
+    expect(call[0]).toContain("/search?");
+    expect(call[1].headers["User-Agent"]).toContain("TMV-PWA");
+  });
+
+  it("returns null when Nominatim has no search result", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse([])));
+
+    await expect(geocodeAddress("not a real address")).resolves.toBeNull();
   });
 });

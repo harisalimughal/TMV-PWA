@@ -24,6 +24,19 @@ const DB_NAME = "tmv-notifications";
 const STORE_NAME = "notifications";
 const DB_VERSION = 1;
 const MAX_ENTRIES = 50;
+const NOTIFICATION_TTL_MS = 24 * 60 * 60 * 1000;
+
+export function visibleNotifications(items: LoggedNotification[], now = Date.now()): LoggedNotification[] {
+  const cutoff = now - NOTIFICATION_TTL_MS;
+  return items
+    .filter(item => item.receivedAt >= cutoff)
+    .sort((a, b) => b.receivedAt - a.receivedAt)
+    .slice(0, MAX_ENTRIES);
+}
+
+export function unreadCountForNotifications(items: LoggedNotification[], now = Date.now()): number {
+  return visibleNotifications(items, now).filter(item => !item.read).length;
+}
 
 function openDb(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
@@ -42,11 +55,16 @@ function openDb(): Promise<IDBDatabase> {
 export async function listNotifications(): Promise<LoggedNotification[]> {
   const db = await openDb();
   return new Promise((resolve, reject) => {
-    const tx = db.transaction(STORE_NAME, "readonly");
-    const request = tx.objectStore(STORE_NAME).getAll();
+    const tx = db.transaction(STORE_NAME, "readwrite");
+    const store = tx.objectStore(STORE_NAME);
+    const request = store.getAll();
     request.onsuccess = () => {
-      const items = (request.result as LoggedNotification[]).sort((a, b) => b.receivedAt - a.receivedAt);
-      resolve(items.slice(0, MAX_ENTRIES));
+      const items = request.result as LoggedNotification[];
+      const cutoff = Date.now() - NOTIFICATION_TTL_MS;
+      for (const item of items) {
+        if (item.receivedAt < cutoff) store.delete(item.id);
+      }
+      resolve(visibleNotifications(items));
     };
     request.onerror = () => reject(request.error);
   });
@@ -54,7 +72,7 @@ export async function listNotifications(): Promise<LoggedNotification[]> {
 
 export async function unreadCount(): Promise<number> {
   const items = await listNotifications();
-  return items.filter(item => !item.read).length;
+  return unreadCountForNotifications(items);
 }
 
 export async function markRead(id: number): Promise<void> {

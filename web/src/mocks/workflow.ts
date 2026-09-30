@@ -23,7 +23,6 @@ export type WorkflowTrigger =
   | "ISSUES_YES"
   | "ISSUES_NONE"
   | "FINISH_MOVE"
-  | "STOP_BY_YES"
   | "STOP_BY_NONE"
   | "SUBMIT_EXTRA_CHARGES"
   | "SUBMIT_OVERTIME"
@@ -58,24 +57,15 @@ export function nextState(
       return current;
     case "WAITING_ARRIVAL_ISSUES_CHOICE":
       return trigger === "scenario" ? "WAITING_LOADED_PHOTO" : current;
-    // Every job is asked "is there a stop-by point?" next, regardless of job.stopBy
-    // (Calendar isn't always kept current for a stop decided on the day).
     case "WAITING_LOADED_PHOTO":
-      return trigger === "evidence" ? "WAITING_STOP_BY_CHECK" : current;
+      return trigger === "evidence" ? "WAITING_EMPTY_VAN_ISSUES_CHECK" : current;
     case "IN_PROGRESS":
-      return trigger === "FINISH_MOVE" ? "WAITING_STOP_BY_CHECK" : current;
+      return trigger === "FINISH_MOVE" ? "WAITING_EMPTY_VAN_ISSUES_CHECK" : current;
     case "WAITING_STOP_BY_CHECK":
-      if (trigger === "STOP_BY_YES") return "WAITING_STOP_BY_PHOTO";
-      if (trigger === "STOP_BY_NONE") return "WAITING_EMPTY_VAN_ISSUES_CHECK";
-      return current;
     case "WAITING_STOP_BY_PHOTO":
-      return trigger === "evidence" ? "WAITING_STOP_BY_ISSUES_CHECK" : current;
     case "WAITING_STOP_BY_ISSUES_CHECK":
-      if (trigger === "ISSUES_YES") return "WAITING_STOP_BY_ISSUES_CHOICE";
-      if (trigger === "ISSUES_NONE") return "WAITING_EMPTY_VAN_ISSUES_CHECK";
-      return current;
     case "WAITING_STOP_BY_ISSUES_CHOICE":
-      return trigger === "scenario" ? "WAITING_EMPTY_VAN_ISSUES_CHECK" : current;
+      return trigger === "STOP_BY_NONE" ? "WAITING_EMPTY_VAN_ISSUES_CHECK" : current;
     case "WAITING_EMPTY_VAN_ISSUES_CHECK":
       if (trigger === "ISSUES_YES") return "WAITING_EMPTY_VAN_ISSUES_CHOICE";
       if (trigger === "ISSUES_NONE") return "WAITING_EXTRA_CHARGES";
@@ -122,13 +112,11 @@ function prevState(current: string, job: Job): string {
     case "WAITING_STOP_BY_CHECK":
       return "WAITING_LOADED_PHOTO";
     case "WAITING_STOP_BY_PHOTO":
-      return "WAITING_STOP_BY_CHECK";
     case "WAITING_STOP_BY_ISSUES_CHECK":
-      return "WAITING_STOP_BY_PHOTO";
     case "WAITING_STOP_BY_ISSUES_CHOICE":
-      return "WAITING_STOP_BY_ISSUES_CHECK";
+      return "WAITING_LOADED_PHOTO";
     case "WAITING_EMPTY_VAN_ISSUES_CHECK":
-      return job.stopBy?.trim() ? "WAITING_STOP_BY_ISSUES_CHECK" : "WAITING_LOADED_PHOTO";
+      return "WAITING_LOADED_PHOTO";
     case "WAITING_EMPTY_VAN_ISSUES_CHOICE":
       return "WAITING_EMPTY_VAN_ISSUES_CHECK";
     case "WAITING_EXTRA_CHARGES":
@@ -209,6 +197,10 @@ export function applyTrigger(
       break;
     case "SUBMIT_PAYMENT":
       next.paymentMethod = (input.payment_method ?? []).join(", ");
+      next.paymentBreakdown = (input.payment_method ?? []).map(method => ({
+        method,
+        amount: method === "Invoice" ? 0 : Math.round((Number(input[`payment_amount_${method}`]?.[0] ?? "0") || 0) * 100) / 100
+      }));
       next.paymentStatus = next.paymentMethod.includes("Invoice") ? "Outstanding" : "Recorded";
       break;
     case "signature":

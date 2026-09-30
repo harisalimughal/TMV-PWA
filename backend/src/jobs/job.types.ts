@@ -21,6 +21,11 @@ export enum ExtraChargeType {
   NONE = "No Extras Time"
 }
 
+export interface PaymentBreakdownItem {
+  method: PaymentMethod | string;
+  amount: number;
+}
+
 export interface DriverProfile {
   initials: string;
   fullName: string;
@@ -46,6 +51,7 @@ export interface Job {
   customerEmail: string;
   customerPhone: string;
   pickup: string;
+  pickupLocation?: { lat: number; lng: number };
   dropoff: string;
   /** A mid-route stop parsed from the Calendar description (e.g. "Stop by:
    *  ..."), if the booking mentions one -- "" when it doesn't. Drives the
@@ -85,12 +91,17 @@ export interface Job {
   amountCharged?: number;
   totalAdjustmentNote?: string;
   paymentMethod: string;
+  paymentBreakdown?: PaymentBreakdownItem[];
   paymentStatus: string;
   managerReviewStatus?: "Pending" | "Approved" | "Flagged";
   managerReviewNote?: string;
   managerReviewedAt?: string;
   clientNamePostcode: string;
   clientConfirmedBy: string;
+  /** ISO timestamp of when the customer final sign-off signature was accepted by the
+   *  server. Distinct from actualFinish because payment/review steps happen after
+   *  sign-off in the driver flow. */
+  clientSignatureAt?: string;
   /** ISO timestamp of the "starting soon" driver email+push reminder (see
    *  reminder.service.ts), or unset if it hasn't fired yet. Prevents a re-run of the
    *  sweep from reminding the same driver twice for the same job. */

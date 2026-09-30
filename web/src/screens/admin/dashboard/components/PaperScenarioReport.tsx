@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { formatLondonDateTime } from "../utils/date";
 import { resolveDriver } from "../utils/drivers";
 import { formatLocationLabel, type CapturedLocation } from "../../../../lib/geo";
+import { scenarioPointFromRecord } from "../utils/scenarioPoint";
 
 interface Props {
   item: any;
@@ -53,6 +54,7 @@ function PhotoSection({ title, src, capturedAt, location, locationName }: PhotoS
 
 export function PaperScenarioReport({ item, kind, isPreview = false }: Props) {
   const raw = item.rawRecord || item;
+  const scenarioPoint = scenarioPointFromRecord(item);
 
   const clientName = item.clientName || raw["Client Name"] || raw["Client Full Name"] || "Not recorded";
   const driverResolved = resolveDriver(item.driver || raw["Driver"]);
@@ -111,8 +113,18 @@ export function PaperScenarioReport({ item, kind, isPreview = false }: Props) {
           <div className="text-[12px] font-medium text-admin-muted mt-0.5">{formattedTime} | Europe/London</div>
         </div>
       </div>
-      <div className="px-3 py-1.5 bg-white border border-[#E5E7EB] rounded-full text-[12px] font-bold text-admin-muted uppercase tracking-widest shadow-sm shrink-0">
-        {refId ? `#${refId}` : "Reference pending"}
+      <div className="flex flex-col items-end gap-1 shrink-0">
+        <div className="px-3 py-1.5 bg-white border border-[#E5E7EB] rounded-full text-[12px] font-bold text-admin-muted uppercase tracking-widest shadow-sm">
+          {refId ? `#${refId}` : "Reference pending"}
+        </div>
+        {scenarioPoint && (
+          <div
+            title={scenarioPoint.full}
+            className="px-2.5 py-1 bg-admin-brand-soft border border-admin-brand/20 rounded-full text-[10px] font-bold uppercase tracking-widest text-admin-brand"
+          >
+            {scenarioPoint.point}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -129,6 +141,13 @@ export function PaperScenarioReport({ item, kind, isPreview = false }: Props) {
   const DetailsAndSignature = () => (
     <div className="mb-3 grid grid-cols-1 gap-3 shrink-0">
       <div className="border border-[#E5E7EB] rounded-card overflow-hidden">
+        {scenarioPoint && (
+          <div className="flex items-center justify-between gap-4 p-3 border-b border-[#E5E7EB] bg-white">
+            <span className="text-label font-medium text-fg-muted">Reported At</span>
+            <span className="text-[13px] font-bold text-admin-ink text-right max-w-[360px]">{scenarioPoint.full}</span>
+          </div>
+        )}
+
         <div className="flex items-center justify-between gap-4 p-3 border-b border-[#E5E7EB] bg-white">
           <span className="text-label font-medium text-fg-muted">Client Name</span>
           <span className="text-[13px] font-bold text-admin-ink text-right">{clientName}</span>

@@ -12,15 +12,13 @@ export interface Job {
   customerEmail: string;
   customerPhone: string;
   pickup: string;
+  pickupLocation?: { lat: number; lng: number };
   dropoff: string;
   /** Optional mid-route stop ("stop by" / waypoint), parsed from the Calendar
-   *  description (see backend's booking.service.ts) if the booking mentions one --
-   *  when present it sits between pickup and drop-off on the route and is added as
-   *  a waypoint to the Navigate link. This is only ever a hint, though: the driver
-   *  is asked "is there a stop-by point?" in the workflow regardless of this value
-   *  (see JobWorkflowScreen.tsx's WAITING_STOP_BY_CHECK), since a stop decided on
-   *  the day is never reflected here. Safe to read anywhere: absent or "" means the
-   *  booking didn't mention one. */
+   *  description (see backend's booking.service.ts) if the booking mentions one.
+   *  The driver workflow no longer asks for or collects stop-by evidence; this remains
+   *  booking detail only. Safe to read anywhere: absent or "" means the booking didn't
+   *  mention one. */
   stopBy?: string;
   /** Verbatim Calendar event title this job was synced from, e.g.
    *  "2 Men - £170 - 16:00". Empty on jobs synced before the backend started
@@ -63,9 +61,11 @@ export interface Job {
   amountCharged?: number;
   totalAdjustmentNote?: string;
   paymentMethod: string;
+  paymentBreakdown?: Array<{ method: string; amount: number }>;
   paymentStatus: string;
   clientNamePostcode: string;
   clientConfirmedBy: string;
+  clientSignatureAt?: string;
   /** ISO timestamp of when this job's van was first detected inside the London
    *  Congestion Charge zone (GPSLive geofence webhook) -- drives the extra-charges
    *  suggestion banner. Unset if never detected. */

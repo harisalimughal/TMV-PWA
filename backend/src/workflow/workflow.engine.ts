@@ -4,17 +4,17 @@ import { deleteEvidence, getEvidence, readEvidenceSummary } from "../db/evidence
 import { destroyEvidenceImage } from "../storage/cloudinary";
 import { appendActivity } from "../db/activity.repo";
 import { getSetting } from "../db/settings.repo";
-import { EvidenceType, ExtraChargeType, Job, PaymentMethod } from "../jobs/job.types";
+import { DriverProfile, EvidenceType, ExtraChargeType, Job, PaymentMethod } from "../jobs/job.types";
 import { uploadEvidence } from "../jobs/evidence.service";
 import { completeJob, getJobForDriver, getNextJobForDriver, saveJob, startJob } from "../jobs/jobs.service";
 import { WorkflowState, nextAfterPhoto, PHOTO_STATES } from "./workflow.states";
 import {
   assertState, validateCrewSize,
-  validateExtraCharges, validateMinutes, validatePaymentMethods, ValidationError
+  validateCurrency, validateExtraCharges, validateMinutes, validatePaymentMethods, ValidationError
 } from "./validation.engine";
 import { log, setContext } from "../utils/logger";
 import { formatPounds } from "../utils/money";
-import { sendReviewRequestEmail } from "../google/gmail";
+import { sendOpsVanLoadedEmail, sendReviewRequestEmail } from "../google/gmail";
 import { REVIEW_REQUEST_EMAIL_TEMPLATE } from "../notifications/message";
 import { isMessageEnabled } from "../notifications/message-catalog";
 import { sendPushToAdmins } from "../push/push.service";
@@ -79,6 +79,33 @@ function validateManualTotal(raw: string): number {
   return Math.round(value * 100) / 100;
 }
 
+function paymentAmountKey(method: PaymentMethod): string {
+  return `payment_amount_${method}`;
+}
+
+function validatePaymentBreakdown(
+  methods: PaymentMethod[],
+  input: Record<string, string[]>,
+  amountCharged?: number
+): Array<{ method: PaymentMethod; amount: number }> {
+  const rows = methods.map(method => {
+    if (method === PaymentMethod.INVOICE) return { method, amount: 0 };
+    const raw = input[paymentAmountKey(method)]?.[0] ?? "";
+    return { method, amount: validateCurrency(raw) };
+  });
+
+  const paidTotal = rows.reduce((sum, row) => sum + row.amount, 0);
+  const expected = amountCharged ?? 0;
+  if (!methods.includes(PaymentMethod.INVOICE) && Math.round(paidTotal * 100) !== Math.round(expected * 100)) {
+    throw new ValidationError("Payment amounts must add up to the final amount charged.");
+  }
+  if (methods.includes(PaymentMethod.INVOICE) && paidTotal > expected) {
+    throw new ValidationError("Payment amounts cannot be more than the final amount charged.");
+  }
+
+  return rows;
+}
+
 export async function beginJob(jobId: string, identifier: string): Promise<Job> {
   return startJob(jobId, identifier);
 }
@@ -86,14 +113,12 @@ export async function beginJob(jobId: string, identifier: string): Promise<Job> 
 const PHOTO_FOLDER: Record<string, EvidenceType> = {
   [WorkflowState.WAITING_ARRIVAL_PHOTO]: "Arrival",
   [WorkflowState.WAITING_LOADED_PHOTO]: "VanLoaded",
-  [WorkflowState.WAITING_STOP_BY_PHOTO]: "StopBy",
   [WorkflowState.WAITING_EMPTY_VAN_PHOTO]: "EmptyVan"
 };
 
 export function maxPhotosForWorkflowState(state: WorkflowState): number {
   switch (state) {
     case WorkflowState.WAITING_LOADED_PHOTO:
-    case WorkflowState.WAITING_STOP_BY_PHOTO:
       return 5;
     case WorkflowState.WAITING_EMPTY_VAN_PHOTO:
       return 2;
@@ -175,7 +200,9 @@ export async function handlePhotoStep(
   if (evidenceType === "Arrival" && !job.actualStart) job.actualStart = now;
   if (evidenceType === "EmptyVan" && !job.actualFinish) job.actualFinish = now;
 
-  return saveJob(job, driver, `PHOTO_${evidenceType.toUpperCase()}_RECEIVED`, from, `${photos.length} file(s)`);
+  const saved = await saveJob(job, driver, `PHOTO_${evidenceType.toUpperCase()}_RECEIVED`, from, `${photos.length} file(s)`);
+  if (evidenceType === "VanLoaded") notifyOpsVanLoaded(saved, driver, from);
+  return saved;
 }
 
 /**
@@ -220,6 +247,31 @@ function notifyAdminsOfCompletion(job: Job, jobId: string): void {
     body: `${job.driverInitials || "A driver"} completed the job for ${job.customerName}.`,
     url: "/?section=finished"
   }).catch(err => log.warn("job completion admin push failed (non-fatal)", { job_id: jobId, error: String(err) }));
+}
+
+function notifyOpsVanLoaded(
+  job: Job,
+  driver: Pick<DriverProfile, "email" | "chatUserName" | "fullName" | "initials" | "vanRegistration">,
+  from: string
+): void {
+  const actor = driver.email || driver.chatUserName || job.driverInitials;
+  sendOpsVanLoadedEmail(job, driver)
+    .then(() => appendActivity({
+      jobId: job.jobId,
+      driver: actor,
+      action: "OPS_VAN_LOADED_EMAIL_SENT",
+      fromState: from,
+      toState: job.currentState,
+      detail: "info@themanvan.co.uk"
+    }))
+    .catch(error => appendActivity({
+      jobId: job.jobId,
+      driver: actor,
+      action: "OPS_VAN_LOADED_EMAIL_FAILED",
+      fromState: from,
+      toState: job.currentState,
+      detail: error instanceof Error ? error.message : String(error)
+    }).catch(err => log.warn("van-loaded ops email audit failed", { job_id: job.jobId, error: String(err) })));
 }
 
 async function sendReviewRequestIfAny(job: Job, jobId: string, actor: string, from: string): Promise<void> {
@@ -388,7 +440,9 @@ export async function handleAction(
     case "SUBMIT_PAYMENT": {
       assertState(job.currentState, WorkflowState.WAITING_PAYMENT);
       const methods = validatePaymentMethods(input.payment_method ?? []);
+      const paymentBreakdown = validatePaymentBreakdown(methods, input, job.amountCharged);
       job.paymentMethod = methods.join(", ");
+      job.paymentBreakdown = paymentBreakdown;
       job.paymentStatus = methods.includes(PaymentMethod.INVOICE) ? "Outstanding" : "Recorded";
       const from = job.currentState;
       job.currentState = WorkflowState.WAITING_REVIEW_CHECK;
@@ -400,6 +454,7 @@ export async function handleAction(
       const from = job.currentState as WorkflowState;
       const noneTarget: Partial<Record<WorkflowState, WorkflowState>> = {
         [WorkflowState.WAITING_ARRIVAL_ISSUES_CHECK]: WorkflowState.WAITING_LOADED_PHOTO,
+        [WorkflowState.WAITING_STOP_BY_CHECK]: WorkflowState.WAITING_EMPTY_VAN_ISSUES_CHECK,
         [WorkflowState.WAITING_STOP_BY_ISSUES_CHECK]: WorkflowState.WAITING_EMPTY_VAN_PHOTO,
         [WorkflowState.WAITING_EMPTY_VAN_ISSUES_CHECK]: WorkflowState.WAITING_EMPTY_VAN_PHOTO
       };
@@ -414,16 +469,19 @@ export async function handleAction(
       return saveJob(job, driver, action, from);
     }
 
-    // "Is there a stop-by point?" -- asked after every Van Loaded photo, independent
-    // of Job.stopBy (Calendar isn't always kept current for a stop decided on the
-    // day). Yes opens the proof photo at the stop. No skips straight to the empty-van
-    // photo; issue reports live in the separate Liability tab.
+    // Legacy recovery only: the driver app no longer shows a stop-by step, but an old
+    // in-progress job may still be parked on one of these states.
     case "STOP_BY_YES":
     case "STOP_BY_NONE": {
-      assertState(job.currentState, WorkflowState.WAITING_STOP_BY_CHECK);
+      if (
+        job.currentState !== WorkflowState.WAITING_STOP_BY_CHECK &&
+        job.currentState !== WorkflowState.WAITING_STOP_BY_PHOTO &&
+        job.currentState !== WorkflowState.WAITING_STOP_BY_ISSUES_CHECK
+      ) {
+        assertState(job.currentState, WorkflowState.WAITING_STOP_BY_CHECK);
+      }
       const from = job.currentState;
-      job.currentState =
-        action === "STOP_BY_YES" ? WorkflowState.WAITING_STOP_BY_PHOTO : WorkflowState.WAITING_EMPTY_VAN_PHOTO;
+      job.currentState = WorkflowState.WAITING_EMPTY_VAN_ISSUES_CHECK;
       return saveJob(job, driver, action, from);
     }
 
@@ -490,14 +548,12 @@ const BACK_TARGET: Partial<Record<WorkflowState, WorkflowState | ((job: Job) => 
   [WorkflowState.WAITING_LOADED_PHOTO]: WorkflowState.WAITING_ARRIVAL_PHOTO,
   [WorkflowState.IN_PROGRESS]: WorkflowState.WAITING_LOADED_PHOTO,
   [WorkflowState.WAITING_STOP_BY_CHECK]: WorkflowState.WAITING_LOADED_PHOTO,
-  [WorkflowState.WAITING_STOP_BY_PHOTO]: WorkflowState.WAITING_STOP_BY_CHECK,
-  [WorkflowState.WAITING_STOP_BY_ISSUES_CHECK]: WorkflowState.WAITING_STOP_BY_PHOTO,
+  [WorkflowState.WAITING_STOP_BY_PHOTO]: WorkflowState.WAITING_LOADED_PHOTO,
+  [WorkflowState.WAITING_STOP_BY_ISSUES_CHECK]: WorkflowState.WAITING_LOADED_PHOTO,
   [WorkflowState.WAITING_STOP_BY_ISSUES_CHOICE]: WorkflowState.WAITING_STOP_BY_ISSUES_CHECK,
-  [WorkflowState.WAITING_EMPTY_VAN_ISSUES_CHECK]: job =>
-    job.stopBy?.trim() ? WorkflowState.WAITING_STOP_BY_PHOTO : WorkflowState.WAITING_LOADED_PHOTO,
+  [WorkflowState.WAITING_EMPTY_VAN_ISSUES_CHECK]: WorkflowState.WAITING_LOADED_PHOTO,
   [WorkflowState.WAITING_EMPTY_VAN_ISSUES_CHOICE]: WorkflowState.WAITING_EMPTY_VAN_ISSUES_CHECK,
-  [WorkflowState.WAITING_EMPTY_VAN_PHOTO]: job =>
-    job.stopBy?.trim() ? WorkflowState.WAITING_STOP_BY_PHOTO : WorkflowState.WAITING_STOP_BY_CHECK,
+  [WorkflowState.WAITING_EMPTY_VAN_PHOTO]: WorkflowState.WAITING_EMPTY_VAN_ISSUES_CHECK,
   [WorkflowState.WAITING_CLIENT_CONFIRMATION]: WorkflowState.WAITING_EMPTY_VAN_PHOTO,
   [WorkflowState.WAITING_EXTRA_CHARGES]: WorkflowState.WAITING_CLIENT_CONFIRMATION,
   [WorkflowState.WAITING_OVERTIME]: WorkflowState.WAITING_EXTRA_CHARGES,
@@ -540,6 +596,7 @@ export async function submitDrawnSignature(
   const from = job.currentState;
   job.clientConfirmedBy = name;
   job.signatureUrl = signatureUrl;
+  job.clientSignatureAt = new Date().toISOString();
   job.currentState = WorkflowState.WAITING_EXTRA_CHARGES;
 
   return saveJob(job, driver, "SUBMIT_CLIENT_CONFIRMATION", from, name);

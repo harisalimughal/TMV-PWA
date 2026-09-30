@@ -40,6 +40,25 @@ interface Props {
 
 type OverviewTab = "overview" | "breakdown";
 
+function paymentBreakdownSummary(job: NormalizedJob): string {
+  if (!job.paymentBreakdown?.length) return job.paymentMethod || "Not recorded";
+  return job.paymentBreakdown
+    .map(row => {
+      if ((row.method || "").toLowerCase() === "invoice" && row.amount === 0) return "Invoice outstanding";
+      return `${row.method || "Not recorded"} £${((row.amount || 0) / 100).toFixed(2)}`;
+    })
+    .join(" · ");
+}
+
+function extraChargeBreakdownSummary(job: NormalizedJob): string {
+  if (job.extraChargeBreakdown?.length) {
+    return job.extraChargeBreakdown
+      .map(row => `${row.label || "Extra"} £${((row.amount || 0) / 100).toFixed(2)}`)
+      .join(" · ");
+  }
+  return "";
+}
+
 export function OverviewPage({ onSelectSection }: Props) {
   const [from, setFrom] = useState<string | undefined>(() => defaultDashboardDateRange().from);
   const [to, setTo] = useState<string | undefined>(() => defaultDashboardDateRange().to);
@@ -540,6 +559,7 @@ function WorkBreakdown({ from, to }: { from?: string; to?: string }) {
                                       <th className="py-2 px-3 font-semibold text-admin-muted text-right">Overtime</th>
                                       <th className="py-2 px-3 font-semibold text-admin-muted text-right">Moving</th>
                                       <th className="py-2 px-3 font-semibold text-admin-muted">Payment</th>
+                                      <th className="py-2 px-3 font-semibold text-admin-muted">Extras</th>
                                       <th className="py-2 px-3 font-semibold text-admin-muted text-right">Total (£)</th>
                                     </tr>
                                   </thead>
@@ -554,7 +574,12 @@ function WorkBreakdown({ from, to }: { from?: string; to?: string }) {
                                         <td className="py-2 px-3 text-right font-mono">{((job.tunnelCharge || 0) / 100).toFixed(2)}</td>
                                         <td className="py-2 px-3 text-right font-mono">{formatDuration(job.overtimeMinutes || 0)}</td>
                                         <td className="py-2 px-3 text-right font-mono">{formatDuration(job.actualMinutes || 0)}</td>
-                                        <td className="py-2 px-3">{job.paymentMethod || "Not recorded"}</td>
+                                        <td className="py-2 px-3 max-w-[240px] truncate" title={paymentBreakdownSummary(job)}>
+                                          {paymentBreakdownSummary(job)}
+                                        </td>
+                                        <td className="py-2 px-3 max-w-[260px] truncate" title={extraChargeBreakdownSummary(job) || "None"}>
+                                          {extraChargeBreakdownSummary(job) || "None"}
+                                        </td>
                                         <td className="py-2 px-3 text-right font-mono font-bold">{((job.amountCharged || 0) / 100).toFixed(2)}</td>
                                       </tr>
                                     ))}

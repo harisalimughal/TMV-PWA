@@ -106,3 +106,42 @@ export async function reverseGeocode(lat: number, lng: number): Promise<string |
     return null;
   }
 }
+
+export async function geocodeAddress(address: string): Promise<{ lat: number; lng: number } | null> {
+  const query = address.trim();
+  if (!query) return null;
+  try {
+    const body = await withTimeout(
+      "Nominatim address geocode",
+      throttled(() =>
+        withRetry(
+          "nominatim.search",
+          async () => {
+            const url =
+              `https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1` +
+              `&q=${encodeURIComponent(query)}`;
+            const res = await fetch(url, {
+              headers: { "User-Agent": NOMINATIM_USER_AGENT, Accept: "application/json" }
+            });
+            if (!res.ok) {
+              const error = new Error(`Nominatim returned ${res.status}`) as Error & { status: number };
+              error.status = res.status;
+              throw error;
+            }
+            return (await res.json()) as Array<{ lat?: string; lon?: string }>;
+          },
+          "idempotent"
+        )
+      ),
+      5_000
+    );
+    const first = body[0];
+    const lat = Number(first?.lat);
+    const lng = Number(first?.lon);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+    return { lat, lng };
+  } catch (error) {
+    log.warn("address geocode failed (non-fatal)", { address: query, error: String(error) });
+    return null;
+  }
+}

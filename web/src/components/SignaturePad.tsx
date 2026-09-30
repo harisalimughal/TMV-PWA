@@ -193,7 +193,7 @@ export const SignaturePad = React.forwardRef<SignaturePadHandle, SignaturePadPro
           // Always a white paper surface, in both themes — the customer signs on
           // white and the exported PNG is dark ink on white, so this must match.
           "relative overflow-hidden rounded-card border-2 border-dashed border-[#CBD5E1] bg-white touch-none",
-          fill ? "min-h-0 flex-1" : "h-[210px]"
+          fill ? "min-h-[360px] flex-1 sm:min-h-[420px]" : "h-[210px]"
         )}
       >
         <canvas

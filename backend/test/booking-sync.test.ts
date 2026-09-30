@@ -7,6 +7,7 @@ const listCalendarEvents = vi.fn();
 const listJobs = vi.fn();
 const upsertJob = vi.fn().mockResolvedValue(undefined);
 const notifyDriverJobAssigned = vi.fn().mockResolvedValue(undefined);
+const geocodeAddress = vi.fn();
 
 vi.mock("../src/google/calendar", () => ({
   listCalendarEvents: (...args: any[]) => listCalendarEvents(...args)
@@ -17,6 +18,9 @@ vi.mock("../src/db/jobs.repo", () => ({
 }));
 vi.mock("../src/jobs/driver-notify", () => ({
   notifyDriverJobAssigned: (...args: any[]) => notifyDriverJobAssigned(...args)
+}));
+vi.mock("../src/integrations/geocode", () => ({
+  geocodeAddress: (...args: any[]) => geocodeAddress(...args)
 }));
 
 import { syncBookingsForDate } from "../src/jobs/booking.service";
@@ -90,6 +94,7 @@ function existingJob(overrides: Partial<Job> = {}): Job {
 describe("syncBookingsForDate", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    geocodeAddress.mockResolvedValue(null);
   });
 
   it("preserves onMyWayAt when a Calendar resync updates an already-notified job", async () => {
@@ -142,6 +147,29 @@ describe("syncBookingsForDate", () => {
       bookedFinish: movedFinish,
       status: JobStatus.READY,
       currentState: WorkflowState.READY
+    }));
+  });
+
+  it("stores pickup coordinates resolved during Calendar sync", async () => {
+    geocodeAddress.mockResolvedValue({ lat: 51.5394, lng: -0.1027 });
+    listJobs.mockResolvedValue([]);
+    listCalendarEvents.mockResolvedValue([
+      calendarEvent([
+        "Name: Client One",
+        "Email: client@example.com",
+        "Phone: 07111222333",
+        "Pickup: 7 Larch Close, London N1 7DP",
+        "Delivery: Old dropoff"
+      ].join("\n"))
+    ]);
+
+    await syncBookingsForDate(DateTime.fromISO("2026-09-24T12:00:00", { zone: "Europe/London" }));
+
+    expect(geocodeAddress).toHaveBeenCalledWith("7 Larch Close, London N1 7DP");
+    expect(upsertJob).toHaveBeenCalledTimes(1);
+    expect(upsertJob.mock.calls[0][0]).toEqual(expect.objectContaining({
+      pickup: "7 Larch Close, London N1 7DP",
+      pickupLocation: { lat: 51.5394, lng: -0.1027 }
     }));
   });
 });

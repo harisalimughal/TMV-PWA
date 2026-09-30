@@ -9,6 +9,7 @@ import { notifyDriverJobAssigned } from "./driver-notify";
 import { Job, JobStatus, ParsedCalendarBooking } from "./job.types";
 import { WorkflowState } from "../workflow/workflow.states";
 import { log } from "../utils/logger";
+import { geocodeAddress } from "../integrations/geocode";
 
 /**
  * Google Calendar's rich-text description editor (the Bold/Italic/link toolbar) saves
@@ -294,7 +295,18 @@ function minutesBetween(start: string, finish: string): number {
   return Math.max(0, Math.round(f.diff(s, "minutes").minutes));
 }
 
-function toJob(parsed: ParsedCalendarBooking, existing?: Job): Job {
+async function pickupLocationFor(parsed: ParsedCalendarBooking, existing?: Job): Promise<Job["pickupLocation"]> {
+  if (!parsed.pickup) return undefined;
+  if (existing?.pickup === parsed.pickup && existing.pickupLocation) return existing.pickupLocation;
+  return (await geocodeAddress(parsed.pickup)) ?? existing?.pickupLocation;
+}
+
+function sameLocation(a: Job["pickupLocation"], b: Job["pickupLocation"]): boolean {
+  if (!a && !b) return true;
+  return a?.lat === b?.lat && a?.lng === b?.lng;
+}
+
+function toJob(parsed: ParsedCalendarBooking, existing: Job | undefined, pickupLocation: Job["pickupLocation"]): Job {
   const now = new Date().toISOString();
 
   /*
@@ -326,6 +338,7 @@ function toJob(parsed: ParsedCalendarBooking, existing?: Job): Job {
     customerEmail: parsed.customerEmail,
     customerPhone: parsed.customerPhone,
     pickup: parsed.pickup,
+    pickupLocation,
     dropoff: parsed.dropoff,
     stopBy: parsed.stopBy,
     floorFrom: parsed.floorFrom,
@@ -357,6 +370,7 @@ function toJob(parsed: ParsedCalendarBooking, existing?: Job): Job {
     paymentStatus: existing?.paymentStatus ?? (paidOnline ? "Paid Online" : "Pending"),
     clientNamePostcode: existing?.clientNamePostcode ?? "",
     clientConfirmedBy: existing?.clientConfirmedBy ?? "",
+    clientSignatureAt: existing?.clientSignatureAt,
     // Cleared when the booked start actually moves, so a rescheduled job reminds the
     // driver again for its real new time instead of staying silent forever.
     reminderSentAt: existing?.bookedStart === bookedStart ? existing?.reminderSentAt : undefined,
@@ -386,7 +400,8 @@ function isUnchanged(next: Job, existing?: Job): boolean {
     "crewSize", "basePrice", "paidOnline", "bookedStart", "bookedFinish", "bookedMinutes", "status",
     "rawTitle", "rawDescription"
   ];
-  return keys.every(key => String(next[key] ?? "") === String(existing[key] ?? ""));
+  return keys.every(key => String(next[key] ?? "") === String(existing[key] ?? "")) &&
+    sameLocation(next.pickupLocation, existing.pickupLocation);
 }
 
 export async function syncBookingsForDate(date = DateTime.now().setZone(env.timezone)): Promise<Job[]> {
@@ -428,7 +443,7 @@ export async function syncBookingsForDate(date = DateTime.now().setZone(env.time
     const parsed = parseCalendarEvent(event);
     if (!parsed) continue;
     const existing = existingByEvent.get(parsed.calendarEventId);
-    const job = toJob(parsed, existing);
+    const job = toJob(parsed, existing, await pickupLocationFor(parsed, existing));
     synced.push(job);
 
     if (!isUnchanged(job, existing)) writes.push(job);
