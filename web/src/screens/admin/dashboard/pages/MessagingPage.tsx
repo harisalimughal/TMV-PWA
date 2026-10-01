@@ -164,19 +164,31 @@ function MessageEditModal({
 }: { item: MessageCatalogItem; onClose: () => void; onSaved: () => void }) {
   const [titleDraft, setTitleDraft] = useState(item.title ?? "");
   const [bodyDraft, setBodyDraft] = useState(item.body);
+  const [htmlDraft, setHtmlDraft] = useState(item.html ?? "");
+  const [htmlEnabled, setHtmlEnabled] = useState(Boolean(item.htmlEnabled));
+  const [editorTab, setEditorTab] = useState<"plain" | "html">("plain");
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
 
   const isSms = item.channel === "SMS";
   const chars = bodyDraft.length;
   const isSmsOverlimit = isSms && chars > 160;
-  const unsaved = bodyDraft !== item.body || (item.hasTitle && titleDraft !== (item.title ?? ""));
+  const unsaved =
+    bodyDraft !== item.body ||
+    (item.hasTitle && titleDraft !== (item.title ?? "")) ||
+    (item.hasHtml && htmlDraft !== (item.html ?? "")) ||
+    (item.hasHtml && htmlEnabled !== Boolean(item.htmlEnabled));
+  const htmlReady = !item.hasHtml || !htmlEnabled || htmlDraft.trim().length > 0;
 
   const handleSave = async () => {
     setSaving(true);
     setSaveError("");
     try {
-      await saveMessageTemplate(item.id, item.hasTitle ? { title: titleDraft, body: bodyDraft } : { body: bodyDraft });
+      await saveMessageTemplate(item.id, {
+        ...(item.hasTitle ? { title: titleDraft } : {}),
+        body: bodyDraft,
+        ...(item.hasHtml ? { html: htmlDraft, htmlEnabled } : {})
+      });
       onSaved();
     } catch (err: any) {
       setSaveError(err?.message || "Failed to save.");
@@ -188,6 +200,8 @@ function MessageEditModal({
   const handleReset = () => {
     setBodyDraft(item.bodyFallback);
     if (item.hasTitle) setTitleDraft(item.titleFallback ?? "");
+    if (item.hasHtml) setHtmlDraft(item.htmlFallback ?? "");
+    if (item.hasHtml) setHtmlEnabled(false);
   };
 
   return (
@@ -206,7 +220,7 @@ function MessageEditModal({
             <Button variant="ghost" onClick={onClose} disabled={saving}>
               Cancel
             </Button>
-            <Button onClick={handleSave} loading={saving} disabled={!unsaved || !bodyDraft.trim()} iconLeft={<Save />}>
+            <Button onClick={handleSave} loading={saving} disabled={!unsaved || !bodyDraft.trim() || !htmlReady} iconLeft={<Save />}>
               {saving ? "Saving…" : "Save changes"}
             </Button>
           </div>
@@ -249,18 +263,56 @@ function MessageEditModal({
         )}
 
         <div>
-          <label className="text-eyebrow text-fg-subtle tracking-wider block mb-2">{item.hasTitle ? "Body" : "Message"}</label>
-          <textarea
-            value={bodyDraft}
-            onChange={e => setBodyDraft(e.target.value)}
-            className="w-full h-40 p-4 rounded-card border border-admin-line bg-white text-[14px] font-mono text-admin-ink shadow-sm outline-none focus:border-admin-brand focus:ring-1 focus:ring-admin-brand resize-none transition"
-            placeholder="Type message text here..."
-          />
-          {isSms && (
-            <div className={`mt-2 flex items-center gap-1.5 text-[12px] font-semibold ${isSmsOverlimit ? "text-admin-status-red" : "text-admin-muted"}`}>
-              {isSmsOverlimit && <AlertTriangle className="w-3.5 h-3.5" />}
-              <span>{chars} characters (SMS standard is 160)</span>
+          {item.hasHtml ? (
+            <div className="mb-2 flex flex-wrap items-center justify-between gap-3">
+              <SegmentedControl
+                aria-label="Email editor"
+                value={editorTab}
+                onChange={setEditorTab}
+                options={[
+                  { value: "plain" as const, label: "Plain Text" },
+                  { value: "html" as const, label: "HTML" }
+                ]}
+              />
+              <div className="flex items-center gap-2">
+                <span className="text-[12px] font-semibold text-admin-muted">Send as HTML</span>
+                <Switch checked={htmlEnabled} onChange={setHtmlEnabled} aria-label="Send as HTML" />
+              </div>
             </div>
+          ) : (
+            <label className="text-eyebrow text-fg-subtle tracking-wider block mb-2">{item.hasTitle ? "Body" : "Message"}</label>
+          )}
+
+          {!item.hasHtml || editorTab === "plain" ? (
+            <>
+              <textarea
+                value={bodyDraft}
+                onChange={e => setBodyDraft(e.target.value)}
+                className="w-full h-40 p-4 rounded-card border border-admin-line bg-white text-[14px] font-mono text-admin-ink shadow-sm outline-none focus:border-admin-brand focus:ring-1 focus:ring-admin-brand resize-none transition"
+                placeholder="Type message text here..."
+              />
+              {isSms && (
+                <div className={`mt-2 flex items-center gap-1.5 text-[12px] font-semibold ${isSmsOverlimit ? "text-admin-status-red" : "text-admin-muted"}`}>
+                  {isSmsOverlimit && <AlertTriangle className="w-3.5 h-3.5" />}
+                  <span>{chars} characters (SMS standard is 160)</span>
+                </div>
+              )}
+            </>
+          ) : (
+            <>
+              <textarea
+                value={htmlDraft}
+                onChange={e => setHtmlDraft(e.target.value)}
+                className="w-full h-56 p-4 rounded-card border border-admin-line bg-white text-[13px] font-mono text-admin-ink shadow-sm outline-none focus:border-admin-brand focus:ring-1 focus:ring-admin-brand resize-y transition"
+                placeholder={"<h1>Hello {customerName}</h1>\n<p>Your pickup is {pickup}</p>\n<p>Your driver is {driver_name}.</p>"}
+                spellCheck={false}
+              />
+              {htmlEnabled && !htmlDraft.trim() && (
+                <p className="mt-2 flex items-center gap-1.5 text-[12px] font-semibold text-admin-status-red">
+                  <AlertTriangle className="w-3.5 h-3.5" /> Add HTML code or turn off Send as HTML.
+                </p>
+              )}
+            </>
           )}
         </div>
 
@@ -276,6 +328,18 @@ function MessageEditModal({
             </div>
           </div>
         </div>
+
+        {item.hasHtml && editorTab === "html" && htmlDraft.trim() && (
+          <div>
+            <span className="text-eyebrow text-fg-subtle tracking-wider block mb-2">HTML Preview</span>
+            <iframe
+              title={`${item.label} HTML preview`}
+              sandbox=""
+              srcDoc={renderPreview(htmlDraft)}
+              className="w-full h-72 rounded-card border border-admin-line bg-white"
+            />
+          </div>
+        )}
       </div>
     </Modal>
   );

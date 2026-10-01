@@ -73,7 +73,10 @@ function job(overrides: Partial<any> = {}) {
 describe("sendOnMyWay SMS notification", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    getSetting.mockResolvedValue("On my way {vanRegistration}");
+    getSetting.mockImplementation((key: string, fallback: string) => {
+      if (key === "JOB_STARTED_EMAIL_HTML") return Promise.resolve(fallback);
+      return Promise.resolve("On my way {vanRegistration}");
+    });
     getDriverProfile.mockResolvedValue(driver);
     listActivityForJob.mockResolvedValue([]);
   });
@@ -110,7 +113,10 @@ describe("sendOnMyWay SMS notification", () => {
 describe("sendOnMyWay email notification", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    getSetting.mockResolvedValue("On my way {vanRegistration}");
+    getSetting.mockImplementation((key: string, fallback: string) => {
+      if (key === "JOB_STARTED_EMAIL_HTML") return Promise.resolve(fallback);
+      return Promise.resolve("On my way {vanRegistration}");
+    });
     getDriverProfile.mockResolvedValue(driver);
     listActivityForJob.mockResolvedValue([]);
   });

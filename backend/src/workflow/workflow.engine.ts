@@ -262,14 +262,14 @@ function notifyOpsVanLoaded(
     }).catch(err => log.warn("van-loaded ops email audit failed", { job_id: job.jobId, error: String(err) })));
 }
 
-async function sendReviewRequestIfAny(job: Job, jobId: string, actor: string, from: string): Promise<void> {
-  if (!job.customerEmail) return;
+async function sendReviewRequestIfAny(job: Job, jobId: string, actor: string, from: string): Promise<boolean> {
+  if (!job.customerEmail) return false;
   if (!(await isMessageEnabled("CUSTOMER_REVIEW_REQUEST_EMAIL"))) {
     await appendActivity({
       jobId, driver: actor, action: "CLIENT_REVIEW_EMAIL_SKIPPED", fromState: from, toState: from,
       detail: "Disabled in admin Messaging settings"
     });
-    return;
+    return false;
   }
   try {
     const [reviewTemplate, reviewHtmlTemplate] = await Promise.all([
@@ -281,11 +281,13 @@ async function sendReviewRequestIfAny(job: Job, jobId: string, actor: string, fr
     await appendActivity({
       jobId, driver: actor, action: "CLIENT_REVIEW_EMAIL_SENT", fromState: from, toState: from, detail: job.customerEmail
     });
+    return true;
   } catch (error) {
     await appendActivity({
       jobId, driver: actor, action: "CLIENT_REVIEW_EMAIL_FAILED", fromState: from, toState: from,
       detail: error instanceof Error ? error.message : String(error)
     });
+    return false;
   }
 }
 
@@ -495,19 +497,19 @@ export async function handleAction(
 
     case "REVIEW_NONE": {
       assertState(job.currentState, WorkflowState.WAITING_REVIEW_CHECK);
-      return completeJob(jobId, identifier);
+      return completeJob(jobId, identifier, { reviewEmailSent: false });
     }
 
     case "REVIEW_YES": {
       assertState(job.currentState, WorkflowState.WAITING_REVIEW_CHECK);
-      await sendReviewRequestIfAny(job, jobId, actor, job.currentState);
-      return completeJob(jobId, identifier);
+      const reviewEmailSent = await sendReviewRequestIfAny(job, jobId, actor, job.currentState);
+      return completeJob(jobId, identifier, { reviewEmailSent });
     }
 
     case "SEND_REVIEW_EMAIL": {
       assertState(job.currentState, WorkflowState.WAITING_REVIEW_SEND);
-      await sendReviewRequestIfAny(job, jobId, actor, job.currentState);
-      return completeJob(jobId, identifier);
+      const reviewEmailSent = await sendReviewRequestIfAny(job, jobId, actor, job.currentState);
+      return completeJob(jobId, identifier, { reviewEmailSent });
     }
 
     case "GO_BACK": {
@@ -545,7 +547,7 @@ const BACK_TARGET: Partial<Record<WorkflowState, WorkflowState | ((job: Job) => 
   [WorkflowState.WAITING_STOP_BY_ISSUES_CHOICE]: WorkflowState.WAITING_STOP_BY_ISSUES_CHECK,
   [WorkflowState.WAITING_EMPTY_VAN_ISSUES_CHECK]: WorkflowState.WAITING_LOADED_PHOTO,
   [WorkflowState.WAITING_EMPTY_VAN_ISSUES_CHOICE]: WorkflowState.WAITING_EMPTY_VAN_ISSUES_CHECK,
-  [WorkflowState.WAITING_EMPTY_VAN_PHOTO]: WorkflowState.WAITING_EMPTY_VAN_ISSUES_CHECK,
+  [WorkflowState.WAITING_EMPTY_VAN_PHOTO]: WorkflowState.WAITING_LOADED_PHOTO,
   [WorkflowState.WAITING_CLIENT_CONFIRMATION]: WorkflowState.WAITING_EMPTY_VAN_PHOTO,
   [WorkflowState.WAITING_EXTRA_CHARGES]: WorkflowState.WAITING_CLIENT_CONFIRMATION,
   [WorkflowState.WAITING_OVERTIME]: WorkflowState.WAITING_EXTRA_CHARGES,

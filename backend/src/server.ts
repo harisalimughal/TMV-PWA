@@ -25,6 +25,7 @@ import { pushRoutes } from "./push/push.routes";
 import { gpsLiveWebhookRoutes } from "./integrations/gpslive-webhook.routes";
 import { runScheduledCalendarSync } from "./jobs/jobs.service";
 import { sweepJobReminders } from "./jobs/reminder.service";
+import { sweepPickupArrivals } from "./jobs/pickup-tracker.service";
 import { dashboardAlertsRoutes } from "./admin/dashboard/alerts.routes";
 import { dashboardDriversSummaryRoutes } from "./admin/dashboard/drivers-summary.routes";
 import { dashboardFinanceRoutes } from "./admin/dashboard/finance.routes";
@@ -157,6 +158,13 @@ function startReminderSweep(): void {
   setInterval(run, env.jobReminderSweepIntervalMs);
 }
 
+function startPickupTrackerSweep(): void {
+  const run = () => sweepPickupArrivals().catch(error =>
+    log.warn("pickup tracker sweep failed", { error: String(error) }));
+  run();
+  setInterval(run, 60_000);
+}
+
 /**
  * Retries ensureIndexes() forever, rather than main() awaiting it once and letting a
  * Mongo outage at boot take the whole process down.
@@ -191,6 +199,7 @@ function main(): void {
   warmupAuth().catch(error => log.warn("auth warmup failed at startup", { error: String(error) }));
   startBackgroundSync();
   startReminderSweep();
+  startPickupTrackerSweep();
 
   const shutdown = () => {
     log.info("SIGTERM received; draining");

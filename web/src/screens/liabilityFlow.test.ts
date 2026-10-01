@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  liabilityCheckpointForWorkflowState,
   liabilityCheckpointOptions,
   pickLiabilityJob,
   reportedAtForLiabilityCheckpoint
@@ -49,7 +50,7 @@ function job(overrides: Partial<Job>): Job {
 
 describe("liability flow helpers", () => {
   it("keeps the liability checkpoint options in the driver-facing order", () => {
-    expect(liabilityCheckpointOptions.map(option => option.label)).toEqual(["Pickup", "Drop-off"]);
+    expect(liabilityCheckpointOptions.map(option => option.label)).toEqual(["Pickup", "Stop-by", "Drop-off"]);
   });
 
   it("uses the requested job only when it is today's active job", () => {
@@ -83,5 +84,14 @@ describe("liability flow helpers", () => {
       label: "Drop-off",
       address: "Drop-off address"
     });
+    expect(reportedAtForLiabilityCheckpoint("stopby", sample)).toEqual({
+      label: "Stop-by",
+      address: "Stop-by address"
+    });
+  });
+
+  it("keeps old stop-by workflow states mapped to the liability checkpoint", () => {
+    expect(liabilityCheckpointForWorkflowState("WAITING_STOP_BY_ISSUES_CHECK")).toBe("stopby");
+    expect(liabilityCheckpointForWorkflowState("WAITING_STOP_BY_ISSUES_CHOICE")).toBe("stopby");
   });
 });

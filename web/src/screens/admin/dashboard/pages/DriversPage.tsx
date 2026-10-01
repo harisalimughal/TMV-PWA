@@ -229,6 +229,14 @@ export function DriversPage() {
                   {formatDuration(driver.totalDurationMinutes)}
                 </span>
               </div>
+
+              <div className="col-span-2 border-t border-admin-line pt-4">
+                <span className="text-admin-muted block text-[12px] mb-1">Review Reports</span>
+                <span className="font-bold text-admin-ink text-[15px] tabular-nums">
+                  {driver.reviewSentCount} sent
+                </span>
+                <span className="text-admin-muted text-[13px] tabular-nums"> · {driver.reviewNotSentCount} not sent</span>
+              </div>
             </div>
           </div>
         ))}

@@ -251,18 +251,33 @@ export function FinishedJobsPage() {
                       />
                     </div>
                     <button onClick={() => setPreviewJob(job)} className="order-2 flex-1 min-w-0 text-left">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="font-semibold text-admin-brand text-[14px]">{job.jobId}</span>
-                        <DriverViewedDot viewedAt={job.driverViewedAt} />
+                      <div className="flex items-start gap-2">
+                        <span className={`w-9 h-9 rounded-full flex items-center justify-center font-bold text-[11px] shrink-0 ${driver.color}`}>
+                          {driver.code}
+                        </span>
+                        <span className="min-w-0 flex-1">
+                          <span className="flex items-center gap-1.5 min-w-0">
+                            <span className="text-[15px] text-admin-ink font-bold truncate">{driver.name}</span>
+                            <DriverViewedDot viewedAt={job.driverViewedAt} />
+                          </span>
+                          <span className="mt-1 block text-[12px] font-semibold text-admin-muted tabular-nums">{emptyVanPhotoTime}</span>
+                        </span>
                         <JobStatusBadge status={job.status} />
                       </div>
-                      <p className="text-card text-fg mt-1.5 truncate">
-                        {job.customerName || "Not recorded"}
-                      </p>
+                      <div className="mt-4 flex items-start justify-between gap-3">
+                        <p className="text-card text-fg font-bold truncate">{job.customerName || "Not recorded"}</p>
+                        <span className="shrink-0 font-mono text-[15px] font-bold tabular-nums text-admin-ink">
+                          {amount === 0 ? "-" : `${String.fromCharCode(163)}${amount.toLocaleString("en-GB", { minimumFractionDigits: 2 })}`}
+                        </span>
+                      </div>
                       <p className="text-[13px] text-admin-muted mt-1 truncate">
                         {job.pickup || "—"} <span className="text-admin-line-strong">→</span> {job.dropoff || "—"}
                       </p>
-                      <div className="flex items-center justify-between gap-3 mt-3 pt-3 border-t border-admin-line">
+                      <div className="mt-4 flex items-center justify-between gap-3 border-t border-admin-line pt-3">
+                        <span className="text-[11px] font-medium text-admin-muted truncate">{job.jobId}</span>
+                        <span className="shrink-0 font-mono text-[13px] font-bold tabular-nums text-admin-ink">Total {formatGBP(total)}</span>
+                      </div>
+                      <div className="hidden">
                         <span className="flex items-center gap-2 min-w-0">
                           <span
                             className={`w-6 h-6 rounded-full flex items-center justify-center font-bold text-[10px] shrink-0 ${driver.color}`}
@@ -350,6 +365,7 @@ export function FinishedJobsPage() {
                   const onMyWayTime = job.onMyWayAt ? formatLondonDateTime(job.onMyWayAt) : null;
                   const customerSignatureTime = job.clientSignatureAt ? formatLondonDateTime(job.clientSignatureAt) : null;
                   const pickupArrivalTime = job.pickupArrivalAt ? formatLondonDateTime(job.pickupArrivalAt) : null;
+                  const trackerArrivalTime = job.trackerArrivalAt ? formatLondonDateTime(job.trackerArrivalAt) : null;
                   const vanLoadedTime = job.vanLoadedAt ? formatLondonDateTime(job.vanLoadedAt) : null;
 
                   const p = job.pickup || <span className="text-[14px] font-normal text-[#B0B0B0] italic">Not recorded</span>;
@@ -427,17 +443,16 @@ export function FinishedJobsPage() {
                           {customerSignatureTime && (
                             <span className="block text-[11px] text-admin-muted/70 mt-0.5">Customer signed: {customerSignatureTime}</span>
                           )}
-                          {pickupArrivalTime && (
-                            <span className="block text-[11px] text-admin-muted/70 mt-0.5">Pickup arrival: {pickupArrivalTime}</span>
-                          )}
+                          <span className="block text-[11px] text-admin-muted/70 mt-0.5">Tracker arrival: {trackerArrivalTime || "Unverified"}</span>
+                          {pickupArrivalTime && <span className="block text-[11px] text-admin-muted/70 mt-0.5">Proof photo: {pickupArrivalTime}</span>}
                           {vanLoadedTime && (
                             <span className="block text-[11px] text-admin-muted/70 mt-0.5">Van loaded: {vanLoadedTime}</span>
                           )}
-                          {(job.vanLoadLate || job.vanLoadOverdue) && (
+                          {(job.arrivalProofLate || job.arrivalProofOverdue) && (
                             <span className="mt-1 inline-flex rounded-control bg-admin-status-red-bg px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.03em] text-admin-status-red">
-                              {job.vanLoadLate
-                                ? `Mismatch ${job.vanLoadDelayMinutes ?? 0} min`
-                                : `Overdue ${job.vanLoadDelayMinutes ?? 0} min`}
+                              {job.arrivalProofLate
+                                ? `Arrival to proof gap (${job.arrivalProofDelayMinutes ?? 0} min)`
+                                : `Proof photo overdue (${job.arrivalProofDelayMinutes ?? 0} min)`}
                             </span>
                           )}
                         </td>
@@ -490,15 +505,20 @@ export function FinishedJobsPage() {
                         </td>
 
                         <td className="px-4 text-center">
-                          {job.signatureUrl ? (
-                            <img
-                              src={job.signatureUrl}
-                              alt="Sig"
-                              className="w-12 h-6 object-contain mx-auto border border-admin-line bg-white rounded-control p-0.5"
-                            />
-                          ) : (
-                            <div className="w-12 h-6 rounded-control border border-dashed border-admin-line-strong mx-auto" />
-                          )}
+                          <div className="flex flex-col items-center gap-1">
+                            {job.signatureUrl ? (
+                              <img
+                                src={job.signatureUrl}
+                                alt="Sig"
+                                className="w-12 h-6 object-contain mx-auto border border-admin-line bg-white rounded-control p-0.5"
+                              />
+                            ) : (
+                              <div className="w-12 h-6 rounded-control border border-dashed border-admin-line-strong mx-auto" />
+                            )}
+                            <span className={`text-[10px] font-bold uppercase tracking-[0.03em] ${job.reviewEmailStatus === "Yes" ? "text-admin-status-green" : "text-admin-muted"}`}>
+                              RW: {job.reviewEmailStatus ?? "No"}
+                            </span>
+                          </div>
                         </td>
                         
                         <td className="px-4 text-center">

@@ -749,18 +749,39 @@ function JobCardList({
                   <JobActionsMenu job={job} onReassign={onReassign} onManualFinish={onManualFinish} />
                 </div>
                 <button onClick={() => onOpen(job)} className="order-2 flex-1 min-w-0 text-left">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="font-semibold text-admin-brand text-[14px]">{job.jobId}</span>
-                    <DriverViewedDot viewedAt={job.driverViewedAt} />
+                  <div className="flex items-start gap-2">
+                    <span className={`w-9 h-9 rounded-full flex items-center justify-center font-bold text-[11px] shrink-0 ${driver.color}`}>
+                      {driver.code}
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="flex items-center gap-1.5 min-w-0">
+                        <span className="text-[15px] text-admin-ink font-bold truncate">{driver.name}</span>
+                        <DriverViewedDot viewedAt={job.driverViewedAt} />
+                      </span>
+                      <span className="mt-1 block text-[12px] font-semibold text-admin-muted tabular-nums">
+                        {formatLondonDateTime(job.bookedStart) || "Not scheduled"}
+                      </span>
+                    </span>
                     <JobStatusBadge status={job.status} />
                   </div>
-                  <p className="text-card text-fg mt-1.5 truncate">
+                  <div className="mt-4 flex items-start justify-between gap-3">
+                    <p className="text-card text-fg font-bold truncate">
                     {job.customerName || "Not recorded"}
-                  </p>
+                    </p>
+                    <span className="shrink-0 font-mono text-[15px] font-bold tabular-nums text-admin-ink">
+                      {amount === 0 ? "-" : `${String.fromCharCode(163)}${amount.toLocaleString("en-GB", { minimumFractionDigits: 2 })}`}
+                    </span>
+                  </div>
                   <p className="text-[13px] text-admin-muted mt-1 truncate">
                     {job.rawTitle || "—"}
                   </p>
-                  <div className="flex items-center justify-between gap-3 mt-3 pt-3 border-t border-admin-line">
+                  <div className="mt-4 flex items-center justify-between gap-3 border-t border-admin-line pt-3">
+                    <span className="text-[11px] font-medium text-admin-muted truncate">{job.jobId}</span>
+                    <span className="shrink-0 font-mono text-[13px] font-bold tabular-nums text-admin-ink">
+                      Total {total === 0 ? "-" : `${String.fromCharCode(163)}${total.toLocaleString("en-GB", { minimumFractionDigits: 2 })}`}
+                    </span>
+                  </div>
+                  <div className="hidden">
                     <span className="flex items-center gap-2 min-w-0">
                       <span
                         className={`w-6 h-6 rounded-full flex items-center justify-center font-bold text-[10px] shrink-0 ${driver.color}`}

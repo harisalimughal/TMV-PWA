@@ -53,7 +53,7 @@ export function nextAfterPhoto(state: WorkflowState): WorkflowState {
     case WorkflowState.WAITING_ARRIVAL_PHOTO:
       return WorkflowState.WAITING_LOADED_PHOTO;
     case WorkflowState.WAITING_LOADED_PHOTO:
-      return WorkflowState.WAITING_EMPTY_VAN_ISSUES_CHECK;
+      return WorkflowState.WAITING_EMPTY_VAN_PHOTO;
     case WorkflowState.WAITING_EMPTY_VAN_PHOTO:
       return WorkflowState.WAITING_CLIENT_CONFIRMATION;
     default:

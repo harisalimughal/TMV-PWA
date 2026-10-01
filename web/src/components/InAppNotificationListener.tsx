@@ -44,7 +44,7 @@ export function InAppNotificationListener(): React.ReactElement | null {
         kind === "broadcast_message" ||
         kind === "congestion_zone" ||
         kind === "tunnel_zone" ||
-        kind === "van_loaded_overdue"
+        kind === "arrival_proof_overdue"
       ) {
         setZoneAlerts(prev => [...prev, { id: nextZoneAlertId++, title, body }]);
         playPersistentAlertSound();

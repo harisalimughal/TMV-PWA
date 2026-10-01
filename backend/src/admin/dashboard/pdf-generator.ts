@@ -97,12 +97,13 @@ export function generateJobPdf(job: NormalizedJob): Buffer {
   addText(`Client Confirmed By: ${job.clientConfirmedName || job.customerName}`, left + 15, 230, 9, "/F2", "0.06 0.11 0.18");
   addText(`Customer Signature Time: ${job.clientSignatureAt ? formatLondonDate(job.clientSignatureAt) : "Not recorded"}`, left + 15, 215, 9, "/F1", "0.23 0.31 0.39");
   addText(`Payment Method: ${job.paymentMethod} (${job.paymentStatus})`, left + 300, 215, 9, "/F1", "0.23 0.31 0.39");
-  addText(`Pickup Arrival Time: ${job.pickupArrivalAt ? formatLondonDate(job.pickupArrivalAt) : "Not recorded"}`, left + 15, 200, 9, "/F1", "0.23 0.31 0.39");
+  addText(`Tracker Arrival: ${job.trackerArrivalAt ? formatLondonDate(job.trackerArrivalAt) : "Unverified"}`, left + 15, 200, 9, "/F1", "0.23 0.31 0.39");
   addText(`Reconciliation Status: ${job.reconciled ? "RECONCILED" : "UNRECONCILED"}`, left + 300, 200, 9, "/F2", job.reconciled ? "0.09 0.50 0.29" : "0.75 0.19 0.15");
-  addText(`Van Loaded Photo Time: ${job.vanLoadedAt ? formatLondonDate(job.vanLoadedAt) : "Not recorded"}`, left + 15, 185, 9, "/F1", "0.23 0.31 0.39");
+  addText(`Proof of Arrival Photo: ${job.pickupArrivalAt ? formatLondonDate(job.pickupArrivalAt) : "Not recorded"}`, left + 15, 185, 9, "/F1", "0.23 0.31 0.39");
+  addText(`Review Report: RW=${job.reviewEmailStatus}`, left + 300, 185, 9, "/F2", job.reviewEmailStatus === "Yes" ? "0.09 0.50 0.29" : "0.75 0.19 0.15");
   addText(`Empty Van Photo Time: ${job.actualFinish ? formatLondonDate(job.actualFinish) : "Not recorded"}`, left + 300, 170, 9, "/F1", "0.23 0.31 0.39");
-  if (job.vanLoadLate || job.vanLoadOverdue) {
-    addText(`VAN LOADED MISMATCH: ${job.vanLoadDelayMinutes || 0} mins`, left + 300, 185, 9, "/F2", "0.75 0.19 0.15");
+  if (job.arrivalProofLate || job.arrivalProofOverdue) {
+    addText(`ARRIVAL TO PROOF GAP: ${job.arrivalProofDelayMinutes || 0} mins`, left + 300, 185, 9, "/F2", "0.75 0.19 0.15");
   }
 
   const comp = job.evidenceCompleteness;

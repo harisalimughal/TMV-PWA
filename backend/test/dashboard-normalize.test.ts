@@ -67,7 +67,7 @@ describe("normalizeMongoDataset", () => {
     expect(job.totalAdjustmentNote).toBe("Discount agreed with office");
   });
 
-  it("flags van loaded photos that were uploaded more than 15 minutes after pickup arrival", async () => {
+  it("flags proof photos 15 minutes or more after verified tracker arrival, regardless of van loaded time", async () => {
     const [job] = await normalizeMongoDataset({
       jobs: [{
         jobId: "TMV-LOAD-LATE",
@@ -84,6 +84,8 @@ describe("normalizeMongoDataset", () => {
         bookedStart: "2026-09-25T09:00:00.000Z",
         bookedFinish: "2026-09-25T11:00:00.000Z",
         actualStart: "2026-09-25T09:00:00.000Z",
+        trackerArrivalAt: "2026-09-25T08:45:00.000Z",
+        trackerLastSeenAt: "2026-09-25T08:45:00.000Z",
         actualFinish: "",
         bookedMinutes: 120,
         actualMinutes: 0,
@@ -153,12 +155,14 @@ describe("normalizeMongoDataset", () => {
 
     expect(job.pickupArrivalAt).toBe("2026-09-25T09:00:00.000Z");
     expect(job.vanLoadedAt).toBe("2026-09-25T09:18:00.000Z");
-    expect(job.vanLoadDelayMinutes).toBe(18);
-    expect(job.vanLoadLate).toBe(true);
-    expect(job.vanLoadOverdue).toBe(false);
+    expect(job.trackerArrivalAt).toBe("2026-09-25T08:45:00.000Z");
+    expect(job.trackerStatus).toBeUndefined();
+    expect(job.arrivalProofDelayMinutes).toBe(15);
+    expect(job.arrivalProofLate).toBe(true);
+    expect(job.arrivalProofOverdue).toBe(false);
   });
 
-  it("flags jobs where pickup arrival is recorded but van loaded is still missing after 15 minutes", async () => {
+  it("flags a missing proof photo only after a tracker-based reminder was issued", async () => {
     const [job] = await normalizeMongoDataset({
       jobs: [{
         jobId: "TMV-LOAD-OVERDUE",
@@ -174,7 +178,10 @@ describe("normalizeMongoDataset", () => {
         paidOnline: false,
         bookedStart: "2026-09-25T09:00:00.000Z",
         bookedFinish: "2026-09-25T11:00:00.000Z",
-        actualStart: "2026-09-25T09:00:00.000Z",
+        actualStart: "",
+        trackerArrivalAt: "2026-09-25T09:00:00.000Z",
+        trackerLastSeenAt: "2026-09-25T09:00:00.000Z",
+        arrivalProofReminderSentAt: "2026-09-25T09:16:00.000Z",
         actualFinish: "",
         bookedMinutes: 120,
         actualMinutes: 0,
@@ -199,25 +206,7 @@ describe("normalizeMongoDataset", () => {
         createdAt: "2026-09-25T08:00:00.000Z",
         updatedAt: "2026-09-25T09:18:00.000Z"
       } as any],
-      evidence: [
-        {
-          evidenceId: "arrival-1",
-          jobId: "TMV-LOAD-OVERDUE",
-          driverEmail: "driver@example.com",
-          evidenceType: "Arrival",
-          contentType: "image/jpeg",
-          fileName: "arrival.jpg",
-          status: EvidenceStatus.COMPLETED,
-          receivedAt: "2026-09-25T09:01:00.000Z",
-          processingStartedAt: "2026-09-25T09:01:00.000Z",
-          processingCompletedAt: "2026-09-25T09:02:00.000Z",
-          cloudinaryPublicId: "arrival",
-          cloudinaryUrl: "https://example.com/arrival.jpg",
-          retryCount: 0,
-          lastError: "",
-          capturedAt: "2026-09-25T09:00:00.000Z"
-        }
-      ],
+      evidence: [],
       activity: [],
       exceptions: [],
       scenarioSubmissions: [],
@@ -225,11 +214,12 @@ describe("normalizeMongoDataset", () => {
       durationMs: 0
     });
 
-    expect(job.pickupArrivalAt).toBe("2026-09-25T09:00:00.000Z");
+    expect(job.pickupArrivalAt).toBeUndefined();
     expect(job.vanLoadedAt).toBeUndefined();
-    expect(job.vanLoadDelayMinutes).toBe(16);
-    expect(job.vanLoadLate).toBe(false);
-    expect(job.vanLoadOverdue).toBe(true);
+    expect(job.arrivalProofDelayMinutes).toBe(16);
+    expect(job.arrivalProofLate).toBe(false);
+    expect(job.arrivalProofOverdue).toBe(true);
+    expect(job.trackerStatus).toBe("stale");
   });
 
   it("normalizes payment and extra charge breakdowns for admin views", async () => {

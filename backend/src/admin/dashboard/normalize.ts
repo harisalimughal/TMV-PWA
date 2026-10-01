@@ -39,7 +39,7 @@ const DETAIL_LABELS = [
   "Duration of van hire", "Notes", "Extra request", "Inventory item"
 ];
 
-const VAN_LOAD_THRESHOLD_MINUTES = 15;
+const ARRIVAL_PROOF_THRESHOLD_MINUTES = 15;
 
 function field(description: string, labels: string[], multiline = false): string {
   const lines = htmlToText(description).split(/\r?\n/).map(l => l.trim()).filter(Boolean);
@@ -112,37 +112,32 @@ function minutesBetween(start: string, finish: string): number | undefined {
   return Math.floor((finishMs - startMs) / 60000);
 }
 
-function calculateVanLoadTiming(
+function calculateArrivalProofTiming(
   items: NormalizedEvidenceItem[],
-  actualStart: string | undefined,
+  job: Job,
   fetchedAt: string
-): Pick<NormalizedJob, "pickupArrivalAt" | "vanLoadedAt" | "vanLoadDelayMinutes" | "vanLoadLate" | "vanLoadOverdue"> {
+): Pick<NormalizedJob, "pickupArrivalAt" | "vanLoadedAt" | "trackerArrivalAt" | "trackerLastSeenAt" | "trackerStatus" | "arrivalProofDelayMinutes" | "arrivalProofLate" | "arrivalProofOverdue"> {
   const arrivalItem = items.find(item => item.category === "Arrival" && item.state === "COMPLETED");
   const vanLoadedItem = items.find(item => item.category === "VanLoaded" && item.state === "COMPLETED");
-  const pickupArrivalAt = evidenceTimestamp(arrivalItem) || actualStart;
+  const pickupArrivalAt = evidenceTimestamp(arrivalItem) || (job.actualStart ? toUtcIso(job.actualStart) : undefined);
   const vanLoadedAt = evidenceTimestamp(vanLoadedItem);
-
-  if (!pickupArrivalAt) {
-    return { vanLoadLate: false, vanLoadOverdue: false };
-  }
-
-  if (vanLoadedAt) {
-    const vanLoadDelayMinutes = minutesBetween(pickupArrivalAt, vanLoadedAt);
-    return {
-      pickupArrivalAt,
-      vanLoadedAt,
-      vanLoadDelayMinutes,
-      vanLoadLate: typeof vanLoadDelayMinutes === "number" && vanLoadDelayMinutes > VAN_LOAD_THRESHOLD_MINUTES,
-      vanLoadOverdue: false
-    };
-  }
-
-  const vanLoadDelayMinutes = minutesBetween(pickupArrivalAt, fetchedAt);
+  const trackerArrivalAt = job.trackerArrivalAt ? toUtcIso(job.trackerArrivalAt) : undefined;
+  const trackerLastSeenAt = job.trackerLastSeenAt ? toUtcIso(job.trackerLastSeenAt) : undefined;
+  const trackerAgeMs = trackerLastSeenAt ? new Date(fetchedAt).getTime() - new Date(trackerLastSeenAt).getTime() : NaN;
+  const trackerStatus = pickupArrivalAt ? undefined : !trackerLastSeenAt ? "unverified" :
+    !Number.isFinite(trackerAgeMs) || trackerAgeMs < 0 || trackerAgeMs > 2 * 60_000 ? "stale" : "reporting";
+  const arrivalProofDelayMinutes = trackerArrivalAt
+    ? minutesBetween(trackerArrivalAt, pickupArrivalAt || fetchedAt)
+    : undefined;
   return {
     pickupArrivalAt,
-    vanLoadDelayMinutes,
-    vanLoadLate: false,
-    vanLoadOverdue: typeof vanLoadDelayMinutes === "number" && vanLoadDelayMinutes > VAN_LOAD_THRESHOLD_MINUTES
+    vanLoadedAt,
+    trackerArrivalAt,
+    trackerLastSeenAt,
+    trackerStatus,
+    arrivalProofDelayMinutes,
+    arrivalProofLate: Boolean(pickupArrivalAt && typeof arrivalProofDelayMinutes === "number" && arrivalProofDelayMinutes >= ARRIVAL_PROOF_THRESHOLD_MINUTES),
+    arrivalProofOverdue: Boolean(!pickupArrivalAt && job.arrivalProofReminderSentAt && typeof arrivalProofDelayMinutes === "number" && arrivalProofDelayMinutes >= ARRIVAL_PROOF_THRESHOLD_MINUTES)
   };
 }
 
@@ -331,7 +326,7 @@ export async function normalizeMongoDataset(dataset: MongoDataset): Promise<Norm
     const jobEvidence = evidenceByJob.get(jobId) || [];
     const jobScenarios = scenariosByJob.get(jobId) || [];
     const { completeness, items } = classifyEvidence(jobId, jobEvidence, job.signatureUrl, jobScenarios);
-    const vanLoadTiming = calculateVanLoadTiming(items, actualStart, dataset.fetchedAt);
+    const arrivalProofTiming = calculateArrivalProofTiming(items, job, dataset.fetchedAt);
 
     const activity = activityByJob.get(jobId) || [];
     const driverViewedAt = activity
@@ -363,7 +358,7 @@ export async function normalizeMongoDataset(dataset: MongoDataset): Promise<Norm
     normalizedJobs.push({
       jobId,
       calendarEventId: job.calendarEventId || "",
-      bookedStart, bookedFinish, actualStart, actualFinish, ...vanLoadTiming, onMyWayAt, driverViewedAt,
+      bookedStart, bookedFinish, actualStart, actualFinish, ...arrivalProofTiming, onMyWayAt, driverViewedAt,
       bookedMinutes, actualMinutes, delayMinutes, delayBand, timingTrustworthy,
       customerName: job.customerName || "Not recorded",
       customerEmail: job.customerEmail || undefined,
@@ -382,6 +377,8 @@ export async function normalizeMongoDataset(dataset: MongoDataset): Promise<Norm
       paymentBreakdown,
       extraChargeBreakdown,
       paymentStatus: job.paymentStatus || "Not recorded",
+      reviewEmailSent: job.reviewEmailSent === true,
+      reviewEmailStatus: job.reviewEmailSent === true ? "Yes" : "No",
       managerReviewStatus: job.managerReviewStatus || "Pending",
       managerReviewNote: job.managerReviewNote || "",
       managerReviewedAt: job.managerReviewedAt || undefined,

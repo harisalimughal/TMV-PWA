@@ -11,6 +11,7 @@ const readEvidenceSummary = vi.fn();
 const uploadEvidence = vi.fn().mockResolvedValue(undefined);
 const sendPushToAdmins = vi.fn().mockResolvedValue(undefined);
 const sendOpsVanLoadedEmail = vi.fn().mockResolvedValue(undefined);
+const sendReviewRequestEmail = vi.fn().mockResolvedValue(undefined);
 
 vi.mock("../src/db/jobs.repo", () => ({
   getJob: (...args: any[]) => getJob(...args),
@@ -34,7 +35,7 @@ vi.mock("../src/jobs/evidence.service", () => ({
   uploadEvidence: (...args: any[]) => uploadEvidence(...args)
 }));
 vi.mock("../src/google/gmail", () => ({
-  sendReviewRequestEmail: vi.fn(),
+  sendReviewRequestEmail: (...args: any[]) => sendReviewRequestEmail(...args),
   sendJobStartedEmail: vi.fn(),
   sendOpsJobCompletionEmail: vi.fn(),
   sendOpsVanLoadedEmail: (...args: any[]) => sendOpsVanLoadedEmail(...args)
@@ -131,14 +132,14 @@ describe("checkout flow order", () => {
     expect(updated.currentState).toBe(WorkflowState.WAITING_LOADED_PHOTO);
   });
 
-  it("moves from van loaded photo straight to drop-off issues", async () => {
+  it("moves from van loaded photo straight to empty van photo", async () => {
     getJob.mockResolvedValue(job({ currentState: WorkflowState.WAITING_LOADED_PHOTO }));
 
     const updated = await handlePhotoStep("TMV-FLOW", "abi@example.com", [
       { buffer: Buffer.from("image"), contentType: "image/jpeg", fileName: "loaded.jpg" }
     ]);
 
-    expect(updated.currentState).toBe(WorkflowState.WAITING_EMPTY_VAN_ISSUES_CHECK);
+    expect(updated.currentState).toBe(WorkflowState.WAITING_EMPTY_VAN_PHOTO);
   });
 
   it("sends a best-effort ops email after van loaded photos are accepted", async () => {
@@ -271,6 +272,26 @@ describe("checkout flow order", () => {
     ]);
   });
 
+  it("records Review Report Yes only after the review email is sent", async () => {
+    getJob.mockResolvedValue(job({ currentState: WorkflowState.WAITING_REVIEW_CHECK }));
+
+    const updated = await handleAction("REVIEW_YES", "TMV-FLOW", "abi@example.com", {});
+
+    expect(sendReviewRequestEmail).toHaveBeenCalled();
+    expect(updated.reviewEmailSent).toBe(true);
+    expect(upsertJob).toHaveBeenCalledWith(expect.objectContaining({ reviewEmailSent: true }));
+  });
+
+  it("records Review Report No when the driver declines the review email", async () => {
+    getJob.mockResolvedValue(job({ currentState: WorkflowState.WAITING_REVIEW_CHECK }));
+
+    const updated = await handleAction("REVIEW_NONE", "TMV-FLOW", "abi@example.com", {});
+
+    expect(sendReviewRequestEmail).not.toHaveBeenCalled();
+    expect(updated.reviewEmailSent).toBe(false);
+    expect(upsertJob).toHaveBeenCalledWith(expect.objectContaining({ reviewEmailSent: false }));
+  });
+
   it("goes back through payment, totals, charges, signature, then empty van photo", async () => {
     getJob.mockResolvedValueOnce(job({ currentState: WorkflowState.WAITING_REVIEW_CHECK }));
     const backToPayment = await handleAction("GO_BACK", "TMV-FLOW", "abi@example.com", {});
@@ -297,5 +318,13 @@ describe("checkout flow order", () => {
     expect(backToChargesState).toBe(WorkflowState.WAITING_EXTRA_CHARGES);
     expect(backToSignatureState).toBe(WorkflowState.WAITING_CLIENT_CONFIRMATION);
     expect(backToPhotoState).toBe(WorkflowState.WAITING_EMPTY_VAN_PHOTO);
+  });
+
+  it("goes back from empty van photo to van loaded photo", async () => {
+    getJob.mockResolvedValue(job({ currentState: WorkflowState.WAITING_EMPTY_VAN_PHOTO }));
+
+    const updated = await handleAction("GO_BACK", "TMV-FLOW", "abi@example.com", {});
+
+    expect(updated.currentState).toBe(WorkflowState.WAITING_LOADED_PHOTO);
   });
 });

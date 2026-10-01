@@ -298,7 +298,7 @@ function minutesBetween(start: string, finish: string): number {
 async function pickupLocationFor(parsed: ParsedCalendarBooking, existing?: Job): Promise<Job["pickupLocation"]> {
   if (!parsed.pickup) return undefined;
   if (existing?.pickup === parsed.pickup && existing.pickupLocation) return existing.pickupLocation;
-  return (await geocodeAddress(parsed.pickup)) ?? existing?.pickupLocation;
+  return (await geocodeAddress(parsed.pickup)) ?? undefined;
 }
 
 function sameLocation(a: Job["pickupLocation"], b: Job["pickupLocation"]): boolean {
@@ -308,6 +308,9 @@ function sameLocation(a: Job["pickupLocation"], b: Job["pickupLocation"]): boole
 
 function toJob(parsed: ParsedCalendarBooking, existing: Job | undefined, pickupLocation: Job["pickupLocation"]): Job {
   const now = new Date().toISOString();
+  const sameDriver = existing?.driverInitials === parsed.driverInitials;
+  const samePickup = existing?.pickup === parsed.pickup && sameLocation(existing?.pickupLocation, pickupLocation);
+  const retainTrackerArrival = sameDriver && samePickup;
 
   /*
    * Commercial terms freeze the moment work begins.
@@ -371,10 +374,16 @@ function toJob(parsed: ParsedCalendarBooking, existing: Job | undefined, pickupL
     clientNamePostcode: existing?.clientNamePostcode ?? "",
     clientConfirmedBy: existing?.clientConfirmedBy ?? "",
     clientSignatureAt: existing?.clientSignatureAt,
+    reviewEmailSent: existing?.reviewEmailSent,
     // Cleared when the booked start actually moves, so a rescheduled job reminds the
     // driver again for its real new time instead of staying silent forever.
     reminderSentAt: existing?.bookedStart === bookedStart ? existing?.reminderSentAt : undefined,
     onMyWayAt: existing?.onMyWayAt,
+    gpsliveImei: sameDriver ? existing?.gpsliveImei : undefined,
+    trackerArrivalAt: retainTrackerArrival ? existing?.trackerArrivalAt : undefined,
+    trackerArrivalCandidateAt: retainTrackerArrival ? existing?.trackerArrivalCandidateAt : undefined,
+    trackerLastSeenAt: retainTrackerArrival ? existing?.trackerLastSeenAt : undefined,
+    arrivalProofReminderSentAt: retainTrackerArrival ? existing?.arrivalProofReminderSentAt : undefined,
     signatureUrl: existing?.signatureUrl ?? "",
     driveFolderId: "",
     driveFolderUrl: "",

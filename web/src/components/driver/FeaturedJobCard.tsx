@@ -105,6 +105,12 @@ export function FeaturedJobCard({ job, onStarted }: FeaturedJobCardProps) {
   }
 
   useEffect(() => {
+    if (job.status !== "READY" || !job.trackerArrivalAt || needsOnMyWay || starting || notifying || autoStarted.current) return;
+    autoStarted.current = true;
+    void handleStart();
+  }, [job.jobId, job.status, job.trackerArrivalAt, needsOnMyWay, starting, notifying]);
+
+  useEffect(() => {
     if (
       job.status !== "READY" ||
       needsOnMyWay ||

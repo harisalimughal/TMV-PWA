@@ -74,13 +74,13 @@ describe("InAppNotificationListener", () => {
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 
-  it("shows van loaded overdue warnings as persistent top popups", async () => {
+  it("shows overdue proof-of-arrival warnings as persistent top popups", async () => {
     const { sendPush } = renderListener();
 
     sendPush({
       title: "Van loaded photo overdue",
       body: "More than 15 min has passed, you didn't upload van loaded pic. Hurry up.",
-      data: { kind: "van_loaded_overdue" }
+      data: { kind: "arrival_proof_overdue" }
     });
 
     const alert = await screen.findByRole("alert");

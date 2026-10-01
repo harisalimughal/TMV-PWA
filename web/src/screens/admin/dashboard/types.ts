@@ -106,9 +106,12 @@ export interface NormalizedJob {
   actualFinish?: string;
   pickupArrivalAt?: string;
   vanLoadedAt?: string;
-  vanLoadDelayMinutes?: number;
-  vanLoadLate?: boolean;
-  vanLoadOverdue?: boolean;
+  trackerArrivalAt?: string;
+  trackerLastSeenAt?: string;
+  trackerStatus?: "reporting" | "stale" | "unverified";
+  arrivalProofDelayMinutes?: number;
+  arrivalProofLate?: boolean;
+  arrivalProofOverdue?: boolean;
   /** When the driver's "I'm on the Way" tap sent the customer SMS/email -- distinct
    *  from actualStart (the Arrival photo's timestamp). */
   onMyWayAt?: string;
@@ -149,6 +152,7 @@ export interface NormalizedJob {
   paymentBreakdown?: MoneyBreakdownItem[];
   extraChargeBreakdown?: MoneyBreakdownItem[];
   paymentStatus: string;
+  reviewEmailStatus?: "Yes" | "No";
   managerReviewStatus?: "Pending" | "Approved" | "Flagged";
   managerReviewNote?: string;
   managerReviewedAt?: string;
@@ -254,6 +258,8 @@ export interface DriverSummaryItem {
   overtimeMinutes: number;
   missingEvidenceCount: number;
   overtimeCount: number;
+  reviewSentCount: number;
+  reviewNotSentCount: number;
 }
 
 export interface FinanceSummaryResponse {

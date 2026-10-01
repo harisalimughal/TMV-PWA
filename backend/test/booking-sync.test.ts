@@ -98,7 +98,13 @@ describe("syncBookingsForDate", () => {
   });
 
   it("preserves onMyWayAt when a Calendar resync updates an already-notified job", async () => {
-    listJobs.mockResolvedValue([existingJob()]);
+    listJobs.mockResolvedValue([existingJob({
+      pickupLocation: { lat: 51.5, lng: -0.14 },
+      gpsliveImei: "123456789012345",
+      trackerArrivalAt: "2026-09-24T08:00:00.000Z",
+      trackerArrivalCandidateAt: "2026-09-24T07:58:00.000Z",
+      arrivalProofReminderSentAt: "2026-09-24T08:16:00.000Z"
+    })]);
     listCalendarEvents.mockResolvedValue([
       calendarEvent([
         "Name: Client One",
@@ -114,7 +120,12 @@ describe("syncBookingsForDate", () => {
     expect(upsertJob).toHaveBeenCalledTimes(1);
     expect(upsertJob.mock.calls[0][0]).toEqual(expect.objectContaining({
       pickup: "New pickup after calendar edit",
-      onMyWayAt: "2026-09-24T07:45:00.000Z"
+      pickupLocation: undefined,
+      onMyWayAt: "2026-09-24T07:45:00.000Z",
+      gpsliveImei: "123456789012345",
+      trackerArrivalAt: undefined,
+      trackerArrivalCandidateAt: undefined,
+      arrivalProofReminderSentAt: undefined
     }));
   });
 

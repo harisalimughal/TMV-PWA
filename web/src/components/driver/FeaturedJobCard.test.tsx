@@ -112,4 +112,17 @@ describe("FeaturedJobCard arrival automation", () => {
     await waitFor(() => expect(startJob).toHaveBeenCalledWith("TMV-ARRIVAL"));
     expect(onStarted).toHaveBeenCalledWith("TMV-ARRIVAL");
   });
+
+  it("opens Proof of Arrival from a confirmed tracker arrival without phone geolocation", async () => {
+    Object.defineProperty(navigator, "geolocation", { configurable: true, value: undefined });
+    const onStarted = vi.fn();
+    render(
+      <ToastProvider>
+        <FeaturedJobCard job={job({ trackerArrivalAt: "2026-09-30T08:25:00.000Z" })} onStarted={onStarted} />
+      </ToastProvider>
+    );
+
+    await waitFor(() => expect(startJob).toHaveBeenCalledWith("TMV-ARRIVAL"));
+    expect(onStarted).toHaveBeenCalledWith("TMV-ARRIVAL");
+  });
 });

@@ -58,7 +58,7 @@ export function nextState(
     case "WAITING_ARRIVAL_ISSUES_CHOICE":
       return trigger === "scenario" ? "WAITING_LOADED_PHOTO" : current;
     case "WAITING_LOADED_PHOTO":
-      return trigger === "evidence" ? "WAITING_EMPTY_VAN_ISSUES_CHECK" : current;
+      return trigger === "evidence" ? "WAITING_EMPTY_VAN_PHOTO" : current;
     case "IN_PROGRESS":
       return trigger === "FINISH_MOVE" ? "WAITING_EMPTY_VAN_ISSUES_CHECK" : current;
     case "WAITING_STOP_BY_CHECK":
@@ -80,11 +80,11 @@ export function nextState(
     case "WAITING_TOTAL_CHARGES":
       return trigger === "SUBMIT_TOTAL_CHARGES" ? "WAITING_PAYMENT" : current;
     case "WAITING_PAYMENT":
-      return trigger === "SUBMIT_PAYMENT" ? "WAITING_EMPTY_VAN_PHOTO" : current;
+      return trigger === "SUBMIT_PAYMENT" ? "WAITING_REVIEW_CHECK" : current;
     case "WAITING_EMPTY_VAN_PHOTO":
       return trigger === "evidence" ? "WAITING_CLIENT_CONFIRMATION" : current;
     case "WAITING_CLIENT_CONFIRMATION":
-      return trigger === "signature" ? "WAITING_REVIEW_CHECK" : current;
+      return trigger === "signature" ? "WAITING_EXTRA_CHARGES" : current;
     case "WAITING_REVIEW_CHECK":
       if (trigger === "REVIEW_YES") return "COMPLETED";
       if (trigger === "REVIEW_NONE") return "COMPLETED";
@@ -128,11 +128,11 @@ function prevState(current: string, job: Job): string {
     case "WAITING_PAYMENT":
       return "WAITING_TOTAL_CHARGES";
     case "WAITING_EMPTY_VAN_PHOTO":
-      return "WAITING_PAYMENT";
+      return "WAITING_LOADED_PHOTO";
     case "WAITING_CLIENT_CONFIRMATION":
       return "WAITING_EMPTY_VAN_PHOTO";
     case "WAITING_REVIEW_CHECK":
-      return "WAITING_CLIENT_CONFIRMATION";
+      return "WAITING_PAYMENT";
     case "WAITING_REVIEW_SEND":
       return "WAITING_REVIEW_CHECK";
     default:

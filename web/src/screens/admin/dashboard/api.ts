@@ -311,10 +311,14 @@ export interface MessageCatalogItem {
   variables: string[];
   enabled: boolean;
   hasTitle: boolean;
+  hasHtml: boolean;
   title?: string;
   titleFallback?: string;
   body: string;
   bodyFallback: string;
+  html?: string;
+  htmlEnabled?: boolean;
+  htmlFallback?: string;
 }
 
 /** notifications/message-catalog.ts's full inventory of every message the app sends,
@@ -329,7 +333,7 @@ export async function toggleMessage(id: string, enabled: boolean): Promise<void>
   return postJson(`/api/admin/messages/${encodeURIComponent(id)}/toggle`, { enabled });
 }
 
-export async function saveMessageTemplate(id: string, fields: { title?: string; body?: string }): Promise<void> {
+export async function saveMessageTemplate(id: string, fields: { title?: string; body?: string; html?: string; htmlEnabled?: boolean }): Promise<void> {
   return postJson(`/api/admin/messages/${encodeURIComponent(id)}`, fields);
 }
 

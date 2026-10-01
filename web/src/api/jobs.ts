@@ -49,6 +49,8 @@ export interface Job {
   /** ISO timestamp of the "I'm on the Way" tap -- unset until the driver taps it,
    *  which is now a prerequisite for Start Job (see api's on-my-way endpoint). */
   onMyWayAt?: string;
+  trackerArrivalAt?: string;
+  arrivalProofReminderSentAt?: string;
   bookedMinutes: number;
   actualMinutes: number;
   differenceMinutes: number;

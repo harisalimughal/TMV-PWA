@@ -22,6 +22,7 @@ import {
 import { PhotoUploader } from "../components/PhotoUploader";
 import type { RemotePhoto } from "../components/PhotoPicker";
 import type { PhotoCaptureMeta } from "../lib/geo";
+import { SignatureField } from "../components/SignatureField";
 import { SignatureModal } from "../components/SignatureModal";
 import { Choice, ChoiceGroup } from "../components/ui/Choice";
 import { useToast } from "../components/ui/Toast";
@@ -43,7 +44,6 @@ import { useOnline } from "../lib/net";
 import { htmlToPlainText } from "../lib/htmlText";
 import { formatCalendarWindow } from "../lib/calendarWindow";
 import { photoLocationBlockedReason } from "../lib/photoLocation";
-import { getVanLoadTiming, vanLoadOverdueBody } from "../lib/vanLoadTiming";
 import type { ScenarioKey } from "../scenarioSpec";
 import {
   CONGESTION_CHARGE,
@@ -157,13 +157,14 @@ export function JobWorkflowScreen({ jobId, onBack }: JobWorkflowScreenProps) {
   const [busy, setBusy] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
   const [signatureOpen, setSignatureOpen] = useState(false);
+  const [customerSignatureBlob, setCustomerSignatureBlob] = useState<Blob | null>(null);
+  const [customerSignaturePreviewUrl, setCustomerSignaturePreviewUrl] = useState<string | null>(null);
   const [openScenario, setOpenScenario] = useState<ScenarioKey | null>(null);
   const [completedIssueScenarios, setCompletedIssueScenarios] = useState<ScenarioKey[]>([]);
   const [issueCompletion, setIssueCompletion] = useState<{
     last: ScenarioKey;
     completed: ScenarioKey[];
   } | null>(null);
-  const [now, setNow] = useState(() => new Date());
   const scrollRef = useRef<HTMLDivElement>(null);
   const toast = useToast();
   const online = useOnline();
@@ -199,9 +200,10 @@ export function JobWorkflowScreen({ jobId, onBack }: JobWorkflowScreenProps) {
   }, [load]);
 
   useEffect(() => {
-    const id = window.setInterval(() => setNow(new Date()), 60000);
-    return () => window.clearInterval(id);
-  }, []);
+    if (!customerSignaturePreviewUrl) return;
+    return () => URL.revokeObjectURL(customerSignaturePreviewUrl);
+  }, [customerSignaturePreviewUrl]);
+
 
   // Defensive: never let one job's half-filled form leak into the next.
   useEffect(() => () => resetFormState(), []);
@@ -344,31 +346,6 @@ export function JobWorkflowScreen({ jobId, onBack }: JobWorkflowScreenProps) {
     autoLegacyStopBySkipFrom.current = `${job.jobId}:${job.currentState}`;
     void run(() => sendAction(job.jobId, "STOP_BY_NONE"), undefined, { home: false });
   }, [job, busy, online, run]);
-
-  useEffect(() => {
-    if (!job) return;
-    if (job.currentState !== "WAITING_LOADED_PHOTO") return;
-    const timing = getVanLoadTiming(evidenceItems, now, job.actualStart || undefined, {
-      requireArrivalEvidence: true
-    });
-    if (!timing.overdue) return;
-    if (typeof BroadcastChannel === "undefined") return;
-
-    const storageKey = `tmv:van-loaded-overdue:${job.jobId}`;
-    if (window.sessionStorage.getItem(storageKey)) return;
-    window.sessionStorage.setItem(storageKey, "1");
-
-    const channel = new BroadcastChannel("tmv_in_app_notifications");
-    channel.postMessage({
-      type: "PUSH_NOTIFICATION_RECEIVED",
-      payload: {
-        title: "Van loaded photo overdue",
-        body: vanLoadOverdueBody(),
-        data: { kind: "van_loaded_overdue", jobId: job.jobId }
-      }
-    });
-    window.setTimeout(() => channel.close(), 0);
-  }, [evidenceItems, job, now]);
 
   if (loading) {
     return (
@@ -559,7 +536,22 @@ export function JobWorkflowScreen({ jobId, onBack }: JobWorkflowScreenProps) {
                 delete formState.photoMetaByStep[submittedAt];
               }
             }}
-            onOpenSignature={() => setSignatureOpen(true)}
+            customerSignatureReady={Boolean(customerSignatureBlob)}
+            onSubmitSignature={async () => {
+              if (!customerSignatureBlob) {
+                toast.error("The customer needs to sign first.");
+                return;
+              }
+              const ok = await run(
+                () => uploadSignature(job.jobId, job.customerName, customerSignatureBlob, setUploadProgress),
+                "Signature saved",
+                { home: false }
+              );
+              if (ok) {
+                setCustomerSignatureBlob(null);
+                setCustomerSignaturePreviewUrl(null);
+              }
+            }}
             onBackHome={onBack}
             onBlocked={reason => toast.error(reason)}
           />
@@ -639,8 +631,15 @@ export function JobWorkflowScreen({ jobId, onBack }: JobWorkflowScreenProps) {
                 suggestedTotal={suggestedTotal}
                 confirmationText={confirmationText}
                 remotePhotos={stepRemotePhotos}
+                customerSignatureSigned={Boolean(customerSignatureBlob)}
+                customerSignaturePreviewUrl={customerSignaturePreviewUrl}
                 onRemoveRemotePhoto={removeRemotePhoto}
                 onOpenScenario={openFirstIssueScenario}
+                onOpenCustomerSignature={() => setSignatureOpen(true)}
+                onClearCustomerSignature={() => {
+                  setCustomerSignatureBlob(null);
+                  setCustomerSignaturePreviewUrl(null);
+                }}
                 onFormChange={bumpForm}
               />
 
@@ -660,13 +659,10 @@ export function JobWorkflowScreen({ jobId, onBack }: JobWorkflowScreenProps) {
         instruction="Hand the phone to the customer. They read the confirmation and sign to accept the completed move."
         agreementText={confirmationText}
         signerName={job.customerName || undefined}
-        onSave={async blob => {
-          const ok = await run(
-            () => uploadSignature(job.jobId, job.customerName, blob, setUploadProgress),
-            "Signature saved",
-            { home: false }
-          );
-          if (ok) setSignatureOpen(false);
+        onSave={blob => {
+          setCustomerSignatureBlob(blob);
+          setCustomerSignaturePreviewUrl(URL.createObjectURL(blob));
+          setSignatureOpen(false);
         }}
       />
     </>
@@ -985,6 +981,15 @@ export function paymentBlockedReasonFor(
   return undefined;
 }
 
+export function customerSignatureBlockedReason(
+  signed: boolean,
+  offlineReason?: string
+): string | undefined {
+  if (offlineReason) return offlineReason;
+  if (!signed) return "The customer needs to sign first.";
+  return undefined;
+}
+
 function StepBody({
   job,
   state,
@@ -994,8 +999,12 @@ function StepBody({
   suggestedTotal,
   confirmationText,
   remotePhotos,
+  customerSignatureSigned,
+  customerSignaturePreviewUrl,
   onRemoveRemotePhoto,
   onOpenScenario,
+  onOpenCustomerSignature,
+  onClearCustomerSignature,
   onFormChange
 }: {
   job: Job;
@@ -1009,8 +1018,12 @@ function StepBody({
   confirmationText: string;
   /** Photos already uploaded for the current photo step (empty for other steps). */
   remotePhotos: RemotePhoto[];
+  customerSignatureSigned: boolean;
+  customerSignaturePreviewUrl: string | null;
   onRemoveRemotePhoto: (evidenceId: string) => void;
   onOpenScenario: (scenario: ScenarioKey) => void;
+  onOpenCustomerSignature: () => void;
+  onClearCustomerSignature: () => void;
   onFormChange: () => void;
 }) {
   // Re-renders the whole workflow screen -- not just this subtree -- so the docked
@@ -1360,25 +1373,45 @@ function StepBody({
       return (
         <div className="flex flex-col gap-4">
           <ChoiceGroup>
-            {PAYMENT_METHODS.map(option => (
-              <Choice
-                key={option}
-                type="checkbox"
-                label={option}
-                selected={formState.payment.includes(option)}
-                onToggle={() => {
-                  formState.payment = formState.payment.includes(option)
-                    ? formState.payment.filter(value => value !== option)
-                    : [...formState.payment, option];
-                  if (!formState.payment.includes(option)) {
-                    delete formState.paymentAmounts[option];
-                  }
-                  tick();
-                }}
-              />
-            ))}
+            {PAYMENT_METHODS.map(option => {
+              const selected = formState.payment.includes(option);
+              return (
+                <div key={option} className="flex flex-col gap-2">
+                  <Choice
+                    type="checkbox"
+                    label={option}
+                    selected={selected}
+                    onToggle={() => {
+                      formState.payment = selected
+                        ? formState.payment.filter(value => value !== option)
+                        : [...formState.payment, option];
+                      if (selected) delete formState.paymentAmounts[option];
+                      tick();
+                    }}
+                  />
+                  {selected && paymentMethodTakesAmount(option) && (
+                    <div className="ml-4 rounded-card border border-line bg-surface px-4 py-3">
+                      <Field label={`${option} amount taken`} required>
+                        {control => (
+                          <Input
+                            {...control}
+                            prefix="Â£"
+                            inputMode="decimal"
+                            value={formState.paymentAmounts[option] ?? ""}
+                            onChange={event => {
+                              formState.paymentAmounts[option] = event.target.value;
+                              tick();
+                            }}
+                          />
+                        )}
+                      </Field>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </ChoiceGroup>
-          {formState.payment.some(paymentMethodTakesAmount) && (
+          {false && formState.payment.some(paymentMethodTakesAmount) && (
             <div className="flex flex-col gap-3 rounded-card border border-line bg-surface px-4 py-3.5">
               <p className="text-label text-fg-muted">Amount taken by payment method</p>
               {formState.payment.filter(paymentMethodTakesAmount).map(method => (
@@ -1413,15 +1446,24 @@ function StepBody({
 
     case "WAITING_CLIENT_CONFIRMATION":
       return (
-        <div className="flex flex-col items-center gap-3 rounded-card border border-warning-line bg-warning-subtle px-4 py-6">
-          <span className="grid size-11 place-items-center rounded-pill bg-brand-subtle text-brand">
-            <PenLine className="size-5" aria-hidden />
-          </span>
-          <p className="text-heading text-warning">Hand your phone to the customer</p>
-          {/* The actual agreement they're signing -- shown up front here too, not
-              just inside the signature pad, so they can read it before the driver
-              even opens it. */}
-          <p className="w-full whitespace-pre-wrap text-left text-body text-fg-muted">{confirmationText}</p>
+        <div className="flex flex-col gap-4">
+          <div className="flex flex-col items-center gap-3 rounded-card border border-warning-line bg-warning-subtle px-4 py-6">
+            <span className="grid size-11 place-items-center rounded-pill bg-brand-subtle text-brand">
+              <PenLine className="size-5" aria-hidden />
+            </span>
+            <p className="text-heading text-warning">Hand your phone to the customer</p>
+            {/* The actual agreement they're signing -- shown up front here too, not
+                just inside the signature pad, so they can read it before the driver
+                even opens it. */}
+            <p className="w-full whitespace-pre-wrap text-left text-body text-fg-muted">{confirmationText}</p>
+          </div>
+          <SignatureField
+            signed={customerSignatureSigned}
+            previewUrl={customerSignaturePreviewUrl}
+            onOpen={onOpenCustomerSignature}
+            onClear={onClearCustomerSignature}
+            instruction="The customer signs to accept the completed move."
+          />
         </div>
       );
 
@@ -1524,9 +1566,10 @@ interface StepDockProps {
   /** Photos already uploaded for the current photo step — count toward the step max. */
   photoRemoteCount: number;
   photoMeta: Array<PhotoCaptureMeta | null>;
+  customerSignatureReady: boolean;
   onAction: (action: string, input?: Record<string, string[]>, message?: string) => void;
   onUploadPhotos: (files: File[], metas: Array<PhotoCaptureMeta | null>) => void;
-  onOpenSignature: () => void;
+  onSubmitSignature: () => void;
   onBackHome: () => void;
   onBlocked: (reason: string) => void;
 }
@@ -1549,9 +1592,10 @@ function StepDock({
   uploadProgress,
   photoRemoteCount,
   photoMeta,
+  customerSignatureReady,
   onAction,
   onUploadPhotos,
-  onOpenSignature,
+  onSubmitSignature,
   onBackHome,
   onBlocked
 }: StepDockProps) {
@@ -1709,11 +1753,16 @@ function StepDock({
             fullWidth
             size="lg"
             iconLeft={<PenLine />}
-            blockedReason={offlineReason}
+            loading={busy}
+            blockedReason={customerSignatureBlockedReason(customerSignatureReady, offlineReason)}
             onBlocked={onBlocked}
-            onClick={onOpenSignature}
+            onClick={onSubmitSignature}
           >
-            Get customer signature
+            {busy
+              ? uploadProgress !== null
+                ? `Saving ${Math.round(uploadProgress * 100)}%`
+                : "Saving..."
+              : "Continue"}
           </Button>
         </BottomActionBar>
       );

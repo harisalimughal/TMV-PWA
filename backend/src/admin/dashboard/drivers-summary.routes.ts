@@ -46,6 +46,8 @@ interface DriverStat {
   overtimeMinutes: number;
   missingEvidenceCount: number;
   overtimeCount: number;
+  reviewSentCount: number;
+  reviewNotSentCount: number;
 }
 
 export function summarizeDrivers(drivers: DriverProfile[], jobs: NormalizedJob[]) {
@@ -63,7 +65,7 @@ export function summarizeDrivers(drivers: DriverProfile[], jobs: NormalizedJob[]
       totalDurationMinutes: 0, durationJobsCount: 0, totalDelayMinutes: 0, delayJobsCount: 0,
       totalChargesPence: 0, revenuePence: 0, cashCollectedPence: 0, cardCollectedPence: 0, bankCollectedPence: 0,
       invoiceCollectedPence: 0, congestionChargePence: 0, tunnelChargePence: 0, overtimeMinutes: 0,
-      missingEvidenceCount: 0, overtimeCount: 0
+      missingEvidenceCount: 0, overtimeCount: 0, reviewSentCount: 0, reviewNotSentCount: 0
     });
   }
 
@@ -78,7 +80,7 @@ export function summarizeDrivers(drivers: DriverProfile[], jobs: NormalizedJob[]
         totalDurationMinutes: 0, durationJobsCount: 0, totalDelayMinutes: 0, delayJobsCount: 0,
         totalChargesPence: 0, revenuePence: 0, cashCollectedPence: 0, cardCollectedPence: 0, bankCollectedPence: 0,
         invoiceCollectedPence: 0, congestionChargePence: 0, tunnelChargePence: 0, overtimeMinutes: 0,
-        missingEvidenceCount: 0, overtimeCount: 0
+        missingEvidenceCount: 0, overtimeCount: 0, reviewSentCount: 0, reviewNotSentCount: 0
       };
       driverStats.set(init, stat);
     }
@@ -86,14 +88,16 @@ export function summarizeDrivers(drivers: DriverProfile[], jobs: NormalizedJob[]
     stat.assignedCount++;
     if (j.status === "COMPLETED") {
       stat.completedCount++;
+      if (j.reviewEmailSent === true) stat.reviewSentCount++;
+      else stat.reviewNotSentCount++;
       stat.totalChargesPence += j.totalCharges || j.calculatedTotalCharges || 0;
-      stat.revenuePence += j.amountCharged;
+      stat.revenuePence += j.amountCharged || 0;
       stat.congestionChargePence += j.congestionCharge || 0;
       stat.tunnelChargePence += j.tunnelCharge || 0;
       stat.overtimeMinutes += j.overtimeMinutes || 0;
       // Same substring categorization as finance.routes.ts's company-wide totals,
       // just kept per-driver here -- so this and the Finance page always agree.
-      const method = j.paymentMethod.toLowerCase();
+      const method = (j.paymentMethod || "").toLowerCase();
       if (method.includes("cash")) stat.cashCollectedPence += j.amountCharged;
       else if (method.includes("card")) stat.cardCollectedPence += j.amountCharged;
       else if (method.includes("bank")) stat.bankCollectedPence += j.amountCharged;
@@ -133,7 +137,8 @@ export function summarizeDrivers(drivers: DriverProfile[], jobs: NormalizedJob[]
       congestionChargePounds: toPounds(pence(s.congestionChargePence)),
       tunnelChargePounds: toPounds(pence(s.tunnelChargePence)),
       overtimeMinutes: s.overtimeMinutes,
-      missingEvidenceCount: s.missingEvidenceCount, overtimeCount: s.overtimeCount
+      missingEvidenceCount: s.missingEvidenceCount, overtimeCount: s.overtimeCount,
+      reviewSentCount: s.reviewSentCount, reviewNotSentCount: s.reviewNotSentCount
     };
   }).sort((a, b) => b.completed - a.completed);
 }

@@ -2,6 +2,7 @@ import React from "react";
 import { Download, Printer } from "lucide-react";
 import { NormalizedJob } from "../types";
 import { formatLondonDateTime } from "../utils/date";
+import { adjustmentReasonForMismatch } from "../utils/workBreakdown";
 
 interface Props {
   job: NormalizedJob;
@@ -10,6 +11,7 @@ interface Props {
 
 export function PaperJobReport({ job, onClose }: Props) {
   const totalCharges = job.totalCharges || job.calculatedTotalCharges || job.basePrice + job.extraCharges + job.overtimeCharge;
+  const adjustmentReason = adjustmentReasonForMismatch(job);
   const formatPounds = (pence: number | undefined) => `£${((pence || 0) / 100).toFixed(2)}`;
   const photoCategories = [
     { key: "Arrival", label: "Arrival / Pickup" },
@@ -179,6 +181,12 @@ export function PaperJobReport({ job, onClose }: Props) {
                 <span className="text-[12px] font-bold text-[#1A1A1A]">Amount Charged</span>
                 <span className="text-[14px] font-bold text-[#1A1A1A]">{formatPounds(job.amountCharged)}</span>
               </div>
+              {adjustmentReason && (
+                <div className="col-span-2 flex justify-between gap-4 py-1 border-b border-admin-line/50 bg-[#FEF2F2] px-2">
+                  <span className="text-[12px] font-bold text-admin-status-red">Adjustment Reason</span>
+                  <span className="max-w-[70%] text-right text-[12px] font-medium text-[#1A1A1A]">{adjustmentReason}</span>
+                </div>
+              )}
               <div className="flex justify-between py-1 border-b border-admin-line/50">
                 <span className="text-[12px] text-[#8A8A8A]">Payment Method</span>
                 <span className="text-[12px] font-medium text-[#1A1A1A]">{job.paymentMethod || "Not recorded"}</span>
@@ -196,10 +204,14 @@ export function PaperJobReport({ job, onClose }: Props) {
                 </span>
               </div>
               <div className="flex justify-between py-1 border-b border-admin-line/50">
-                <span className="text-[12px] text-[#8A8A8A]">Pickup arrival time</span>
+                <span className="text-[12px] text-[#8A8A8A]">Proof of arrival photo time</span>
                 <span className="text-[12px] font-medium text-[#1A1A1A]">
                   {job.pickupArrivalAt ? formatLondonDateTime(job.pickupArrivalAt) : "Not recorded"}
                 </span>
+              </div>
+              <div className="flex justify-between py-1 border-b border-admin-line/50">
+                <span className="text-[12px] text-[#8A8A8A]">Tracker arrival time</span>
+                <span className="text-[12px] font-medium text-[#1A1A1A]">{job.trackerArrivalAt ? formatLondonDateTime(job.trackerArrivalAt) : "Unverified"}</span>
               </div>
               <div className="flex justify-between py-1 border-b border-admin-line/50">
                 <span className="text-[12px] text-[#8A8A8A]">Van loaded photo time</span>
@@ -213,13 +225,13 @@ export function PaperJobReport({ job, onClose }: Props) {
                   {job.actualFinish ? formatLondonDateTime(job.actualFinish) : "Not recorded"}
                 </span>
               </div>
-              {(job.vanLoadLate || job.vanLoadOverdue) && (
+              {(job.arrivalProofLate || job.arrivalProofOverdue) && (
                 <div className="flex justify-between py-1 border-b border-admin-line/50">
-                  <span className="text-[12px] font-semibold text-admin-status-red">Van loaded mismatch</span>
+                  <span className="text-[12px] font-semibold text-admin-status-red">Gap between tracker arrival and proof photo</span>
                   <span className="text-[12px] font-bold text-admin-status-red">
-                    {job.vanLoadLate
-                      ? `${job.vanLoadDelayMinutes ?? 0} min after arrival`
-                      : `${job.vanLoadDelayMinutes ?? 0} min overdue`}
+                    {job.arrivalProofLate
+                      ? `${job.arrivalProofDelayMinutes ?? 0} min`
+                      : `Proof overdue ${job.arrivalProofDelayMinutes ?? 0} min`}
                   </span>
                 </div>
               )}

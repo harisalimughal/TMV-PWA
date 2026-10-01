@@ -3,6 +3,7 @@ import { NormalizedJob, ScenarioKind } from "../types";
 import { formatLondonDateTime } from "../utils/date";
 import { formatLocationLabel, type CapturedLocation } from "../../../../lib/geo";
 import { scenarioPointFromRecord } from "../utils/scenarioPoint";
+import { adjustmentReasonForMismatch } from "../utils/workBreakdown";
 
 interface Props {
   job: NormalizedJob;
@@ -84,6 +85,7 @@ export function PaperDossierReport({ job, isPreview = false }: Props) {
   // Helpers
   const formatPounds = (cents: number | undefined) => `£${((cents || 0) / 100).toFixed(2)}`;
   const totalCharges = job.totalCharges || job.calculatedTotalCharges || (job.basePrice || 0) + (job.extraCharges || 0) + (job.overtimeCharge || 0);
+  const adjustmentReason = adjustmentReasonForMismatch(job);
   const MoneyRow = ({ label, value, strong = false }: { label: string; value: number; strong?: boolean }) => (
     <div className="flex items-center justify-between p-3 border-b border-[#E5E7EB] bg-white last:border-b-0">
       <span className="text-label font-medium text-fg-muted">{label}</span>
@@ -365,10 +367,14 @@ export function PaperDossierReport({ job, isPreview = false }: Props) {
                     </span>
                   </div>
                   <div className="flex items-center justify-between p-3 border-b border-[#E5E7EB] bg-white">
-                    <span className="text-label font-medium text-fg-muted">Pickup arrival time</span>
+                    <span className="text-label font-medium text-fg-muted">Proof of arrival photo time</span>
                     <span className="text-[13px] font-bold text-admin-ink">
                       {job.pickupArrivalAt ? formatLondonDateTime(job.pickupArrivalAt) : "Not recorded"}
                     </span>
+                  </div>
+                  <div className="flex items-center justify-between p-3 border-b border-[#E5E7EB] bg-white">
+                    <span className="text-label font-medium text-fg-muted">Tracker arrival time</span>
+                    <span className="text-[13px] font-bold text-admin-ink">{job.trackerArrivalAt ? formatLondonDateTime(job.trackerArrivalAt) : "Unverified"}</span>
                   </div>
                   <div className="flex items-center justify-between p-3 border-b border-[#E5E7EB] bg-white">
                     <span className="text-label font-medium text-fg-muted">Van loaded photo time</span>
@@ -382,13 +388,13 @@ export function PaperDossierReport({ job, isPreview = false }: Props) {
                       {job.actualFinish ? formatLondonDateTime(job.actualFinish) : "Not recorded"}
                     </span>
                   </div>
-                  {(job.vanLoadLate || job.vanLoadOverdue) && (
+                  {(job.arrivalProofLate || job.arrivalProofOverdue) && (
                     <div className="flex items-center justify-between p-3 border-b border-[#E5E7EB] bg-white">
-                      <span className="text-label font-medium text-admin-status-red">Van loaded mismatch</span>
+                      <span className="text-label font-medium text-admin-status-red">Gap between tracker arrival and proof photo</span>
                       <span className="text-[13px] font-bold text-admin-status-red">
-                        {job.vanLoadLate
-                          ? `${job.vanLoadDelayMinutes ?? 0} min after arrival`
-                          : `${job.vanLoadDelayMinutes ?? 0} min overdue`}
+                        {job.arrivalProofLate
+                          ? `${job.arrivalProofDelayMinutes ?? 0} min`
+                          : `Proof overdue ${job.arrivalProofDelayMinutes ?? 0} min`}
                       </span>
                     </div>
                   )}
@@ -407,6 +413,12 @@ export function PaperDossierReport({ job, isPreview = false }: Props) {
                   <MoneyRow label="Overtime" value={job.overtimeCharge || 0} />
                   <MoneyRow label="Total Charges" value={totalCharges} strong />
                   <MoneyRow label="Amount Charged" value={job.amountCharged || 0} strong />
+                  {adjustmentReason && (
+                    <div className="flex items-start justify-between gap-4 p-3 border-b border-[#E5E7EB] bg-[#FEF2F2]">
+                      <span className="text-label font-bold text-admin-status-red">Adjustment Reason</span>
+                      <span className="max-w-[60%] text-right text-[12px] font-semibold text-admin-ink">{adjustmentReason}</span>
+                    </div>
+                  )}
                   <div className="flex items-center justify-between p-3 bg-white">
                     <span className="text-label font-medium text-fg-muted">Reconciliation</span>
                     <span className={`text-[11px] font-bold uppercase tracking-[0.03em] ${job.reconciled ? "text-admin-status-green" : "text-admin-status-red"}`}>
@@ -442,6 +454,9 @@ export function PaperDossierReport({ job, isPreview = false }: Props) {
                   <span className="text-[11px] font-medium text-admin-muted mt-2">Confirmed By: {job.clientConfirmedName || "N/A"}</span>
                   <span className="text-[10px] font-medium text-admin-muted mt-0.5">
                     Signed: {job.clientSignatureAt ? formatLondonDateTime(job.clientSignatureAt) : formattedTime}
+                  </span>
+                  <span className={`text-[10px] font-bold uppercase tracking-[0.03em] mt-1 ${job.reviewEmailStatus === "Yes" ? "text-admin-status-green" : "text-admin-muted"}`}>
+                    Review Report: RW={job.reviewEmailStatus ?? "No"}
                   </span>
                 </div>
               </div>

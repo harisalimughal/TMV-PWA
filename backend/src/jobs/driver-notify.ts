@@ -1,6 +1,6 @@
 import { getDriverProfileByInitials } from "../auth/driver-account.service";
 import { sendDriverJobAssignmentEmail } from "../google/gmail";
-import { getMessageBody, getMessageTitle, isMessageEnabled } from "../notifications/message-catalog";
+import { getMessageBody, getMessageHtml, getMessageTitle, isMessageEnabled } from "../notifications/message-catalog";
 import { sendPushToDriver } from "../push/push.service";
 import { Job } from "./job.types";
 import { log } from "../utils/logger";
@@ -37,8 +37,11 @@ export async function notifyDriverJobAssigned(job: Job, driverInitials: string):
   if (emailEnabled) {
     const driver = await getDriverProfileByInitials(driverInitials).catch(() => null);
     if (driver?.email) {
-      const body = await getMessageBody("DRIVER_JOB_ASSIGNMENT_EMAIL", job);
-      await sendDriverJobAssignmentEmail(driver.email, job, body).catch(err =>
+      const [body, html] = await Promise.all([
+        getMessageBody("DRIVER_JOB_ASSIGNMENT_EMAIL", job),
+        getMessageHtml("DRIVER_JOB_ASSIGNMENT_EMAIL", job)
+      ]);
+      await sendDriverJobAssignmentEmail(driver.email, job, body, html).catch(err =>
         log.warn("failed to send job assignment email", { error: String(err), driverInitials, job_id: job.jobId })
       );
     }

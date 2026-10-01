@@ -93,6 +93,8 @@ export interface Job {
   paymentMethod: string;
   paymentBreakdown?: PaymentBreakdownItem[];
   paymentStatus: string;
+  /** Whether the customer review email was successfully sent at job completion. */
+  reviewEmailSent?: boolean;
   managerReviewStatus?: "Pending" | "Approved" | "Flagged";
   managerReviewNote?: string;
   managerReviewedAt?: string;
@@ -113,6 +115,14 @@ export interface Job {
    *  actualStart, which is the Arrival photo's timestamp -- "on my way" can happen
    *  well before the driver physically arrives. */
   onMyWayAt?: string;
+  /** First confirmed fresh GPSLive position at the pickup, from the assigned IMEI. */
+  trackerArrivalAt?: string;
+  /** First in-radius report awaiting a second report to rule out a drive-by. */
+  trackerArrivalCandidateAt?: string;
+  /** Latest fresh report from the assigned tracker while this job was checked. */
+  trackerLastSeenAt?: string;
+  /** The proof-of-arrival reminder is sent at most once per job. */
+  arrivalProofReminderSentAt?: string;
   /** ISO timestamp of when this job's van was first detected inside the London
    *  Congestion Charge zone, via GPSLive's "CHARGES - ALERTS" geofence webhook (see
    *  integrations/gpslive-webhook.routes.ts) -- drives the "Entered Central London"

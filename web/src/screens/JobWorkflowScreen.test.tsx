@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { paymentActionInput, paymentBlockedReasonFor, paymentMethodTakesAmount, photoMaxFor } from "./JobWorkflowScreen";
+import {
+  customerSignatureBlockedReason,
+  paymentActionInput,
+  paymentBlockedReasonFor,
+  paymentMethodTakesAmount,
+  photoMaxFor
+} from "./JobWorkflowScreen";
 
 describe("photoMaxFor", () => {
   it("matches the driver workflow evidence photo limits", () => {
@@ -28,5 +34,13 @@ describe("payment helpers", () => {
     expect(paymentBlockedReasonFor(["Invoice"], {})).toBeUndefined();
     expect(paymentBlockedReasonFor(["Card", "Invoice"], { Card: "" })).toBe("Enter the amount taken by Card.");
     expect(paymentBlockedReasonFor(["Card"], { Card: "-5" })).toBe("Enter a valid amount taken by Card.");
+  });
+});
+
+describe("customer signature helper", () => {
+  it("requires saving a signature before the customer sign-off can continue", () => {
+    expect(customerSignatureBlockedReason(false)).toBe("The customer needs to sign first.");
+    expect(customerSignatureBlockedReason(true)).toBeUndefined();
+    expect(customerSignatureBlockedReason(true, "You're offline.")).toBe("You're offline.");
   });
 });

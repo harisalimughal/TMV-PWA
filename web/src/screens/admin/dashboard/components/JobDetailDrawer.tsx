@@ -260,11 +260,23 @@ export function JobDetailDrawer({ job: initialJob, isOpen, onClose, onUpdated }:
               </div>
               <div className="mt-2 border-t border-admin-line pt-2">
                 <span className="block text-[10px] font-bold uppercase tracking-wider text-admin-muted">
-                  Pickup arrival
+                  Proof of arrival photo
                 </span>
                 <span className="mt-0.5 block text-[12px] font-semibold text-admin-ink">
                   {job.pickupArrivalAt ? formatLondonDateTime(job.pickupArrivalAt) : "Not recorded"}
                 </span>
+              </div>
+              <div className="mt-2 border-t border-admin-line pt-2">
+                <span className="block text-[10px] font-bold uppercase tracking-wider text-admin-muted">Tracker arrival</span>
+                <span className="mt-0.5 block text-[12px] font-semibold text-admin-ink">{job.trackerArrivalAt ? formatLondonDateTime(job.trackerArrivalAt) : "Unverified"}</span>
+                {job.trackerStatus && <span className="mt-0.5 block text-[11px] text-admin-muted">Tracker: {job.trackerStatus === "reporting" ? "Reporting" : job.trackerStatus === "stale" ? "Stale / no recent position" : "No verified report"}</span>}
+                {(job.arrivalProofLate || job.arrivalProofOverdue) && (
+                  <span className="mt-1 inline-flex rounded-control bg-admin-status-red-bg px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.03em] text-admin-status-red">
+                    {job.arrivalProofLate
+                      ? `Arrival to proof gap (${job.arrivalProofDelayMinutes ?? 0} min)`
+                      : `Proof photo overdue (${job.arrivalProofDelayMinutes ?? 0} min)`}
+                  </span>
+                )}
               </div>
               <div className="mt-2 border-t border-admin-line pt-2">
                 <span className="block text-[10px] font-bold uppercase tracking-wider text-admin-muted">
@@ -273,13 +285,6 @@ export function JobDetailDrawer({ job: initialJob, isOpen, onClose, onUpdated }:
                 <span className="mt-0.5 block text-[12px] font-semibold text-admin-ink">
                   {job.vanLoadedAt ? formatLondonDateTime(job.vanLoadedAt) : "Not recorded"}
                 </span>
-                {(job.vanLoadLate || job.vanLoadOverdue) && (
-                  <span className="mt-1 inline-flex rounded-control bg-admin-status-red-bg px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.03em] text-admin-status-red">
-                    {job.vanLoadLate
-                      ? `Mismatch ${job.vanLoadDelayMinutes ?? 0} min`
-                      : `Overdue ${job.vanLoadDelayMinutes ?? 0} min`}
-                  </span>
-                )}
               </div>
               <div className="mt-2 border-t border-admin-line pt-2">
                 <span className="block text-[10px] font-bold uppercase tracking-wider text-admin-muted">

@@ -24,6 +24,7 @@ export interface MessageDef {
   /** Email only: optional HTML body. Empty/missing means send the plain body as
    *  text-only, preserving existing behaviour until an admin opts into HTML. */
   htmlKey?: string;
+  htmlEnabledKey?: string;
   htmlFallback?: string;
   variables: string[];
 }
@@ -70,6 +71,7 @@ export const MESSAGE_CATALOG: MessageDef[] = [
     bodyKey: "JOB_STARTED_EMAIL_MESSAGE_TEXT",
     bodyFallback: JOB_STARTED_MESSAGE_TEMPLATE,
     htmlKey: "JOB_STARTED_EMAIL_HTML",
+    htmlEnabledKey: "JOB_STARTED_EMAIL_HTML_ENABLED",
     htmlFallback: "",
     variables: SHARED_VARIABLES
   },
@@ -84,6 +86,7 @@ export const MESSAGE_CATALOG: MessageDef[] = [
     bodyKey: "REVIEW_REQUEST_EMAIL_TEXT",
     bodyFallback: REVIEW_REQUEST_EMAIL_TEMPLATE,
     htmlKey: "REVIEW_REQUEST_EMAIL_HTML",
+    htmlEnabledKey: "REVIEW_REQUEST_EMAIL_HTML_ENABLED",
     htmlFallback: "",
     variables: ["{NAME}", ...SHARED_VARIABLES]
   },
@@ -107,6 +110,7 @@ export const MESSAGE_CATALOG: MessageDef[] = [
       "Booked: {job_date}\n" +
       "Job ID: {jobId}\n",
     htmlKey: "DRIVER_JOB_ASSIGNMENT_EMAIL_HTML",
+    htmlEnabledKey: "DRIVER_JOB_ASSIGNMENT_EMAIL_HTML_ENABLED",
     htmlFallback: "",
     variables: ["{customerName}", "{pickup}", "{dropoff}", "{job_date}", "{jobId}"]
   },
@@ -202,6 +206,10 @@ export async function getMessageHtml(
 ): Promise<string> {
   const def = findMessageDef(id);
   if (!def?.htmlKey) return "";
+  if (def.htmlEnabledKey) {
+    const enabled = await getSetting(def.htmlEnabledKey, "false");
+    if (enabled !== "true") return "";
+  }
   const raw = await getSetting(def.htmlKey, def.htmlFallback || "");
   if (!raw.trim()) return "";
   return job ? renderMessageTemplate(raw, job, driver, extra) : raw;

@@ -200,7 +200,7 @@ export function LiabilityScreen({ initialCheckpoint, initialJobId }: LiabilitySc
 
             {!checkpoint && activeJob && (
               <Alert tone="info" title="Select a checkpoint first">
-                Pick Pickup or Drop-off to enable the report options below.
+                Pick Pickup, Stop-by, or Drop-off to enable the report options below.
               </Alert>
             )}
 

@@ -32,6 +32,7 @@ import { formatLondonDate, formatLondonDateTime } from "../utils/date";
 import { completionRate, formatDuration } from "../utils/kpi";
 import {
   adjustmentReason,
+  arrivalProofMismatchLabel,
   extraChargeBreakdownLines,
   jobServiceType,
   jobsForDriver,
@@ -571,7 +572,9 @@ function WorkBreakdown({ from, to }: { from?: string; to?: string }) {
                                     </tr>
                                   </thead>
                                   <tbody className="divide-y divide-admin-line/60">
-                                    {driverJobs.map(job => (
+                                    {driverJobs.map(job => {
+                                      const arrivalProofMismatch = arrivalProofMismatchLabel(job);
+                                      return (
                                       <tr key={job.jobId}>
                                         <td className="py-2 px-3 font-mono font-semibold text-admin-brand">{job.jobId}</td>
                                         <td className="py-2 px-3 text-admin-muted whitespace-nowrap">{formatLondonDateTime(job.bookedStart || job.actualStart)}</td>
@@ -579,11 +582,17 @@ function WorkBreakdown({ from, to }: { from?: string; to?: string }) {
                                         <td className="py-2 px-3">{jobServiceType(job)}</td>
                                         <td className="py-2 px-3 text-[11px] text-admin-muted whitespace-nowrap">
                                           <ul className="list-disc space-y-0.5 pl-4">
-                                            <li>Pickup: {job.pickupArrivalAt ? formatLondonDateTime(job.pickupArrivalAt) : "Not recorded"}</li>
+                                            <li>Tracker arrival: {job.trackerArrivalAt ? formatLondonDateTime(job.trackerArrivalAt) : "Unverified"}</li>
+                                            <li>Proof photo: {job.pickupArrivalAt ? formatLondonDateTime(job.pickupArrivalAt) : "Not recorded"}</li>
                                             <li>Van loaded: {job.vanLoadedAt ? formatLondonDateTime(job.vanLoadedAt) : "Not recorded"}</li>
                                             <li>Empty van: {job.actualFinish ? formatLondonDateTime(job.actualFinish) : "Not recorded"}</li>
                                             <li>Customer signed: {job.clientSignatureAt ? formatLondonDateTime(job.clientSignatureAt) : "Not recorded"}</li>
                                           </ul>
+                                          {arrivalProofMismatch && (
+                                            <span className="mt-1 inline-flex rounded-control bg-admin-status-red-bg px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.03em] text-admin-status-red">
+                                              {arrivalProofMismatch}
+                                            </span>
+                                          )}
                                         </td>
                                         <td className="py-2 px-3 text-right font-mono">{((job.congestionCharge || 0) / 100).toFixed(2)}</td>
                                         <td className="py-2 px-3 text-right font-mono">{((job.tunnelCharge || 0) / 100).toFixed(2)}</td>
@@ -613,7 +622,8 @@ function WorkBreakdown({ from, to }: { from?: string; to?: string }) {
                                           {adjustmentReason(job)}
                                         </td>
                                       </tr>
-                                    ))}
+                                      );
+                                    })}
                                   </tbody>
                                 </table>
                               </div>

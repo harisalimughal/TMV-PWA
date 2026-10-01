@@ -87,4 +87,18 @@ describe("summarizeDrivers", () => {
     expect(row.totalChargesPounds).toBe(120);
     expect(row.revenuePounds).toBe(100);
   });
+
+  it("counts review emails sent and not sent for completed jobs", () => {
+    const [row] = summarizeDrivers(
+      [{ initials: "TI", fullName: "Tiago", email: "tiago@example.com", chatUserName: "", active: true, role: "Driver", phone: "", vanRegistration: "", imei: "" }],
+      [
+        { driverInitials: "TI", driverName: "Tiago", status: JobStatus.COMPLETED, reviewEmailSent: true, amountCharged: 0, totalCharges: 0, paymentMethod: "", evidenceCompleteness: {} } as any,
+        { driverInitials: "TI", driverName: "Tiago", status: JobStatus.COMPLETED, reviewEmailSent: false, amountCharged: 0, totalCharges: 0, paymentMethod: "", evidenceCompleteness: {} } as any,
+        { driverInitials: "TI", driverName: "Tiago", status: JobStatus.IN_PROGRESS, reviewEmailSent: true, amountCharged: 0, totalCharges: 0, paymentMethod: "", evidenceCompleteness: {} } as any
+      ]
+    );
+
+    expect(row.reviewSentCount).toBe(1);
+    expect(row.reviewNotSentCount).toBe(1);
+  });
 });

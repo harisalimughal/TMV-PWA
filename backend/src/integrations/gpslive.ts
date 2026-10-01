@@ -107,16 +107,15 @@ export function matchDriverByPlateAndName(
  * their van's GPSLive device (to look up its imei) instead of given a device, find
  * the driver. Used by congestion-zone.service.ts's job-start check.
  *
- * Priority: an admin-assigned imei (exact, unambiguous -- see DriverAccountDoc's own
- * comment) beats vanRegistration/initials string-matching, which stays only as a
- * fallback for drivers who haven't been assigned one yet. */
+ * An admin-assigned IMEI is authoritative. Plate/initials matching is available only
+ * for drivers without a device assignment; an offline assigned device must not silently
+ * turn into a different van. */
 export function findDeviceForDriver(
   driver: { initials: string; vanRegistration: string; imei?: string },
   devices: GpsLiveDevice[]
 ): GpsLiveDevice | null {
   if (driver.imei) {
-    const byImei = devices.find(d => d.imei === driver.imei);
-    if (byImei) return byImei;
+    return devices.find(d => d.imei === driver.imei) ?? null;
   }
   if (driver.vanRegistration) {
     const plate = normalizePlate(driver.vanRegistration);

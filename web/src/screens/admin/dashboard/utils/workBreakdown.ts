@@ -42,6 +42,20 @@ export function adjustmentReason(job: NormalizedJob): string {
   return job.totalAdjustmentNote?.trim() || "None";
 }
 
+export function adjustmentReasonForMismatch(job: NormalizedJob): string {
+  const totalCharges = totalChargesForJob(job);
+  const amountCharged = job.amountCharged || 0;
+  if (amountCharged === totalCharges) return "";
+  return job.totalAdjustmentNote?.trim() || "Not recorded";
+}
+
+export function arrivalProofMismatchLabel(job: NormalizedJob): string {
+  const minutes = job.arrivalProofDelayMinutes ?? 0;
+  if (job.arrivalProofOverdue) return `Proof photo overdue (${minutes} min)`;
+  if (job.arrivalProofLate || (job.pickupArrivalAt && minutes >= 15)) return `Arrival to proof gap (${minutes} min)`;
+  return "";
+}
+
 export function extraChargeBreakdownLines(job: NormalizedJob): string[] {
   if (!job.extraChargeBreakdown?.length) return ["None"];
   return job.extraChargeBreakdown.map(row => `${row.label || "Extra"} £${((row.amount || 0) / 100).toFixed(2)}`);

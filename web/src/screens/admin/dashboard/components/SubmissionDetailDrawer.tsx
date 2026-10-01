@@ -14,6 +14,7 @@ import { htmlToPlainText } from "../../../../lib/htmlText";
 import { RawBookingText } from "../../../../components/driver/RawBookingText";
 import { JobScenarioSection } from "./JobScenarioSection";
 import { scenarioPointFromRecord } from "../utils/scenarioPoint";
+import { adjustmentReasonForMismatch } from "../utils/workBreakdown";
 
 type ScenarioKind = "checkin" | "checkout" | "parking" | "liability";
 
@@ -59,6 +60,17 @@ function ChargeRow({
       </span>
       <span className={`font-mono text-[13px] tabular-nums ${strong ? "font-bold" : "font-semibold"} ${brand ? "text-admin-brand" : "text-admin-ink"}`}>
         {formatGBP(value)}
+      </span>
+    </div>
+  );
+}
+
+function ChargeNoteRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-start justify-between gap-4 bg-admin-status-red-bg/40 px-3 py-2.5">
+      <span className="text-[12px] font-bold text-admin-status-red">{label}</span>
+      <span className="max-w-[60%] text-right text-[12px] font-semibold text-admin-ink">
+        {value}
       </span>
     </div>
   );
@@ -441,9 +453,11 @@ export function SubmissionDetailDrawer({ job: initialJob, isOpen, onClose, onNav
               value={normalizedJob.onMyWayAt ? formatLondonDateTime(normalizedJob.onMyWayAt) : "Not recorded"}
             />
             <DetailRow
-              label="Pickup arrival time"
+              label="Proof of arrival photo time"
               value={normalizedJob.pickupArrivalAt ? formatLondonDateTime(normalizedJob.pickupArrivalAt) : "Not recorded"}
             />
+            <DetailRow label="Tracker arrival time" value={normalizedJob.trackerArrivalAt ? formatLondonDateTime(normalizedJob.trackerArrivalAt) : "Unverified"} />
+            {normalizedJob.trackerStatus && <DetailRow label="Tracker status" value={normalizedJob.trackerStatus === "reporting" ? "Reporting" : normalizedJob.trackerStatus === "stale" ? "Stale / no recent position" : "No verified report"} />}
             <DetailRow
               label="Van loaded photo time"
               value={normalizedJob.vanLoadedAt ? formatLondonDateTime(normalizedJob.vanLoadedAt) : "Not recorded"}
@@ -453,11 +467,11 @@ export function SubmissionDetailDrawer({ job: initialJob, isOpen, onClose, onNav
               value={normalizedJob.actualFinish ? formatLondonDateTime(normalizedJob.actualFinish) : "Not recorded"}
             />
           </div>
-          {(normalizedJob.vanLoadLate || normalizedJob.vanLoadOverdue) && (
+          {(normalizedJob.arrivalProofLate || normalizedJob.arrivalProofOverdue) && (
             <div className="mt-4 inline-flex rounded-control bg-admin-status-red-bg px-3 py-1.5 text-[12px] font-bold uppercase tracking-[0.03em] text-admin-status-red">
-              {normalizedJob.vanLoadLate
-                ? `Van loaded mismatch: ${normalizedJob.vanLoadDelayMinutes ?? 0} min`
-                : `Van loaded overdue: ${normalizedJob.vanLoadDelayMinutes ?? 0} min`}
+              {normalizedJob.arrivalProofLate
+                ? `Gap between tracker arrival and proof photo (${normalizedJob.arrivalProofDelayMinutes ?? 0} min)`
+                : `Proof photo overdue (${normalizedJob.arrivalProofDelayMinutes ?? 0} min)`}
             </div>
           )}
         </div>
@@ -505,6 +519,9 @@ export function SubmissionDetailDrawer({ job: initialJob, isOpen, onClose, onNav
             )}
             <ChargeRow label="Total Charges" value={totalCharges} strong />
             <ChargeRow label="Amount Charged" value={normalizedJob.amountCharged} strong brand />
+            {adjustmentReasonForMismatch(normalizedJob) && (
+              <ChargeNoteRow label="Adjustment Reason" value={adjustmentReasonForMismatch(normalizedJob)} />
+            )}
           </div>
         </div>
       )}
@@ -584,27 +601,34 @@ export function SubmissionDetailDrawer({ job: initialJob, isOpen, onClose, onNav
       <div className="bg-white rounded-module p-4 sm:p-6 shadow-sm border border-admin-line">
          <label className="text-[13px] font-semibold text-admin-muted block mb-4">Client Signature</label>
          {signatureUrl ? (
-            <div className="max-w-sm">
-              <div className="border border-admin-line rounded-card p-4 bg-admin-surface flex justify-center">
-                <img src={signatureUrl} alt="Signature" className="max-h-24 mix-blend-multiply" />
+            <div className="flex items-center gap-5">
+              <div className="max-w-sm">
+                <div className="border border-admin-line rounded-card p-4 bg-admin-surface flex justify-center">
+                  <img src={signatureUrl} alt="Signature" className="max-h-24 mix-blend-multiply" />
+                </div>
+                {/* Proof of place for the signature itself, same as a photo's caption --
+                    absent on submissions made before signature location was captured. */}
+                {isScenario && (scenarioItem.signature?.capturedAt || scenarioItem.signature?.location) && (
+                  <div className="mt-2 text-[11px] leading-tight text-admin-muted text-center space-y-0.5">
+                    {scenarioItem.signature?.capturedAt && <div>{formatCapturedTime(scenarioItem.signature.capturedAt)}</div>}
+                    {scenarioItem.signature?.location ? (
+                      <a
+                        href={mapsUrlForLocation(scenarioItem.signature.location)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="block truncate text-admin-brand underline underline-offset-2"
+                      >
+                        {formatLocationLabel(scenarioItem.signature.location, scenarioItem.signature.locationName)}
+                      </a>
+                    ) : (
+                      <div>No location</div>
+                    )}
+                  </div>
+                )}
               </div>
-              {/* Proof of place for the signature itself, same as a photo's caption --
-                  absent on submissions made before signature location was captured. */}
-              {isScenario && (scenarioItem.signature?.capturedAt || scenarioItem.signature?.location) && (
-                <div className="mt-2 text-[11px] leading-tight text-admin-muted text-center space-y-0.5">
-                  {scenarioItem.signature?.capturedAt && <div>{formatCapturedTime(scenarioItem.signature.capturedAt)}</div>}
-                  {scenarioItem.signature?.location ? (
-                    <a
-                      href={mapsUrlForLocation(scenarioItem.signature.location)}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="block truncate text-admin-brand underline underline-offset-2"
-                    >
-                      {formatLocationLabel(scenarioItem.signature.location, scenarioItem.signature.locationName)}
-                    </a>
-                  ) : (
-                    <div>No location</div>
-                  )}
+              {!isScenario && (
+                <div className={`text-[11px] font-bold uppercase tracking-[0.03em] ${ (job as NormalizedJob).reviewEmailStatus === "Yes" ? "text-admin-status-green" : "text-admin-muted"}`}>
+                  Review Report: RW={(job as NormalizedJob).reviewEmailStatus ?? "No"}
                 </div>
               )}
             </div>

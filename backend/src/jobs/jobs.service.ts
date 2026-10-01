@@ -566,7 +566,11 @@ function sendOpsCompletionEmailIfAny(job: Job, driver: DriverProfile): void {
     .catch(error => log.warn("job completion ops email audit failed", { job_id: job.jobId, error: String(error) }));
 }
 
-export async function completeJob(jobId: string, identifier: string): Promise<Job> {
+export async function completeJob(
+  jobId: string,
+  identifier: string,
+  options: { reviewEmailSent?: boolean } = {}
+): Promise<Job> {
   const { job, driver } = await getJobForDriver(jobId, identifier);
   if (job.status === JobStatus.COMPLETED) return job;
 
@@ -583,6 +587,9 @@ export async function completeJob(jobId: string, identifier: string): Promise<Jo
   );
   job.differenceMinutes = job.actualMinutes - job.bookedMinutes;
   job.delayStatus = delayStatus(job.bookedFinish, job.actualFinish);
+  // Older/manual completions have no review action to replay. Persist an explicit
+  // No so the admin report never leaves the review outcome ambiguous.
+  job.reviewEmailSent = options.reviewEmailSent ?? job.reviewEmailSent ?? false;
   job.status = JobStatus.COMPLETED;
   job.currentState = WorkflowState.COMPLETED;
   const completedJob = await saveJob(job, driver, "COMPLETE_JOB", from, `Server finish timestamp ${now}`);

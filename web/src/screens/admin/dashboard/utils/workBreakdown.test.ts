@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
+  adjustmentReasonForMismatch,
   adjustmentReason,
+  arrivalProofMismatchLabel,
   extraChargeBreakdownLines,
   jobServiceType,
   jobsForDriver,
@@ -83,6 +85,29 @@ describe("work breakdown helpers", () => {
     expect(adjustmentReason(baseJob)).toBe("None");
   });
 
+  it("shows the adjustment reason only when amount charged differs from total charges", () => {
+    expect(adjustmentReasonForMismatch({
+      ...baseJob,
+      totalCharges: 70600,
+      amountCharged: 60000,
+      totalAdjustmentNote: "Customer agreed discount with office"
+    })).toBe("Customer agreed discount with office");
+
+    expect(adjustmentReasonForMismatch({
+      ...baseJob,
+      totalCharges: 70600,
+      amountCharged: 70600,
+      totalAdjustmentNote: "Old note"
+    })).toBe("");
+
+    expect(adjustmentReasonForMismatch({
+      ...baseJob,
+      totalCharges: 70600,
+      amountCharged: 60000,
+      totalAdjustmentNote: "   "
+    })).toBe("Not recorded");
+  });
+
   it("formats extra charges as separate visible lines", () => {
     expect(extraChargeBreakdownLines({
       ...baseJob,
@@ -92,6 +117,33 @@ describe("work breakdown helpers", () => {
       ]
     })).toEqual(["Tunnel £15.00", "Overtime (2 hrs) £120.00"]);
     expect(extraChargeBreakdownLines(baseJob)).toEqual(["None"]);
+  });
+
+  it("labels tracker arrival to proof photo gaps at 15 minutes or more", () => {
+    expect(arrivalProofMismatchLabel({
+      ...baseJob,
+      arrivalProofDelayMinutes: 14,
+      arrivalProofLate: false
+    })).toBe("");
+
+    expect(arrivalProofMismatchLabel({
+      ...baseJob,
+      arrivalProofDelayMinutes: 15,
+      pickupArrivalAt: "2026-10-01T08:15:00.000Z",
+      arrivalProofLate: false
+    })).toBe("Arrival to proof gap (15 min)");
+
+    expect(arrivalProofMismatchLabel({
+      ...baseJob,
+      arrivalProofDelayMinutes: 15,
+      arrivalProofLate: false
+    })).toBe("");
+
+    expect(arrivalProofMismatchLabel({
+      ...baseJob,
+      arrivalProofDelayMinutes: 16,
+      arrivalProofOverdue: true
+    })).toBe("Proof photo overdue (16 min)");
   });
 });
 
