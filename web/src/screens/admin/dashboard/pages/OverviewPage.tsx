@@ -376,6 +376,8 @@ function WorkBreakdown({ from, to }: { from?: string; to?: string }) {
       { header: "Driver", value: r => r.fullName },
       { header: "Code", value: r => r.initials },
       { header: "Completed Jobs", value: r => r.completed },
+      { header: "Review Requests Sent", value: r => r.reviewSentCount },
+      { header: "Review Requests Not Sent", value: r => r.reviewNotSentCount },
       { header: "Congestion (£)", value: r => r.congestionChargePounds.toFixed(2) },
       { header: "Tunnel (£)", value: r => r.tunnelChargePounds.toFixed(2) },
       { header: "Overtime Hours", value: r => formatDuration(r.overtimeMinutes) },
@@ -485,11 +487,12 @@ function WorkBreakdown({ from, to }: { from?: string; to?: string }) {
 
         {/* BREAKDOWN TABLE */}
         <div className="border border-admin-line rounded-card overflow-x-auto">
-          <table className="w-full min-w-[1120px] text-left text-[13px] border-collapse">
+          <table className="w-full min-w-[1200px] text-left text-[13px] border-collapse">
             <thead className="bg-admin-surface">
               <tr className="border-b border-admin-line">
                 <th className="py-2.5 px-3 font-semibold text-admin-muted">Driver</th>
                 <th className="py-2.5 px-3 font-semibold text-admin-muted text-right">Completed Jobs</th>
+                <th className="py-2.5 px-3 font-semibold text-admin-muted text-right">RW Sent / Not sent</th>
                 <th className="py-2.5 px-3 font-semibold text-admin-muted text-right">Congestion (£)</th>
                 <th className="py-2.5 px-3 font-semibold text-admin-muted text-right">Tunnel (£)</th>
                 <th className="py-2.5 px-3 font-semibold text-admin-muted text-right">Overtime Hours</th>
@@ -505,13 +508,13 @@ function WorkBreakdown({ from, to }: { from?: string; to?: string }) {
             <tbody className="divide-y divide-admin-line/60">
               {isLoading ? (
                 <tr>
-                  <td colSpan={12} className="py-8 text-center text-admin-muted">
+                  <td colSpan={13} className="py-8 text-center text-admin-muted">
                     <Loader2 className="w-4 h-4 animate-spin inline-block mr-2" /> Loading…
                   </td>
                 </tr>
               ) : rows.length === 0 ? (
                 <tr>
-                  <td colSpan={12} className="py-8 text-center text-admin-muted">No drivers found for this range.</td>
+                  <td colSpan={13} className="py-8 text-center text-admin-muted">No drivers found for this range.</td>
                 </tr>
               ) : (
                 rows.map(r => {
@@ -530,6 +533,7 @@ function WorkBreakdown({ from, to }: { from?: string; to?: string }) {
                           </span>
                         </td>
                         <td className="py-2.5 px-3 text-right">{r.completed}</td>
+                        <td className="py-2.5 px-3 text-right font-mono tabular-nums">{r.reviewSentCount} / {r.reviewNotSentCount}</td>
                         <td className="py-2.5 px-3 text-right font-mono">{r.congestionChargePounds.toFixed(2)}</td>
                         <td className="py-2.5 px-3 text-right font-mono">{r.tunnelChargePounds.toFixed(2)}</td>
                         <td className="py-2.5 px-3 text-right font-mono">{formatDuration(r.overtimeMinutes)}</td>
@@ -543,7 +547,7 @@ function WorkBreakdown({ from, to }: { from?: string; to?: string }) {
                       </tr>
                       {isExpanded && (
                         <tr>
-                          <td colSpan={12} className="bg-admin-surface/50 p-3">
+                          <td colSpan={13} className="bg-admin-surface/50 p-3">
                             {jobsLoading ? (
                               <div className="py-6 text-center text-admin-muted">
                                 <Loader2 className="w-4 h-4 animate-spin inline-block mr-2" /> Loading job breakdown...
@@ -552,7 +556,7 @@ function WorkBreakdown({ from, to }: { from?: string; to?: string }) {
                               <div className="py-6 text-center text-admin-muted">No completed jobs found for this driver in the selected range.</div>
                             ) : (
                               <div className="max-w-full overflow-x-auto rounded-card border border-admin-line bg-white">
-                                <table className="w-full min-w-[1280px] text-left text-[12px] border-collapse">
+                                <table className="w-full min-w-[1360px] text-left text-[12px] border-collapse">
                                   <thead className="bg-white">
                                     <tr className="border-b border-admin-line">
                                       <th className="py-2 px-3 font-semibold text-admin-muted">Job</th>
@@ -560,6 +564,7 @@ function WorkBreakdown({ from, to }: { from?: string; to?: string }) {
                                       <th className="py-2 px-3 font-semibold text-admin-muted">Customer</th>
                                       <th className="py-2 px-3 font-semibold text-admin-muted">Service Type</th>
                                       <th className="py-2 px-3 font-semibold text-admin-muted">Timing</th>
+                                      <th className="py-2 px-3 font-semibold text-admin-muted">RW</th>
                                       <th className="py-2 px-3 font-semibold text-admin-muted text-right">Congestion (£)</th>
                                       <th className="py-2 px-3 font-semibold text-admin-muted text-right">Tunnel (£)</th>
                                       <th className="py-2 px-3 font-semibold text-admin-muted text-right">Overtime</th>
@@ -593,6 +598,11 @@ function WorkBreakdown({ from, to }: { from?: string; to?: string }) {
                                               {arrivalProofMismatch}
                                             </span>
                                           )}
+                                        </td>
+                                        <td className="py-2 px-3 whitespace-nowrap">
+                                          <span className={`inline-flex rounded-control px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-[0.03em] ${job.reviewEmailStatus === "Yes" ? "bg-admin-status-green-bg text-admin-status-green" : "bg-admin-surface text-admin-muted"}`}>
+                                            RW: {job.reviewEmailStatus ?? "No"}
+                                          </span>
                                         </td>
                                         <td className="py-2 px-3 text-right font-mono">{((job.congestionCharge || 0) / 100).toFixed(2)}</td>
                                         <td className="py-2 px-3 text-right font-mono">{((job.tunnelCharge || 0) / 100).toFixed(2)}</td>
