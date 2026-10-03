@@ -8,6 +8,7 @@ import { DriverProfile, EvidenceType, ExtraChargeType, Job, PaymentMethod } from
 import { uploadEvidence } from "../jobs/evidence.service";
 import { completeJob, getJobForDriver, getNextJobForDriver, saveJob, startJob } from "../jobs/jobs.service";
 import { WorkflowState, nextAfterPhoto, PHOTO_STATES } from "./workflow.states";
+import { verifyArrivalAtPhotoUpload } from "../jobs/pickup-tracker.service";
 import {
   assertState, validateCrewSize,
   validateCurrency, validateExtraCharges, validateMinutes, validatePaymentMethods, ValidationError
@@ -185,7 +186,12 @@ export async function handlePhotoStep(
   // not the administrative button-tapping around it -- set once, on the photo that
   // marks each boundary, not overwritten on a later redo of the same step.
   const now = new Date().toISOString();
-  if (evidenceType === "Arrival" && !job.actualStart) job.actualStart = now;
+  if (evidenceType === "Arrival" && !job.actualStart) {
+    job.actualStart = now;
+    await verifyArrivalAtPhotoUpload(job, driver, now).catch(err =>
+      log.warn("verifyArrivalAtPhotoUpload failed (non-fatal)", { job_id: job.jobId, error: String(err) })
+    );
+  }
   if (evidenceType === "EmptyVan" && !job.actualFinish) job.actualFinish = now;
 
   const saved = await saveJob(job, driver, `PHOTO_${evidenceType.toUpperCase()}_RECEIVED`, from, `${photos.length} file(s)`);

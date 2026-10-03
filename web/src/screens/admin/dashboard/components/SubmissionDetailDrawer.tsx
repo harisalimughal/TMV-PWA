@@ -456,8 +456,26 @@ export function SubmissionDetailDrawer({ job: initialJob, isOpen, onClose, onNav
               label="Proof of arrival photo time"
               value={normalizedJob.pickupArrivalAt ? formatLondonDateTime(normalizedJob.pickupArrivalAt) : "Not recorded"}
             />
-            <DetailRow label="Tracker arrival time" value={normalizedJob.trackerArrivalAt ? formatLondonDateTime(normalizedJob.trackerArrivalAt) : "Unverified"} />
-            {normalizedJob.trackerStatus && <DetailRow label="Tracker status" value={normalizedJob.trackerStatus === "reporting" ? "Reporting" : normalizedJob.trackerStatus === "stale" ? "Stale / no recent position" : "No verified report"} />}
+            <DetailRow
+              label="Tracker arrival time"
+              value={
+                normalizedJob.trackerArrivalAt ? (
+                  formatLondonDateTime(normalizedJob.trackerArrivalAt)
+                ) : (
+                  <div>
+                    <span className="text-admin-status-red font-semibold">Unverified</span>
+                    {normalizedJob.trackerUnverifiedReason && (
+                      <div className="text-[12px] text-admin-status-red mt-0.5 font-normal">
+                        {normalizedJob.trackerUnverifiedReason}
+                      </div>
+                    )}
+                  </div>
+                )
+              }
+            />
+            {normalizedJob.trackerStatus && !normalizedJob.trackerUnverifiedReason && (
+              <DetailRow label="Tracker status" value={normalizedJob.trackerStatus === "reporting" ? "Reporting" : normalizedJob.trackerStatus === "stale" ? "Stale / no recent position" : "No verified report"} />
+            )}
             <DetailRow
               label="Van loaded photo time"
               value={normalizedJob.vanLoadedAt ? formatLondonDateTime(normalizedJob.vanLoadedAt) : "Not recorded"}

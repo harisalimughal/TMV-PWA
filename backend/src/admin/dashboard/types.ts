@@ -113,6 +113,9 @@ export interface NormalizedJob {
   trackerArrivalAt?: string;
   trackerLastSeenAt?: string;
   trackerStatus?: "reporting" | "stale" | "unverified";
+  trackerDistanceMeters?: number;
+  trackerLocationName?: string;
+  trackerUnverifiedReason?: string;
   arrivalProofDelayMinutes?: number;
   arrivalProofLate?: boolean;
   arrivalProofOverdue?: boolean;

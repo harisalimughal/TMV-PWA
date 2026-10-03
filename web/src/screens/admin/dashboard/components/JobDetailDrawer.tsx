@@ -268,8 +268,17 @@ export function JobDetailDrawer({ job: initialJob, isOpen, onClose, onUpdated }:
               </div>
               <div className="mt-2 border-t border-admin-line pt-2">
                 <span className="block text-[10px] font-bold uppercase tracking-wider text-admin-muted">Tracker arrival</span>
-                <span className="mt-0.5 block text-[12px] font-semibold text-admin-ink">{job.trackerArrivalAt ? formatLondonDateTime(job.trackerArrivalAt) : "Unverified"}</span>
-                {job.trackerStatus && <span className="mt-0.5 block text-[11px] text-admin-muted">Tracker: {job.trackerStatus === "reporting" ? "Reporting" : job.trackerStatus === "stale" ? "Stale / no recent position" : "No verified report"}</span>}
+                {job.trackerArrivalAt ? (
+                  <span className="mt-0.5 block text-[12px] font-semibold text-admin-ink">{formatLondonDateTime(job.trackerArrivalAt)}</span>
+                ) : (
+                  <div>
+                    <span className="mt-0.5 block text-[12px] font-semibold text-admin-status-red">Unverified</span>
+                    {job.trackerUnverifiedReason && (
+                      <span className="mt-0.5 block text-[11px] text-admin-status-red">{job.trackerUnverifiedReason}</span>
+                    )}
+                  </div>
+                )}
+                {job.trackerStatus && !job.trackerUnverifiedReason && <span className="mt-0.5 block text-[11px] text-admin-muted">Tracker: {job.trackerStatus === "reporting" ? "Reporting" : job.trackerStatus === "stale" ? "Stale / no recent position" : "No verified report"}</span>}
                 {(job.arrivalProofLate || job.arrivalProofOverdue) && (
                   <span className="mt-1 inline-flex rounded-control bg-admin-status-red-bg px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.03em] text-admin-status-red">
                     {job.arrivalProofLate

@@ -448,7 +448,9 @@ export function FinishedJobsPage() {
                           {customerSignatureTime && (
                             <span className="block text-[11px] text-admin-muted/70 mt-0.5">Customer signed: {customerSignatureTime}</span>
                           )}
-                          <span className="block text-[11px] text-admin-muted/70 mt-0.5">Tracker arrival: {trackerArrivalTime || "Unverified"}</span>
+                          <span className={`block text-[11px] mt-0.5 ${trackerArrivalTime ? "text-admin-muted/70" : "text-admin-status-red"}`}>
+                            Tracker arrival: {trackerArrivalTime || (job.trackerUnverifiedReason ? `Unverified (${job.trackerUnverifiedReason})` : "Unverified")}
+                          </span>
                           {pickupArrivalTime && <span className="block text-[11px] text-admin-muted/70 mt-0.5">Proof photo: {pickupArrivalTime}</span>}
                           {vanLoadedTime && (
                             <span className="block text-[11px] text-admin-muted/70 mt-0.5">Van loaded: {vanLoadedTime}</span>

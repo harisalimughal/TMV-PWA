@@ -121,6 +121,12 @@ export interface Job {
   trackerArrivalCandidateAt?: string;
   /** Latest fresh report from the assigned tracker while this job was checked. */
   trackerLastSeenAt?: string;
+  /** Distance in meters from pickup location when tracker last reported. */
+  trackerDistanceMeters?: number;
+  /** Place or area name of the tracker when last reported outside radius. */
+  trackerLocationName?: string;
+  /** Reason why tracker arrival could not be verified (e.g. van far away, no device). */
+  trackerUnverifiedReason?: string;
   /** The proof-of-arrival reminder is sent at most once per job. */
   arrivalProofReminderSentAt?: string;
   /** ISO timestamp of when this job's van was first detected inside the London

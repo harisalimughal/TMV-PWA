@@ -116,7 +116,7 @@ function calculateArrivalProofTiming(
   items: NormalizedEvidenceItem[],
   job: Job,
   fetchedAt: string
-): Pick<NormalizedJob, "pickupArrivalAt" | "vanLoadedAt" | "trackerArrivalAt" | "trackerLastSeenAt" | "trackerStatus" | "arrivalProofDelayMinutes" | "arrivalProofLate" | "arrivalProofOverdue"> {
+): Pick<NormalizedJob, "pickupArrivalAt" | "vanLoadedAt" | "trackerArrivalAt" | "trackerLastSeenAt" | "trackerStatus" | "trackerDistanceMeters" | "trackerLocationName" | "trackerUnverifiedReason" | "arrivalProofDelayMinutes" | "arrivalProofLate" | "arrivalProofOverdue"> {
   const arrivalItem = items.find(item => item.category === "Arrival" && item.state === "COMPLETED");
   const vanLoadedItem = items.find(item => item.category === "VanLoaded" && item.state === "COMPLETED");
   const pickupArrivalAt = evidenceTimestamp(arrivalItem) || (job.actualStart ? toUtcIso(job.actualStart) : undefined);
@@ -129,12 +129,36 @@ function calculateArrivalProofTiming(
   const arrivalProofDelayMinutes = trackerArrivalAt
     ? minutesBetween(trackerArrivalAt, pickupArrivalAt || fetchedAt)
     : undefined;
+
+  let trackerUnverifiedReason = job.trackerUnverifiedReason;
+  if (!trackerArrivalAt && !trackerUnverifiedReason) {
+    if (!job.pickupLocation) {
+      trackerUnverifiedReason = "Pickup address could not be geocoded";
+    } else if (!job.onMyWayAt) {
+      trackerUnverifiedReason = "Driver did not tap On My Way";
+    } else if (typeof job.trackerDistanceMeters === "number") {
+      const loc = job.trackerLocationName ? ` in ${job.trackerLocationName}` : "";
+      if (job.trackerDistanceMeters >= 1000) {
+        trackerUnverifiedReason = `Van was ${(job.trackerDistanceMeters / 1000).toFixed(1)} km away${loc}`;
+      } else {
+        trackerUnverifiedReason = `Van was ${job.trackerDistanceMeters}m away (outside 300m radius)${loc}`;
+      }
+    } else if (trackerStatus === "stale") {
+      trackerUnverifiedReason = "Tracker device signal was stale / offline";
+    } else if (!trackerLastSeenAt) {
+      trackerUnverifiedReason = "No tracker signal received";
+    }
+  }
+
   return {
     pickupArrivalAt,
     vanLoadedAt,
     trackerArrivalAt,
     trackerLastSeenAt,
     trackerStatus,
+    trackerDistanceMeters: job.trackerDistanceMeters,
+    trackerLocationName: job.trackerLocationName,
+    trackerUnverifiedReason,
     arrivalProofDelayMinutes,
     arrivalProofLate: Boolean(pickupArrivalAt && typeof arrivalProofDelayMinutes === "number" && arrivalProofDelayMinutes >= ARRIVAL_PROOF_THRESHOLD_MINUTES),
     arrivalProofOverdue: Boolean(!pickupArrivalAt && job.arrivalProofReminderSentAt && typeof arrivalProofDelayMinutes === "number" && arrivalProofDelayMinutes >= ARRIVAL_PROOF_THRESHOLD_MINUTES)
