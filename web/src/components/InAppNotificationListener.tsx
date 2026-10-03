@@ -93,7 +93,7 @@ export function InAppNotificationListener(): React.ReactElement | null {
 
   return (
     <div
-      className="pointer-events-none fixed inset-x-0 top-0 z-[320] flex flex-col items-center gap-2 px-3 pt-[calc(env(safe-area-inset-top)+12px)]"
+      className="pointer-events-none fixed inset-x-0 top-[calc(env(safe-area-inset-top)+165px)] z-[320] flex flex-col items-center gap-2 px-3"
       role="alert"
       aria-live="assertive"
     >
