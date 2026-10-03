@@ -108,7 +108,7 @@ export async function reverseGeocode(lat: number, lng: number): Promise<string |
 }
 
 // ---------------------------------------------------------------------------
-// Address cleaning — Calendar addresses contain flat numbers, floor notes and
+// Address cleaning -- Calendar addresses contain flat numbers, floor notes and
 // compressed postcodes that prevent Nominatim from resolving them.
 // ---------------------------------------------------------------------------
 
@@ -118,31 +118,31 @@ export async function reverseGeocode(lat: number, lng: number): Promise<string |
  *  passes through unchanged. */
 function cleanAddressForGeocoding(raw: string): string {
   let addr = raw;
-  // (1) Remove parenthetical notes — (ground floor), (basement), (3rd floor), etc.
+  // (1) Remove parenthetical notes -- (ground floor), (basement), (3rd floor), etc.
   addr = addr.replace(/\([^)]*\)/g, "");
   // (2) Remove trailing instructions after a dash that mention floor/lift/access.
   //     Only fires when the text after the dash contains a floor/lift keyword so
   //     genuine hyphens in street names (e.g. "Shepherd's Bush - London") survive.
   addr = addr.replace(
-    /\s+[-–—]\s+(?:(?:\d+\w*\s+)?(?:floor|lift)|no\s+lift|basement|ground\s*floor).*$/i,
+    /\s+[-\u2013\u2014]\s+(?:(?:\d+\w*\s+)?(?:floor|lift)|no\s+lift|basement|ground\s*floor).*$/i,
     ""
   );
   // (3) Remove "Flat X," / "Flat X -" / "Unit X," patterns (with separator).
   //     The separator requirement prevents false positives on street names
   //     like "Flat Iron Square".
-  addr = addr.replace(/,?\s*\b(?:flat|unit|apt|apartment)\s+\S+\s*[,\-–—]\s*/gi, ", ");
-  // (4) Remove trailing floor references — "First Floor Flat", "Ground Floor", etc.
+  addr = addr.replace(/,?\s*\b(?:flat|unit|apt|apartment)\s+\S+\s*[,\-\u2013\u2014]\s*/gi, ", ");
+  // (4) Remove trailing floor references -- "First Floor Flat", "Ground Floor", etc.
   addr = addr.replace(
     /[,\s]+(?:(?:first|second|third|fourth|fifth|\d+\w*)\s+floor(?:\s+flat)?|ground\s+floor(?:\s+flat)?|basement(?:\s+flat)?)$/i,
     ""
   );
-  // (5) Fix compressed UK postcodes: W26HP → W2 6HP, E32PX → E3 2PX, SW81TW → SW8 1TW
+  // (5) Fix compressed UK postcodes: W26HP -> W2 6HP, E32PX -> E3 2PX, SW81TW -> SW8 1TW
   addr = addr.replace(/\b([A-Z]{1,2}\d{1,2}[A-Z]?)(\d[A-Z]{2})\b/gi, "$1 $2");
   // (6) Tidy leftover punctuation and whitespace
   addr = addr.replace(/\.\s*(?=[,\s]|$)/g, ""); // trailing dots before separator or end
   addr = addr.replace(/,\s*,/g, ",");            // double commas
   addr = addr.replace(/\s{2,}/g, " ");           // multiple spaces
-  addr = addr.replace(/^[\s,.\-–—]+|[\s,.\-–—]+$/g, ""); // leading/trailing junk
+  addr = addr.replace(/^[\s,.\-\u2013\u2014]+|[\s,.\-\u2013\u2014]+$/g, ""); // leading/trailing junk
   return addr.trim();
 }
 
@@ -156,7 +156,7 @@ function extractUkPostcode(address: string): string | null {
 // Nominatim forward geocoding
 // ---------------------------------------------------------------------------
 
-/** Single Nominatim search request — shared by the primary and fallback attempts
+/** Single Nominatim search request -- shared by the primary and fallback attempts
  *  in geocodeAddress(). Returns coordinates or null (empty results); throws on
  *  network/timeout/HTTP errors so the caller can decide whether to retry. */
 async function nominatimSearch(query: string): Promise<{ lat: number; lng: number } | null> {
@@ -192,24 +192,23 @@ async function nominatimSearch(query: string): Promise<{ lat: number; lng: numbe
 }
 
 export async function geocodeAddress(address: string): Promise<{ lat: number; lng: number } | null> {
-  const query = address.trim();
-  if (!query) return null;
   const raw = address.trim();
   if (!raw) return null;
   const cleaned = cleanAddressForGeocoding(raw);
   const query = cleaned || raw;
   try {
-    const body = await withTimeout(
-      "Nominatim address geocode",
-      throttled(() =>
-        withRetry(
-          "nominatim.search",
-          async () => {
-            const url =
-              `https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1` +
-              `&q=${encodeURIComponent(query)}`;
-            const res = await fetch(url, {
-              headers: { "User-Agent": NOMINATIM_USER_AGENT, Accept: "application/json" }
-            });
-            if (!res.ok) {
-              const error = new Error(`No
+    const result = await nominatimSearch(query);
+    if (result) return result;
+    // Cleaned address returned no results -- try UK postcode as a fallback.
+    // A UK postcode covers a small area (~15 addresses) so the coordinates are
+    // accurate enough for the 150 m tracker-arrival radius check.
+    const postcode = extractUkPostcode(raw);
+    if (postcode && postcode !== query) {
+      return await nominatimSearch(postcode);
+    }
+    return null;
+  } catch (error) {
+    log.warn("address geocode failed (non-fatal)", { address: query, error: String(error) });
+    return null;
+  }
+}
