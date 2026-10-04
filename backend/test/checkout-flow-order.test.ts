@@ -38,7 +38,9 @@ vi.mock("../src/google/gmail", () => ({
   sendReviewRequestEmail: (...args: any[]) => sendReviewRequestEmail(...args),
   sendJobStartedEmail: vi.fn(),
   sendOpsJobCompletionEmail: vi.fn(),
-  sendOpsVanLoadedEmail: (...args: any[]) => sendOpsVanLoadedEmail(...args)
+  sendOpsVanLoadedEmail: (...args: any[]) => sendOpsVanLoadedEmail(...args),
+  sendOpsVanUnloadedEmail: vi.fn().mockResolvedValue(undefined),
+  sendOpsCustomerSignedEmail: vi.fn().mockResolvedValue(undefined)
 }));
 vi.mock("../src/push/push.service", () => ({
   sendPushToAdmins: (...args: any[]) => sendPushToAdmins(...args)

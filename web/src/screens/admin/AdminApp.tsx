@@ -79,7 +79,13 @@ export function AdminApp() {
    */
   useEffect(() => {
     const readSection = () => {
-      const sec = new URLSearchParams(window.location.search).get("section");
+      const params = new URLSearchParams(window.location.search);
+      const sec = params.get("section");
+      const job = params.get("job");
+      if (!sec && job) {
+        setActiveSection("jobs");
+        return;
+      }
       setActiveSection(sec === "settings" ? "pricing" : sec || "overview");
     };
     readSection();
@@ -122,7 +128,7 @@ export function AdminApp() {
       {activeSection === "alerts" && <AlertsPage />}
       {activeSection === "jobs" && <JobsPage />}
       {activeSection === "van" && <VanMileagePage />}
-      {activeSection === "finished" && <FinishedJobsPage />}
+      {activeSection === "finished" && <JobsPage initialStatus="Finished" />}
       {activeSection === "notifications" && <NotificationsPage />}
       {activeSection === "checkin" && <ScenariosPage kind="checkin" />}
       {activeSection === "checkout" && <ScenariosPage kind="checkout" />}

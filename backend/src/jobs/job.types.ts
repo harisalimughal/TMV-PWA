@@ -115,6 +115,8 @@ export interface Job {
    *  actualStart, which is the Arrival photo's timestamp -- "on my way" can happen
    *  well before the driver physically arrives. */
   onMyWayAt?: string;
+  pickupArrivalAt?: string;
+  vanLoadedAt?: string;
   /** First confirmed fresh GPSLive position at the pickup, from the assigned IMEI. */
   trackerArrivalAt?: string;
   /** First in-radius report awaiting a second report to rule out a drive-by. */

@@ -15,7 +15,12 @@ import {
 } from "./validation.engine";
 import { log, setContext } from "../utils/logger";
 import { formatPounds } from "../utils/money";
-import { sendOpsVanLoadedEmail, sendReviewRequestEmail } from "../google/gmail";
+import {
+  sendOpsCustomerSignedEmail,
+  sendOpsVanLoadedEmail,
+  sendOpsVanUnloadedEmail,
+  sendReviewRequestEmail
+} from "../google/gmail";
 import { REVIEW_REQUEST_EMAIL_TEMPLATE } from "../notifications/message";
 import { isMessageEnabled } from "../notifications/message-catalog";
 import { sendPushToAdmins } from "../push/push.service";
@@ -188,14 +193,17 @@ export async function handlePhotoStep(
   const now = new Date().toISOString();
   if (evidenceType === "Arrival" && !job.actualStart) {
     job.actualStart = now;
+    if (!job.pickupArrivalAt) job.pickupArrivalAt = now;
     await verifyArrivalAtPhotoUpload(job, driver, now).catch(err =>
       log.warn("verifyArrivalAtPhotoUpload failed (non-fatal)", { job_id: job.jobId, error: String(err) })
     );
   }
+  if (evidenceType === "VanLoaded" && !job.vanLoadedAt) job.vanLoadedAt = now;
   if (evidenceType === "EmptyVan" && !job.actualFinish) job.actualFinish = now;
 
   const saved = await saveJob(job, driver, `PHOTO_${evidenceType.toUpperCase()}_RECEIVED`, from, `${photos.length} file(s)`);
   if (evidenceType === "VanLoaded") notifyOpsVanLoaded(saved, driver, from);
+  if (evidenceType === "EmptyVan") notifyOpsVanUnloaded(saved, driver, from);
   return saved;
 }
 
@@ -249,7 +257,7 @@ function notifyOpsVanLoaded(
   from: string
 ): void {
   const actor = driver.email || driver.chatUserName || job.driverInitials;
-  sendOpsVanLoadedEmail(job, driver)
+  Promise.resolve(sendOpsVanLoadedEmail(job, driver))
     .then(() => appendActivity({
       jobId: job.jobId,
       driver: actor,
@@ -266,6 +274,56 @@ function notifyOpsVanLoaded(
       toState: job.currentState,
       detail: error instanceof Error ? error.message : String(error)
     }).catch(err => log.warn("van-loaded ops email audit failed", { job_id: job.jobId, error: String(err) })));
+}
+
+function notifyOpsVanUnloaded(
+  job: Job,
+  driver: Pick<DriverProfile, "email" | "chatUserName" | "fullName" | "initials" | "vanRegistration">,
+  from: string
+): void {
+  const actor = driver.email || driver.chatUserName || job.driverInitials;
+  Promise.resolve(sendOpsVanUnloadedEmail(job, driver))
+    .then(() => appendActivity({
+      jobId: job.jobId,
+      driver: actor,
+      action: "OPS_VAN_UNLOADED_EMAIL_SENT",
+      fromState: from,
+      toState: job.currentState,
+      detail: "info@themanvan.co.uk"
+    }))
+    .catch(error => appendActivity({
+      jobId: job.jobId,
+      driver: actor,
+      action: "OPS_VAN_UNLOADED_EMAIL_FAILED",
+      fromState: from,
+      toState: job.currentState,
+      detail: error instanceof Error ? error.message : String(error)
+    }).catch(err => log.warn("van-unloaded ops email audit failed", { job_id: job.jobId, error: String(err) })));
+}
+
+function notifyOpsCustomerSigned(
+  job: Job,
+  driver: Pick<DriverProfile, "email" | "chatUserName" | "fullName" | "initials" | "vanRegistration">,
+  from: string
+): void {
+  const actor = driver.email || driver.chatUserName || job.driverInitials;
+  Promise.resolve(sendOpsCustomerSignedEmail(job, driver))
+    .then(() => appendActivity({
+      jobId: job.jobId,
+      driver: actor,
+      action: "OPS_CUSTOMER_SIGNED_EMAIL_SENT",
+      fromState: from,
+      toState: job.currentState,
+      detail: "info@themanvan.co.uk"
+    }))
+    .catch(error => appendActivity({
+      jobId: job.jobId,
+      driver: actor,
+      action: "OPS_CUSTOMER_SIGNED_EMAIL_FAILED",
+      fromState: from,
+      toState: job.currentState,
+      detail: error instanceof Error ? error.message : String(error)
+    }).catch(err => log.warn("customer-signed ops email audit failed", { job_id: job.jobId, error: String(err) })));
 }
 
 async function sendReviewRequestIfAny(job: Job, jobId: string, actor: string, from: string): Promise<boolean> {
@@ -599,7 +657,9 @@ export async function submitDrawnSignature(
   job.clientSignatureAt = new Date().toISOString();
   job.currentState = WorkflowState.WAITING_EXTRA_CHARGES;
 
-  return saveJob(job, driver, "SUBMIT_CLIENT_CONFIRMATION", from, name);
+  const saved = await saveJob(job, driver, "SUBMIT_CLIENT_CONFIRMATION", from, name);
+  notifyOpsCustomerSigned(saved, driver, from);
+  return saved;
 }
 
 /**

@@ -21,7 +21,7 @@ const pickup = { lat: 51.501, lng: -0.1416 };
 describe("assessPickupPosition", () => {
   it("accepts a fresh tracker report near the pickup", () => {
     expect(assessPickupPosition({ lat: 51.5012, lng: -0.1416, dtTracker: "2026-10-01 09:59:30" }, pickup, now))
-      .toEqual({ state: "inside", reportedAt: "2026-10-01T09:59:30.000Z" });
+      .toEqual({ state: "inside", distanceMeters: 22, reportedAt: "2026-10-01T09:59:30.000Z" });
   });
 
   it("rejects a stale position even when it is at the pickup", () => {

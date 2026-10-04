@@ -119,8 +119,8 @@ function calculateArrivalProofTiming(
 ): Pick<NormalizedJob, "pickupArrivalAt" | "vanLoadedAt" | "trackerArrivalAt" | "trackerLastSeenAt" | "trackerStatus" | "trackerDistanceMeters" | "trackerLocationName" | "trackerUnverifiedReason" | "arrivalProofDelayMinutes" | "arrivalProofLate" | "arrivalProofOverdue"> {
   const arrivalItem = items.find(item => item.category === "Arrival" && item.state === "COMPLETED");
   const vanLoadedItem = items.find(item => item.category === "VanLoaded" && item.state === "COMPLETED");
-  const pickupArrivalAt = evidenceTimestamp(arrivalItem) || (job.actualStart ? toUtcIso(job.actualStart) : undefined);
-  const vanLoadedAt = evidenceTimestamp(vanLoadedItem);
+  const pickupArrivalAt = evidenceTimestamp(arrivalItem) || (job.pickupArrivalAt ? toUtcIso(job.pickupArrivalAt) : undefined) || (job.actualStart ? toUtcIso(job.actualStart) : undefined);
+  const vanLoadedAt = evidenceTimestamp(vanLoadedItem) || (job.vanLoadedAt ? toUtcIso(job.vanLoadedAt) : undefined);
   const trackerArrivalAt = job.trackerArrivalAt ? toUtcIso(job.trackerArrivalAt) : undefined;
   const trackerLastSeenAt = job.trackerLastSeenAt ? toUtcIso(job.trackerLastSeenAt) : undefined;
   const trackerAgeMs = trackerLastSeenAt ? new Date(fetchedAt).getTime() - new Date(trackerLastSeenAt).getTime() : NaN;

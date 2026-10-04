@@ -49,7 +49,6 @@ const NAV_CONFIG: NavSectionItem[] = [
   { id: "livefleet", label: "Live Fleet", icon: Navigation, isLive: true, desc: "Real-time GPS vehicle positions and driver telemetry" },
   { id: "alerts", label: "Alerts", icon: ShieldAlert, desc: "GPSLive's fleet alert feed, including congestion zone crossings" },
   { id: "jobs", label: "Jobs", icon: Truck, desc: "Operational moves joined across Jobs, Drivers, Workflow and Evidence" },
-  { id: "finished", label: "Finished Jobs", icon: CheckSquare, desc: "Completed moves audit with verified evidence and sign-off records" },
   { id: "van", label: "Van", icon: Truck, desc: "Driver mileage, fuel and service records" },
   { id: "notifications", label: "Notifications & Push", icon: Bell, desc: "Automated communication audit across Email, SMS and Web Push channels" },
   { type: "header", label: "Scenarios" },

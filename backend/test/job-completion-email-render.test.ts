@@ -1,9 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
+  opsCustomerSignedSubject,
   opsJobCompletionSubject,
   opsVanLoadedSubject,
+  opsVanUnloadedSubject,
+  renderOpsCustomerSignedEmail,
   renderOpsJobCompletionEmail,
-  renderOpsVanLoadedEmail
+  renderOpsVanLoadedEmail,
+  renderOpsVanUnloadedEmail
 } from "../src/google/gmail";
 import { JobStatus, type Job } from "../src/jobs/job.types";
 import { WorkflowState } from "../src/workflow/workflow.states";
@@ -31,8 +35,12 @@ function job(): Job {
     paidOnline: false,
     bookedStart: "2026-09-22T08:00:00.000Z",
     bookedFinish: "2026-09-22T10:00:00.000Z",
+    onMyWayAt: "2026-09-22T07:45:00.000Z",
+    pickupArrivalAt: "2026-09-22T08:10:00.000Z",
     actualStart: "2026-09-22T08:10:00.000Z",
+    vanLoadedAt: "2026-09-22T09:15:00.000Z",
     actualFinish: "2026-09-22T10:20:00.000Z",
+    clientSignatureAt: "2026-09-22T10:25:00.000Z",
     bookedMinutes: 120,
     actualMinutes: 130,
     differenceMinutes: 10,
@@ -60,7 +68,7 @@ function job(): Job {
 }
 
 describe("renderOpsJobCompletionEmail", () => {
-  it("includes the summary, submitted details, and dashboard View More link", () => {
+  it("includes the summary, submitted details, timings, and dashboard View More link", () => {
     const email = renderOpsJobCompletionEmail(
       job(),
       { initials: "HA", fullName: "Haris Ali", email: "driver@example.com", vanRegistration: "AB12 CDE" },
@@ -72,8 +80,16 @@ describe("renderOpsJobCompletionEmail", () => {
     expect(email.text).toContain("Haris Ali completed the job of Mary Major");
     expect(email.html).toContain("Haris Ali completed the job of Mary Major");
     expect(email.text).toContain("Pickup: 10 Alpha Road");
+    expect(email.text).toContain("Booked: 09:00 - 11:00");
+    expect(email.text).toContain("On my way: 08:45");
+    expect(email.text).toContain("Proof of arrival photo: 09:10");
+    expect(email.text).toContain("Van loaded photo: 10:15");
+    expect(email.text).toContain("Empty van photo: 11:20");
+    expect(email.text).toContain("Customer signature time: 11:25");
     expect(email.text).toContain("Client confirmed by: Mary Major");
     expect(email.text).toContain("Arrival photos: 1");
+    expect(email.text).not.toContain("Stop-by");
+    expect(email.html).not.toContain("Stop-by");
     expect(email.text).toContain("View more: https://dashboard.themanvan.co.uk/?section=finished&job=TMV-456");
     expect(email.html).toContain("View More");
     expect(email.html).toContain("https://dashboard.themanvan.co.uk/?section=finished&amp;job=TMV-456");
@@ -81,7 +97,7 @@ describe("renderOpsJobCompletionEmail", () => {
 });
 
 describe("renderOpsVanLoadedEmail", () => {
-  it("includes the driver, customer, and in-progress job View More link", () => {
+  it("includes the driver, customer, timings breakdown, and in-progress job View More link", () => {
     const email = renderOpsVanLoadedEmail(
       job(),
       { initials: "HA", fullName: "Haris Ali", email: "driver@example.com", vanRegistration: "AB12 CDE" }
@@ -89,8 +105,54 @@ describe("renderOpsVanLoadedEmail", () => {
 
     expect(opsVanLoadedSubject(job())).toBe("Van loaded - Mary Major");
     expect(email.text).toContain("Haris Ali has loaded the van for Mary Major job.");
+    expect(email.text).toContain("Pickup: 10 Alpha Road");
+    expect(email.text).toContain("Booked: 09:00 - 11:00");
+    expect(email.text).toContain("On my way: 08:45");
+    expect(email.text).toContain("Proof of arrival photo: 09:10");
+    expect(email.text).toContain("Van loaded photo: 10:15");
     expect(email.text).toContain("View more: https://dashboard.themanvan.co.uk/?section=jobs&job=TMV-456");
     expect(email.html).toContain("Haris Ali has loaded the van for Mary Major job.");
+    expect(email.text).not.toContain("Stop-by");
+    expect(email.html).not.toContain("Stop-by");
+    expect(email.html).toContain("View More");
+    expect(email.html).toContain("https://dashboard.themanvan.co.uk/?section=jobs&amp;job=TMV-456");
+  });
+});
+
+describe("renderOpsVanUnloadedEmail", () => {
+  it("includes the driver, customer, timings breakdown, and in-progress job View More link", () => {
+    const email = renderOpsVanUnloadedEmail(
+      job(),
+      { initials: "HA", fullName: "Haris Ali", email: "driver@example.com", vanRegistration: "AB12 CDE" }
+    );
+
+    expect(opsVanUnloadedSubject(job())).toBe("Van unloaded - Mary Major");
+    expect(email.text).toContain("Haris Ali has unloaded the van for Mary Major job.");
+    expect(email.text).toContain("Pickup: 10 Alpha Road");
+    expect(email.text).toContain("Booked: 09:00 - 11:00");
+    expect(email.text).toContain("Empty van photo: 11:20");
+    expect(email.text).toContain("View more: https://dashboard.themanvan.co.uk/?section=jobs&job=TMV-456");
+    expect(email.html).toContain("Haris Ali has unloaded the van for Mary Major job.");
+    expect(email.html).toContain("View More");
+    expect(email.html).toContain("https://dashboard.themanvan.co.uk/?section=jobs&amp;job=TMV-456");
+  });
+});
+
+describe("renderOpsCustomerSignedEmail", () => {
+  it("includes the driver, customer, customer signature time, and in-progress job View More link", () => {
+    const email = renderOpsCustomerSignedEmail(
+      job(),
+      { initials: "HA", fullName: "Haris Ali", email: "driver@example.com", vanRegistration: "AB12 CDE" }
+    );
+
+    expect(opsCustomerSignedSubject(job())).toBe("Customer signed - Mary Major");
+    expect(email.text).toContain("Haris Ali captured customer signature for Mary Major job.");
+    expect(email.text).toContain("Pickup: 10 Alpha Road");
+    expect(email.text).toContain("Booked: 09:00 - 11:00");
+    expect(email.text).toContain("Customer signature time: 11:25");
+    expect(email.text).toContain("Client confirmed by: Mary Major");
+    expect(email.text).toContain("View more: https://dashboard.themanvan.co.uk/?section=jobs&job=TMV-456");
+    expect(email.html).toContain("Haris Ali captured customer signature for Mary Major job.");
     expect(email.html).toContain("View More");
     expect(email.html).toContain("https://dashboard.themanvan.co.uk/?section=jobs&amp;job=TMV-456");
   });

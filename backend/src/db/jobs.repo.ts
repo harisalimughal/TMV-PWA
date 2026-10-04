@@ -79,6 +79,7 @@ export interface JobsPageFilter {
   to?: string;
   status?: string;
   driverInitials?: string;
+  allowedDriverInitials?: string[];
   /** Free-text search across the usual job fields, already escaped for regex use by
    *  the caller isn't required -- this function escapes it. */
   q?: string;
@@ -105,9 +106,32 @@ export interface JobsPageFilter {
 export async function listJobsPage(filter: JobsPageFilter): Promise<{ items: Job[]; total: number }> {
   const col = await jobsCollection();
 
-  const match: Record<string, any> = {};
-  if (filter.status) match.status = filter.status;
-  if (filter.driverInitials) match.driverInitials = filter.driverInitials;
+  const andClauses: Record<string, any>[] = [];
+
+  if (filter.status) andClauses.push({ status: filter.status });
+
+  if (filter.driverInitials) {
+    if (filter.allowedDriverInitials && !filter.allowedDriverInitials.map(a => a.toUpperCase()).includes(filter.driverInitials.toUpperCase())) {
+      andClauses.push({ driverInitials: "__NONE__" });
+    } else {
+      andClauses.push({ driverInitials: filter.driverInitials });
+    }
+  } else if (filter.allowedDriverInitials && filter.allowedDriverInitials.length > 0) {
+    const allowed = filter.allowedDriverInitials;
+    const allowedBothCases = Array.from(new Set([
+      ...allowed.map(a => a.toUpperCase()),
+      ...allowed.map(a => a.toLowerCase())
+    ]));
+    andClauses.push({
+      $or: [
+        { driverInitials: { $in: allowedBothCases } },
+        { driverInitials: "" },
+        { driverInitials: null },
+        { driverInitials: "UNASSIGNED" },
+        { driverInitials: { $exists: false } }
+      ]
+    });
+  }
 
   const pipeline: any[] = [];
   if (filter.from || filter.to) {
@@ -118,7 +142,7 @@ export async function listJobsPage(filter: JobsPageFilter): Promise<{ items: Job
     const range: Record<string, string> = {};
     if (filter.from) range.$gte = filter.from;
     if (filter.to) range.$lte = filter.to;
-    match.__effectiveStart = range;
+    andClauses.push({ __effectiveStart: range });
   }
 
   if (filter.q?.trim()) {
@@ -128,8 +152,10 @@ export async function listJobsPage(filter: JobsPageFilter): Promise<{ items: Job
       { customerEmail: regex }, { pickup: regex }, { dropoff: regex }, { driverInitials: regex }
     ];
     if (filter.qMatchedInitials?.length) orClauses.push({ driverInitials: { $in: filter.qMatchedInitials } });
-    match.$or = orClauses;
+    andClauses.push({ $or: orClauses });
   }
+
+  const match: Record<string, any> = andClauses.length === 1 ? andClauses[0] : andClauses.length > 1 ? { $and: andClauses } : {};
 
   pipeline.push({ $match: match });
 

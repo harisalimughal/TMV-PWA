@@ -535,7 +535,9 @@ export function dashboardJobsRoutes(): Router {
         ({ jobs: allJobs } = await getDashboardDataset());
       }
 
-      const jobs = applyFilters(allJobs, req.query);
+      const drivers = await listDriverProfiles();
+      const registeredInitials = new Set(drivers.map(d => d.initials.trim().toUpperCase()).filter(Boolean));
+      const jobs = applyFilters(allJobs, req.query, registeredInitials);
 
       const headers = [
         "Job ID", "Calendar Event ID", "Driver", "Customer", "Phone", "Pickup", "Dropoff",
@@ -628,11 +630,14 @@ export function dashboardJobsRoutes(): Router {
     // dead code, not imported anywhere), so this only affects one-off report generation,
     // not interactive Jobs Archive browsing.
     const usesLegacyFilters = [payMethod, payStatus, evidence].some(v => typeof v === "string" && v && v !== "ALL");
+    const drivers = await listDriverProfiles();
+    const registeredInitialsList = drivers.map(d => d.initials.trim().toUpperCase()).filter(Boolean);
+    const registeredInitialsSet = new Set(registeredInitialsList);
 
     if (usesLegacyFilters) {
       try {
         const { dataset, jobs: allJobs } = await getDashboardDataset();
-        const filtered = applyFilters(allJobs, req.query);
+        const filtered = applyFilters(allJobs, req.query, registeredInitialsSet);
         const sort = typeof req.query.sort === "string" ? req.query.sort : "bookedStart";
         const dir = req.query.dir === "desc" ? "desc" : "asc";
         const jobs = [...filtered].sort((a, b) => {
@@ -684,12 +689,11 @@ export function dashboardJobsRoutes(): Router {
       let qMatchedInitials: string[] | undefined;
       if (q?.trim()) {
         const term = q.trim().toLowerCase();
-        const drivers = await listDriverProfiles();
         qMatchedInitials = drivers.filter(d => d.fullName?.toLowerCase().includes(term)).map(d => d.initials).filter(Boolean);
       }
 
       const { items: pageJobs, total } = await listJobsPage({
-        from, to, status, driverInitials, q, qMatchedInitials, sort, dir, page, pageSize
+        from, to, status, driverInitials, allowedDriverInitials: registeredInitialsList, q, qMatchedInitials, sort, dir, page, pageSize
       });
 
       const jobIds = pageJobs.map(j => j.jobId);
@@ -766,9 +770,17 @@ async function mirrorNewJob(calendarEventId: string, fields: NewJobFields): Prom
   return job;
 }
 
-function applyFilters(jobs: NormalizedJob[], query: Record<string, any>): NormalizedJob[] {
+function applyFilters(jobs: NormalizedJob[], query: Record<string, any>, allowedDriverInitials?: Set<string>): NormalizedJob[] {
   let list = jobs;
   const { from, to, q, status, driver, payMethod, payStatus, evidence } = query;
+
+  if (allowedDriverInitials && allowedDriverInitials.size > 0) {
+    list = list.filter(j => {
+      const init = (j.driverInitials || "").trim().toUpperCase();
+      if (!init || init === "UNASSIGNED") return true;
+      return allowedDriverInitials.has(init);
+    });
+  }
 
   if (typeof from === "string" && from) list = list.filter(j => (j.actualStart || j.bookedStart) >= from);
   if (typeof to === "string" && to) list = list.filter(j => (j.actualStart || j.bookedStart) <= to);

@@ -10,7 +10,9 @@ import {
   ArrowRight,
   Trash2,
   List,
-  LayoutGrid
+  LayoutGrid,
+  Search,
+  RefreshCw
 } from "lucide-react";
 import { SubmissionDetailDrawer } from "../components/SubmissionDetailDrawer";
 import { FolderActionDropdown } from "../components/FolderActionDropdown";
@@ -49,13 +51,79 @@ function extraChargeBreakdownSummary(job: NormalizedJob): string {
   return rows.join(" · ");
 }
 
-export function FinishedJobsPage() {
-  const [viewMode, setViewMode] = useState<"table" | "cards">("cards");
+export interface FinishedJobsPageProps {
+  from?: string;
+  to?: string;
+  onDateRangeChange?: (from?: string, to?: string) => void;
+  driverFilter?: string;
+  onDriverFilterChange?: (driver: string) => void;
+  statusFilter?: string;
+  onStatusFilterChange?: (status: string) => void;
+  searchQuery?: string;
+  onSearchQueryChange?: (search: string) => void;
+  viewMode?: "table" | "cards";
+  onViewModeChange?: (mode: "table" | "cards") => void;
+}
+
+export function FinishedJobsPage({
+  from: propFrom,
+  to: propTo,
+  onDateRangeChange,
+  driverFilter: propDriverFilter,
+  onDriverFilterChange,
+  statusFilter,
+  onStatusFilterChange,
+  searchQuery: propSearchQuery,
+  onSearchQueryChange,
+  viewMode: propViewMode,
+  onViewModeChange
+}: FinishedJobsPageProps = {}) {
+  const [internalViewMode, setInternalViewMode] = useState<"table" | "cards">("cards");
+  const viewMode = propViewMode !== undefined ? propViewMode : internalViewMode;
+  const setViewMode = (mode: "table" | "cards") => {
+    if (onViewModeChange) onViewModeChange(mode);
+    else setInternalViewMode(mode);
+  };
+
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
-  const [from, setFrom] = useState<string | undefined>(() => defaultDashboardDateRange().from);
-  const [to, setTo] = useState<string | undefined>(() => defaultDashboardDateRange().to);
-  const [driverFilter, setDriverFilter] = useState<string>("");
+  const [internalFrom, setInternalFrom] = useState<string | undefined>(() => defaultDashboardDateRange().from);
+  const [internalTo, setInternalTo] = useState<string | undefined>(() => defaultDashboardDateRange().to);
+  const [internalDriverFilter, setInternalDriverFilter] = useState<string>("");
+
+  const from = propFrom !== undefined ? propFrom : internalFrom;
+  const to = propTo !== undefined ? propTo : internalTo;
+  const driverFilter = propDriverFilter !== undefined ? propDriverFilter : internalDriverFilter;
+
+  const [internalSearchQuery, setInternalSearchQuery] = useState("");
+  const searchQuery = propSearchQuery !== undefined ? propSearchQuery : internalSearchQuery;
+  const [debouncedSearch, setDebouncedSearch] = useState(searchQuery);
+
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(searchQuery), 300);
+    return () => clearTimeout(t);
+  }, [searchQuery]);
+
+  const handleSearchChange = (val: string) => {
+    setPage(1);
+    if (onSearchQueryChange) onSearchQueryChange(val);
+    else setInternalSearchQuery(val);
+  };
+
+  const handleDateChange = (f?: string, t?: string) => {
+    setPage(1);
+    if (onDateRangeChange) onDateRangeChange(f, t);
+    else {
+      setInternalFrom(f);
+      setInternalTo(t);
+    }
+  };
+
+  const handleDriverChange = (driver: string) => {
+    setPage(1);
+    if (onDriverFilterChange) onDriverFilterChange(driver);
+    else setInternalDriverFilter(driver);
+  };
   const [expandedJobId, setExpandedJobId] = useState<string | null>(null);
   const [previewJob, setPreviewJob] = useState<NormalizedJob | null>(null);
   const [selectedRows, setSelectedRows] = useState<Set<string>>(new Set());
@@ -66,9 +134,9 @@ export function FinishedJobsPage() {
   const [autoDownloadJobId, setAutoDownloadJobId] = useState<string | null>(null);
   const openedDeepLinkJobRef = useRef<string | null>(null);
 
-  const { data, isLoading, error, refetch } = useQuery({
-    queryKey: ["jobs", "COMPLETED", page, pageSize, from, to, driverFilter],
-    queryFn: () => fetchJobs({ status: "COMPLETED", page, pageSize, from, to, driver: driverFilter || undefined })
+  const { data, isLoading, isFetching, error, refetch } = useQuery({
+    queryKey: ["jobs", "COMPLETED", page, pageSize, from, to, driverFilter, debouncedSearch],
+    queryFn: () => fetchJobs({ status: "COMPLETED", page, pageSize, from, to, driver: driverFilter || undefined, search: debouncedSearch || undefined })
   });
 
   // Same roster the Drivers tab shows (DriversPage.tsx's own `roster` filter) -- every
@@ -145,51 +213,98 @@ export function FinishedJobsPage() {
             </div>
           </div>
         </div>
-      )}
+      )}
+
+      {/* CONSOLIDATED TOOLBAR CARD -- identical layout to JobsPage */}
+      <div className="p-2 bg-white rounded-module shadow-sm border border-transparent flex flex-col gap-3">
+        <div className="flex flex-wrap items-center gap-3">
+          <DateRangePicker from={from} to={to} onChange={handleDateChange} />
 
-      {/* PAGE HEADER -- the title itself now lives in Layout.tsx's top header bar, so
-          this row is just the toolbar controls that used to sit to its right. */}
-      <div className="flex flex-wrap items-center gap-y-3 gap-x-3 px-2">
-        <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
-          <div className="hidden md:flex items-center p-1 bg-admin-surface rounded-card border border-admin-line/50 shrink-0">
+          <span className="shrink-0 text-label font-medium text-fg-muted px-2 whitespace-nowrap sm:min-w-[120px] sm:text-right ml-auto">
+            {isLoading || isFetching ? "Updating..." : `${data?.pagination?.total ?? items.length} moves`}
+          </span>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="flex items-center p-1 bg-admin-surface rounded-card border border-admin-line/50 shrink-0">
             <button
               onClick={() => setViewMode("table")}
-              title="Table view"
               className={`p-1.5 rounded-control transition ${viewMode === "table" ? "bg-white shadow-sm text-admin-ink" : "text-admin-muted hover:text-admin-ink"}`}
             >
               <List className="w-4 h-4" />
             </button>
             <button
               onClick={() => setViewMode("cards")}
-              title="Card view"
               className={`p-1.5 rounded-control transition ${viewMode === "cards" ? "bg-white shadow-sm text-admin-ink" : "text-admin-muted hover:text-admin-ink"}`}
             >
               <LayoutGrid className="w-4 h-4" />
             </button>
           </div>
+
           <select
             value={driverFilter}
-            onChange={e => { setDriverFilter(e.target.value); setPage(1); }}
+            onChange={e => handleDriverChange(e.target.value)}
             disabled={driverOptionsLoading}
-            className="shrink-0 h-10 px-3 rounded-control border border-line-strong bg-surface text-fg text-button shadow-sm outline-none focus:border-admin-brand"
+            className="shrink-0 h-10 px-3 rounded-card border border-admin-line/50 bg-admin-surface text-[13px] font-medium text-admin-ink outline-none focus:border-admin-brand"
           >
             <option value="">{driverOptionsLoading ? "Loading drivers..." : "All drivers"}</option>
             {!driverOptionsLoading && driverOptions.map(d => (
               <option key={d.initials} value={d.initials}>{d.fullName || d.initials}</option>
             ))}
           </select>
-          <DateRangePicker from={from} to={to} onChange={(f, t) => { setFrom(f); setTo(t); setPage(1); }} />
-          <div className="hidden sm:block w-px h-6 bg-admin-line mx-2 shrink-0" />
-          <ExportMenu
-            onExportCsv={() => {
+
+          <div className="relative w-full sm:w-64 order-last sm:order-none">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-admin-muted" />
+            <input
+              type="text"
+              placeholder="Search ID, customer, route..."
+              value={searchQuery}
+              onChange={e => handleSearchChange(e.target.value)}
+              className="w-full pl-9 pr-4 h-10 rounded-card bg-admin-surface border border-admin-line/50 text-[13px] text-admin-ink focus:border-admin-brand focus:ring-1 focus:ring-admin-brand outline-none transition"
+            />
+          </div>
+
+          <div className="flex items-center bg-admin-surface p-1 rounded-card border border-admin-line/50 shrink-0">
+            {["All", "In Progress", "Finished"].map(status => (
+              <button
+                key={status}
+                onClick={() => onStatusFilterChange ? onStatusFilterChange(status) : undefined}
+                className={`shrink-0 whitespace-nowrap px-3 py-1.5 rounded-control text-[13px] font-medium transition ${
+                  (statusFilter || "Finished") === status
+                    ? "bg-white text-admin-ink shadow-sm"
+                    : "text-admin-muted hover:text-admin-ink"
+                }`}
+              >
+                {status}
+              </button>
+            ))}
+          </div>
+
+          <div className="hidden sm:block w-px h-6 bg-admin-line mx-1 shrink-0" />
+
+          <button
+            onClick={() => refetch()}
+            disabled={isLoading || isFetching}
+            className="p-2 rounded-card bg-admin-surface hover:bg-admin-line/40 text-admin-muted hover:text-admin-ink transition border border-admin-line/50"
+            title="Refresh"
+          >
+            <RefreshCw className={`w-4 h-4 ${(isLoading || isFetching) ? "animate-spin text-admin-brand" : ""}`} />
+          </button>
+
+          <button
+            onClick={() => {
               const params = new URLSearchParams({ status: "COMPLETED" });
               if (driverFilter) params.set("driver", driverFilter);
               if (from) params.set("from", from);
               if (to) params.set("to", to);
+              if (debouncedSearch) params.set("search", debouncedSearch);
               window.location.href = `/api/admin/jobs/export.csv?${params.toString()}`;
             }}
-            onPrintPdf={() => window.print()}
-          />
+            className="p-2 rounded-card bg-admin-surface hover:bg-admin-line/40 text-admin-muted hover:text-admin-ink transition border border-admin-line/50"
+            title="Export CSV"
+          >
+            <Download className="w-4 h-4" />
+          </button>
         </div>
       </div>
 

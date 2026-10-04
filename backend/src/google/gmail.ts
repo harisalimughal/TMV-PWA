@@ -1,3 +1,4 @@
+import { DateTime } from "luxon";
 import { google, gmail_v1 } from "googleapis";
 import { createGoogleAuth, env, SCOPES } from "../config/env";
 import { DriverProfile, Job } from "../jobs/job.types";
@@ -46,7 +47,7 @@ function pounds(value: number | undefined): string {
   return `£${amount.toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
-function dashboardJobUrl(jobId: string, section = "finished"): string {
+function dashboardJobUrl(jobId: string, section = "jobs"): string {
   const dashboardBase =
     process.env.TMV_DASHBOARD_URL?.trim().replace(/\/+$/, "") ||
     "https://dashboard.themanvan.co.uk";
@@ -64,6 +65,91 @@ function evidenceLine(evidence?: EvidenceProgress): string {
   ].join("\n");
 }
 
+function formatLondonTimeOnly(iso?: string): string {
+  if (!iso) return "Not recorded";
+  const dt = DateTime.fromISO(iso, { zone: env.timezone || "Europe/London" });
+  if (!dt.isValid) {
+    const jsDate = new Date(iso);
+    if (!isNaN(jsDate.getTime())) {
+      const dt2 = DateTime.fromJSDate(jsDate, { zone: env.timezone || "Europe/London" });
+      if (dt2.isValid) return dt2.toFormat("HH:mm");
+    }
+    return iso;
+  }
+  return dt.toFormat("HH:mm");
+}
+
+function formatBookedTime(bookedStart?: string, bookedFinish?: string): string {
+  if (!bookedStart && !bookedFinish) return "Not recorded";
+  const start = bookedStart ? formatLondonTimeOnly(bookedStart) : "Not recorded";
+  const finish = bookedFinish ? formatLondonTimeOnly(bookedFinish) : "Not recorded";
+  return `${start} - ${finish}`;
+}
+
+function formatTrackerArrival(job: Job): string {
+  if (job.trackerArrivalAt) {
+    return formatLondonTimeOnly(job.trackerArrivalAt);
+  }
+  let reason = job.trackerUnverifiedReason;
+  if (reason && reason.includes(" away") && !reason.includes(" away from pickup point")) {
+    reason = reason.replace(/ away(\b)/, " away from pickup point$1");
+  }
+  return reason ? `Unverified (${reason})` : "Unverified";
+}
+
+interface TimingsBreakdown {
+  booked: string;
+  onMyWay: string;
+  trackerArrival: string;
+  pickupArrival: string;
+  vanLoaded: string;
+  emptyVan: string;
+  customerSignature: string;
+}
+
+function getTimingsBreakdown(job: Job): TimingsBreakdown {
+  return {
+    booked: formatBookedTime(job.bookedStart, job.bookedFinish),
+    onMyWay: formatLondonTimeOnly(job.onMyWayAt),
+    trackerArrival: formatTrackerArrival(job),
+    pickupArrival: formatLondonTimeOnly(job.pickupArrivalAt || job.actualStart),
+    vanLoaded: formatLondonTimeOnly(job.vanLoadedAt),
+    emptyVan: formatLondonTimeOnly(job.actualFinish),
+    customerSignature: formatLondonTimeOnly(job.clientSignatureAt)
+  };
+}
+
+function renderTimingsTextLines(timings: TimingsBreakdown): string[] {
+  return [
+    `Booked: ${timings.booked}`,
+    `On my way: ${timings.onMyWay}`,
+    `Tracker arrival: ${timings.trackerArrival}`,
+    `Proof of arrival photo: ${timings.pickupArrival}`,
+    `Van loaded photo: ${timings.vanLoaded}`,
+    `Empty van photo: ${timings.emptyVan}`,
+    `Customer signature time: ${timings.customerSignature}`
+  ];
+}
+
+const row = (label: string, value: string) =>
+  `<tr><td style="padding:6px 12px;color:#667085;font-size:13px;">${escapeHtml(label)}</td>` +
+  `<td style="padding:6px 12px;color:#101828;font-size:13px;font-weight:600;">${escapeHtml(value || "Not recorded")}</td></tr>`;
+
+const sectionHeaderRow = (title: string) =>
+  `<tr><td colspan="2" style="padding:12px 12px 6px;color:#475467;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;border-top:1px solid #eaecf0;">${escapeHtml(title)}</td></tr>`;
+
+function renderTimingsHtmlRows(timings: TimingsBreakdown): string {
+  return (
+    row("Booked", timings.booked) +
+    row("On my way", timings.onMyWay) +
+    row("Tracker arrival", timings.trackerArrival) +
+    row("Proof of arrival photo", timings.pickupArrival) +
+    row("Van loaded photo", timings.vanLoaded) +
+    row("Empty van photo", timings.emptyVan) +
+    row("Customer signature time", timings.customerSignature)
+  );
+}
+
 export function opsJobCompletionSubject(
   job: Pick<Job, "customerName">,
   driver: Pick<DriverProfile, "fullName" | "initials" | "email">
@@ -77,10 +163,11 @@ export function renderOpsJobCompletionEmail(
   driver: Pick<DriverProfile, "fullName" | "initials" | "email" | "vanRegistration">,
   evidence?: EvidenceProgress
 ): EmailContent {
-  const viewUrl = dashboardJobUrl(job.jobId);
+  const viewUrl = dashboardJobUrl(job.jobId, "finished");
   const driverLabel = `${driver.fullName || "Unknown driver"} (${driver.initials || job.driverInitials || "—"})`;
   const total = job.amountCharged ?? job.totalCharges ?? job.calculatedTotalCharges ?? job.basePrice;
   const subjectText = opsJobCompletionSubject(job, driver);
+  const timings = getTimingsBreakdown(job);
   const lines = [
     subjectText,
     "",
@@ -89,10 +176,9 @@ export function renderOpsJobCompletionEmail(
     driver.vanRegistration ? `Van: ${driver.vanRegistration}` : "",
     `Pickup: ${job.pickup || "Not recorded"}`,
     `Drop-off: ${job.dropoff || "Not recorded"}`,
-    job.stopBy ? `Stop-by: ${job.stopBy}` : "",
     "",
-    `Booked: ${job.bookedStart || "Not recorded"} - ${job.bookedFinish || "Not recorded"}`,
-    `Actual: ${job.actualStart || "Not recorded"} - ${job.actualFinish || "Not recorded"}`,
+    "Timings:",
+    ...renderTimingsTextLines(timings),
     `Duration: ${job.actualMinutes || 0} minutes (${job.differenceMinutes || 0} min difference)`,
     `Delay status: ${job.delayStatus || "Not recorded"}`,
     "",
@@ -108,10 +194,6 @@ export function renderOpsJobCompletionEmail(
     `View more: ${viewUrl}`
   ].filter(Boolean);
 
-  const row = (label: string, value: string) =>
-    `<tr><td style="padding:6px 12px;color:#667085;font-size:13px;">${escapeHtml(label)}</td>` +
-    `<td style="padding:6px 12px;color:#101828;font-size:13px;font-weight:600;">${escapeHtml(value || "Not recorded")}</td></tr>`;
-
   const html =
     `<!doctype html><html><body style="margin:0;background:#f6f7f9;font-family:Arial,sans-serif;color:#101828;">` +
     `<div style="max-width:640px;margin:0 auto;padding:24px;">` +
@@ -121,14 +203,18 @@ export function renderOpsJobCompletionEmail(
     `<table style="width:100%;border-collapse:collapse;margin-bottom:18px;">` +
     row("Customer", job.customerName) +
     row("Driver", driverLabel) +
+    (driver.vanRegistration ? row("Van", driver.vanRegistration) : "") +
     row("Pickup", job.pickup) +
     row("Drop-off", job.dropoff) +
-    (job.stopBy ? row("Stop-by", job.stopBy) : "") +
-    row("Booked", `${job.bookedStart || "Not recorded"} - ${job.bookedFinish || "Not recorded"}`) +
-    row("Actual", `${job.actualStart || "Not recorded"} - ${job.actualFinish || "Not recorded"}`) +
+    sectionHeaderRow("Timings") +
+    renderTimingsHtmlRows(timings) +
+    row("Duration", `${job.actualMinutes || 0} minutes (${job.differenceMinutes || 0} min difference)`) +
     row("Delay", job.delayStatus || "Not recorded") +
+    sectionHeaderRow("Payment & Audit") +
     row("Payment", `${job.paymentMethod || "Not recorded"} / ${job.paymentStatus || "Not recorded"}`) +
     row("Amount charged", pounds(total)) +
+    row("Calculated total", pounds(job.calculatedTotalCharges ?? job.totalCharges)) +
+    (job.totalAdjustmentNote ? row("Adjustment note", job.totalAdjustmentNote) : "") +
     row("Client confirmed by", job.clientConfirmedBy || "Not recorded") +
     row("Evidence", evidenceLine(evidence).replace(/\n/g, " | ")) +
     `</table>` +
@@ -136,6 +222,63 @@ export function renderOpsJobCompletionEmail(
     `</div></div></body></html>`;
 
   return { text: lines.join("\n"), html };
+}
+
+function renderOpsStepEmail({
+  job,
+  driver,
+  stepBadge,
+  badgeColor = "#2563eb",
+  message,
+  section = "jobs"
+}: {
+  job: Job;
+  driver: Pick<DriverProfile, "fullName" | "initials" | "email" | "vanRegistration">;
+  stepBadge: string;
+  badgeColor?: string;
+  message: string;
+  section?: string;
+}): EmailContent {
+  const viewUrl = dashboardJobUrl(job.jobId, section);
+  const driverLabel = `${driver.fullName || "Unknown driver"} (${driver.initials || job.driverInitials || "—"})`;
+  const timings = getTimingsBreakdown(job);
+
+  const textLines = [
+    message,
+    "",
+    `Customer: ${job.customerName || "Not recorded"}`,
+    `Driver: ${driverLabel}`,
+    driver.vanRegistration ? `Van: ${driver.vanRegistration}` : "",
+    `Pickup: ${job.pickup || "Not recorded"}`,
+    `Drop-off: ${job.dropoff || "Not recorded"}`,
+    job.clientConfirmedBy ? `Client confirmed by: ${job.clientConfirmedBy}` : "",
+    "",
+    "Timings:",
+    ...renderTimingsTextLines(timings),
+    "",
+    `View more: ${viewUrl}`
+  ].filter(Boolean);
+
+  const html =
+    `<!doctype html><html><body style="margin:0;background:#f6f7f9;font-family:Arial,sans-serif;color:#101828;">` +
+    `<div style="max-width:640px;margin:0 auto;padding:24px;">` +
+    `<div style="background:#ffffff;border:1px solid #eaecf0;border-radius:12px;padding:22px;">` +
+    `<p style="margin:0 0 6px;color:${escapeHtml(badgeColor)};font-size:12px;font-weight:700;text-transform:uppercase;">${escapeHtml(stepBadge)}</p>` +
+    `<h1 style="margin:0 0 16px;font-size:20px;line-height:1.3;">${escapeHtml(message)}</h1>` +
+    `<table style="width:100%;border-collapse:collapse;margin-bottom:18px;">` +
+    row("Customer", job.customerName) +
+    row("Driver", driverLabel) +
+    (driver.vanRegistration ? row("Van", driver.vanRegistration) : "") +
+    row("Pickup", job.pickup) +
+    row("Drop-off", job.dropoff) +
+    (job.clientConfirmedBy ? row("Client confirmed by", job.clientConfirmedBy) : "") +
+    sectionHeaderRow("Timings") +
+    renderTimingsHtmlRows(timings) +
+    `</table>` +
+    `<a href="${escapeHtml(viewUrl)}" style="display:inline-block;background:#111827;color:#ffffff;text-decoration:none;border-radius:8px;padding:11px 16px;font-size:14px;font-weight:700;">View More</a>` +
+    `</div></div></body></html>`;
+
+  return { text: textLines.join("\n"), html };
 }
 
 export function opsVanLoadedSubject(job: Pick<Job, "customerName">): string {
@@ -146,20 +289,56 @@ export function renderOpsVanLoadedEmail(
   job: Job,
   driver: Pick<DriverProfile, "fullName" | "initials" | "email" | "vanRegistration">
 ): EmailContent {
-  const viewUrl = dashboardJobUrl(job.jobId, "jobs");
   const driverName = driver.fullName || driver.initials || driver.email || "Driver";
   const customerName = job.customerName || "Customer";
-  const message = `${driverName} has loaded the van for ${customerName} job.`;
-  const text = [message, "", `View more: ${viewUrl}`].join("\n");
-  const html =
-    `<!doctype html><html><body style="margin:0;background:#f6f7f9;font-family:Arial,sans-serif;color:#101828;">` +
-    `<div style="max-width:560px;margin:0 auto;padding:24px;">` +
-    `<div style="background:#ffffff;border:1px solid #eaecf0;border-radius:12px;padding:22px;">` +
-    `<p style="margin:0 0 6px;color:#2563eb;font-size:12px;font-weight:700;text-transform:uppercase;">Van loaded</p>` +
-    `<h1 style="margin:0 0 16px;font-size:20px;line-height:1.3;">${escapeHtml(message)}</h1>` +
-    `<a href="${escapeHtml(viewUrl)}" style="display:inline-block;background:#111827;color:#ffffff;text-decoration:none;border-radius:8px;padding:11px 16px;font-size:14px;font-weight:700;">View More</a>` +
-    `</div></div></body></html>`;
-  return { text, html };
+  return renderOpsStepEmail({
+    job,
+    driver,
+    stepBadge: "Van loaded",
+    badgeColor: "#2563eb",
+    message: `${driverName} has loaded the van for ${customerName} job.`,
+    section: "jobs"
+  });
+}
+
+export function opsVanUnloadedSubject(job: Pick<Job, "customerName">): string {
+  return `Van unloaded - ${job.customerName || "Customer"}`;
+}
+
+export function renderOpsVanUnloadedEmail(
+  job: Job,
+  driver: Pick<DriverProfile, "fullName" | "initials" | "email" | "vanRegistration">
+): EmailContent {
+  const driverName = driver.fullName || driver.initials || driver.email || "Driver";
+  const customerName = job.customerName || "Customer";
+  return renderOpsStepEmail({
+    job,
+    driver,
+    stepBadge: "Van unloaded",
+    badgeColor: "#0891b2",
+    message: `${driverName} has unloaded the van for ${customerName} job.`,
+    section: "jobs"
+  });
+}
+
+export function opsCustomerSignedSubject(job: Pick<Job, "customerName">): string {
+  return `Customer signed - ${job.customerName || "Customer"}`;
+}
+
+export function renderOpsCustomerSignedEmail(
+  job: Job,
+  driver: Pick<DriverProfile, "fullName" | "initials" | "email" | "vanRegistration">
+): EmailContent {
+  const driverName = driver.fullName || driver.initials || driver.email || "Driver";
+  const customerName = job.customerName || "Customer";
+  return renderOpsStepEmail({
+    job,
+    driver,
+    stepBadge: "Customer signed",
+    badgeColor: "#12B76A",
+    message: `${driverName} captured customer signature for ${customerName} job.`,
+    section: "jobs"
+  });
 }
 
 async function sendEmail(to: string, subject: string, content: EmailContent): Promise<void> {
@@ -252,6 +431,20 @@ export async function sendOpsVanLoadedEmail(
   driver: Pick<DriverProfile, "fullName" | "initials" | "email" | "vanRegistration">
 ): Promise<void> {
   await sendEmail("info@themanvan.co.uk", opsVanLoadedSubject(job), renderOpsVanLoadedEmail(job, driver));
+}
+
+export async function sendOpsVanUnloadedEmail(
+  job: Job,
+  driver: Pick<DriverProfile, "fullName" | "initials" | "email" | "vanRegistration">
+): Promise<void> {
+  await sendEmail("info@themanvan.co.uk", opsVanUnloadedSubject(job), renderOpsVanUnloadedEmail(job, driver));
+}
+
+export async function sendOpsCustomerSignedEmail(
+  job: Job,
+  driver: Pick<DriverProfile, "fullName" | "initials" | "email" | "vanRegistration">
+): Promise<void> {
+  await sendEmail("info@themanvan.co.uk", opsCustomerSignedSubject(job), renderOpsCustomerSignedEmail(job, driver));
 }
 
 /** Gated behind notifications/message-catalog.ts's DRIVER_JOB_ASSIGNMENT_EMAIL --

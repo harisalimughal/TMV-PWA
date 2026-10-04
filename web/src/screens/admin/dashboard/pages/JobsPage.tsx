@@ -1,6 +1,6 @@
-import React, { useState, useMemo, useEffect } from "react";
+import React, { useState, useMemo, useEffect, useRef } from "react";
 import { useQuery, keepPreviousData } from "@tanstack/react-query";
-import { fetchDrivers, fetchJobs, markJobFinishedManually, reassignJob } from "../api";
+import { fetchDrivers, fetchJobs, fetchJobDetail, markJobFinishedManually, reassignJob } from "../api";
 import { NormalizedJob } from "../types";
 import { JobDetailDrawer } from "../components/JobDetailDrawer";
 import { JobStatusBadge } from "../components/StatusBadge";
@@ -12,6 +12,7 @@ import { formatLondonDateTime } from "../utils/date";
 import { downloadCsv, stampForFilename, toCsv } from "../utils/csv";
 import { resolveDriver, formatVanReg } from "../utils/drivers";
 import { useDriverOptions } from "../hooks/useDriverOptions";
+import { FinishedJobsPage } from "./FinishedJobsPage";
 import {
   Search,
   Download,
@@ -30,7 +31,11 @@ import {
   CheckCircle2
 } from "lucide-react";
 
-export function JobsPage() {
+export interface JobsPageProps {
+  initialStatus?: string;
+}
+
+export function JobsPage({ initialStatus = "All" }: JobsPageProps = {}) {
   // The table is 12 columns wide and lives behind a horizontal scrollbar on anything
   // narrower than a desktop -- close to unusable there. Cards are the default view on
   // every screen size now; table is still available via the toggle for anyone who
@@ -47,7 +52,7 @@ export function JobsPage() {
   const [to, setTo] = useState<string | undefined>(() => defaultDashboardDateRange().to);
   const [searchQuery, setSearchQuery] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState("All"); // All, In Progress
+  const [statusFilter, setStatusFilter] = useState(initialStatus); // All, In Progress, Finished
   const [driverFilter, setDriverFilter] = useState<string>("");
   
   const [page, setPage] = useState(1);
@@ -63,7 +68,7 @@ export function JobsPage() {
   // actually sort on.
   const SORT_FIELD_MAP: Record<string, string> = { Timing: "bookedStart", Total: "amountCharged", Status: "status" };
   const serverSort = sortConfig ? SORT_FIELD_MAP[sortConfig.key] : undefined;
-  const serverStatus = statusFilter === "In Progress" ? "IN_PROGRESS" : undefined;
+  const serverStatus = statusFilter === "In Progress" ? "IN_PROGRESS" : statusFilter === "Finished" ? "COMPLETED" : undefined;
 
   /**
    * Real server-side pagination. This used to pull up to 500 rows -- the whole
@@ -146,6 +151,37 @@ export function JobsPage() {
     if (page > totalPages) setPage(totalPages);
   }, [page, totalPages]);
 
+  const openedDeepLinkJobRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    const handleJobParam = () => {
+      const jobId = new URLSearchParams(window.location.search).get("job");
+      if (!jobId || openedDeepLinkJobRef.current === jobId) return;
+      openedDeepLinkJobRef.current = jobId;
+      fetchJobDetail(jobId)
+        .then(job => {
+          if (job) setDrawerJob(job);
+        })
+        .catch(() => {
+          openedDeepLinkJobRef.current = null;
+        });
+    };
+
+    handleJobParam();
+    window.addEventListener("popstate", handleJobParam);
+    return () => window.removeEventListener("popstate", handleJobParam);
+  }, []);
+
+  const handleCloseDrawer = () => {
+    setDrawerJob(null);
+    openedDeepLinkJobRef.current = null;
+    const url = new URL(window.location.href);
+    if (url.searchParams.has("job")) {
+      url.searchParams.delete("job");
+      window.history.replaceState({}, "", url.toString());
+    }
+  };
+
   const handleSort = (key: string) => {
     setSortConfig(current => {
       if (current?.key === key) {
@@ -208,6 +244,24 @@ export function JobsPage() {
       ? <ChevronUp className="inline w-3 h-3 text-admin-brand ml-1" />
       : <ChevronDown className="inline w-3 h-3 text-admin-brand ml-1" />;
   };
+
+  if (statusFilter === "Finished") {
+    return (
+      <FinishedJobsPage
+        from={from}
+        to={to}
+        onDateRangeChange={(f, t) => { setFrom(f); setTo(t); setPage(1); }}
+        driverFilter={driverFilter}
+        onDriverFilterChange={d => { setDriverFilter(d); setPage(1); }}
+        statusFilter={statusFilter}
+        onStatusFilterChange={s => { setStatusFilter(s); setPage(1); }}
+        searchQuery={searchQuery}
+        onSearchQueryChange={s => { setSearchQuery(s); setPage(1); }}
+        viewMode={viewMode}
+        onViewModeChange={v => setViewMode(v)}
+      />
+    );
+  }
 
   return (
     <div className="space-y-6 max-w-[1440px] mx-auto pb-12 relative">
@@ -304,7 +358,7 @@ export function JobsPage() {
           </div>
 
           <div className="flex items-center bg-admin-surface p-1 rounded-card border border-admin-line/50 shrink-0">
-            {["All", "In Progress"].map(status => (
+            {["All", "In Progress", "Finished"].map(status => (
               <button
                 key={status}
                 onClick={() => { setStatusFilter(status); setPage(1); }}
@@ -611,7 +665,7 @@ export function JobsPage() {
         <JobDetailDrawer
           job={drawerJob}
           isOpen={!!drawerJob}
-          onClose={() => setDrawerJob(null)}
+          onClose={handleCloseDrawer}
           onUpdated={() => refetch()}
         />
       )}
