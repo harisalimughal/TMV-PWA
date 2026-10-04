@@ -445,15 +445,15 @@ export function FinishedJobsPage() {
                           {onMyWayTime && (
                             <span className="block text-[11px] text-admin-muted/70 mt-0.5">On my way: {onMyWayTime}</span>
                           )}
-                          {customerSignatureTime && (
-                            <span className="block text-[11px] text-admin-muted/70 mt-0.5">Customer signed: {customerSignatureTime}</span>
-                          )}
                           <span className={`block text-[11px] mt-0.5 ${trackerArrivalTime ? "text-admin-muted/70" : "text-admin-status-red"}`}>
                             Tracker arrival: {trackerArrivalTime || (job.trackerUnverifiedReason ? `Unverified (${job.trackerUnverifiedReason})` : "Unverified")}
                           </span>
                           {pickupArrivalTime && <span className="block text-[11px] text-admin-muted/70 mt-0.5">Proof photo: {pickupArrivalTime}</span>}
                           {vanLoadedTime && (
                             <span className="block text-[11px] text-admin-muted/70 mt-0.5">Van loaded: {vanLoadedTime}</span>
+                          )}
+                          {customerSignatureTime && (
+                            <span className="block text-[11px] text-admin-muted/70 mt-0.5">Customer signed: {customerSignatureTime}</span>
                           )}
                           {(job.arrivalProofLate || job.arrivalProofOverdue) && (
                             <span className="mt-1 inline-flex rounded-control bg-admin-status-red-bg px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.03em] text-admin-status-red">

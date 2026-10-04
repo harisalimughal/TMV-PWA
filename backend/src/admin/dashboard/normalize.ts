@@ -131,6 +131,9 @@ function calculateArrivalProofTiming(
     : undefined;
 
   let trackerUnverifiedReason = job.trackerUnverifiedReason;
+  if (trackerUnverifiedReason && trackerUnverifiedReason.includes(" away") && !trackerUnverifiedReason.includes(" away from pickup point")) {
+    trackerUnverifiedReason = trackerUnverifiedReason.replace(/ away(\b)/, " away from pickup point$1");
+  }
   if (!trackerArrivalAt && !trackerUnverifiedReason) {
     if (!job.pickupLocation) {
       trackerUnverifiedReason = "Pickup address could not be geocoded";
@@ -139,9 +142,9 @@ function calculateArrivalProofTiming(
     } else if (typeof job.trackerDistanceMeters === "number") {
       const loc = job.trackerLocationName ? ` in ${job.trackerLocationName}` : "";
       if (job.trackerDistanceMeters >= 1000) {
-        trackerUnverifiedReason = `Van was ${(job.trackerDistanceMeters / 1000).toFixed(1)} km away${loc}`;
+        trackerUnverifiedReason = `Van was ${(job.trackerDistanceMeters / 1000).toFixed(1)} km away from pickup point${loc}`;
       } else {
-        trackerUnverifiedReason = `Van was ${job.trackerDistanceMeters}m away (outside 300m radius)${loc}`;
+        trackerUnverifiedReason = `Van was ${job.trackerDistanceMeters}m away from pickup point (outside 300m radius)${loc}`;
       }
     } else if (trackerStatus === "stale") {
       trackerUnverifiedReason = "Tracker device signal was stale / offline";

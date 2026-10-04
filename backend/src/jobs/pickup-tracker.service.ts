@@ -93,9 +93,9 @@ export async function sweepPickupArrivals(now = new Date()): Promise<void> {
         if (position.state === "outside") {
           let reason: string;
           if (dist >= 1000) {
-            reason = `Van was ${(dist / 1000).toFixed(1)} km away`;
+            reason = `Van was ${(dist / 1000).toFixed(1)} km away from pickup point`;
           } else {
-            reason = `Van was ${dist}m away (outside 300m radius)`;
+            reason = `Van was ${dist}m away from pickup point (outside 300m radius)`;
           }
           let locName = job.trackerLocationName;
           if (!locName && dist >= 500) {
@@ -218,9 +218,9 @@ export async function verifyArrivalAtPhotoUpload(
       }
       let reason: string;
       if (dist >= 1000) {
-        reason = `Van was ${(dist / 1000).toFixed(1)} km away${locName ? ` in ${locName}` : ""}`;
+        reason = `Van was ${(dist / 1000).toFixed(1)} km away from pickup point${locName ? ` in ${locName}` : ""}`;
       } else {
-        reason = `Van was ${dist}m away (outside 300m radius)${locName ? ` in ${locName}` : ""}`;
+        reason = `Van was ${dist}m away from pickup point (outside 300m radius)${locName ? ` in ${locName}` : ""}`;
       }
       job.trackerDistanceMeters = dist;
       job.trackerLocationName = locName;

@@ -198,20 +198,14 @@ export function PaperJobReport({ job, onClose }: Props) {
                 </span>
               </div>
               <div className="flex justify-between py-1 border-b border-admin-line/50">
-                <span className="text-[12px] text-[#8A8A8A]">Customer signature time</span>
-                <span className="text-[12px] font-medium text-[#1A1A1A]">
-                  {job.clientSignatureAt ? formatLondonDateTime(job.clientSignatureAt) : "Not recorded"}
-                </span>
+                <span className="text-[12px] text-[#8A8A8A]">Tracker arrival time</span>
+                <span className={`text-[12px] font-medium ${job.trackerArrivalAt ? "text-[#1A1A1A]" : "text-admin-status-red"}`}>{job.trackerArrivalAt ? formatLondonDateTime(job.trackerArrivalAt) : (job.trackerUnverifiedReason ? `Unverified (${job.trackerUnverifiedReason})` : "Unverified")}</span>
               </div>
               <div className="flex justify-between py-1 border-b border-admin-line/50">
                 <span className="text-[12px] text-[#8A8A8A]">Proof of arrival photo time</span>
                 <span className="text-[12px] font-medium text-[#1A1A1A]">
                   {job.pickupArrivalAt ? formatLondonDateTime(job.pickupArrivalAt) : "Not recorded"}
                 </span>
-              </div>
-              <div className="flex justify-between py-1 border-b border-admin-line/50">
-                <span className="text-[12px] text-[#8A8A8A]">Tracker arrival time</span>
-                <span className={`text-[12px] font-medium ${job.trackerArrivalAt ? "text-[#1A1A1A]" : "text-admin-status-red"}`}>{job.trackerArrivalAt ? formatLondonDateTime(job.trackerArrivalAt) : (job.trackerUnverifiedReason ? `Unverified (${job.trackerUnverifiedReason})` : "Unverified")}</span>
               </div>
               <div className="flex justify-between py-1 border-b border-admin-line/50">
                 <span className="text-[12px] text-[#8A8A8A]">Van loaded photo time</span>
@@ -223,6 +217,12 @@ export function PaperJobReport({ job, onClose }: Props) {
                 <span className="text-[12px] text-[#8A8A8A]">Empty van photo time</span>
                 <span className="text-[12px] font-medium text-[#1A1A1A]">
                   {job.actualFinish ? formatLondonDateTime(job.actualFinish) : "Not recorded"}
+                </span>
+              </div>
+              <div className="flex justify-between py-1 border-b border-admin-line/50">
+                <span className="text-[12px] text-[#8A8A8A]">Customer signature time</span>
+                <span className="text-[12px] font-medium text-[#1A1A1A]">
+                  {job.clientSignatureAt ? formatLondonDateTime(job.clientSignatureAt) : "Not recorded"}
                 </span>
               </div>
               {(job.arrivalProofLate || job.arrivalProofOverdue) && (

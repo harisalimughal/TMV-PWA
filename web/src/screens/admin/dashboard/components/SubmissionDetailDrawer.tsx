@@ -445,16 +445,8 @@ export function SubmissionDetailDrawer({ job: initialJob, isOpen, onClose, onNav
             <DetailRow label="Payment status" value={normalizedJob.paymentStatus || "Not recorded"} />
             <DetailRow label="Customer confirmed by" value={normalizedJob.clientConfirmedName || "Not recorded"} />
             <DetailRow
-              label="Customer signature time"
-              value={normalizedJob.clientSignatureAt ? formatLondonDateTime(normalizedJob.clientSignatureAt) : "Not recorded"}
-            />
-            <DetailRow
               label="On my way (customer notified)"
               value={normalizedJob.onMyWayAt ? formatLondonDateTime(normalizedJob.onMyWayAt) : "Not recorded"}
-            />
-            <DetailRow
-              label="Proof of arrival photo time"
-              value={normalizedJob.pickupArrivalAt ? formatLondonDateTime(normalizedJob.pickupArrivalAt) : "Not recorded"}
             />
             <DetailRow
               label="Tracker arrival time"
@@ -477,12 +469,20 @@ export function SubmissionDetailDrawer({ job: initialJob, isOpen, onClose, onNav
               <DetailRow label="Tracker status" value={normalizedJob.trackerStatus === "reporting" ? "Reporting" : normalizedJob.trackerStatus === "stale" ? "Stale / no recent position" : "No verified report"} />
             )}
             <DetailRow
+              label="Proof of arrival photo time"
+              value={normalizedJob.pickupArrivalAt ? formatLondonDateTime(normalizedJob.pickupArrivalAt) : "Not recorded"}
+            />
+            <DetailRow
               label="Van loaded photo time"
               value={normalizedJob.vanLoadedAt ? formatLondonDateTime(normalizedJob.vanLoadedAt) : "Not recorded"}
             />
             <DetailRow
               label="Empty van photo time"
               value={normalizedJob.actualFinish ? formatLondonDateTime(normalizedJob.actualFinish) : "Not recorded"}
+            />
+            <DetailRow
+              label="Customer signature time"
+              value={normalizedJob.clientSignatureAt ? formatLondonDateTime(normalizedJob.clientSignatureAt) : "Not recorded"}
             />
           </div>
           {(normalizedJob.arrivalProofLate || normalizedJob.arrivalProofOverdue) && (

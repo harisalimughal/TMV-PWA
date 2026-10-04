@@ -361,20 +361,14 @@ export function PaperDossierReport({ job, isPreview = false }: Props) {
                     </span>
                   </div>
                   <div className="flex items-center justify-between p-3 border-b border-[#E5E7EB] bg-white">
-                    <span className="text-label font-medium text-fg-muted">Customer signature time</span>
-                    <span className="text-[13px] font-bold text-admin-ink">
-                      {job.clientSignatureAt ? formatLondonDateTime(job.clientSignatureAt) : "Not recorded"}
-                    </span>
+                    <span className="text-label font-medium text-fg-muted">Tracker arrival time</span>
+                    <span className={`text-[13px] font-bold ${job.trackerArrivalAt ? "text-admin-ink" : "text-admin-status-red"}`}>{job.trackerArrivalAt ? formatLondonDateTime(job.trackerArrivalAt) : (job.trackerUnverifiedReason ? `Unverified (${job.trackerUnverifiedReason})` : "Unverified")}</span>
                   </div>
                   <div className="flex items-center justify-between p-3 border-b border-[#E5E7EB] bg-white">
                     <span className="text-label font-medium text-fg-muted">Proof of arrival photo time</span>
                     <span className="text-[13px] font-bold text-admin-ink">
                       {job.pickupArrivalAt ? formatLondonDateTime(job.pickupArrivalAt) : "Not recorded"}
                     </span>
-                  </div>
-                  <div className="flex items-center justify-between p-3 border-b border-[#E5E7EB] bg-white">
-                    <span className="text-label font-medium text-fg-muted">Tracker arrival time</span>
-                    <span className={`text-[13px] font-bold ${job.trackerArrivalAt ? "text-admin-ink" : "text-admin-status-red"}`}>{job.trackerArrivalAt ? formatLondonDateTime(job.trackerArrivalAt) : (job.trackerUnverifiedReason ? `Unverified (${job.trackerUnverifiedReason})` : "Unverified")}</span>
                   </div>
                   <div className="flex items-center justify-between p-3 border-b border-[#E5E7EB] bg-white">
                     <span className="text-label font-medium text-fg-muted">Van loaded photo time</span>
@@ -386,6 +380,12 @@ export function PaperDossierReport({ job, isPreview = false }: Props) {
                     <span className="text-label font-medium text-fg-muted">Empty van photo time</span>
                     <span className="text-[13px] font-bold text-admin-ink">
                       {job.actualFinish ? formatLondonDateTime(job.actualFinish) : "Not recorded"}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between p-3 border-b border-[#E5E7EB] bg-white">
+                    <span className="text-label font-medium text-fg-muted">Customer signature time</span>
+                    <span className="text-[13px] font-bold text-admin-ink">
+                      {job.clientSignatureAt ? formatLondonDateTime(job.clientSignatureAt) : "Not recorded"}
                     </span>
                   </div>
                   {(job.arrivalProofLate || job.arrivalProofOverdue) && (

@@ -251,22 +251,6 @@ export function JobDetailDrawer({ job: initialJob, isOpen, onClose, onUpdated }:
                 </span>
               </div>
               <div className="mt-2 border-t border-admin-line pt-2">
-                <span className="block text-[10px] font-bold uppercase tracking-wider text-admin-muted">
-                  Customer signature time
-                </span>
-                <span className="mt-0.5 block text-[12px] font-semibold text-admin-ink">
-                  {job.clientSignatureAt ? formatLondonDateTime(job.clientSignatureAt) : "Not recorded"}
-                </span>
-              </div>
-              <div className="mt-2 border-t border-admin-line pt-2">
-                <span className="block text-[10px] font-bold uppercase tracking-wider text-admin-muted">
-                  Proof of arrival photo
-                </span>
-                <span className="mt-0.5 block text-[12px] font-semibold text-admin-ink">
-                  {job.pickupArrivalAt ? formatLondonDateTime(job.pickupArrivalAt) : "Not recorded"}
-                </span>
-              </div>
-              <div className="mt-2 border-t border-admin-line pt-2">
                 <span className="block text-[10px] font-bold uppercase tracking-wider text-admin-muted">Tracker arrival</span>
                 {job.trackerArrivalAt ? (
                   <span className="mt-0.5 block text-[12px] font-semibold text-admin-ink">{formatLondonDateTime(job.trackerArrivalAt)}</span>
@@ -289,6 +273,14 @@ export function JobDetailDrawer({ job: initialJob, isOpen, onClose, onUpdated }:
               </div>
               <div className="mt-2 border-t border-admin-line pt-2">
                 <span className="block text-[10px] font-bold uppercase tracking-wider text-admin-muted">
+                  Proof of arrival photo
+                </span>
+                <span className="mt-0.5 block text-[12px] font-semibold text-admin-ink">
+                  {job.pickupArrivalAt ? formatLondonDateTime(job.pickupArrivalAt) : "Not recorded"}
+                </span>
+              </div>
+              <div className="mt-2 border-t border-admin-line pt-2">
+                <span className="block text-[10px] font-bold uppercase tracking-wider text-admin-muted">
                   Van loaded photo
                 </span>
                 <span className="mt-0.5 block text-[12px] font-semibold text-admin-ink">
@@ -301,6 +293,14 @@ export function JobDetailDrawer({ job: initialJob, isOpen, onClose, onUpdated }:
                 </span>
                 <span className="mt-0.5 block text-[12px] font-semibold text-admin-ink">
                   {job.actualFinish ? formatLondonDateTime(job.actualFinish) : "Not recorded"}
+                </span>
+              </div>
+              <div className="mt-2 border-t border-admin-line pt-2">
+                <span className="block text-[10px] font-bold uppercase tracking-wider text-admin-muted">
+                  Customer signature time
+                </span>
+                <span className="mt-0.5 block text-[12px] font-semibold text-admin-ink">
+                  {job.clientSignatureAt ? formatLondonDateTime(job.clientSignatureAt) : "Not recorded"}
                 </span>
               </div>
             </div>
