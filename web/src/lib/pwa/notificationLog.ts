@@ -16,8 +16,10 @@ export interface LoggedNotification {
   title: string;
   body: string;
   url: string;
+  kind?: string;
   receivedAt: number;
   read: boolean;
+  dismissed?: boolean;
 }
 
 const DB_NAME = "tmv-notifications";
@@ -97,4 +99,20 @@ export async function markRead(id: number): Promise<void> {
 export async function markAllRead(): Promise<void> {
   const items = await listNotifications();
   await Promise.all(items.filter(item => !item.read).map(item => markRead(item.id)));
+}
+
+export async function dismissNotification(id: number): Promise<void> {
+  const db = await openDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE_NAME, "readwrite");
+    const store = tx.objectStore(STORE_NAME);
+    const getRequest = store.get(id);
+    getRequest.onsuccess = () => {
+      const entry = getRequest.result as LoggedNotification | undefined;
+      if (!entry || entry.dismissed) return;
+      store.put({ ...entry, dismissed: true });
+    };
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
 }

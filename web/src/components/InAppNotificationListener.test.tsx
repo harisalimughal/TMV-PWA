@@ -4,11 +4,18 @@ import { ToastProvider } from "./ui/Toast";
 import { InAppNotificationListener } from "./InAppNotificationListener";
 import { playPersistentAlertSound, primePersistentAlertSound } from "../lib/alertSound";
 
+const notificationLogMocks = vi.hoisted(() => ({
+  listNotifications: vi.fn(),
+  dismissNotification: vi.fn()
+}));
+
 vi.mock("../lib/alertSound", () => ({
   playPersistentAlertSound: vi.fn(),
   primePersistentAlertSound: vi.fn(),
   playZoneAlertSound: vi.fn()
 }));
+
+vi.mock("../lib/pwa/notificationLog", () => notificationLogMocks);
 
 function renderListener() {
   const listeners: Array<(event: MessageEvent) => void> = [];
@@ -43,6 +50,12 @@ function renderListener() {
 describe("InAppNotificationListener", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    notificationLogMocks.listNotifications.mockResolvedValue([]);
+    notificationLogMocks.dismissNotification.mockResolvedValue(undefined);
+    Object.defineProperty(globalThis, "indexedDB", {
+      configurable: true,
+      value: {}
+    });
   });
 
   it("primes alert audio on the first driver gesture so later popup sounds can play", () => {
@@ -87,5 +100,32 @@ describe("InAppNotificationListener", () => {
     expect(alert).toHaveTextContent("Van loaded photo overdue");
     expect(alert).toHaveTextContent("Hurry up");
     expect(playPersistentAlertSound).toHaveBeenCalledOnce();
+  });
+
+  it("restores a background broadcast until its center notice is explicitly closed", async () => {
+    notificationLogMocks.listNotifications.mockResolvedValue([
+      {
+        id: 42,
+        title: "Tomorrow's update",
+        body: "There are no jobs booked for tomorrow.",
+        url: "/?tab=jobs",
+        kind: "broadcast_message",
+        receivedAt: Date.now(),
+        read: true,
+        dismissed: false
+      }
+    ]);
+
+    renderListener();
+
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("Tomorrow's update");
+    expect(alert).toHaveTextContent("There are no jobs booked for tomorrow.");
+    expect(playPersistentAlertSound).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Close" }));
+
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(notificationLogMocks.dismissNotification).toHaveBeenCalledWith(42);
   });
 });

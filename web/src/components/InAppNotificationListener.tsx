@@ -1,27 +1,63 @@
 import React, { useEffect, useState } from "react";
-import { ShieldAlert, X } from "lucide-react";
+import { X } from "lucide-react";
 import { useToast } from "./ui/Toast";
 import { notifyJobsRefresh } from "../lib/jobsRefresh";
 import { playPersistentAlertSound, primePersistentAlertSound } from "../lib/alertSound";
+import { dismissNotification, listNotifications } from "../lib/pwa/notificationLog";
 
 interface ZoneAlert {
   id: number;
+  notificationId?: number;
   title: string;
   body: string;
 }
 
 let nextZoneAlertId = 1;
 
+const PERSISTENT_KINDS = new Set([
+  "broadcast_message",
+  "congestion_zone",
+  "tunnel_zone",
+  "arrival_proof_overdue"
+]);
+
 export function InAppNotificationListener(): React.ReactElement | null {
   const toast = useToast();
   // Congestion/tunnel zone pushes (congestion-zone.service.ts's data.kind) get their
-  // own persistent red popup instead of the usual toast -- see the render below. A
-  // toast that fades out in a few seconds is too easy to miss while driving, and this
-  // is money the office needs to know got flagged, so it stays until the driver
-  // explicitly closes it.
+  // own persistent notice instead of the usual toast -- see the render below. A toast
+  // that fades out in a few seconds is too easy to miss while driving, and this is
+  // money the office needs to know got flagged, so it stays until the driver explicitly
+  // closes it.
   const [zoneAlerts, setZoneAlerts] = useState<ZoneAlert[]>([]);
 
   useEffect(() => {
+    let active = true;
+
+    // Pushes received while the app is closed are already in IndexedDB. Restore
+    // persistent notices on startup and keep them visible until their own close
+    // button is used; bell read/unread state is intentionally separate.
+    if (typeof indexedDB !== "undefined") {
+      void listNotifications()
+        .then(items => {
+          if (!active) return;
+          const restored = items
+            .filter(item => item.kind && PERSISTENT_KINDS.has(item.kind) && !item.dismissed)
+            .map(item => ({
+              id: nextZoneAlertId++,
+              notificationId: item.id,
+              title: item.title,
+              body: item.body
+            }));
+          setZoneAlerts(prev => {
+            const existingIds = new Set(prev.map(item => item.notificationId));
+            return [...restored.filter(item => !existingIds.has(item.notificationId)), ...prev];
+          });
+        })
+        .catch(() => {
+          // IndexedDB can be unavailable in private browsing; live pushes still work.
+        });
+    }
+
     const primeAudio = () => primePersistentAlertSound();
     window.addEventListener("pointerdown", primeAudio, { once: true, passive: true });
     window.addEventListener("keydown", primeAudio, { once: true });
@@ -39,14 +75,13 @@ export function InAppNotificationListener(): React.ReactElement | null {
       const body = payload.body || "New update received";
       const url = payload.url;
       const kind = payload.data?.kind;
+      const notificationId = typeof payload.notificationId === "number" ? payload.notificationId : undefined;
 
-      if (
-        kind === "broadcast_message" ||
-        kind === "congestion_zone" ||
-        kind === "tunnel_zone" ||
-        kind === "arrival_proof_overdue"
-      ) {
-        setZoneAlerts(prev => [...prev, { id: nextZoneAlertId++, title, body }]);
+      if (PERSISTENT_KINDS.has(kind)) {
+        setZoneAlerts(prev => {
+          if (notificationId && prev.some(item => item.notificationId === notificationId)) return prev;
+          return [...prev, { id: nextZoneAlertId++, notificationId, title, body }];
+        });
         playPersistentAlertSound();
       } else {
         toast.info(`${title}: ${body}`, url ? { onClick: () => { window.location.href = url; } } : undefined);
@@ -79,6 +114,7 @@ export function InAppNotificationListener(): React.ReactElement | null {
     }
 
     return () => {
+      active = false;
       window.removeEventListener("pointerdown", primeAudio);
       window.removeEventListener("keydown", primeAudio);
       window.removeEventListener("touchstart", primeAudio);
@@ -89,27 +125,35 @@ export function InAppNotificationListener(): React.ReactElement | null {
     };
   }, [toast]);
 
+  const closeAlert = (alert: ZoneAlert) => {
+    setZoneAlerts(prev => prev.filter(item => item.id !== alert.id));
+    if (alert.notificationId) {
+      void dismissNotification(alert.notificationId).catch(() => {
+        // The notice is closed for this session even if storage is unavailable.
+      });
+    }
+  };
+
   if (zoneAlerts.length === 0) return null;
 
   return (
     <div
-      className="pointer-events-none fixed inset-x-0 top-[calc(env(safe-area-inset-top)+165px)] z-[320] flex flex-col items-center gap-2 px-3"
+      className="pointer-events-none fixed left-0 right-0 top-[calc(env(safe-area-inset-top)+190px)] z-[15] flex flex-col items-center gap-2 px-4 lg:left-[var(--sidebar-width)]"
       role="alert"
       aria-live="assertive"
     >
       {zoneAlerts.map(alert => (
         <div
           key={alert.id}
-          className="pointer-events-auto flex w-full max-w-sm items-start gap-3 rounded-card bg-danger-signal px-4 py-3 text-white shadow-lg animate-in slide-in-from-top-4"
+          className="pointer-events-auto relative w-full max-w-[calc(var(--content-max-width)-2rem)] rounded-[8px] border border-[#F1D989] bg-[#FFFBE6] px-5 py-4 text-center text-[#8A5A21] shadow-sm animate-in slide-in-from-top-4"
         >
-          <ShieldAlert className="size-5 shrink-0 mt-0.5" aria-hidden />
-          <div className="min-w-0 flex-1">
+          <div className="min-w-0">
             <p className="text-[13px] font-bold leading-snug">{alert.title}</p>
-            <p className="mt-0.5 text-[13px] leading-snug">{alert.body}</p>
+            <p className="mt-3 text-[13px] font-bold leading-snug">{alert.body}</p>
           </div>
           <button
-            onClick={() => setZoneAlerts(prev => prev.filter(a => a.id !== alert.id))}
-            className="-mr-1 -mt-1 shrink-0 p-1 opacity-80 hover:opacity-100"
+            onClick={() => closeAlert(alert)}
+            className="absolute right-2 top-2 shrink-0 rounded-full p-1 text-[#8A5A21]/70 hover:text-[#8A5A21] focus-visible:outline-[#8A5A21]"
             aria-label="Close"
           >
             <X className="size-4" />

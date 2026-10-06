@@ -27,20 +27,22 @@ function notifOpenDb() {
   });
 }
 
-function notifLog(title, body, url) {
+function notifLog(title, body, url, kind) {
   return notifOpenDb()
     .then(function (db) {
       return new Promise(function (resolve, reject) {
         var tx = db.transaction(NOTIF_STORE_NAME, "readwrite");
-        tx.objectStore(NOTIF_STORE_NAME).add({
+        var request = tx.objectStore(NOTIF_STORE_NAME).add({
           title: title,
           body: body,
           url: url,
+          kind: kind,
           receivedAt: Date.now(),
-          read: false
+          read: false,
+          dismissed: false
         });
         tx.oncomplete = function () {
-          resolve();
+          resolve(request.result);
         };
         tx.onerror = function () {
           reject(tx.error);
@@ -50,6 +52,7 @@ function notifLog(title, body, url) {
     .catch(function () {
       /* Best-effort -- a logging failure must never block showing the real OS
          notification, which is the part that actually matters. */
+      return null;
     });
 }
 
@@ -98,6 +101,7 @@ self.addEventListener("push", function (event) {
   var title = data.title || "The Man Van";
   var body = data.body || "New notification from The Man Van";
   var url = data.url || "/";
+  var kind = data.data && data.data.kind;
   var options = {
     body: body,
     icon: data.icon || "/icons/icon-192.png",
@@ -115,19 +119,24 @@ self.addEventListener("push", function (event) {
   };
   if (data.badge) options.badge = data.badge;
 
-  // Broadcast to open clients for in-app alert sync
-  try {
-    if (typeof BroadcastChannel !== "undefined") {
-      var channel = new BroadcastChannel("tmv_in_app_notifications");
-      channel.postMessage({
-        type: "PUSH_NOTIFICATION_RECEIVED",
-        payload: data
-      });
-    }
-  } catch (err) {}
-
   event.waitUntil(
-    Promise.all([notifLog(title, body, url), self.registration.showNotification(title, options)])
+    Promise.all([
+      notifLog(title, body, url, kind).then(function (notificationId) {
+        // Broadcast only after IndexedDB has assigned the row ID. The open app uses
+        // that ID to remember when this persistent center notice is explicitly closed.
+        try {
+          if (typeof BroadcastChannel !== "undefined") {
+            var channel = new BroadcastChannel("tmv_in_app_notifications");
+            channel.postMessage({
+              type: "PUSH_NOTIFICATION_RECEIVED",
+              payload: Object.assign({}, data, { notificationId: notificationId })
+            });
+            channel.close();
+          }
+        } catch (err) {}
+      }),
+      self.registration.showNotification(title, options)
+    ])
   );
 });
 
