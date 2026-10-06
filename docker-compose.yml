@@ -1,6 +1,9 @@
 services:
   tmv-pwa:
-    build: .
+    build:
+      context: .
+      args:
+        VITE_BUILD_ID: ${VITE_BUILD_ID:-dev}
     container_name: tmv-pwa
     restart: unless-stopped
     ports:

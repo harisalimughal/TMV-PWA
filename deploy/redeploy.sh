@@ -9,6 +9,7 @@ git fetch origin main
 git reset --hard origin/main
 
 echo "==> Rebuilding and recreating the container"
+export VITE_BUILD_ID="$(git rev-parse --short HEAD)"
 docker compose up -d --build
 
 echo "==> Done. Recent logs:"

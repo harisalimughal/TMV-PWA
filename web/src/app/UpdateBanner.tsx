@@ -1,16 +1,26 @@
 import { useEffect, useState } from "react";
 import { DownloadCloud, X } from "lucide-react";
+import { BUILD_ID } from "../lib/pwa/version";
 import { useServiceWorkerUpdate } from "../screens/pwa-settings/hooks/useServiceWorkerUpdate";
 
-const DISMISS_KEY = "tmv-pwa:update-banner-dismissed";
+const DISMISS_KEY = "tmv-pwa:update-banner-dismissed-for-build";
+
+function wasDismissedForCurrentBuild(): boolean {
+  try {
+    return localStorage.getItem(DISMISS_KEY) === BUILD_ID;
+  } catch {
+    return false;
+  }
+}
 
 /**
  * App-wide "a new version is available" prompt. Shown whenever a service worker is
  * waiting, so drivers who never open PWA Settings still get fixes. Dismissible for
- * the session; it returns on the next load while the update is still pending.
+ * the current app build; a later build can announce its own update.
  *
  * Fixed above the mobile tab bar (and the safe-area inset) so it never covers a
- * screen header; below modals and toasts in the stack.
+ * screen header; below modals and toasts in the stack. A dismissal is remembered
+ * for the current build so the same waiting worker is not announced on every launch.
  */
 export function UpdateBanner() {
   const { needRefresh, updating, applyUpdate } = useServiceWorkerUpdate();
@@ -21,23 +31,11 @@ export function UpdateBanner() {
       return false;
     }
   });
-  const [dismissed, setDismissed] = useState(() => {
-    try {
-      return sessionStorage.getItem(DISMISS_KEY) === "1";
-    } catch {
-      return false;
-    }
-  });
+  const [dismissed, setDismissed] = useState(wasDismissedForCurrentBuild);
 
-  // A fresh "waiting" worker should re-show the banner even if dismissed earlier.
+  // A newer running build gets a different BUILD_ID and may show its next update.
   useEffect(() => {
-    if (needRefresh) {
-      try {
-        if (sessionStorage.getItem(DISMISS_KEY) !== "1") setDismissed(false);
-      } catch {
-        /* ignore */
-      }
-    }
+    if (needRefresh) setDismissed(wasDismissedForCurrentBuild());
   }, [needRefresh]);
 
   useEffect(() => {
@@ -56,7 +54,7 @@ export function UpdateBanner() {
   function dismiss() {
     setDismissed(true);
     try {
-      sessionStorage.setItem(DISMISS_KEY, "1");
+      localStorage.setItem(DISMISS_KEY, BUILD_ID);
     } catch {
       /* ignore */
     }

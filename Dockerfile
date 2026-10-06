@@ -25,6 +25,8 @@ WORKDIR /app/web
 COPY web/package*.json ./
 RUN npm ci
 COPY web ./
+ARG VITE_BUILD_ID
+ENV VITE_BUILD_ID=$VITE_BUILD_ID
 RUN npm run build
 
 # ---- runtime ----

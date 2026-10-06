@@ -16,8 +16,10 @@
 import { registerSW } from "virtual:pwa-register";
 import type { ServiceWorkerUpdateState, UpdateCheckResult } from "./types";
 import { supportsServiceWorker } from "./platform";
+import { BUILD_ID } from "./version";
 
 const LAST_CHECK_KEY = "tmv-pwa:last-update-check";
+const UPDATE_NOTIFICATION_KEY = "tmv-pwa:update-notification-shown-for-build";
 /** How often to quietly re-check for a new worker while the app is open. */
 const PERIODIC_CHECK_MS = 60 * 60 * 1000;
 
@@ -113,6 +115,11 @@ export function initServiceWorker(): void {
 async function notifyUpdateAvailable(): Promise<void> {
   if (updateNotificationShown || !("Notification" in window)) return;
   if (Notification.permission !== "granted") return;
+  try {
+    if (localStorage.getItem(UPDATE_NOTIFICATION_KEY) === BUILD_ID) return;
+  } catch {
+    /* continue without persistence when storage is unavailable */
+  }
   updateNotificationShown = true;
 
   try {
@@ -127,6 +134,11 @@ async function notifyUpdateAvailable(): Promise<void> {
         url: "/?update=app"
       }
     });
+    try {
+      localStorage.setItem(UPDATE_NOTIFICATION_KEY, BUILD_ID);
+    } catch {
+      /* non-critical: the in-memory guard still prevents repeats this session */
+    }
   } catch (err) {
     updateNotificationShown = false;
     report("Showing update notification failed", err);
