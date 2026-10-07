@@ -6,7 +6,8 @@
  */
 import { Request, Response, Router } from "express";
 import {
-  buildDriverMatchIndex, fetchGpsLiveDevices, fetchGpsLiveZones, GpsLiveDevice, matchDriverByPlateAndName
+  buildDriverMatchIndex, fetchGpsLiveDevices, fetchGpsLiveZones, GpsLiveDevice,
+  isGpsLiveDeviceActive, matchDriverByPlateAndName
 } from "../../integrations/gpslive";
 import { listDriverProfiles } from "../../auth/driver-account.service";
 import { jobsCollection } from "../../db/mongo";
@@ -61,8 +62,10 @@ async function getLiveFleet(): Promise<LiveFleetVehicle[]> {
 
   const driverIndex = buildDriverMatchIndex(drivers);
 
-  const vehicles: LiveFleetVehicle[] = devices.map((device: GpsLiveDevice) => {
-    const matched = matchDriverByPlateAndName(device.plateNumber || "", device.name || "", driverIndex);
+  const vehicles: LiveFleetVehicle[] = devices.filter(isGpsLiveDeviceActive).map((device: GpsLiveDevice) => {
+    const matched = matchDriverByPlateAndName(
+      device.plateNumber || "", device.name || "", driverIndex, device.imei
+    );
     const params = device.params || {};
 
     return {

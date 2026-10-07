@@ -143,11 +143,9 @@ export interface Job {
    *  and the Extra Charges "Tunnel Charges" suggestion banner. */
   tunnelZoneEnteredAt?: string;
   /** The GPSLive device IMEI resolved for this job's driver at the moment the job
-   *  started (see jobs/congestion-zone.service.ts's checkCongestionZoneAtJobStart) --
-   *  pinned once and never re-resolved, so a driver's van assignment changing later
-   *  (a swap, a profile edit) can't retroactively misattribute an in-flight job's
-   *  congestion events to the wrong van. Unset if no device could be resolved at
-   *  start (no GPSLive key configured, or no matching device for that driver yet). */
+   *  started (see jobs/congestion-zone.service.ts's checkCongestionZoneAtJobStart).
+   *  An active pin is retained for the job; an inactive/removed pin may be repaired
+   *  from one unique active initials match. Unset if no device can be resolved. */
   gpsliveImei?: string;
   /** Cloudinary URL of the customer's drawn signature, once captured -- replaces the
    * old Sheets "Signatures" tab. Empty until WAITING_CLIENT_CONFIRMATION is completed. */

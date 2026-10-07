@@ -3,7 +3,9 @@ import { getDriverProfileByInitials } from "../auth/driver-account.service";
 import { jobsCollection } from "../db/mongo";
 import { listJobs } from "../db/jobs.repo";
 import { reverseGeocode } from "../integrations/geocode";
-import { fetchGpsLiveDevices, type GpsLiveDevice } from "../integrations/gpslive";
+import {
+  fetchGpsLiveDevices, findDeviceForDriver, isGpsLiveDeviceActive, type GpsLiveDevice
+} from "../integrations/gpslive";
 import { sendPushToDriver } from "../push/push.service";
 import { log } from "../utils/logger";
 import { Job, JobStatus } from "./job.types";
@@ -23,11 +25,12 @@ function distanceMeters(a: { lat: number; lng: number }, b: { lat: number; lng: 
 export function assessPickupPosition(
   device: Pick<GpsLiveDevice, "lat" | "lng" | "dtTracker">,
   pickup: { lat: number; lng: number },
-  now: Date
+  now: Date,
+  maxReportAgeMs = MAX_REPORT_AGE_MS
 ): { state: "inside" | "outside" | "stale"; distanceMeters: number; reportedAt?: string } {
   const report = DateTime.fromSQL(device.dtTracker || "", { zone: "utc" });
   const age = now.getTime() - report.toMillis();
-  if (!report.isValid || !Number.isFinite(age) || age < -60_000 || age > MAX_REPORT_AGE_MS ||
+  if (!report.isValid || !Number.isFinite(age) || age < -60_000 || age > maxReportAgeMs ||
       !Number.isFinite(device.lat) || !Number.isFinite(device.lng)) return { state: "stale", distanceMeters: NaN };
   const reportedAt = report.toUTC().toISO()!;
   const distance = Math.round(distanceMeters(device, pickup));
@@ -65,20 +68,24 @@ export async function sweepPickupArrivals(now = new Date()): Promise<void> {
     const devices = await fetchGpsLiveDevices();
     const byImei = new Map(devices.map(device => [device.imei, device]));
     const col = await jobsCollection();
-    const profileCache = new Map<string, string>();
+    const profileCache = new Map<string, Awaited<ReturnType<typeof getDriverProfileByInitials>>>();
 
     for (const job of jobs) {
       try {
-        let assignedImei = profileCache.get(job.driverInitials);
-        if (assignedImei === undefined) {
-          const profile = await getDriverProfileByInitials(job.driverInitials);
-          assignedImei = profile?.imei || "";
-          profileCache.set(job.driverInitials, assignedImei);
+        let profile = profileCache.get(job.driverInitials);
+        if (profile === undefined) {
+          profile = await getDriverProfileByInitials(job.driverInitials);
+          profileCache.set(job.driverInitials, profile);
         }
-        // A changed driver/device assignment needs review, never a guessed fallback.
-        if (!assignedImei || (job.gpsliveImei && job.gpsliveImei !== assignedImei)) continue;
-        const device = byImei.get(assignedImei);
+        if (!profile) continue;
+        const device = findDeviceForDriver(profile, devices);
         if (!device) continue;
+        // Keep an active tracker pinned to an in-flight job. An inactive/removed pin
+        // may be repaired by the driver's one unique active initials match.
+        const pinned = job.gpsliveImei ? byImei.get(job.gpsliveImei) : undefined;
+        if (job.gpsliveImei && job.gpsliveImei !== device.imei && pinned && isGpsLiveDeviceActive(pinned)) continue;
+        const assignedImei = device.imei;
+        const deviceChanged = !!job.gpsliveImei && job.gpsliveImei !== assignedImei;
         const position = assessPickupPosition(device, job.pickupLocation!, now);
         if (position.state === "stale" || !position.reportedAt) continue;
         const reportMs = new Date(position.reportedAt).getTime();
@@ -97,7 +104,7 @@ export async function sweepPickupArrivals(now = new Date()): Promise<void> {
           } else {
             reason = `Van was ${dist}m away from pickup point (outside 300m radius)`;
           }
-          let locName = job.trackerLocationName;
+          let locName = deviceChanged ? undefined : job.trackerLocationName;
           if (!locName && dist >= 500) {
             locName = (await reverseGeocode(device.lat, device.lng).catch(() => null)) || undefined;
           }
@@ -106,27 +113,40 @@ export async function sweepPickupArrivals(now = new Date()): Promise<void> {
             reason += ` in ${locName}`;
           }
           seenAt.trackerUnverifiedReason = reason;
-          await col.updateOne(filter, { $set: seenAt, $unset: { trackerArrivalCandidateAt: "" } } as any);
+          await col.updateOne(filter, {
+            $set: seenAt,
+            $unset: {
+              trackerArrivalCandidateAt: "",
+              ...(locName ? {} : { trackerLocationName: "" })
+            }
+          } as any);
           continue;
         }
         if (!job.trackerArrivalAt) {
-          const candidateMs = job.trackerArrivalCandidateAt ? new Date(job.trackerArrivalCandidateAt).getTime() : NaN;
+          const candidateMs = !deviceChanged && job.trackerArrivalCandidateAt
+            ? new Date(job.trackerArrivalCandidateAt).getTime()
+            : NaN;
           if (Number.isFinite(candidateMs) && reportMs > candidateMs && reportMs - candidateMs <= 5 * 60_000) {
             await col.updateOne(filter, {
               $set: { ...seenAt, trackerArrivalAt: job.trackerArrivalCandidateAt },
-              $unset: { trackerArrivalCandidateAt: "", trackerUnverifiedReason: "" }
+              $unset: {
+                trackerArrivalCandidateAt: "", trackerUnverifiedReason: "", trackerLocationName: ""
+              }
             } as any);
             continue;
           }
           if (!Number.isFinite(candidateMs) || reportMs > candidateMs) {
             await col.updateOne(filter, {
               $set: { ...seenAt, trackerArrivalCandidateAt: position.reportedAt },
-              $unset: { trackerUnverifiedReason: "" }
+              $unset: { trackerUnverifiedReason: "", trackerLocationName: "" }
             } as any);
           }
           continue;
         }
-        await col.updateOne(filter, { $set: seenAt, $unset: { trackerUnverifiedReason: "" } } as any);
+        await col.updateOne(filter, {
+          $set: seenAt,
+          $unset: { trackerUnverifiedReason: "", trackerLocationName: "" }
+        } as any);
         if (job.arrivalProofReminderSentAt || now.getTime() - new Date(job.trackerArrivalAt).getTime() < PROOF_REMINDER_MS) continue;
         // Atomically claim the one reminder before sending, even if two sweeps overlap.
         const claimed = await col.updateOne({ ...filter, arrivalProofReminderSentAt: null } as any,
@@ -167,8 +187,7 @@ export async function verifyArrivalAtPhotoUpload(
     return;
   }
 
-  const assignedImei = driver.imei || job.gpsliveImei;
-  if (!assignedImei) {
+  if (!driver.initials) {
     job.trackerUnverifiedReason = "No GPS tracker device assigned to driver";
     await col.updateOne(filter, { $set: { trackerUnverifiedReason: job.trackerUnverifiedReason } } as any);
     return;
@@ -176,23 +195,36 @@ export async function verifyArrivalAtPhotoUpload(
 
   try {
     const devices = await fetchGpsLiveDevices();
-    const device = devices.find(d => d.imei === assignedImei);
-    if (!device || !Number.isFinite(device.lat) || !Number.isFinite(device.lng)) {
+    const profile = await getDriverProfileByInitials(driver.initials);
+    const device = findDeviceForDriver({
+      initials: driver.initials,
+      vanRegistration: profile?.vanRegistration || "",
+      imei: driver.imei || profile?.imei || job.gpsliveImei
+    }, devices);
+    if (!device) {
       job.trackerUnverifiedReason = "Tracker device signal offline / not found";
       await col.updateOne(filter, { $set: { trackerUnverifiedReason: job.trackerUnverifiedReason } } as any);
       return;
     }
 
-    const report = DateTime.fromSQL(device.dtTracker || "", { zone: "utc" });
     const now = new Date();
-    const age = now.getTime() - (report.isValid ? report.toMillis() : 0);
-    // For parked vans with engine off, positions up to 30 mins old are a valid representation of where it parked
-    const isReasonableAge = report.isValid && age >= -60_000 && age <= 30 * 60_000;
+    // A parked tracker may sleep, so proof upload accepts a position up to 30 minutes
+    // old. Anything older must not produce a misleading distance from an old location.
+    const position = assessPickupPosition(device, job.pickupLocation, now, 30 * 60_000);
+    if (position.state === "stale" || !position.reportedAt) {
+      job.trackerUnverifiedReason = "Tracker device signal was stale / offline";
+      await col.updateOne(filter, {
+        $set: { trackerUnverifiedReason: job.trackerUnverifiedReason, gpsliveImei: device.imei },
+        $unset: { trackerArrivalCandidateAt: "", trackerDistanceMeters: "", trackerLocationName: "" }
+      } as any);
+      return;
+    }
 
-    const dist = Math.round(distanceMeters(device, job.pickupLocation));
-    const reportedAt = report.isValid ? report.toUTC().toISO()! : photoTakenAt;
+    const dist = position.distanceMeters;
+    const reportedAt = position.reportedAt;
+    const assignedImei = device.imei;
 
-    if (dist <= ARRIVAL_RADIUS_METERS && isReasonableAge) {
+    if (position.state === "inside") {
       // Van is at the pickup location! Verify arrival!
       const arrivalTime = reportedAt || photoTakenAt;
       job.trackerArrivalAt = arrivalTime;
@@ -207,7 +239,9 @@ export async function verifyArrivalAtPhotoUpload(
           trackerDistanceMeters: dist,
           gpsliveImei: assignedImei
         },
-        $unset: { trackerArrivalCandidateAt: "", trackerUnverifiedReason: "" }
+        $unset: {
+          trackerArrivalCandidateAt: "", trackerUnverifiedReason: "", trackerLocationName: ""
+        }
       } as any);
       log.info("tracker arrival verified at photo upload", { job_id: job.jobId, distance_meters: dist });
     } else {
@@ -242,4 +276,3 @@ export async function verifyArrivalAtPhotoUpload(
     log.warn("verifyArrivalAtPhotoUpload failed", { job_id: job.jobId, error: String(error) });
   }
 }
-

@@ -15,7 +15,7 @@ export interface GpsLiveDevice {
   lng: number;
   speed: number;
   odometer?: number;
-  active?: string;
+  active?: string | boolean;
   /**
    * Raw hardware sensor readings, all string-typed by the device firmware (Teltonika,
    * per the "protocol" field on live accounts). Keys are not documented by GPSLive and
@@ -52,6 +52,14 @@ export function parseTrailingInitials(name: string): string | null {
   return match ? match[1].toUpperCase() : null;
 }
 
+/** GPSLive keeps expired/replaced trackers in API responses after hiding them from
+ * the Live Map. Missing status is treated as active for older payloads and tests. */
+export function isGpsLiveDeviceActive(device: Pick<GpsLiveDevice, "active">): boolean {
+  if (device.active === undefined || device.active === null || device.active === "") return true;
+  if (typeof device.active === "boolean") return device.active;
+  return !["false", "0", "no", "inactive"].includes(device.active.trim().toLowerCase());
+}
+
 /** Best-effort plate guess for payloads that only carry a combined "<PLATE> -
  * <INITIALS>" device name (e.g. the webhook's `deviceName`), unlike /v1/devices/list
  * rows which already have a separate plateNumber field. Falls back to the whole
@@ -66,63 +74,66 @@ export interface MatchedDriver {
 }
 
 export interface DriverMatchIndex {
+  byImei: Map<string, MatchedDriver>;
   byPlate: Map<string, MatchedDriver>;
   byInitials: Map<string, MatchedDriver>;
 }
 
-/**
- * Plate is the authoritative signal once a driver has one on file; initials-matching
- * is only offered for drivers who have no van registration on file to match by
- * instead. Shared by fleet.routes.ts and gpslive-webhook.routes.ts, which both need
- * to turn a GPSLive device identity into "which driver is this".
- */
+/** Build all available identity joins. Callers prefer IMEI, then the deliberate
+ * trailing-initials convention used in GPSLive names, then registration plate. */
 export function buildDriverMatchIndex(
-  drivers: Array<{ initials: string; fullName: string; vanRegistration: string }>
+  drivers: Array<{ initials: string; fullName: string; vanRegistration: string; imei?: string }>
 ): DriverMatchIndex {
+  const byImei = new Map<string, MatchedDriver>();
   const byPlate = new Map<string, MatchedDriver>();
   const byInitials = new Map<string, MatchedDriver>();
   for (const d of drivers) {
     if (!d.initials) continue;
-    if (d.vanRegistration) {
-      byPlate.set(normalizePlate(d.vanRegistration), { initials: d.initials, fullName: d.fullName });
-    } else {
-      byInitials.set(d.initials, { initials: d.initials, fullName: d.fullName });
-    }
+    const matched = { initials: d.initials, fullName: d.fullName };
+    if (d.imei) byImei.set(d.imei, matched);
+    if (d.vanRegistration) byPlate.set(normalizePlate(d.vanRegistration), matched);
+    byInitials.set(d.initials, matched);
   }
-  return { byPlate, byInitials };
+  return { byImei, byPlate, byInitials };
 }
 
 export function matchDriverByPlateAndName(
   plateNumber: string,
   name: string,
-  index: DriverMatchIndex
+  index: DriverMatchIndex,
+  imei = ""
 ): MatchedDriver | null {
-  const byPlate = index.byPlate.get(normalizePlate(plateNumber || ""));
+  const byImei = imei ? index.byImei.get(imei) : undefined;
   const trailingInitials = parseTrailingInitials(name || "");
   const byInitials = trailingInitials ? index.byInitials.get(trailingInitials) : undefined;
-  return byPlate || byInitials || null;
+  const byPlate = index.byPlate.get(normalizePlate(plateNumber || ""));
+  return byImei || byInitials || byPlate || null;
 }
 
 /** The reverse direction of matchDriverByPlateAndName above: given a driver, find
  * their van's GPSLive device (to look up its imei) instead of given a device, find
  * the driver. Used by congestion-zone.service.ts's job-start check.
  *
- * An admin-assigned IMEI is authoritative. Plate/initials matching is available only
- * for drivers without a device assignment; an offline assigned device must not silently
- * turn into a different van. */
+ * An active admin-assigned IMEI is authoritative. If that tracker has been retired,
+ * one unique active trailing-initials match repairs the association; plate is the
+ * final fallback and is also accepted only when unique. */
 export function findDeviceForDriver(
   driver: { initials: string; vanRegistration: string; imei?: string },
   devices: GpsLiveDevice[]
 ): GpsLiveDevice | null {
+  const activeDevices = devices.filter(isGpsLiveDeviceActive);
   if (driver.imei) {
-    return devices.find(d => d.imei === driver.imei) ?? null;
+    const assigned = activeDevices.find(d => d.imei === driver.imei);
+    if (assigned) return assigned;
   }
-  if (driver.vanRegistration) {
-    const plate = normalizePlate(driver.vanRegistration);
-    const byPlate = devices.find(d => normalizePlate(d.plateNumber || "") === plate);
-    if (byPlate) return byPlate;
-  }
-  return devices.find(d => parseTrailingInitials(d.name || "") === driver.initials) ?? null;
+  const initials = driver.initials.trim().toUpperCase();
+  const byInitials = activeDevices.filter(d => parseTrailingInitials(d.name || "") === initials);
+  if (byInitials.length === 1) return byInitials[0];
+  if (byInitials.length > 1 || !driver.vanRegistration) return null;
+
+  const plate = normalizePlate(driver.vanRegistration);
+  const byPlate = activeDevices.filter(d => normalizePlate(d.plateNumber || "") === plate);
+  return byPlate.length === 1 ? byPlate[0] : null;
 }
 
 /**
