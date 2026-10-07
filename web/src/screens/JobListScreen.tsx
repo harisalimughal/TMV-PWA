@@ -184,19 +184,26 @@ export function JobListScreen({ driver, onOpenJob }: JobListScreenProps) {
        *  scroll flow (not inside PullToRefresh, whose overflow context would stop
        *  `position: sticky` working) so it pins to the top as the list scrolls. */}
       {showFilterBar && (
-        <div className="sticky top-0 z-20 bg-bg px-4 pb-1 pt-2">
-          <JobFilterBar
-            value={filter}
-            onChange={value => {
-              setFilter(value);
-              // Switching tabs is also a natural moment to check for anything new --
-              // no reason to make the driver pull-to-refresh just because they
-              // tapped between Today and Upcoming.
-              void load("refresh");
-            }}
-            counts={{ today: filtered.counts.today, upcoming: filtered.counts.upcoming }}
+        <>
+          <div className="sticky top-0 z-20 bg-bg px-4 pb-1 pt-2">
+            <JobFilterBar
+              value={filter}
+              onChange={value => {
+                setFilter(value);
+                // Switching tabs is also a natural moment to check for anything new --
+                // no reason to make the driver pull-to-refresh just because they
+                // tapped between Today and Upcoming.
+                void load("refresh");
+              }}
+              counts={{ today: filtered.counts.today, upcoming: filtered.counts.upcoming }}
+            />
+          </div>
+          <div
+            aria-hidden
+            className="transition-[height] duration-fast motion-reduce:transition-none"
+            style={{ height: "var(--tmv-persistent-alert-space, 0px)" }}
           />
-        </div>
+        </>
       )}
 
       <PullToRefresh onRefresh={() => load("refresh")} scrollRef={scrollRef}>
