@@ -163,7 +163,7 @@ export function InAppNotificationListener(): React.ReactElement | null {
       {zoneAlerts.map(alert => (
         <div
           key={alert.id}
-          className="pointer-events-auto relative w-full max-w-[calc(var(--content-max-width)-2rem)] rounded-[8px] border border-[#F1D989] bg-[#FFFBE6] px-5 py-4 text-center text-[#8A5A21] shadow-sm animate-in slide-in-from-top-4"
+          className="pointer-events-auto relative w-full max-w-[calc(var(--content-max-width)-2rem)] rounded-[8px] border border-[#C99526] bg-[#FFFBE6] px-5 py-4 text-center text-[#8A5A21] shadow-sm animate-in slide-in-from-top-4"
         >
           <div className="min-w-0">
             <p className="text-[13px] font-bold leading-snug">{alert.title}</p>
