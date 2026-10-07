@@ -34,6 +34,10 @@ export function AppLayout({ active, onSelect, driver, onLogout, showTopBar = tru
             onOpenProfile={() => onSelect("profile")}
           />
         )}
+        <div
+          data-persistent-alert-host="app"
+          className="mx-auto w-full max-w-content shrink-0 px-4 pt-3 empty:hidden"
+        />
         <div className="min-h-0 flex-1">{children}</div>
       </div>
       <BottomNav active={active} onSelect={onSelect} />

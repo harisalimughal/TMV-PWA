@@ -1,4 +1,5 @@
-import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
+import React, { useEffect, useLayoutEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 import { useToast } from "./ui/Toast";
 import { notifyJobsRefresh } from "../lib/jobsRefresh";
@@ -20,11 +21,16 @@ const PERSISTENT_KINDS = new Set([
   "tunnel_zone",
   "arrival_proof_overdue"
 ]);
-const ALERT_SPACE_VAR = "--tmv-persistent-alert-space";
+
+function findAlertHost(): HTMLElement | null {
+  return document.querySelector<HTMLElement>(
+    '[data-persistent-alert-host="screen"]'
+  ) ?? document.querySelector<HTMLElement>('[data-persistent-alert-host="app"]');
+}
 
 export function InAppNotificationListener(): React.ReactElement | null {
   const toast = useToast();
-  const alertStackRef = useRef<HTMLDivElement>(null);
+  const [alertHost, setAlertHost] = useState<HTMLElement | null>(null);
   // Congestion/tunnel zone pushes (congestion-zone.service.ts's data.kind) get their
   // own persistent notice instead of the usual toast -- see the render below. A toast
   // that fades out in a few seconds is too easy to miss while driving, and this is
@@ -136,32 +142,21 @@ export function InAppNotificationListener(): React.ReactElement | null {
     }
   };
 
+  // The listener lives above the routed screen in App.tsx. Resolve the nearest host
+  // after each commit so navigation can move an existing alert from the app-level
+  // fallback into a screen-specific slot without relying on viewport coordinates.
   useLayoutEffect(() => {
-    const stack = alertStackRef.current;
-    const root = document.documentElement;
-    const updateSpace = () => {
-      root.style.setProperty(ALERT_SPACE_VAR, stack && zoneAlerts.length > 0 ? `${stack.offsetHeight}px` : "0px");
-    };
-
-    updateSpace();
-    if (!stack || typeof ResizeObserver === "undefined") {
-      return () => root.style.setProperty(ALERT_SPACE_VAR, "0px");
-    }
-
-    const observer = new ResizeObserver(updateSpace);
-    observer.observe(stack);
-    return () => {
-      observer.disconnect();
-      root.style.setProperty(ALERT_SPACE_VAR, "0px");
-    };
-  }, [zoneAlerts.length]);
+    const nextHost = findAlertHost();
+    setAlertHost(current => current === nextHost ? current : nextHost);
+  });
 
   if (zoneAlerts.length === 0) return null;
 
-  return (
+  const alertStack = (
     <div
-      ref={alertStackRef}
-      className="pointer-events-none fixed left-0 right-0 top-[calc(env(safe-area-inset-top)+190px)] z-[15] flex flex-col items-center gap-2 px-4 lg:left-[var(--sidebar-width)]"
+      className={alertHost
+        ? "pointer-events-none relative z-[15] flex w-full flex-col items-center gap-2"
+        : "pointer-events-none fixed inset-x-0 top-[calc(env(safe-area-inset-top)+12px)] z-[300] flex flex-col items-center gap-2 px-4 lg:left-[var(--sidebar-width)]"}
       role="alert"
       aria-live="assertive"
     >
@@ -185,4 +180,6 @@ export function InAppNotificationListener(): React.ReactElement | null {
       ))}
     </div>
   );
+
+  return alertHost ? createPortal(alertStack, alertHost) : alertStack;
 }

@@ -199,9 +199,8 @@ export function JobListScreen({ driver, onOpenJob }: JobListScreenProps) {
             />
           </div>
           <div
-            aria-hidden
-            className="transition-[height] duration-fast motion-reduce:transition-none"
-            style={{ height: "var(--tmv-persistent-alert-space, 0px)" }}
+            data-persistent-alert-host="screen"
+            className="px-4 pt-3 empty:hidden"
           />
         </>
       )}

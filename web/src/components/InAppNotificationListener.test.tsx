@@ -17,7 +17,7 @@ vi.mock("../lib/alertSound", () => ({
 
 vi.mock("../lib/pwa/notificationLog", () => notificationLogMocks);
 
-function renderListener() {
+function renderListener(withHost = false) {
   const listeners: Array<(event: MessageEvent) => void> = [];
   const serviceWorker = {
     addEventListener: vi.fn((_type: string, listener: (event: MessageEvent) => void) => {
@@ -33,6 +33,7 @@ function renderListener() {
   render(
     <ToastProvider>
       <InAppNotificationListener />
+      {withHost && <div data-testid="alert-host" data-persistent-alert-host="screen" />}
     </ToastProvider>
   );
 
@@ -100,6 +101,21 @@ describe("InAppNotificationListener", () => {
     expect(alert).toHaveTextContent("Van loaded photo overdue");
     expect(alert).toHaveTextContent("Hurry up");
     expect(playPersistentAlertSound).toHaveBeenCalledOnce();
+  });
+
+  it("renders inside the screen host so the notice occupies layout space", async () => {
+    const { sendPush } = renderListener(true);
+
+    sendPush({
+      title: "Traffic update",
+      body: "Use the north entrance today.",
+      data: { kind: "broadcast_message" }
+    });
+
+    const alert = await screen.findByRole("alert");
+    expect(screen.getByTestId("alert-host")).toContainElement(alert);
+    expect(alert).toHaveClass("relative");
+    expect(alert).not.toHaveClass("fixed");
   });
 
   it("restores a background broadcast until its center notice is explicitly closed", async () => {
