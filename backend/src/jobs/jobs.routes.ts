@@ -21,6 +21,8 @@ import { listScenarioSubmissionsForJob } from "../db/scenario.repo";
 import { getSetting } from "../db/settings.repo";
 import { reverseGeocode } from "../integrations/geocode";
 import { log } from "../utils/logger";
+import { getDriverJobSummary } from "../db/driver-job-summary.repo";
+import { submitDriverJobSummary } from "./driver-job-summary.service";
 
 export const JOB_EVIDENCE_UPLOAD_MAX_FILES = 5;
 export const SCENARIO_PHOTO_UPLOAD_MAX_FILES = 30;
@@ -203,7 +205,8 @@ export function jobsRoutes(): Router {
         evidence,
         evidenceItems,
         suggestedTotal: await suggestedTotal(job),
-        confirmationText
+        confirmationText,
+        driverJobSummary: await getDriverJobSummary(job.jobId)
       });
     } catch (error) {
       errorResponse(res, error);
@@ -303,6 +306,15 @@ export function jobsRoutes(): Router {
         suggestedTotal: await suggestedTotal(job),
         evidenceItems: await evidenceItemsFor(job.jobId)
       });
+    } catch (error) {
+      errorResponse(res, error);
+    }
+  });
+
+  router.post("/:jobId/driver-summary", async (req: Request, res: Response) => {
+    try {
+      const summary = await submitDriverJobSummary(String(req.params.jobId), req.driverEmail!, req.body ?? {});
+      res.status(200).json({ summary });
     } catch (error) {
       errorResponse(res, error);
     }

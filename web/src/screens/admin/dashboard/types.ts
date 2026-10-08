@@ -61,6 +61,22 @@ export interface MoneyBreakdownItem {
   minutes?: number;
 }
 
+export interface DriverJobSummary {
+  jobId: string;
+  driverInitials: string;
+  driverEmail: string;
+  startTime: string;
+  endTime: string;
+  congestionCharge: boolean;
+  congestionChargePence: number;
+  helperName: string;
+  helperHours: number;
+  paymentMethod: string;
+  amountCollectedPence: number;
+  paymentBreakdown?: Array<{ method: "Cash" | "Card" | "Link" | "Invoice/Transfer"; amountPence: number }>;
+  submittedAt: string;
+}
+
 export type ScenarioKind = "checkin" | "checkout" | "parking" | "liability";
 
 /** A Check In/Check Out/Parking Liability/Liability Report submission filed
@@ -155,6 +171,7 @@ export interface NormalizedJob {
   paymentBreakdown?: MoneyBreakdownItem[];
   extraChargeBreakdown?: MoneyBreakdownItem[];
   paymentStatus: string;
+  driverJobSummary?: DriverJobSummary;
   reviewEmailStatus?: "Yes" | "No";
   managerReviewStatus?: "Pending" | "Approved" | "Flagged";
   managerReviewNote?: string;

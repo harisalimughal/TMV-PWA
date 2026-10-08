@@ -82,6 +82,35 @@ export interface Job {
   updatedAt: string;
 }
 
+export type DriverJobSummaryPaymentMethod = "Cash" | "Card" | "Link" | "Invoice/Transfer";
+
+export interface DriverJobSummary {
+  jobId: string;
+  driverEmail: string;
+  driverInitials: string;
+  startTime: string;
+  endTime: string;
+  congestionCharge: boolean;
+  congestionChargePence: number;
+  helperName: string;
+  helperHours: number;
+  paymentMethod: string;
+  amountCollectedPence: number;
+  paymentBreakdown?: Array<{ method: DriverJobSummaryPaymentMethod; amountPence: number }>;
+  submittedAt: string;
+}
+
+export interface DriverJobSummaryInput {
+  startTime: string;
+  endTime: string;
+  congestionCharge: boolean;
+  congestionChargeAmount: string;
+  helperName: string;
+  helperHours: string;
+  paymentMethods: DriverJobSummaryPaymentMethod[];
+  paymentAmounts: Record<DriverJobSummaryPaymentMethod, string>;
+}
+
 export interface ActivityEntry {
   jobId: string;
   driver: string;
@@ -152,8 +181,16 @@ export function fetchJobDetail(jobId: string): Promise<{
   evidenceItems: EvidenceItem[];
   suggestedTotal: number;
   confirmationText: string;
+  driverJobSummary?: DriverJobSummary | null;
 }> {
   return request(`/api/jobs/${encodeURIComponent(jobId)}`);
+}
+
+export function submitDriverJobSummary(
+  jobId: string,
+  input: DriverJobSummaryInput
+): Promise<{ summary: DriverJobSummary }> {
+  return postJson(`/api/jobs/${encodeURIComponent(jobId)}/driver-summary`, input);
 }
 
 export function fetchJobScenarios(jobId: string): Promise<{ submissions: ScenarioSubmission[] }> {

@@ -17,6 +17,7 @@ import { appendActivity, deleteActivityForJob, listActivityForJobs } from "../..
 import { listEvidenceForJob, listEvidenceForJobs, deleteEvidenceForJob, getEvidence, deleteEvidence } from "../../db/evidence.repo";
 import { listScenarioSubmissionsForJob, listScenarioSubmissionsForJobs, deleteScenarioSubmissionsForJob } from "../../db/scenario.repo";
 import { deleteExceptionsForJob, listExceptionsForJobs } from "../../db/exceptions.repo";
+import { listDriverJobSummariesForJobs } from "../../db/driver-job-summary.repo";
 import { destroyEvidenceImage, publicIdFromCloudinaryUrl } from "../../storage/cloudinary";
 import { JobStatus, Job } from "../../jobs/job.types";
 import { WorkflowState } from "../../workflow/workflow.states";
@@ -50,14 +51,15 @@ function escapeCsvField(val: unknown): string {
  * full for pages like these that only ever look at one job.
  */
 async function buildNormalizedJob(job: Job): Promise<NormalizedJob> {
-  const [evidence, activity, scenarioSubmissions, exceptions] = await Promise.all([
+  const [evidence, activity, scenarioSubmissions, exceptions, driverJobSummaries] = await Promise.all([
     listEvidenceForJobs([job.jobId]),
     listActivityForJobs([job.jobId]),
     listScenarioSubmissionsForJobs([job.jobId]),
-    listExceptionsForJobs([job.jobId])
+    listExceptionsForJobs([job.jobId]),
+    listDriverJobSummariesForJobs([job.jobId])
   ]);
   const [normalized] = await normalizeMongoDataset({
-    jobs: [job], evidence, activity, scenarioSubmissions, exceptions,
+    jobs: [job], evidence, activity, scenarioSubmissions, exceptions, driverJobSummaries,
     fetchedAt: new Date().toISOString(), durationMs: 0
   });
   return normalized;
@@ -529,6 +531,7 @@ export function dashboardJobsRoutes(): Router {
         const evidence = await listEvidenceForJobs(scopedJobs.map(j => j.jobId));
         allJobs = await normalizeMongoDataset({
           jobs: scopedJobs, evidence, activity: [], scenarioSubmissions: [], exceptions: [],
+          driverJobSummaries: await listDriverJobSummariesForJobs(scopedJobs.map(j => j.jobId)),
           fetchedAt: new Date().toISOString(), durationMs: 0
         });
       } else {
@@ -699,10 +702,11 @@ export function dashboardJobsRoutes(): Router {
       const jobIds = pageJobs.map(j => j.jobId);
       // Activity is scoped to this page only so list cards can show the driver-viewed
       // marker without falling back to a full company-wide activity read.
-      const [pageEvidence, pageActivity, pageScenarios] = await Promise.all([
+      const [pageEvidence, pageActivity, pageScenarios, pageDriverJobSummaries] = await Promise.all([
         listEvidenceForJobs(jobIds),
         listActivityForJobs(jobIds),
-        listScenarioSubmissionsForJobs(jobIds)
+        listScenarioSubmissionsForJobs(jobIds),
+        listDriverJobSummariesForJobs(jobIds)
       ]);
 
       const normalizedItems = await normalizeMongoDataset({
@@ -711,6 +715,7 @@ export function dashboardJobsRoutes(): Router {
         activity: pageActivity,
         scenarioSubmissions: pageScenarios,
         exceptions: [],
+        driverJobSummaries: pageDriverJobSummaries,
         fetchedAt: new Date().toISOString(),
         durationMs: 0
       });

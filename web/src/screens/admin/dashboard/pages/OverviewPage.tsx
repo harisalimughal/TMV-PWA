@@ -61,6 +61,62 @@ function extraChargeBreakdownSummary(job: NormalizedJob): string {
   return "";
 }
 
+function poundsFromPence(value: number | undefined): string {
+  return ((value || 0) / 100).toFixed(2);
+}
+
+function driverSummaryMinutes(job: NormalizedJob): number {
+  const summary = job.driverJobSummary;
+  if (!summary) return 0;
+  const start = new Date(summary.startTime).getTime();
+  const end = new Date(summary.endTime).getTime();
+  if (!Number.isFinite(start) || !Number.isFinite(end) || end < start) return 0;
+  return Math.round((end - start) / 60000);
+}
+
+function normalizedManualMethod(method: string): string {
+  const lower = method.toLowerCase();
+  if (lower.includes("invoice") || lower.includes("transfer")) return "invoice-transfer";
+  return lower;
+}
+
+function paymentMethodMatches(system: string, manual: string): boolean {
+  const sys = system.toLowerCase();
+  const man = normalizedManualMethod(manual);
+  if (man === "invoice-transfer") return sys.includes("invoice") || sys.includes("bank") || sys.includes("transfer");
+  return sys.includes(man);
+}
+
+function manualPaymentMethods(job: NormalizedJob): string[] {
+  const summary = job.driverJobSummary;
+  if (!summary) return [];
+  if (summary.paymentBreakdown?.length) return summary.paymentBreakdown.map(row => row.method);
+  return summary.paymentMethod.split(",").map(part => part.trim()).filter(Boolean);
+}
+
+function manualPaymentSummary(job: NormalizedJob): string {
+  const summary = job.driverJobSummary;
+  if (!summary) return "-";
+  if (summary.paymentBreakdown?.length) {
+    return summary.paymentBreakdown
+      .map(row => `${row.method} GBP ${poundsFromPence(row.amountPence)}`)
+      .join(" | ");
+  }
+  return `${summary.paymentMethod} | GBP ${poundsFromPence(summary.amountCollectedPence)}`;
+}
+
+function discrepancyLabels(job: NormalizedJob): string[] {
+  const summary = job.driverJobSummary;
+  if (!summary) return ["Missing driver entry"];
+  const labels: string[] = [];
+  const manualMinutes = driverSummaryMinutes(job);
+  if (job.actualMinutes && manualMinutes && Math.abs(job.actualMinutes - manualMinutes) > 15) labels.push("Hours");
+  if (Boolean(job.congestionCharge) !== summary.congestionCharge || Math.abs((job.congestionCharge || 0) - summary.congestionChargePence) > 0) labels.push("Congestion");
+  if (!manualPaymentMethods(job).every(method => paymentMethodMatches(job.paymentMethod || "", method))) labels.push("Payment method");
+  if (Math.abs((job.amountCharged || 0) - summary.amountCollectedPence) > 0) labels.push("Amount");
+  return labels;
+}
+
 export function OverviewPage({ onSelectSection }: Props) {
   const [from, setFrom] = useState<string | undefined>(() => defaultDashboardDateRange().from);
   const [to, setTo] = useState<string | undefined>(() => defaultDashboardDateRange().to);
@@ -304,6 +360,7 @@ function OverviewSummary({
 function WorkBreakdown({ from, to }: { from?: string; to?: string }) {
   const [driver, setDriver] = useState("all");
   const [expandedDriver, setExpandedDriver] = useState<string | null>(null);
+  const [compareDriver, setCompareDriver] = useState<string | null>(null);
   const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
   const [isExportOpen, setIsExportOpen] = useState(false);
   const exportRef = useRef<HTMLDivElement>(null);
@@ -355,6 +412,7 @@ function WorkBreakdown({ from, to }: { from?: string; to?: string }) {
 
   useEffect(() => {
     setExpandedDriver(null);
+    setCompareDriver(null);
   }, [from, to, driver]);
 
   // The dropdown offers real drivers to filter down to -- not every code this
@@ -519,6 +577,7 @@ function WorkBreakdown({ from, to }: { from?: string; to?: string }) {
               ) : (
                 rows.map(r => {
                   const isExpanded = expandedDriver === r.initials;
+                  const isCompare = compareDriver === r.initials;
                   const driverJobs = isExpanded ? jobsForDriver(breakdownJobs, r.initials) : [];
                   return (
                     <React.Fragment key={r.initials}>
@@ -543,7 +602,26 @@ function WorkBreakdown({ from, to }: { from?: string; to?: string }) {
                         <td className="py-2.5 px-3 text-right font-mono">{r.bankCollectedPounds.toFixed(2)}</td>
                         <td className="py-2.5 px-3 text-right font-mono">{r.invoiceCollectedPounds.toFixed(2)}</td>
                         <td className="py-2.5 px-3 text-right font-mono font-bold">{r.totalChargesPounds.toFixed(2)}</td>
-                        <td className="py-2.5 px-3 text-right font-mono font-bold">{r.revenuePounds.toFixed(2)}</td>
+                        <td className="py-2.5 px-3 text-right font-mono font-bold">
+                          <div className="flex items-center justify-end gap-2">
+                            <span>{r.revenuePounds.toFixed(2)}</span>
+                            <button
+                              type="button"
+                              onClick={event => {
+                                event.stopPropagation();
+                                setExpandedDriver(r.initials);
+                                setCompareDriver(isCompare ? null : r.initials);
+                              }}
+                              className={`rounded-control border px-2 py-1 text-[11px] font-bold transition ${
+                                isCompare
+                                  ? "border-admin-brand bg-admin-ink text-white"
+                                  : "border-admin-line bg-white text-admin-ink hover:bg-admin-surface"
+                              }`}
+                            >
+                              Compare
+                            </button>
+                          </div>
+                        </td>
                       </tr>
                       {isExpanded && (
                         <tr>
@@ -554,6 +632,8 @@ function WorkBreakdown({ from, to }: { from?: string; to?: string }) {
                               </div>
                             ) : driverJobs.length === 0 ? (
                               <div className="py-6 text-center text-admin-muted">No completed jobs found for this driver in the selected range.</div>
+                            ) : isCompare ? (
+                              <DriverComparisonTable jobs={driverJobs} />
                             ) : (
                               <div className="max-w-full overflow-x-auto rounded-card border border-admin-line bg-white">
                                 <table className="w-full min-w-[1360px] text-left text-[12px] border-collapse">
@@ -663,6 +743,94 @@ function WorkBreakdown({ from, to }: { from?: string; to?: string }) {
           />
         </PrintPortal>
       )}
+    </div>
+  );
+}
+
+function DriverComparisonTable({ jobs }: { jobs: NormalizedJob[] }) {
+  const submittedJobs = jobs.filter(job => job.driverJobSummary);
+  const driverMinutes = submittedJobs.reduce((sum, job) => sum + driverSummaryMinutes(job), 0);
+  const helperHours = submittedJobs.reduce((sum, job) => sum + (job.driverJobSummary?.helperHours || 0), 0);
+
+  return (
+    <div className="space-y-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <div className="rounded-card border border-admin-line bg-white px-4 py-3">
+          <p className="text-[11px] font-bold uppercase text-admin-muted">Driver entries</p>
+          <p className="mt-1 text-[20px] font-bold text-admin-ink">{submittedJobs.length} / {jobs.length}</p>
+        </div>
+        <div className="rounded-card border border-admin-line bg-white px-4 py-3">
+          <p className="text-[11px] font-bold uppercase text-admin-muted">Driver total hours</p>
+          <p className="mt-1 text-[20px] font-bold text-admin-ink">{formatDuration(driverMinutes)}</p>
+        </div>
+        <div className="rounded-card border border-admin-line bg-white px-4 py-3">
+          <p className="text-[11px] font-bold uppercase text-admin-muted">Helper total hours</p>
+          <p className="mt-1 text-[20px] font-bold text-admin-ink">{helperHours.toFixed(1)} hrs</p>
+        </div>
+      </div>
+
+      <div className="max-w-full overflow-x-auto rounded-card border border-admin-line bg-white">
+        <table className="w-full min-w-[1320px] text-left text-[12px] border-collapse">
+          <thead className="bg-white">
+            <tr className="border-b border-admin-line">
+              <th className="py-2 px-3 font-semibold text-admin-muted">Job</th>
+              <th className="py-2 px-3 font-semibold text-admin-muted">Customer</th>
+              <th className="py-2 px-3 font-semibold text-admin-muted">System time</th>
+              <th className="py-2 px-3 font-semibold text-admin-muted">Driver time</th>
+              <th className="py-2 px-3 font-semibold text-admin-muted text-right">System hours</th>
+              <th className="py-2 px-3 font-semibold text-admin-muted text-right">Driver hours</th>
+              <th className="py-2 px-3 font-semibold text-admin-muted">Helper</th>
+              <th className="py-2 px-3 font-semibold text-admin-muted text-right">Helper hours</th>
+              <th className="py-2 px-3 font-semibold text-admin-muted text-right">System congestion</th>
+              <th className="py-2 px-3 font-semibold text-admin-muted text-right">Driver congestion</th>
+              <th className="py-2 px-3 font-semibold text-admin-muted">System payment</th>
+              <th className="py-2 px-3 font-semibold text-admin-muted">Driver payment</th>
+              <th className="py-2 px-3 font-semibold text-admin-muted">Discrepancy</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-admin-line/60">
+            {jobs.map(job => {
+              const summary = job.driverJobSummary;
+              const discrepancies = discrepancyLabels(job);
+              return (
+                <tr key={`${job.jobId}-compare`} className={discrepancies.length ? "bg-admin-status-red-bg/30" : ""}>
+                  <td className="py-2 px-3 font-mono font-semibold text-admin-brand">{job.jobId}</td>
+                  <td className="py-2 px-3 font-medium text-admin-ink">{job.customerName || "Not recorded"}</td>
+                  <td className="py-2 px-3 text-admin-muted whitespace-nowrap">
+                    {job.actualStart ? formatLondonDateTime(job.actualStart) : "Not recorded"}<br />
+                    {job.actualFinish ? formatLondonDateTime(job.actualFinish) : "Not recorded"}
+                  </td>
+                  <td className="py-2 px-3 text-admin-muted whitespace-nowrap">
+                    {summary ? formatLondonDateTime(summary.startTime) : "Missing"}<br />
+                    {summary ? formatLondonDateTime(summary.endTime) : "Missing"}
+                  </td>
+                  <td className="py-2 px-3 text-right font-mono">{formatDuration(job.actualMinutes || 0)}</td>
+                  <td className="py-2 px-3 text-right font-mono">{summary ? formatDuration(driverSummaryMinutes(job)) : "-"}</td>
+                  <td className="py-2 px-3">{summary?.helperName || "-"}</td>
+                  <td className="py-2 px-3 text-right font-mono">{summary ? summary.helperHours.toFixed(1) : "-"}</td>
+                  <td className="py-2 px-3 text-right font-mono">GBP {poundsFromPence(job.congestionCharge)}</td>
+                  <td className="py-2 px-3 text-right font-mono">{summary ? `GBP ${poundsFromPence(summary.congestionChargePence)}` : "-"}</td>
+                  <td className="py-2 px-3">{paymentBreakdownSummary(job)}<br /><span className="font-mono">GBP {poundsFromPence(job.amountCharged)}</span></td>
+                  <td className="py-2 px-3">{manualPaymentSummary(job)}</td>
+                  <td className="py-2 px-3">
+                    {discrepancies.length ? (
+                      <div className="flex flex-wrap gap-1">
+                        {discrepancies.map(label => (
+                          <span key={`${job.jobId}-${label}`} className="rounded-control bg-admin-status-red-bg px-2 py-0.5 text-[10px] font-bold uppercase text-admin-status-red">
+                            {label}
+                          </span>
+                        ))}
+                      </div>
+                    ) : (
+                      <span className="rounded-control bg-admin-status-green-bg px-2 py-0.5 text-[10px] font-bold uppercase text-admin-status-green">Matched</span>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }

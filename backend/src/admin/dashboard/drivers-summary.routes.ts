@@ -11,6 +11,7 @@ import { listDriverProfiles } from "../../auth/driver-account.service";
 import { getDashboardDataset } from "./dataset-cache";
 import { listJobsInRange } from "../../db/jobs.repo";
 import { listEvidenceForJobs } from "../../db/evidence.repo";
+import { listDriverJobSummariesForJobs } from "../../db/driver-job-summary.repo";
 import { normalizeMongoDataset } from "./normalize";
 import { DriverProfile } from "../../jobs/job.types";
 import { NormalizedJob } from "./types";
@@ -160,9 +161,14 @@ export function dashboardDriversSummaryRoutes(): Router {
       if (from || to) {
         const [driverList, scopedJobs] = await Promise.all([listDriverProfiles(), listJobsInRange(from, to)]);
         drivers = driverList;
-        const evidence = await listEvidenceForJobs(scopedJobs.map(j => j.jobId));
+        const jobIds = scopedJobs.map(j => j.jobId);
+        const [evidence, driverJobSummaries] = await Promise.all([
+          listEvidenceForJobs(jobIds),
+          listDriverJobSummariesForJobs(jobIds)
+        ]);
         jobs = await normalizeMongoDataset({
           jobs: scopedJobs, evidence, activity: [], scenarioSubmissions: [], exceptions: [],
+          driverJobSummaries,
           fetchedAt: new Date().toISOString(), durationMs: 0
         });
         fetchedAt = new Date().toISOString();

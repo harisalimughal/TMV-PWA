@@ -260,6 +260,11 @@ export async function normalizeMongoDataset(dataset: MongoDataset): Promise<Norm
     scenariosByJob.set(s.jobId, list);
   }
 
+  const driverJobSummaryByJob = new Map<string, NonNullable<MongoDataset["driverJobSummaries"]>[number]>();
+  for (const summary of dataset.driverJobSummaries ?? []) {
+    driverJobSummaryByJob.set(summary.jobId, summary);
+  }
+
   const activityByJob = new Map<string, ActivityEntry[]>();
   for (const a of dataset.activity) {
     const list = activityByJob.get(a.jobId) || [];
@@ -361,6 +366,25 @@ export async function normalizeMongoDataset(dataset: MongoDataset): Promise<Norm
       .map(a => a.timestamp)
       .sort((a, b) => a.localeCompare(b))[0];
     const exceptions = exceptionsByJob.get(jobId) || [];
+    const driverJobSummaryDoc = driverJobSummaryByJob.get(jobId);
+    const driverJobSummary = driverJobSummaryDoc ? {
+      jobId: driverJobSummaryDoc.jobId,
+      driverInitials: driverJobSummaryDoc.driverInitials,
+      driverEmail: driverJobSummaryDoc.driverEmail,
+      startTime: toUtcIso(driverJobSummaryDoc.startTime),
+      endTime: toUtcIso(driverJobSummaryDoc.endTime),
+      congestionCharge: driverJobSummaryDoc.congestionCharge,
+      congestionChargePence: pence(driverJobSummaryDoc.congestionChargePence || 0),
+      helperName: driverJobSummaryDoc.helperName,
+      helperHours: driverJobSummaryDoc.helperHours,
+      paymentMethod: driverJobSummaryDoc.paymentMethod,
+      amountCollectedPence: pence(driverJobSummaryDoc.amountCollectedPence || 0),
+      paymentBreakdown: driverJobSummaryDoc.paymentBreakdown?.map(row => ({
+        method: row.method,
+        amountPence: pence(row.amountPence || 0)
+      })),
+      submittedAt: toUtcIso(driverJobSummaryDoc.submittedAt)
+    } : undefined;
 
     if (isDuplicate) {
       exceptions.push({ type: "DUPLICATE_JOB_ID", detail: `Job ID "${jobId}" appears more than once.`, timestamp: new Date().toISOString() });
@@ -404,6 +428,7 @@ export async function normalizeMongoDataset(dataset: MongoDataset): Promise<Norm
       paymentBreakdown,
       extraChargeBreakdown,
       paymentStatus: job.paymentStatus || "Not recorded",
+      driverJobSummary,
       reviewEmailSent: job.reviewEmailSent === true,
       reviewEmailStatus: job.reviewEmailSent === true ? "Yes" : "No",
       managerReviewStatus: job.managerReviewStatus || "Pending",

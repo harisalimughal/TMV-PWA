@@ -10,6 +10,7 @@ import { listAllEvidence } from "../../db/evidence.repo";
 import { listAllActivity } from "../../db/activity.repo";
 import { listAllScenarioSubmissions, ScenarioSubmissionDoc } from "../../db/scenario.repo";
 import { listExceptions, ExceptionDoc } from "../../db/exceptions.repo";
+import { DriverJobSummaryDoc, listAllDriverJobSummaries } from "../../db/driver-job-summary.repo";
 import { ActivityDoc } from "../../db/mongo";
 import { Job, EvidenceRecord } from "../../jobs/job.types";
 import { log } from "../../utils/logger";
@@ -20,6 +21,7 @@ export interface MongoDataset {
   activity: ActivityDoc[];
   scenarioSubmissions: ScenarioSubmissionDoc[];
   exceptions: ExceptionDoc[];
+  driverJobSummaries?: DriverJobSummaryDoc[];
   fetchedAt: string;
   durationMs: number;
 }
@@ -58,12 +60,13 @@ export async function readMongoDataset(): Promise<MongoDataset> {
   // (10s) are slow *independently* of each other, not from contending for a shared
   // resource -- running them one at a time just sums those delays instead of
   // overlapping them. Parallel at least caps the damage near the slowest single read.
-  const [jobs, evidence, activity, scenarioSubmissions, exceptions] = await Promise.all([
+  const [jobs, evidence, activity, scenarioSubmissions, exceptions, driverJobSummaries] = await Promise.all([
     timedRead("jobs", listJobs),
     timedRead("evidence", listAllEvidence),
     timedRead("activity", listAllActivity),
     timedRead("scenarioSubmissions", listAllScenarioSubmissions),
-    timedRead("exceptions", listExceptions)
+    timedRead("exceptions", listExceptions),
+    timedRead("driverJobSummaries", listAllDriverJobSummaries)
   ]);
 
   const durationMs = Date.now() - started;
@@ -71,5 +74,5 @@ export async function readMongoDataset(): Promise<MongoDataset> {
     log.warn("dashboard mongo read exceeded latency budget", { duration_ms: durationMs, budget_ms: LATENCY_BUDGET_MS });
   }
 
-  return { jobs, evidence, activity, scenarioSubmissions, exceptions, fetchedAt: new Date().toISOString(), durationMs };
+  return { jobs, evidence, activity, scenarioSubmissions, exceptions, driverJobSummaries, fetchedAt: new Date().toISOString(), durationMs };
 }

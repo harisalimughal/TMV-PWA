@@ -5,6 +5,7 @@ import { Job } from "../jobs/job.types";
 import { EvidenceRecord } from "../jobs/job.types";
 import type { VanRecordDoc } from "./van.repo";
 import type { VanComplianceDoc } from "./van-compliance.repo";
+import type { DriverJobSummaryDoc } from "./driver-job-summary.repo";
 
 export interface DriverAccountDoc {
   /** Lower-cased. Primary lookup key for login. */
@@ -179,6 +180,11 @@ export async function dismissalsCollection(): Promise<Collection<DismissalDoc>> 
   return db.collection<DismissalDoc>("dashboard_dismissals");
 }
 
+export async function driverJobSummariesCollection(): Promise<Collection<DriverJobSummaryDoc>> {
+  const db = await getDb();
+  return db.collection<DriverJobSummaryDoc>("driver_job_summaries");
+}
+
 /** Collection name kept as-is (predates the Fuel/Service record types) -- renaming a
  *  live Mongo collection isn't worth the migration risk for what's just an internal
  *  identifier. */
@@ -195,8 +201,8 @@ export async function vanComplianceCollection(): Promise<Collection<VanComplianc
 /** Creates indexes if they don't exist yet. Safe to call every startup -- createIndex
  * is a no-op when the index already matches. */
 export async function ensureIndexes(): Promise<void> {
-  const [accounts, jobs, evidence, activity, settings, pushSubs, vanRecords, vanCompliance, dismissals] = await Promise.all([
-    driverAccounts(), jobsCollection(), evidenceCollection(), activityCollection(), settingsCollection(), pushSubscriptionsCollection(), vanRecordsCollection(), vanComplianceCollection(), dismissalsCollection()
+  const [accounts, jobs, evidence, activity, settings, pushSubs, vanRecords, vanCompliance, dismissals, driverJobSummaries] = await Promise.all([
+    driverAccounts(), jobsCollection(), evidenceCollection(), activityCollection(), settingsCollection(), pushSubscriptionsCollection(), vanRecordsCollection(), vanComplianceCollection(), dismissalsCollection(), driverJobSummariesCollection()
   ]);
   await Promise.all([
     accounts.createIndex({ email: 1 }, { unique: true }),
@@ -216,7 +222,9 @@ export async function ensureIndexes(): Promise<void> {
     vanRecords.createIndex({ driverInitials: 1, submittedAt: -1 }),
     vanRecords.createIndex({ type: 1, submittedAt: -1 }),
     vanCompliance.createIndex({ vanRegistration: 1 }, { unique: true }),
-    dismissals.createIndex({ type: 1, refId: 1 }, { unique: true })
+    dismissals.createIndex({ type: 1, refId: 1 }, { unique: true }),
+    driverJobSummaries.createIndex({ jobId: 1 }, { unique: true }),
+    driverJobSummaries.createIndex({ driverInitials: 1, submittedAt: -1 })
   ]);
   log.info("mongo indexes verified");
 }

@@ -14,9 +14,13 @@ import {
   type EvidenceItem,
   type JobUpdateResult,
   sendAction,
+  submitDriverJobSummary,
   uploadEvidencePhotos,
   uploadSignature,
   type ApiError,
+  type DriverJobSummary,
+  type DriverJobSummaryInput,
+  type DriverJobSummaryPaymentMethod,
   type Job
 } from "../api/jobs";
 import { PhotoUploader } from "../components/PhotoUploader";
@@ -153,6 +157,8 @@ export function JobWorkflowScreen({ jobId, onBack }: JobWorkflowScreenProps) {
   const [suggestedTotal, setSuggestedTotal] = useState(0);
   const [evidenceItems, setEvidenceItems] = useState<EvidenceItem[]>([]);
   const [confirmationText, setConfirmationText] = useState(DEFAULT_CUSTOMER_CONFIRMATION_TEXT);
+  const [driverJobSummary, setDriverJobSummary] = useState<DriverJobSummary | null>(null);
+  const [summarySubmitting, setSummarySubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
@@ -188,6 +194,7 @@ export function JobWorkflowScreen({ jobId, onBack }: JobWorkflowScreenProps) {
       setSuggestedTotal(result.suggestedTotal);
       setEvidenceItems(result.evidenceItems ?? []);
       if (result.confirmationText) setConfirmationText(result.confirmationText);
+      setDriverJobSummary(result.driverJobSummary ?? null);
     } catch (err) {
       setError((err as ApiError)?.message || "Couldn't load this job.");
     } finally {
@@ -553,13 +560,47 @@ export function JobWorkflowScreen({ jobId, onBack }: JobWorkflowScreenProps) {
               }
             }}
             onBackHome={onBack}
+            completionSummarySubmitted={Boolean(driverJobSummary)}
             onBlocked={reason => toast.error(reason)}
           />
         }
       >
         {complete ? (
           <div className="px-4 pb-5">
-            <CompletionSummary job={job} />
+            {driverJobSummary ? (
+              <>
+                <CompletionSummary job={job} />
+                <div className="mt-4 rounded-card border border-success/25 bg-success-subtle px-4 py-3">
+                  <p className="text-label font-semibold text-success">Driver job entry submitted</p>
+                  <p className="mt-1 text-helper text-fg-muted">
+                    This manual entry is locked and ready for admin comparison.
+                  </p>
+                </div>
+              </>
+            ) : (
+              <DriverJobSummaryForm
+                job={job}
+                submitting={summarySubmitting}
+                onSubmit={async input => {
+                  if (!online) {
+                    toast.error("You're offline. Reconnect to submit this job entry.");
+                    return;
+                  }
+                  setSummarySubmitting(true);
+                  setError(null);
+                  try {
+                    const result = await submitDriverJobSummary(job.jobId, input);
+                    setDriverJobSummary(result.summary);
+                    toast.success("Job entry submitted");
+                  } catch (err) {
+                    const apiError = err as ApiError;
+                    setError(apiError?.message || "Couldn't submit the job entry.");
+                  } finally {
+                    setSummarySubmitting(false);
+                  }
+                }}
+              />
+            )}
             <div className="scroll-pb-dock" aria-hidden />
           </div>
         ) : (
@@ -1571,6 +1612,7 @@ interface StepDockProps {
   onUploadPhotos: (files: File[], metas: Array<PhotoCaptureMeta | null>) => void;
   onSubmitSignature: () => void;
   onBackHome: () => void;
+  completionSummarySubmitted: boolean;
   onBlocked: (reason: string) => void;
 }
 
@@ -1597,6 +1639,7 @@ function StepDock({
   onUploadPhotos,
   onSubmitSignature,
   onBackHome,
+  completionSummarySubmitted,
   onBlocked
 }: StepDockProps) {
   const offlineReason = !online ? "You're offline — reconnect to submit this step." : undefined;
@@ -1787,7 +1830,13 @@ function StepDock({
     case "COMPLETED":
       return (
         <BottomActionBar>
-          <Button fullWidth size="lg" onClick={onBackHome}>
+          <Button
+            fullWidth
+            size="lg"
+            blockedReason={completionSummarySubmitted ? undefined : "Submit the job entry first."}
+            onBlocked={onBlocked}
+            onClick={onBackHome}
+          >
             Back to your jobs
           </Button>
         </BottomActionBar>
@@ -1796,6 +1845,213 @@ function StepDock({
     default:
       return null;
   }
+}
+
+const DRIVER_SUMMARY_PAYMENT_METHODS: DriverJobSummaryPaymentMethod[] = ["Cash", "Card", "Link", "Invoice/Transfer"];
+
+function isoForInput(value?: string): string {
+  const date = value ? new Date(value) : new Date();
+  if (Number.isNaN(date.getTime())) return "";
+  const local = new Date(date.getTime() - date.getTimezoneOffset() * 60_000);
+  return local.toISOString().slice(0, 16);
+}
+
+function inputToIso(value: string): string {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? "" : date.toISOString();
+}
+
+function summaryMethodFor(rawMethod: string): DriverJobSummaryPaymentMethod {
+  const raw = rawMethod.toLowerCase();
+  if (raw.includes("cash")) return "Cash";
+  if (raw.includes("card")) return "Card";
+  if (raw.includes("link")) return "Link";
+  return "Invoice/Transfer";
+}
+
+function emptySummaryPaymentAmounts(): Record<DriverJobSummaryPaymentMethod, string> {
+  return { Cash: "", Card: "", Link: "", "Invoice/Transfer": "" };
+}
+
+function methodsForSummary(job: Job): DriverJobSummaryPaymentMethod[] {
+  if (job.paymentBreakdown?.length) {
+    return Array.from(new Set(job.paymentBreakdown.map(row => summaryMethodFor(row.method))));
+  }
+  if (!job.paymentMethod) return [];
+  return Array.from(new Set(job.paymentMethod.split(",").map(part => summaryMethodFor(part.trim())).filter(Boolean)));
+}
+
+function amountsForSummary(job: Job): Record<DriverJobSummaryPaymentMethod, string> {
+  const amounts = emptySummaryPaymentAmounts();
+  if (job.paymentBreakdown?.length) {
+    for (const row of job.paymentBreakdown) {
+      const method = summaryMethodFor(row.method);
+      amounts[method] = (((Number(amounts[method]) || 0) + (row.amount || 0))).toFixed(2);
+    }
+    return amounts;
+  }
+  const methods = methodsForSummary(job);
+  if (methods.length === 1 && job.amountCharged) amounts[methods[0]] = job.amountCharged.toFixed(2);
+  return amounts;
+}
+
+function DriverJobSummaryForm({
+  job,
+  submitting,
+  onSubmit
+}: {
+  job: Job;
+  submitting: boolean;
+  onSubmit: (input: DriverJobSummaryInput) => Promise<void>;
+}) {
+  const [startTime, setStartTime] = useState(() => isoForInput(job.actualStart || job.bookedStart));
+  const [endTime, setEndTime] = useState(() => isoForInput(job.actualFinish));
+  const [congestionCharge, setCongestionCharge] = useState(() => job.extraCharges?.includes(CONGESTION_CHARGE) ?? false);
+  const [congestionChargeAmount, setCongestionChargeAmount] = useState("");
+  const [helperName, setHelperName] = useState("");
+  const [helperHours, setHelperHours] = useState("");
+  const [paymentMethods, setPaymentMethods] = useState<DriverJobSummaryPaymentMethod[]>(() => methodsForSummary(job));
+  const [paymentAmounts, setPaymentAmounts] = useState<Record<DriverJobSummaryPaymentMethod, string>>(() => amountsForSummary(job));
+
+  const blockedReason = (() => {
+    if (!startTime) return "Enter the start time.";
+    if (!endTime) return "Enter the end time.";
+    if (new Date(endTime).getTime() < new Date(startTime).getTime()) return "End time cannot be before start time.";
+    if (congestionCharge && congestionChargeAmount && Number(congestionChargeAmount) < 0) return "Enter a valid congestion charge amount.";
+    if (helperHours.trim() && (!Number.isFinite(Number(helperHours)) || Number(helperHours) < 0)) return "Enter valid helper hours.";
+    if (paymentMethods.length === 0) return "Choose at least one payment method.";
+    for (const method of paymentMethods) {
+      const amount = paymentAmounts[method]?.trim() ?? "";
+      if (!amount) return `Enter the amount collected by ${method}.`;
+      if (!Number.isFinite(Number(amount)) || Number(amount) < 0) return `Enter a valid amount for ${method}.`;
+    }
+    return undefined;
+  })();
+
+  return (
+    <div className="flex flex-col gap-5">
+      <div className="rounded-card border border-brand-line bg-brand-subtle px-4 py-3.5">
+        <p className="text-eyebrow uppercase text-brand-subtle-fg">Job Completion Entry</p>
+        <p className="mt-1 text-body text-fg-muted">
+          Submit the manual details for this job before moving to the next one.
+        </p>
+      </div>
+
+      <div className="rounded-card border border-line bg-surface px-4 py-4">
+        <p className="text-heading text-fg">Job</p>
+        <p className="mt-1 font-mono text-body text-fg-muted">{job.jobId}</p>
+      </div>
+
+      <div className="rounded-card border border-line bg-surface px-4 py-4">
+        <p className="mb-3 text-heading text-fg">Time & charges</p>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <Field label="Start time" required>
+            {control => <Input {...control} type="datetime-local" value={startTime} onChange={e => setStartTime(e.target.value)} />}
+          </Field>
+          <Field label="End time" required>
+            {control => <Input {...control} type="datetime-local" value={endTime} onChange={e => setEndTime(e.target.value)} />}
+          </Field>
+        </div>
+        <div className="mt-4">
+          <Choice
+            type="checkbox"
+            label="Add Congestion Charge"
+            selected={congestionCharge}
+            onToggle={() => setCongestionCharge(v => !v)}
+          />
+          {congestionCharge && (
+            <div className="mt-3">
+              <Field label="Congestion amount">
+                {control => (
+                  <Input
+                    {...control}
+                    prefix="GBP"
+                    inputMode="decimal"
+                    value={congestionChargeAmount}
+                    onChange={e => setCongestionChargeAmount(e.target.value)}
+                  />
+                )}
+              </Field>
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div className="rounded-card border border-line bg-surface px-4 py-4">
+        <p className="mb-3 text-heading text-fg">Helper details</p>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <Field label="Helper name">
+            {control => <Input {...control} value={helperName} onChange={e => setHelperName(e.target.value)} />}
+          </Field>
+          <Field label="Helper hours">
+            {control => <Input {...control} inputMode="decimal" value={helperHours} onChange={e => setHelperHours(e.target.value)} />}
+          </Field>
+        </div>
+      </div>
+
+      <div className="rounded-card border border-line bg-surface px-4 py-4">
+        <p className="mb-3 text-heading text-fg">Payment received</p>
+        <div className="flex flex-col gap-3">
+          {DRIVER_SUMMARY_PAYMENT_METHODS.map(method => {
+            const selected = paymentMethods.includes(method);
+            return (
+              <div key={method} className="flex flex-col gap-2">
+                <Choice
+                  type="checkbox"
+                  label={method}
+                  selected={selected}
+                  onToggle={() => {
+                    setPaymentMethods(current =>
+                      selected ? current.filter(value => value !== method) : [...current, method]
+                    );
+                    if (selected) {
+                      setPaymentAmounts(current => ({ ...current, [method]: "" }));
+                    }
+                  }}
+                />
+                {selected && (
+                  <div className="ml-4 rounded-card border border-line bg-surface px-4 py-3">
+                    <Field label={`${method} amount collected`} required>
+                      {control => (
+                        <Input
+                          {...control}
+                          prefix="GBP"
+                          inputMode="decimal"
+                          value={paymentAmounts[method] ?? ""}
+                          onChange={e => setPaymentAmounts(current => ({ ...current, [method]: e.target.value }))}
+                        />
+                      )}
+                    </Field>
+                  </div>
+                )}
+              </div>
+            )}
+          )}
+        </div>
+      </div>
+
+      {blockedReason && <Alert tone="warning">{blockedReason}</Alert>}
+      <Button
+        fullWidth
+        size="lg"
+        loading={submitting}
+        blockedReason={blockedReason}
+        onBlocked={() => undefined}
+        onClick={() => onSubmit({
+          startTime: inputToIso(startTime),
+          endTime: inputToIso(endTime),
+          congestionCharge,
+          congestionChargeAmount,
+          helperName,
+          helperHours,
+          paymentMethods,
+          paymentAmounts
+        })}
+      >
+        Submit job entry
+      </Button>
+    </div>
+  );
 }
 
 // Fallback shown until the job detail response's confirmationText loads. Reads the
