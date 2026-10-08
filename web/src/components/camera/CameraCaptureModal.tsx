@@ -4,6 +4,7 @@ import { Camera, CameraOff, Loader2, RefreshCw, SwitchCamera, X } from "lucide-r
 import { cx } from "../../ui";
 import { haptics } from "../../lib/haptics";
 import type { CapturedLocation, PhotoCaptureMeta } from "../../lib/geo";
+import { photoLocationErrorMessage } from "../../lib/photoLocation";
 import { useCameraStream } from "./useCameraStream";
 import { useLocationWatch } from "./useLocationWatch";
 
@@ -87,7 +88,7 @@ export function CameraCaptureModal({
 }: CameraCaptureModalProps) {
   const { status, error, stream, hasMultipleCameras, start, stop, toggleFacing } =
     useCameraStream();
-  const locationRef = useLocationWatch(open);
+  const locationWatch = useLocationWatch(open);
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -183,7 +184,7 @@ export function CameraCaptureModal({
 
   if (!open || typeof document === "undefined") return null;
 
-  const captureLocation = locationForCapture(locationRef.current, fallbackLocation, requireLocation);
+  const captureLocation = locationForCapture(locationWatch.locationRef.current, fallbackLocation, requireLocation);
   const locationPending = requireLocation && !captureLocation;
 
   function handleCapture() {
@@ -201,7 +202,11 @@ export function CameraCaptureModal({
     ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
     // The location/time that matter are of this instant — the shutter press — not
     // whenever "Use photo" is eventually tapped on the confirm screen.
-    const meta: PhotoCaptureMeta = { capturedAt: new Date().toISOString(), location: captureLocation };
+    const meta: PhotoCaptureMeta = {
+      capturedAt: new Date().toISOString(),
+      location: captureLocation,
+      locationError: !captureLocation && requireLocation ? locationWatch.error ?? undefined : undefined
+    };
     canvas.toBlob(
       blob => {
         setCapturing(false);
@@ -422,8 +427,15 @@ export function CameraCaptureModal({
         )}
 
         {phase === "live" && locationPending && !failed && (
-          <p className="mt-3 text-center text-[13px] font-medium text-white/75" role="status" aria-live="polite">
-            Getting location in background...
+          <p
+            className={cx(
+              "mt-3 text-center text-[13px] font-medium",
+              locationWatch.error ? "text-amber-200" : "text-white/75"
+            )}
+            role="status"
+            aria-live="polite"
+          >
+            {locationWatch.error ? photoLocationErrorMessage(locationWatch.error) : "Getting location in background..."}
           </p>
         )}
 

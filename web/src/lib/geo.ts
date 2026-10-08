@@ -14,10 +14,13 @@ export interface CapturedLocation {
   accuracy: number;
 }
 
+export type CaptureLocationError = "denied" | "unavailable" | "timeout" | "unsupported";
+
 export interface PhotoCaptureMeta {
   /** ISO timestamp, set the instant the shutter fired. */
   capturedAt: string;
   location: CapturedLocation | null;
+  locationError?: CaptureLocationError;
   /** A short place name for `location`, resolved live client-side moments after
    *  capture (see api/jobs.ts's reverseGeocodeLive, called from
    *  components/PhotoPicker.tsx) so the driver sees a real place instead of raw

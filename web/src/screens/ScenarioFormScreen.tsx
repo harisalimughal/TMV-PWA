@@ -253,7 +253,7 @@ export function ScenarioFormScreen({
   const [signatureModalOpen, setSignatureModalOpen] = useState(false);
   // Watches position while the pad's open so a fix is already on hand the instant the
   // customer taps Save -- same approach the camera uses for photos (useLocationWatch).
-  const signatureLocationRef = useLocationWatch(signatureModalOpen);
+  const signatureLocation = useLocationWatch(signatureModalOpen);
   const [signatureMeta, setSignatureMeta] = useState<PhotoCaptureMeta | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [progress, setProgress] = useState<number | null>(null);
@@ -313,7 +313,7 @@ export function ScenarioFormScreen({
     setSignatureBlob(blob);
     setSignaturePreviewUrl(URL.createObjectURL(blob));
     setExistingSignatureCleared(false);
-    setSignatureMeta({ capturedAt: new Date().toISOString(), location: signatureLocationRef.current });
+    setSignatureMeta({ capturedAt: new Date().toISOString(), location: signatureLocation.locationRef.current });
     setSignatureModalOpen(false);
   }
 

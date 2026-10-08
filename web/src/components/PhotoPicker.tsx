@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-import { Camera, FileUp, Loader2, X } from "lucide-react";
+import { AlertTriangle, Camera, FileUp, Loader2, RefreshCw, X } from "lucide-react";
 import { compressAll, formatBytes } from "../lib/image";
 import { haptics } from "../lib/haptics";
 import type { CapturedLocation, PhotoCaptureMeta } from "../lib/geo";
@@ -7,6 +7,7 @@ import { reverseGeocodeLive } from "../api/jobs";
 import { cx } from "../ui";
 import { CameraCaptureModal } from "./camera";
 import { useLocationWatch } from "./camera/useLocationWatch";
+import { photoLocationIssue } from "../lib/photoLocation";
 
 export interface PhotoPickerProps {
   label: string;
@@ -108,8 +109,9 @@ export function PhotoPicker({
   const [stepLocation, setStepLocation] = useState<CapturedLocation | null>(
     () => initialMeta?.find(meta => meta?.location)?.location ?? null
   );
+  const [locationRetryKey, setLocationRetryKey] = useState(0);
   const hasLocalPhotoMissingLocation = previews.some(preview => preview.meta && !preview.meta.location);
-  const backgroundLocationRef = useLocationWatch(cameraOpen || hasLocalPhotoMissingLocation);
+  const backgroundLocation = useLocationWatch(cameraOpen || hasLocalPhotoMissingLocation, locationRetryKey);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   // Hand a camera-open trigger to the caller (e.g. a docked "Take photo" button),
@@ -145,7 +147,7 @@ export function PhotoPicker({
   }
 
   useEffect(() => {
-    const location = backgroundLocationRef.current;
+    const location = backgroundLocation.location;
     if (!location) return;
     setStepLocation(location);
     setPreviews(current => {
@@ -162,7 +164,24 @@ export function PhotoPicker({
       for (const url of updatedUrls) resolveLocationName(url, location);
       return next;
     });
-  }, [backgroundLocationRef.current, onChange]);
+  }, [backgroundLocation.location, onChange]);
+
+  useEffect(() => {
+    if (!backgroundLocation.error) return;
+    setPreviews(current => {
+      let changed = false;
+      const next = current.map(preview => {
+        if (!preview.meta || preview.meta.location || preview.meta.locationError === backgroundLocation.error) {
+          return preview;
+        }
+        changed = true;
+        return { ...preview, meta: { ...preview.meta, locationError: backgroundLocation.error ?? undefined } };
+      });
+      if (!changed) return current;
+      onChange(next.map(p => p.file), next.map(p => p.meta));
+      return next;
+    });
+  }, [backgroundLocation.error, onChange]);
 
   async function addFiles(files: File[], metas: Array<PhotoCaptureMeta | null> = files.map(() => null)) {
     setProcessing(true);
@@ -208,6 +227,44 @@ export function PhotoPicker({
     onChange(next.map(p => p.file), next.map(p => p.meta));
   }
 
+  function requestLocationForExistingPhoto() {
+    setPreviews(current => {
+      let changed = false;
+      const next = current.map(preview => {
+        if (!preview.meta || preview.meta.location || !preview.meta.locationError) return preview;
+        changed = true;
+        const { locationError, ...meta } = preview.meta;
+        return { ...preview, meta };
+      });
+      if (!changed) return current;
+      onChange(next.map(p => p.file), next.map(p => p.meta));
+      return next;
+    });
+    setLocationRetryKey(key => key + 1);
+  }
+
+  function captureAgainForMissingLocation() {
+    const index = previews.map(preview => Boolean(preview.meta && !preview.meta.location)).lastIndexOf(true);
+    if (index >= 0) {
+      const target = previews[index];
+      URL.revokeObjectURL(target.url);
+      const next = previews.filter((_, i) => i !== index);
+      setPreviews(next);
+      onChange(next.map(p => p.file), next.map(p => p.meta));
+    }
+    setLocationRetryKey(key => key + 1);
+    setCameraOpen(true);
+  }
+
+  function handleLocationIssueAction() {
+    if (!locationIssue) return;
+    if (locationIssue.action === "capture-again") {
+      captureAgainForMissingLocation();
+      return;
+    }
+    requestLocationForExistingPhoto();
+  }
+
   const remote = remoteFiles ?? [];
   const total = remote.length + previews.length;
   // Keep the pre-existing behaviour for callers without server photos (max===1 stays
@@ -217,6 +274,7 @@ export function PhotoPicker({
   const totalBytes = previews.reduce((sum, p) => sum + p.file.size, 0);
   const met = total >= min;
   const captureLabel = total === 0 ? "Take photo" : "Take another";
+  const locationIssue = photoLocationIssue(previews.length, previews.map(p => p.meta), requireLocation);
 
   return (
     <section className="flex flex-col gap-3">
@@ -341,6 +399,32 @@ export function PhotoPicker({
         <p className="text-meta text-fg-subtle">
           {formatBytes(totalBytes)} to send — photos are shrunk on this phone first.
         </p>
+      )}
+
+      {locationIssue && (
+        <div className="flex items-start gap-2 rounded-card border border-warning-line bg-warning-subtle px-3 py-3 text-helper text-warning">
+          <AlertTriangle className="mt-0.5 size-4 shrink-0" aria-hidden />
+          <div className="min-w-0 flex-1">
+            <p className="font-medium">{locationIssue.message}</p>
+            {locationIssue.action === "allow" && (
+              <p className="mt-1 text-[12px] leading-snug text-warning">
+                If your browser shows Allow or Don't Allow, choose Allow. If you already allowed it in settings, this will use that permission automatically.
+              </p>
+            )}
+            <button
+              type="button"
+              onClick={handleLocationIssueAction}
+              className="mt-2 inline-flex min-h-9 items-center gap-1.5 rounded-control bg-warning px-3 text-[13px] font-semibold text-white transition-transform active:scale-[0.985] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-warning"
+            >
+              {locationIssue.action === "capture-again" ? (
+                <Camera className="size-3.5" aria-hidden />
+              ) : (
+                <RefreshCw className="size-3.5" aria-hidden />
+              )}
+              {locationIssue.actionLabel}
+            </button>
+          </div>
+        </div>
       )}
 
       <CameraCaptureModal

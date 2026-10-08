@@ -8,6 +8,14 @@ describe("photoLocationBlockedReason", () => {
     );
   });
 
+  it("explains why location could not be captured when the browser reports it", () => {
+    expect(
+      photoLocationBlockedReason(1, [
+        { capturedAt: "2026-09-26T10:00:00Z", location: null, locationError: "denied" }
+      ])
+    ).toBe("Location permission is required for this app to continue. Please allow location access.");
+  });
+
   it("allows continuing once location has been backfilled", () => {
     expect(
       photoLocationBlockedReason(1, [

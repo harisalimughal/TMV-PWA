@@ -1,40 +1,73 @@
-import { useEffect, useRef, useState } from "react";
-import type { CapturedLocation } from "../../lib/geo";
+import { useEffect, useRef, useState, type RefObject } from "react";
+import type { CapturedLocation, CaptureLocationError } from "../../lib/geo";
+
+export type LocationWatchStatus = "idle" | "pending" | "ready" | CaptureLocationError;
+
+export interface LocationWatch {
+  location: CapturedLocation | null;
+  locationRef: RefObject<CapturedLocation | null>;
+  status: LocationWatchStatus;
+  error: CaptureLocationError | null;
+}
+
+function errorFromGeolocation(error: GeolocationPositionError): CaptureLocationError {
+  if (error.code === error.PERMISSION_DENIED) return "denied";
+  if (error.code === error.POSITION_UNAVAILABLE) return "unavailable";
+  if (error.code === error.TIMEOUT) return "timeout";
+  return "unavailable";
+}
 
 /**
- * Keeps the driver's latest known position in a ref while `active` (the camera modal
- * being open), so a location is usually already on hand the instant the shutter fires
- * instead of the capture having to wait on a fresh GPS fix. Purely best-effort: no
- * permission prompt UI here (unlike the camera's), and any failure — denied, no GPS,
- * unsupported browser, timeout — just leaves the ref at null forever. Reading it is
- * always safe and never blocks or fails a photo capture.
+ * Keeps the driver's latest known position while `active`, and exposes the reason
+ * when the browser cannot provide one. Evidence capture still happens in-app, but
+ * required evidence can now tell the driver exactly what must be fixed.
  */
-export function useLocationWatch(active: boolean): React.RefObject<CapturedLocation | null> {
+export function useLocationWatch(active: boolean, resetKey = 0): LocationWatch {
   const locationRef = useRef<CapturedLocation | null>(null);
-  const [, rerender] = useState(0);
+  const [location, setLocation] = useState<CapturedLocation | null>(null);
+  const [status, setStatus] = useState<LocationWatchStatus>("idle");
+  const [error, setError] = useState<CaptureLocationError | null>(null);
 
   useEffect(() => {
     locationRef.current = null;
-    if (!active) return;
-    if (typeof navigator === "undefined" || !navigator.geolocation) return;
+    setLocation(null);
+    setError(null);
+
+    if (!active) {
+      setStatus("idle");
+      return;
+    }
+
+    if (typeof navigator === "undefined" || !navigator.geolocation) {
+      setStatus("unsupported");
+      setError("unsupported");
+      return;
+    }
+
+    setStatus("pending");
 
     const watchId = navigator.geolocation.watchPosition(
       position => {
-        locationRef.current = {
+        const next = {
           lat: position.coords.latitude,
           lng: position.coords.longitude,
           accuracy: position.coords.accuracy
         };
-        rerender(v => v + 1);
+        locationRef.current = next;
+        setLocation(next);
+        setStatus("ready");
+        setError(null);
       },
-      () => {
-        /* Denied / unavailable / timed out — stay null, the photo still works. */
+      geoError => {
+        const nextError = errorFromGeolocation(geoError);
+        setStatus(nextError);
+        setError(nextError);
       },
       { enableHighAccuracy: true, maximumAge: 10_000, timeout: 15_000 }
     );
 
     return () => navigator.geolocation.clearWatch(watchId);
-  }, [active]);
+  }, [active, resetKey]);
 
-  return locationRef;
+  return { location, locationRef, status, error };
 }
