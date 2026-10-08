@@ -3,7 +3,7 @@ import type { PhotoCaptureMeta } from "./geo";
 export function photoLocationErrorMessage(error: PhotoCaptureMeta["locationError"]): string {
   switch (error) {
     case "denied":
-      return "Location permission is required for this app to continue. Please allow location access.";
+      return "Location is blocked. Open chat.themanvan.co.uk in your browser, allow Location for the site, then return to the app and try again.";
     case "unavailable":
       return "Device location appears to be off. Turn on Location Services or GPS, then capture the photo again.";
     case "timeout":
@@ -15,7 +15,7 @@ export function photoLocationErrorMessage(error: PhotoCaptureMeta["locationError
   }
 }
 
-export type PhotoLocationAction = "allow" | "retry-location" | "capture-again";
+export type PhotoLocationAction = "blocked-settings" | "retry-location" | "capture-again";
 
 export interface PhotoLocationIssue {
   message: string;
@@ -36,8 +36,8 @@ export function photoLocationIssue(
     if (error === "denied") {
       return {
         message: photoLocationErrorMessage(error),
-        action: "allow",
-        actionLabel: "Allow location"
+        action: "blocked-settings",
+        actionLabel: "I allowed it, try again"
       };
     }
     if (error === "unavailable" || error === "unsupported") {

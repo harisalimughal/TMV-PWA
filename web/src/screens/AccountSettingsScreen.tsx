@@ -5,6 +5,7 @@ import { AppShell } from "../app/AppShell";
 import { cx, IconButton } from "../ui";
 import { ThemeToggle } from "../components/driver";
 import { InstallAppCard } from "./pwa-settings/components/InstallAppCard";
+import { LocationPermissionCard } from "./pwa-settings/components/LocationPermissionCard";
 import { NotificationsCard } from "./pwa-settings/components/NotificationsCard";
 
 interface AccountSettingsScreenProps {
@@ -64,6 +65,7 @@ export function AccountSettingsScreen({ driver, onLogout, onBack }: AccountSetti
         <GroupLabel>App</GroupLabel>
         <div className="flex flex-col gap-2.5 px-5 pt-1.5">
           <InstallAppCard />
+          <LocationPermissionCard />
           <NotificationsCard />
         </div>
 

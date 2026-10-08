@@ -104,6 +104,10 @@ export function supportsPush(): boolean {
   );
 }
 
+export function supportsGeolocation(): boolean {
+  return typeof navigator !== "undefined" && !!navigator.geolocation;
+}
+
 export function supportsStorageEstimate(): boolean {
   return (
     typeof navigator !== "undefined" &&

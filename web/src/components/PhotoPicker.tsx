@@ -406,11 +406,6 @@ export function PhotoPicker({
           <AlertTriangle className="mt-0.5 size-4 shrink-0" aria-hidden />
           <div className="min-w-0 flex-1">
             <p className="font-medium">{locationIssue.message}</p>
-            {locationIssue.action === "allow" && (
-              <p className="mt-1 text-[12px] leading-snug text-warning">
-                If your browser shows Allow or Don't Allow, choose Allow. If you already allowed it in settings, this will use that permission automatically.
-              </p>
-            )}
             <button
               type="button"
               onClick={handleLocationIssueAction}

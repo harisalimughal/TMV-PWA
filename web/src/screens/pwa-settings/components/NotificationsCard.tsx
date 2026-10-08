@@ -71,17 +71,17 @@ export function NotificationsCard() {
     >
       <div className="flex flex-col gap-3" aria-live="polite">
         <StatusRow
-          label="Push Status"
+          label="Notification Status"
           value={
             isSubscribed
-              ? "Active & Subscribed"
+              ? "Notifications Active"
               : isGranted
-              ? "Permission Allowed"
+              ? "Notifications Allowed"
               : permission === "denied"
-              ? "Blocked"
+              ? "Notifications Blocked"
               : permission === "unsupported"
-              ? "Not supported"
-              : "Not enabled"
+              ? "Notifications Not Supported"
+              : "Notifications Not Enabled"
           }
           tone={isSubscribed || isGranted ? "success" : permission === "denied" ? "danger" : "neutral"}
           icon={

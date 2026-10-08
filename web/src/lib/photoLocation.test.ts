@@ -13,7 +13,9 @@ describe("photoLocationBlockedReason", () => {
       photoLocationBlockedReason(1, [
         { capturedAt: "2026-09-26T10:00:00Z", location: null, locationError: "denied" }
       ])
-    ).toBe("Location permission is required for this app to continue. Please allow location access.");
+    ).toBe(
+      "Location is blocked. Open chat.themanvan.co.uk in your browser, allow Location for the site, then return to the app and try again."
+    );
   });
 
   it("allows continuing once location has been backfilled", () => {

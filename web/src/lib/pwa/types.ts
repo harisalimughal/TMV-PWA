@@ -25,6 +25,9 @@ export type InstallOutcome = "accepted" | "dismissed" | "unavailable";
 /** Notification permission, plus an explicit unsupported state the DOM type lacks. */
 export type NotificationPermissionState = NotificationPermission | "unsupported";
 
+/** Geolocation permission, plus states for browsers without the capability/API. */
+export type LocationPermissionState = PermissionState | "unsupported" | "unknown";
+
 /** Service-worker update lifecycle, as surfaced to the UI. */
 export interface ServiceWorkerUpdateState {
   /** `serviceWorker` exists in this browser. */

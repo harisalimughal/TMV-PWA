@@ -2,6 +2,7 @@ import React from "react";
 import { ArrowLeft } from "lucide-react";
 import { AppShell } from "../../app/AppShell";
 import { IconButton } from "../../ui";
+import { LocationPermissionCard } from "./components/LocationPermissionCard";
 import { NotificationsCard } from "./components/NotificationsCard";
 
 interface PwaSettingsScreenProps {
@@ -33,6 +34,7 @@ export function PwaSettingsScreen({ onBack }: PwaSettingsScreenProps) {
           Manage backend-backed PWA features for this device.
         </p>
 
+        <LocationPermissionCard />
         <NotificationsCard />
       </div>
     </AppShell>
