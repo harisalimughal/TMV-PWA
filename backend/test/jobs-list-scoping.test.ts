@@ -67,6 +67,28 @@ describe("driver job lists are scoped to that driver's own initials", () => {
     expect(listJobs).toHaveBeenCalledTimes(1);
     expect(listJobs).toHaveBeenCalledWith({ driverInitials: "HE" });
   });
+  it("shows an ongoing overnight queue blocker in the driver list, not inaccessible past jobs", async () => {
+    vi.useFakeTimers(); vi.setSystemTime(new Date("2026-10-12T07:00:00Z"));
+    const active = { jobId: "OVERNIGHT", driverInitials: "HE", status: JobStatus.IN_PROGRESS,
+      bookedStart: "2026-10-11T22:00:00Z", bookedFinish: "2026-10-12T08:00:00Z" };
+    const expired = { ...active, jobId: "EXPIRED", bookedFinish: "2026-10-12T06:00:00Z" };
+    listJobs.mockResolvedValue([expired, active]);
+    const grouped = await getJobsGroupedForDriver("helena@example.com");
+    expect(grouped.today.map(job => job.jobId)).toEqual(["OVERNIGHT"]);
+    expect(grouped.past.map(job => job.jobId)).toEqual(["EXPIRED"]);
+    expect((await getNextJobForDriver("helena@example.com")).job?.jobId).toBe("OVERNIGHT");
+  });
+  it("does not let an expired current-day job occupy the only visible active slot", async () => {
+    vi.useFakeTimers(); vi.setSystemTime(new Date("2026-10-12T07:00:00Z"));
+    listJobs.mockResolvedValue([
+      { jobId: "EXPIRED", driverInitials: "HE", status: JobStatus.IN_PROGRESS, bookedStart: "2026-10-12T05:00:00Z", bookedFinish: "2026-10-12T06:00:00Z" },
+      { jobId: "NEXT", driverInitials: "HE", status: JobStatus.READY, bookedStart: "2026-10-12T07:00:00Z", bookedFinish: "2026-10-12T08:00:00Z" }
+    ]);
+    const grouped = await getJobsGroupedForDriver("helena@example.com");
+    expect(grouped.today.map(job => job.jobId)).toEqual(["NEXT"]);
+    expect(grouped.past.map(job => job.jobId)).toEqual(["EXPIRED"]);
+    expect((await getNextJobForDriver("helena@example.com")).job?.jobId).toBe("NEXT");
+  });
 
   it("restores pending Manual details after relogin and releases the next job after submission", async () => {
     const completed = { jobId: "DONE", driverInitials: "HE", status: JobStatus.COMPLETED, currentState: WorkflowState.COMPLETED, bookedStart: new Date().toISOString(), manualDetailsRequiredAt: new Date().toISOString() };

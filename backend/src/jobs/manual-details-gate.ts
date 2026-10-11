@@ -1,6 +1,7 @@
 import { listDriverJobSummariesForJobs } from "../db/driver-job-summary.repo";
 import { ValidationError } from "../workflow/validation.engine";
 import { JobStatus, type Job } from "./job.types";
+import { isQueueBlockingJob } from "./job-queue-policy";
 
 export class ManualDetailsPendingError extends ValidationError {
   constructor(readonly jobId: string) {
@@ -20,7 +21,8 @@ export async function assertQueueReleased(jobs: Job[], target: Job): Promise<voi
   if (target.status === JobStatus.IN_PROGRESS) return;
   const pending = await pendingManualDetails(jobs);
   if (pending) throw new ManualDetailsPendingError(pending.jobId);
-  if (jobs.some(job => job.status === JobStatus.IN_PROGRESS && job.jobId !== target.jobId)) {
+  const now = new Date();
+  if (jobs.some(job => job.jobId !== target.jobId && isQueueBlockingJob(job, now))) {
     throw new ValidationError("Finish your active job before starting another job.");
   }
 }

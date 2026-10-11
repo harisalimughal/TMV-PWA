@@ -13,6 +13,7 @@ import { recordGpsAssignment } from "../gps/gps.association";
 import { withJobLock } from "../utils/lock";
 import { gpsLocation, gpsTime } from "../gps/gps.parse";
 import { PICKUP_ARRIVAL_RADIUS_METERS, recordedArrivalDistance } from "./pickup-arrival.rules";
+import { isQueueBlockingJob, isWithinUnfinishedBookingWindow } from "./job-queue-policy";
 
 const MAX_REPORT_AGE_MS = 2 * 60_000;
 const PROOF_REMINDER_MS = 15 * 60_000;
@@ -54,11 +55,12 @@ export async function sweepPickupArrivals(now = new Date()): Promise<void> {
   running = true;
   try {
     const allJobs = await listJobs();
-    const busyDrivers = new Set(allJobs.filter(job => job.status === JobStatus.IN_PROGRESS && job.actualStart)
+    const busyDrivers = new Set(allJobs.filter(job => isQueueBlockingJob(job, now) && job.actualStart)
       .map(job => job.driverInitials));
     const seenDrivers = new Set<string>();
     const jobs = allJobs.filter(job =>
       (job.status === JobStatus.READY || job.status === JobStatus.IN_PROGRESS) &&
+      isWithinUnfinishedBookingWindow(job, now) &&
       job.onMyWayAt && job.pickupLocation && job.driverInitials &&
       ((!job.actualStart && !busyDrivers.has(job.driverInitials)) ||
         (job.actualStart && !job.trackerArrivalAt && now.getTime() - Date.parse(job.actualStart) <= 5 * 60_000))

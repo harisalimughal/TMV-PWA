@@ -12,6 +12,7 @@ import { syncTodayBookings } from "./booking.service";
 import { log } from "../utils/logger";
 import { withJobLock, withLock } from "../utils/lock";
 import { assertQueueReleased, pendingManualDetails } from "./manual-details-gate";
+import { isQueueBlockingJob } from "./job-queue-policy";
 import { recordGpsAssignment } from "../gps/gps.association";
 import { captureRoadTariff } from "../gps/road-charge.tariff";
 import { ValidationError } from "../workflow/validation.engine";
@@ -147,7 +148,7 @@ export async function getNextJobForDriver(
   if (pending) return { job: pending, driver };
 
   const active = jobs
-    .filter(j => j.status === JobStatus.IN_PROGRESS && j.driverInitials === driver.initials)
+    .filter(j => isQueueBlockingJob(j) && j.driverInitials === driver.initials)
     .sort((a, b) => a.bookedStart.localeCompare(b.bookedStart))[0];
   if (active) return { job: active, driver };
 
@@ -155,6 +156,7 @@ export async function getNextJobForDriver(
     jobs
       .filter(j => isDueByToday(j.bookedStart))
       .filter(j => j.status !== JobStatus.COMPLETED && j.status !== JobStatus.CANCELLED)
+      .filter(j => j.status !== JobStatus.IN_PROGRESS || isQueueBlockingJob(j))
       // Assigned-only: a driver only ever sees their own jobs, never every unassigned
       // booking in the calendar (the "open pool, first to start it claims it" design
       // this used to have -- see startJob's still-present claim logic below, now only
@@ -256,6 +258,14 @@ export async function getJobsGroupedForDriver(identifier: string): Promise<{
   const next: Job[] = [];
 
   for (const job of relevant) {
+    if (isQueueBlockingJob(job, now.toJSDate(), env.timezone)) {
+      today.push(job);
+      continue;
+    }
+    if (job.status === JobStatus.IN_PROGRESS) {
+      past.push(job);
+      continue;
+    }
     const dayKey = londonDayKey(job.bookedStart);
     if (!dayKey || !todayKey) continue;
     if (dayKey === todayKey) today.push(job);

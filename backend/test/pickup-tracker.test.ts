@@ -55,6 +55,21 @@ describe("sweepPickupArrivals", () => {
     getDriverProfileByInitials.mockResolvedValue({ initials: "AB", imei: "123" });
     sendPushToDriver.mockResolvedValue({ sent: 1 });
   });
+  it("does not let an expired historical in-progress job suppress the driver's current pickup", async () => {
+    const old = { jobId: "OLD", driverInitials: "AB", status: JobStatus.IN_PROGRESS,
+      bookedStart: "2026-09-25T09:00:00Z", bookedFinish: "2026-09-25T11:00:00Z", actualStart: "2026-09-25T09:00:00Z" } as Job;
+    const current = { jobId: "CURRENT", driverInitials: "AB", status: JobStatus.READY,
+      bookedStart: "2026-10-01T09:00:00Z", bookedFinish: "2026-10-01T11:00:00Z", actualStart: "",
+      onMyWayAt: "2026-10-01T09:50:00Z", pickupLocation: pickup, gpsliveImei: "123" } as Job;
+    listJobs.mockResolvedValue([old, current]);
+    const updateOne = vi.fn().mockResolvedValue({ modifiedCount: 1 });
+    jobsCollection.mockResolvedValue({ updateOne });
+    fetchGpsLiveDevices.mockResolvedValue([{ imei: "123", active: "true", lat: pickup.lat, lng: pickup.lng,
+      speed: 0, dtTracker: "2026-10-01 09:59:30" }]);
+    await sweepPickupArrivals(now);
+    expect(updateOne).toHaveBeenCalledWith(expect.objectContaining({ _id: "CURRENT" }), expect.anything());
+    expect(updateOne).not.toHaveBeenCalledWith(expect.objectContaining({ _id: "OLD" }), expect.anything());
+  });
   it("confirms arrival beyond 300m and freezes the distance of the first report", async () => {
     const job = { jobId: "RADIUS", driverInitials: "AB", status: JobStatus.READY, actualStart: "", onMyWayAt: "2026-10-01T09:50:00Z", pickupLocation: pickup } as Job;
     listJobs.mockResolvedValue([job]);
