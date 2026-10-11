@@ -4,7 +4,7 @@ Status: local implementation/QA only. No release date is approved. No deployment
 
 ## Prospective Activation
 
-Local client amendment (2026-10-12, not deployed yet): the pending-submissions revision supersedes the start-gating policy below. Manual Details still opens immediately after completion, but missing entries do not block another visible active job. The marker identifies records for the Pending Submissions menu instead of forcing Jobs redirects. Upcoming remains read-only; scheduled finish timestamps do not hide a same-day unfinished workflow. No Do later or earlier-job reopening controls are added. See driver-pending-submissions.md and the latest plan.md checkpoint before any release.
+Deployed client amendment (673ce8a, 2026-10-12 Asia/Karachi): this revision supersedes the historical start-gating policy below. Manual Details still opens immediately after completion, but missing entries do not block another visible active job. The marker identifies records for the Pending Submissions menu instead of forcing Jobs redirects. Upcoming remains read-only; scheduled finish timestamps do not hide a same-day unfinished workflow. No Do later or earlier-job reopening controls are added. See driver-pending-submissions.md and the latest plan.md checkpoint.
 
 The activation instant is the UTC start of an explicitly approved release, recorded in the deployment/change log. Do not invent or backdate that date. Before a release, drain active jobs or approve a documented transition for them, confirm driver PWA updates, and verify that the frontend/backend build identifiers match.
 

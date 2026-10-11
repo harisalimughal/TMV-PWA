@@ -1,6 +1,6 @@
 # Driver Jobs and Pending Submissions
 
-User-authorized release revision, 2026-10-12. Final checks passed; push/deployment is in progress. This supersedes the cross-job blockers and driver-list expiry rules introduced with the recent queue releases; the existing GPS pickup expiry policy is unchanged.
+User-authorized release 673ce8a, deployed 2026-10-11T22:11:40Z (2026-10-12 Asia/Karachi). This supersedes the cross-job blockers and driver-list expiry rules introduced with the recent queue releases; the existing GPS pickup expiry policy is unchanged.
 
 ## Final Approved Behavior
 
@@ -22,4 +22,4 @@ Backend: all 577 tests across 63 files passed, including real HTTP integration w
 
 Final full frontend regression: all 382 tests across 77 files passed after correcting a new test's tab-role/refresh-count assertions and removing the unrequested reopening controls. Coverage includes the no-redirect Jobs list, no earlier reopening, active/Upcoming selection, read-only Upcoming, immediate manual form without Do later, draft retention, pending refresh/retry/opening, hamburger navigation, Escape/focus restoration, existing modals and recorded On the Way timing. Both final production/PWA builds and TypeScript checks passed.
 
-Actual phone/browser visual acceptance remains a client checkpoint. The user subsequently explicitly authorized checking, pushing and deploying this final scope. Deployment verification is recorded in plan.md.
+Live verification: both public sites return HTTP 200 and serve 673ce8a; the pending endpoint requires driver authentication. Read-only driver-list/pending queries succeeded for all nine active accounts, with no forced manual redirect. Source checks confirm removal of the old cross-job guards and expiry-based job hiding. The isolated diagnostic blocked database mutators and stubbed Calendar sync; no real jobs were started and no customer messages or report exports were generated. Actual phone/browser visual acceptance remains a client checkpoint. See plan.md.
