@@ -1,7 +1,7 @@
 # Driver Reports, GPS Charge Monitoring, and Job Billing Plan
 
 Created: 2026-10-09 (Asia/Karachi). Last updated: 2026-10-11.
-Status: Phases 0-8 implemented. Application release c101cfb is deployed; initial production health/auth/core-report/asset checks passed. Phase 9 local integration/compatibility/security/capacity work is verified; actual approved-environment GPS backfill and real provider/device acceptance checks remain pending. See backend/docs/phase9-verification.md and phase9-rollout.md. D07 still excludes new monetary liability intake/admin editing. User explicitly authorized checking, pushing to main and deploying on 2026-10-12 (Asia/Karachi). This release does not certify physical GPS accuracy or authorize a bulk historical backfill.
+Status: Phases 0-8 implemented. Application release 0c9ff55 is deployed; public health/asset/build checks passed. Initial c101cfb release also passed authentication/core-report checks. Phase 9 local integration/compatibility/security/capacity work is verified; actual approved-environment GPS backfill and real provider/device acceptance checks remain pending. See backend/docs/phase9-verification.md and phase9-rollout.md. D07 still excludes new monetary liability intake/admin editing. User explicitly authorized checking, pushing to main and deploying on 2026-10-12 (Asia/Karachi). This release does not certify physical GPS accuracy or authorize a bulk historical backfill.
 Owner: TMV PWA project. This file is the execution checklist for subsequent work.
 
 ## 1. Working Agreement and Progress Rules
@@ -783,4 +783,5 @@ On every future implementation handoff, add a row here and state the next unchec
 ### Notification Modal Button Removal (2026-10-12)
 - [x] User confirmed the MA notifications are visible. Remove Open related page from the driver's notification detail modal and remove its unused destination helper/icon import. Preserve full content, Close/Escape, read-state behavior, admin bell navigation and operating-system push click handling.
 - [x] Fifteen focused notification tests, frontend typecheck and scoped whitespace checks passed. Verified that valid same-origin destinations also have no modal link.
-- [ ] User checkpoint: reopen an MA notification and check that only the message and existing close controls remain. User subsequently explicitly authorized pushing and deploying this follow-up; release is in progress.
+- [x] User explicitly authorized push/deployment. Pushed and deployed application commit 0c9ff55 at 2026-10-11T20:20:51Z. Frontend production/PWA build passed; clean server checkout fast-forwarded without reset and previous c101cfb image preserved as tmv-pwa:pre-0c9ff55. Both public sites return HTTP 200 for health/shell/assets, serve build 0c9ff55 and no longer include Open related page in the driver bundle. Container running with zero restarts. Production environment and backend application code unchanged; no customer report export or new notification sent.
+- [ ] User checkpoint: select Update Now in the installed PWA, then reopen an MA notification and check that only the message and existing close controls remain.
