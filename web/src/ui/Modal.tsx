@@ -99,7 +99,7 @@ export function Modal({
         if (dismissible && event.target === event.currentTarget) onClose();
       }}
     >
-      <div className="absolute inset-0 bg-black/40 backdrop-blur-[2px] animate-in fade-in" aria-hidden="true" />
+      <div className="absolute inset-0 bg-black/40 backdrop-blur-[2px] animate-in fade-in" aria-hidden="true" onMouseDown={() => { if (dismissible) onClose(); }} />
       <div
         ref={panelRef}
         role="dialog"

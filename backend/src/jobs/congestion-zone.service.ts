@@ -1,172 +1,66 @@
 import { DateTime } from "luxon";
-import { env } from "../config/env";
 import { getGpsApiKey } from "../config/live-settings";
 import { DriverProfile, Job } from "./job.types";
-import { getJob, listJobs, upsertJob } from "../db/jobs.repo";
+import { getJob, upsertJob } from "../db/jobs.repo";
 import { getMessageBody, getMessageTitle, isMessageEnabled } from "../notifications/message-catalog";
 import { sendPushToDriver } from "../push/push.service";
 import { fetchGpsLiveAlertsForDevice, fetchGpsLiveDevices, findDeviceForDriver } from "../integrations/gpslive";
 import { log } from "../utils/logger";
-
-/** How far back the job-start check looks for the van's last Congestion zone_in/
- *  zone_out -- long enough to cover a shift's worth of driving before a job starts,
- *  short enough that a query stays cheap. */
-const LOOKBACK_HOURS = 6;
+import { withJobLock } from "../utils/lock";
+import { recordGpsAssignment } from "../gps/gps.association";
+import { parseGpsEvent } from "../gps/gps.parse";
+import { saveGpsEvents } from "../gps/gps.repo";
+import { roadWindow } from "../gps/road-charge.rules";
 
 type Zone = "congestion" | "tunnel";
+const fields = { congestion: "congestionZoneEnteredAt", tunnel: "tunnelZoneEnteredAt" } as const;
+const messages = { congestion: "DRIVER_CONGESTION_ZONE_PUSH", tunnel: "DRIVER_TUNNEL_ZONE_PUSH" } as const;
 
-const ZONE_FIELD: Record<Zone, "congestionZoneEnteredAt" | "tunnelZoneEnteredAt"> = {
-  congestion: "congestionZoneEnteredAt",
-  tunnel: "tunnelZoneEnteredAt"
-};
-
-/** notifications/message-catalog.ts id for each zone's push -- both default on, each
- *  independently toggle-able from the admin Messaging tab. */
-const ZONE_MESSAGE_ID: Record<Zone, string> = {
-  congestion: "DRIVER_CONGESTION_ZONE_PUSH",
-  tunnel: "DRIVER_TUNNEL_ZONE_PUSH"
-};
-
-/**
- * True if some OTHER job already carries this zone's flag for the same physical van
- * (matched by GPSLive device identity, not driver) on today's Europe/London calendar
- * day. The London Congestion Charge (and the Dartford Crossing toll) is a once-per-day
- * charge, not a per-job one -- without this, a van still sitting inside the zone
- * between jobs (no zone_out recorded yet) got the "already inside" job-start check
- * (below) to re-flag every subsequent job that day too, suggesting the same day's
- * charge be added again on a job that may never itself have gone near the zone.
- */
-async function alreadyChargedTodayForVan(zone: Zone, imei: string, excludeJobId: string): Promise<boolean> {
-  if (!imei) return false;
-  const field = ZONE_FIELD[zone];
-  const todayKey = DateTime.now().setZone(env.timezone).toISODate();
-  const others = await listJobs({ gpsliveImei: imei });
-  return others.some(j => {
-    if (j.jobId === excludeJobId) return false;
-    const flaggedAt = j[field];
-    if (!flaggedAt) return false;
-    return DateTime.fromISO(flaggedAt).setZone(env.timezone).toISODate() === todayKey;
+/** Legacy first-charge-window UI marker/notification only. Physical counts and money come
+ * from the GPS ledger and road rules, never from this marker. */
+async function flagZoneEntry(zone: Zone, jobId: string, driverInitials: string, occurredAt: string): Promise<void> {
+  // The raw event was already persisted by ingestion; outside-hours activity must
+  // not create a fee suggestion or consume the job's one notification opportunity.
+  if (roadWindow(zone, occurredAt).chargeable !== true) return;
+  await withJobLock(jobId, async () => {
+    const job = await getJob(jobId);
+    const field = fields[zone];
+    if (!job || job[field] || job.status === "COMPLETED" || job.status === "CANCELLED") return;
+    await upsertJob({ ...job, [field]: occurredAt });
+    const message = messages[zone];
+    if (!(await isMessageEnabled(message))) return;
+    const title = await getMessageTitle(message), body = await getMessageBody(message);
+    await sendPushToDriver(driverInitials, { title, body, url: "/?tab=jobs", data: { kind: `${zone}_zone` } }).catch(error =>
+      log.warn(`${zone} zone push failed`, { error: String(error), job_id: jobId }));
   });
 }
 
-/**
- * Flags a job's van as having entered the Congestion Charge (or tunnel toll) zone,
- * and pushes the driver. Shared by gpslive-webhook.routes.ts (a fresh "zone_in"
- * crossing while the job is already in progress) and checkCongestionZoneAtJobStart
- * below (the van was already inside when the job began, so no crossing ever happens
- * for GPSLive to report). Idempotent per job -- re-reads the job fresh and does
- * nothing if that zone's *ZoneEnteredAt is already set, so calling this twice for the
- * same job (e.g. a GPSLive webhook retry, or both paths firing close together) never
- * double-notifies. `imei`, when known, also guards against flagging a second job for
- * a charge the same van already triggered today (see alreadyChargedTodayForVan) --
- * pass "" when the device couldn't be resolved to skip that check (best-effort, same
- * as everywhere else in this file). The push itself is gated by this zone's entry in
- * notifications/message-catalog.ts (DRIVER_CONGESTION_ZONE_PUSH / _TUNNEL_) -- the
- * flag/dedup bookkeeping above still happens even if the admin has turned the push
- * off, so re-enabling it later doesn't re-fire for zone entries already recorded.
- */
-async function flagZoneEntry(zone: Zone, jobId: string, driverInitials: string, imei: string): Promise<void> {
-  const job = await getJob(jobId);
-  const field = ZONE_FIELD[zone];
-  if (!job || job[field]) return;
-  if (await alreadyChargedTodayForVan(zone, imei, jobId)) {
-    log.info(`${zone} zone entry skipped -- already charged today on another job for this van`, {
-      job_id: jobId, driver: driverInitials
-    });
-    return;
-  }
-
-  await upsertJob({ ...job, [field]: new Date().toISOString() });
-
-  const messageId = ZONE_MESSAGE_ID[zone];
-  if (await isMessageEnabled(messageId)) {
-    const [title, body] = await Promise.all([getMessageTitle(messageId), getMessageBody(messageId)]);
-    // `data.kind` lets the driver app's InAppNotificationListener tell this apart from
-    // every other push it handles, so it can show the persistent red zone-alert popup
-    // (with a sound) instead of the usual auto-dismissing toast -- see that
-    // component's own comment for why this one doesn't just behave like the rest.
-    await sendPushToDriver(driverInitials, { title, body, url: "/?tab=jobs", data: { kind: `${zone}_zone` } }).catch(error =>
-      log.warn(`${zone} zone push failed`, { error: String(error), job_id: jobId })
-    );
-  }
-
-  log.info(`${zone} zone entry flagged`, { job_id: jobId, driver: driverInitials });
+export function flagCongestionZoneEntry(jobId: string, driverInitials: string, _imei: string, occurredAt = new Date().toISOString()): Promise<void> {
+  return flagZoneEntry("congestion", jobId, driverInitials, occurredAt);
+}
+export function flagTunnelZoneEntry(jobId: string, driverInitials: string, _imei: string, occurredAt = new Date().toISOString()): Promise<void> {
+  return flagZoneEntry("tunnel", jobId, driverInitials, occurredAt);
 }
 
-export function flagCongestionZoneEntry(jobId: string, driverInitials: string, imei: string): Promise<void> {
-  return flagZoneEntry("congestion", jobId, driverInitials, imei);
-}
-
-export function flagTunnelZoneEntry(jobId: string, driverInitials: string, imei: string): Promise<void> {
-  return flagZoneEntry("tunnel", jobId, driverInitials, imei);
-}
-
-/** Zone-specific bits of the job-start "already inside" check below: the GPSLive
- *  event_desc substring to look for, and the flag call to fire. */
-const ZONE_CHECK: Record<Zone, { search: string; flag: typeof flagCongestionZoneEntry }> = {
-  congestion: { search: "Congestion", flag: flagCongestionZoneEntry },
-  tunnel: { search: "Tunnel", flag: flagTunnelZoneEntry }
-};
-
-/**
- * Checked once, right when a job starts. GPSLive's webhook only ever reports a
- * *crossing* into the Congestion or tunnel-toll zone (see gpslive-webhook.routes.ts)
- * -- a job that starts with the van already inside one (pickup address in central
- * London, or driven in before clocking on) would otherwise never get the
- * extra-charges suggestion, since no crossing happens during that job for GPSLive to
- * report. This instead looks back over the last few hours of that van's own alert
- * history for the most recent zone_in/zone_out on each zone; if the latest one is
- * zone_in, the van is presumably still inside right now.
- *
- * This is also the only place a job's device gets resolved at all -- see pinDevice's
- * own comment for why that matters even when the "already inside" check itself finds
- * nothing.
- *
- * Best-effort throughout: GPSLive being unreachable, the van having no matching
- * device, or no zone history in the window all just mean no early suggestion --
- * never blocks or fails job start.
- */
+/** Pre-job entries establish context only, not a new in-job crossing or customer fee. */
 export async function checkCongestionZoneAtJobStart(job: Job, driver: DriverProfile): Promise<void> {
   if (!(await getGpsApiKey())) return;
-
   try {
     const devices = await fetchGpsLiveDevices();
-    const device = findDeviceForDriver(driver, devices);
+    const pinned = devices.find(row => row.imei === job.gpsliveImei);
+    const device = pinned || findDeviceForDriver(driver, devices);
     if (!device) return;
-
-    await pinDevice(job, device.imei);
-
-    const now = DateTime.now();
-    const format = (d: DateTime) => d.toFormat("yyyy-MM-dd HH:mm:ss");
-    const dateFrom = format(now.minus({ hours: LOOKBACK_HOURS }));
-    const dateTo = format(now);
-
-    for (const zone of Object.keys(ZONE_CHECK) as Zone[]) {
-      const { search, flag } = ZONE_CHECK[zone];
-      const events = await fetchGpsLiveAlertsForDevice(device.imei, dateFrom, dateTo, search);
-      const latest = events
-        .filter(e => e.event_desc?.includes(search))
-        .sort((a, b) => b.dt_tracker.localeCompare(a.dt_tracker))[0];
-
-      if (latest?.type === "zone_in") {
-        await flag(job.jobId, driver.initials, device.imei);
-      }
+    await withJobLock(job.jobId, async () => {
+      const fresh = await getJob(job.jobId);
+      if (!fresh || fresh.status === "COMPLETED" || fresh.status === "CANCELLED") return;
+      recordGpsAssignment(fresh, device.imei, new Date().toISOString(), "job-start-resolution");
+      await upsertJob(fresh);
+    });
+    const now = DateTime.utc();
+    for (const search of ["Congestion", "Tunnel", "Dartford"]) {
+      const rows = await fetchGpsLiveAlertsForDevice(device.imei, now.minus({ hours: 6 }).toFormat("yyyy-MM-dd HH:mm:ss"), now.toFormat("yyyy-MM-dd HH:mm:ss"), search);
+      const parsed = rows.map(row => parseGpsEvent(row, "alerts-history", now.toISO()!, device.imei));
+      await saveGpsEvents(parsed.filter((row): row is NonNullable<typeof row> => !!row));
     }
-  } catch (error) {
-    log.warn("zone job-start check failed", { error: String(error), job_id: job.jobId });
-  }
-}
-
-/**
- * Pins the resolved device to this job for its whole lifetime, so
- * gpslive-webhook.routes.ts can match a later real-time event by device identity
- * (job.gpsliveImei) instead of re-deriving "whose van is this" from the driver's
- * profile again at the moment the event arrives -- which could be wrong if the
- * driver's assigned van has changed (a swap, a profile edit) since this job started.
- * Set once, never overwritten -- job is the caller's own already-fresh copy, so this
- * skips a redundant read when nothing needs to change.
- */
-async function pinDevice(job: Job, imei: string): Promise<void> {
-  if (job.gpsliveImei) return;
-  await upsertJob({ ...job, gpsliveImei: imei });
+  } catch (error) { log.warn("zone job-start context check failed", { error: String(error), job_id: job.jobId }); }
 }

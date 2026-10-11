@@ -44,23 +44,23 @@ describe("flagCongestionZoneEntry", () => {
     getJob.mockResolvedValue(job());
     listJobs.mockResolvedValue([]); // no other jobs on this imei
 
-    await flagCongestionZoneEntry("TMV-A", "AB", "IMEI-1");
+    await flagCongestionZoneEntry("TMV-A", "AB", "IMEI-1", "2026-10-09T10:00:00Z");
 
     expect(upsertJob).toHaveBeenCalledTimes(1);
     expect(upsertJob.mock.calls[0][0].congestionZoneEnteredAt).toBeTruthy();
     expect(sendPushToDriver).toHaveBeenCalledTimes(1);
   });
 
-  it("does NOT flag when another job for the same van already flagged the congestion zone today", async () => {
+  it("flags a different qualifying job even when the same van entered earlier that day", async () => {
     getJob.mockResolvedValue(job({ jobId: "TMV-B" }));
     listJobs.mockResolvedValue([
       job({ jobId: "TMV-A", congestionZoneEnteredAt: new Date().toISOString() })
     ]);
 
-    await flagCongestionZoneEntry("TMV-B", "AB", "IMEI-1");
+    await flagCongestionZoneEntry("TMV-B", "AB", "IMEI-1", "2026-10-09T10:00:00Z");
 
-    expect(upsertJob).not.toHaveBeenCalled();
-    expect(sendPushToDriver).not.toHaveBeenCalled();
+    expect(upsertJob).toHaveBeenCalledTimes(1);
+    expect(sendPushToDriver).toHaveBeenCalledTimes(1);
   });
 
   it("still flags when the other job's entry was on a previous day", async () => {
@@ -69,7 +69,7 @@ describe("flagCongestionZoneEntry", () => {
       job({ jobId: "TMV-A", congestionZoneEnteredAt: "2020-01-01T09:00:00.000Z" })
     ]);
 
-    await flagCongestionZoneEntry("TMV-B", "AB", "IMEI-1");
+    await flagCongestionZoneEntry("TMV-B", "AB", "IMEI-1", "2026-10-09T10:00:00Z");
 
     expect(upsertJob).toHaveBeenCalledTimes(1);
   });
@@ -77,7 +77,7 @@ describe("flagCongestionZoneEntry", () => {
   it("is idempotent -- does nothing if this job's own flag is already set", async () => {
     getJob.mockResolvedValue(job({ congestionZoneEnteredAt: new Date().toISOString() }));
 
-    await flagCongestionZoneEntry("TMV-A", "AB", "IMEI-1");
+    await flagCongestionZoneEntry("TMV-A", "AB", "IMEI-1", "2026-10-09T10:00:00Z");
 
     expect(upsertJob).not.toHaveBeenCalled();
     expect(listJobs).not.toHaveBeenCalled();
@@ -86,22 +86,22 @@ describe("flagCongestionZoneEntry", () => {
   it("skips the cross-job dedup check entirely when no imei is known (best-effort)", async () => {
     getJob.mockResolvedValue(job());
 
-    await flagCongestionZoneEntry("TMV-A", "AB", "");
+    await flagCongestionZoneEntry("TMV-A", "AB", "", "2026-10-09T10:00:00Z");
 
     expect(listJobs).not.toHaveBeenCalled();
     expect(upsertJob).toHaveBeenCalledTimes(1);
   });
 
-  it("scopes the dedup lookup to this van's own imei, not the whole fleet", async () => {
+  it("does not suppress customer job notifications using another job's daily flag", async () => {
     getJob.mockResolvedValue(job({ jobId: "TMV-B" }));
     listJobs.mockResolvedValue([]);
 
-    await flagCongestionZoneEntry("TMV-B", "AB", "IMEI-1");
+    await flagCongestionZoneEntry("TMV-B", "AB", "IMEI-1", "2026-10-09T10:00:00Z");
 
     // The actual van-vs-van scoping happens in the Mongo query itself (see
     // db/jobs.repo.ts's listJobs filter) -- this just confirms the service asks for
     // that filter rather than pulling every job and filtering in JS.
-    expect(listJobs).toHaveBeenCalledWith({ gpsliveImei: "IMEI-1" });
+    expect(listJobs).not.toHaveBeenCalled();
   });
 
   it("does not push when DRIVER_CONGESTION_ZONE_PUSH is disabled, but still flags the job", async () => {
@@ -111,7 +111,7 @@ describe("flagCongestionZoneEntry", () => {
       Promise.resolve(key === "MSG_ENABLED_DRIVER_CONGESTION_ZONE_PUSH" ? "false" : fallback)
     );
 
-    await flagCongestionZoneEntry("TMV-A", "AB", "IMEI-1");
+    await flagCongestionZoneEntry("TMV-A", "AB", "IMEI-1", "2026-10-09T10:00:00Z");
 
     expect(upsertJob).toHaveBeenCalledTimes(1);
     expect(sendPushToDriver).not.toHaveBeenCalled();
@@ -119,6 +119,19 @@ describe("flagCongestionZoneEntry", () => {
 });
 
 describe("flagTunnelZoneEntry", () => {
+  it("does not create a fee suggestion or notification outside charging hours", async () => {
+    getJob.mockResolvedValue(job());
+    await flagTunnelZoneEntry("TMV-A", "AB", "IMEI-1", "2026-10-09T21:00:00Z");
+    expect(upsertJob).not.toHaveBeenCalled();
+    expect(sendPushToDriver).not.toHaveBeenCalled();
+  });
+  it("does not let an outside-hours entry suppress a later qualifying entry", async () => {
+    getJob.mockResolvedValue(job());
+    await flagTunnelZoneEntry("TMV-A", "AB", "IMEI-1", "2026-10-09T04:00:00Z");
+    await flagTunnelZoneEntry("TMV-A", "AB", "IMEI-1", "2026-10-09T10:00:00Z");
+    expect(upsertJob).toHaveBeenCalledTimes(1);
+    expect(sendPushToDriver).toHaveBeenCalledTimes(1);
+  });
   it("dedupes independently of the congestion zone field", async () => {
     getJob.mockResolvedValue(job({ jobId: "TMV-B" }));
     // Another job flagged CONGESTION today, but never the tunnel zone -- tunnel
@@ -127,7 +140,7 @@ describe("flagTunnelZoneEntry", () => {
       job({ jobId: "TMV-A", congestionZoneEnteredAt: new Date().toISOString() })
     ]);
 
-    await flagTunnelZoneEntry("TMV-B", "AB", "IMEI-1");
+    await flagTunnelZoneEntry("TMV-B", "AB", "IMEI-1", "2026-10-09T10:00:00Z");
 
     expect(upsertJob).toHaveBeenCalledTimes(1);
     expect(upsertJob.mock.calls[0][0].tunnelZoneEnteredAt).toBeTruthy();

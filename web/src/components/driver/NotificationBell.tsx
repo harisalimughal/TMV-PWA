@@ -1,8 +1,9 @@
-import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Bell, BellOff } from "lucide-react";
 import { EmptyState } from "../../ui";
 import { useNotificationLog } from "../../lib/pwa/useNotificationLog";
 import type { LoggedNotification } from "../../lib/pwa/notificationLog";
+import { NotificationDetailModal } from "./NotificationDetailModal";
 
 function relativeTime(ms: number): string {
   const diffMs = Date.now() - ms;
@@ -18,18 +19,18 @@ function relativeTime(ms: number): string {
 /**
  * The bell icon in the app header: unread count badge, a dropdown of recent push
  * notifications (see lib/pwa/notificationLog.ts / useNotificationLog.ts), and click-
- * through navigation -- tapping an item marks it read and takes the driver straight
- * to whatever screen the notification was about, the same place tapping the OS
- * notification itself goes (push-worker.js's notificationclick). This is the in-app
- * equivalent of that for someone who already has the app open and dismissed (or never
- * saw) the OS notification.
+ * through navigation for admin. Driver headers opt into the full-message modal;
+ * opening it marks the message read without leaving the current job screen.
  */
-export function NotificationBell() {
+export function NotificationBell({ showDetails = false }: { showDetails?: boolean } = {}) {
   const { items, unreadCount, loading, markRead, markAllRead } = useNotificationLog();
   const [isOpen, setIsOpen] = useState(false);
+  const [selectedNotification, setSelectedNotification] = useState<LoggedNotification | null>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
   const rootRef = useRef<HTMLDivElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
   const [panelShiftX, setPanelShiftX] = useState(0);
+  const closeDetails = useCallback(() => setSelectedNotification(null), []);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -75,14 +76,21 @@ export function NotificationBell() {
   }, [isOpen, items.length]);
 
   function handleSelect(item: LoggedNotification) {
-    void markRead(item.id);
+    // Local-storage failures must not prevent reading the message.
+    void markRead(item.id).catch(() => undefined);
     setIsOpen(false);
+    if (showDetails) {
+      triggerRef.current?.focus();
+      setSelectedNotification(item);
+      return;
+    }
     window.location.href = item.url || "/";
   }
 
   return (
     <div className="relative" ref={rootRef}>
       <button
+        ref={triggerRef}
         type="button"
         onClick={() => setIsOpen(open => !open)}
         aria-label={unreadCount > 0 ? `Notifications, ${unreadCount} unread` : "Notifications"}
@@ -152,6 +160,7 @@ export function NotificationBell() {
           </div>
         </div>
       )}
+      {showDetails && <NotificationDetailModal notification={selectedNotification} onClose={closeDetails} />}
     </div>
   );
 }

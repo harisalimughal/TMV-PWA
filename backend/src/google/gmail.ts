@@ -180,6 +180,11 @@ export function renderOpsJobCompletionEmail(
     "Timings:",
     ...renderTimingsTextLines(timings),
     `Duration: ${job.actualMinutes || 0} minutes (${job.differenceMinutes || 0} min difference)`,
+    ...(job.timeBilling ? [
+      `Calendar duration: ${job.timeBilling.scheduledMinutes} min; allocated: ${job.timeBilling.allocatedMinutes} min`,
+      `Extra time: ${job.timeBilling.extraMinutes} min; billed blocks: ${job.timeBilling.billedExtraBlocks}`,
+      `Overtime: ${pounds(job.overtimeCharge)}; rate source: ${job.timeBilling.rateSource}`
+    ] : []),
     `Delay status: ${job.delayStatus || "Not recorded"}`,
     "",
     `Payment method: ${job.paymentMethod || "Not recorded"}`,
@@ -209,6 +214,9 @@ export function renderOpsJobCompletionEmail(
     sectionHeaderRow("Timings") +
     renderTimingsHtmlRows(timings) +
     row("Duration", `${job.actualMinutes || 0} minutes (${job.differenceMinutes || 0} min difference)`) +
+    (job.timeBilling ? row("Calendar / allocated", `${job.timeBilling.scheduledMinutes} / ${job.timeBilling.allocatedMinutes} min`) +
+      row("Extra time / billed blocks", `${job.timeBilling.extraMinutes} min / ${job.timeBilling.billedExtraBlocks}`) +
+      row("Overtime / rate source", `${pounds(job.overtimeCharge)} / ${job.timeBilling.rateSource}`) : "") +
     row("Delay", job.delayStatus || "Not recorded") +
     sectionHeaderRow("Payment & Audit") +
     row("Payment", `${job.paymentMethod || "Not recorded"} / ${job.paymentStatus || "Not recorded"}`) +

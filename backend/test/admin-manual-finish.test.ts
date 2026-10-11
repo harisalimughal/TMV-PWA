@@ -30,6 +30,9 @@ vi.mock("../src/google/gmail", () => ({
   sendJobStartedEmail: vi.fn(),
   sendOpsJobCompletionEmail: (...args: any[]) => sendOpsJobCompletionEmail(...args)
 }));
+vi.mock("../src/db/settings.repo", () => ({
+  getSetting: vi.fn(async (_key: string, fallback: string) => fallback)
+}));
 
 import { markJobFinishedManually } from "../src/admin/dashboard/manual-finish";
 
@@ -133,5 +136,34 @@ describe("markJobFinishedManually", () => {
 
     expect(upsertJob).not.toHaveBeenCalled();
     expect(appendActivity).not.toHaveBeenCalledWith(expect.objectContaining({ action: "ADMIN_MARKED_COMPLETED" }));
+  });
+
+  it("preserves the empty-van finish time and calculates overtime from the recorded move", async () => {
+    getJob.mockResolvedValue(baseJob({
+      bookedFinish: "2026-09-23T10:30:00Z", bookedMinutes: 90,
+      actualStart: "2026-09-23T09:00:00Z", actualFinish: "2026-09-23T11:30:00Z",
+      extraChargeText: "GBP 55 per half hour", basePrice: 100
+    }));
+    const completed = await markJobFinishedManually("TMV-MANUAL", "Confirmed finish");
+    expect(completed).toMatchObject({ actualFinish: "2026-09-23T11:30:00Z", overtimeCharge: 55, totalCharges: 155 });
+    expect(completed.timeBilling).toMatchObject({ actualMinutes: 150, allocatedMinutes: 120, billedExtraBlocks: 1 });
+    getJob.mockResolvedValue(completed);
+    upsertJob.mockClear();
+    await markJobFinishedManually("TMV-MANUAL", "Retry");
+    expect(upsertJob).not.toHaveBeenCalled();
+  });
+
+  it("labels fallback timing unverifiable and retains saved charges", async () => {
+    const completed = await markJobFinishedManually("TMV-MANUAL", "Missing evidence");
+    expect(completed).toMatchObject({ timeBillingStatus: "needs-verification", actualStartSource: "completion-fallback", actualFinishSource: "admin-manual", totalCharges: 12000 });
+    expect(completed.timeBilling).toBeUndefined();
+  });
+
+  it("keeps invalid recorded timing finite and flagged instead of saving NaN", async () => {
+    getJob.mockResolvedValue(baseJob({ actualStart: "invalid", actualFinish: "2026-09-23T11:00:00Z" }));
+    const completed = await markJobFinishedManually("TMV-MANUAL", "Verify times");
+    expect(completed.actualMinutes).toBe(0);
+    expect(completed.timeBillingStatus).toBe("needs-verification");
+    expect(completed.timeBilling).toBeUndefined();
   });
 });

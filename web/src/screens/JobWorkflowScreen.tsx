@@ -1,4 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
+import { scheduledDurationLabel } from "../lib/jobTime";
+import { DriverJobSummaryForm, clearManualDetailsDraft } from "../components/driver/DriverJobSummaryForm";
+import { notifyJobsRefresh } from "../lib/jobsRefresh";
 import {
   AlertTriangle,
   Camera,
@@ -19,8 +22,6 @@ import {
   uploadSignature,
   type ApiError,
   type DriverJobSummary,
-  type DriverJobSummaryInput,
-  type DriverJobSummaryPaymentMethod,
   type Job
 } from "../api/jobs";
 import { PhotoUploader } from "../components/PhotoUploader";
@@ -195,6 +196,7 @@ export function JobWorkflowScreen({ jobId, onBack }: JobWorkflowScreenProps) {
       setEvidenceItems(result.evidenceItems ?? []);
       if (result.confirmationText) setConfirmationText(result.confirmationText);
       setDriverJobSummary(result.driverJobSummary ?? null);
+      if (result.driverJobSummary) clearManualDetailsDraft(result.job);
     } catch (err) {
       setError((err as ApiError)?.message || "Couldn't load this job.");
     } finally {
@@ -269,7 +271,7 @@ export function JobWorkflowScreen({ jobId, onBack }: JobWorkflowScreenProps) {
         if (typeof result.suggestedTotal === "number") setSuggestedTotal(result.suggestedTotal);
         if (result.evidenceItems) setEvidenceItems(result.evidenceItems);
         if (successMessage) toast.success(successMessage);
-        if (opts?.home === false) {
+        if (opts?.home === false || result.job.status === "COMPLETED") {
           // Staying on this screen for a new step's content: put the driver at the
           // top of it rather than wherever the previous step happened to be scrolled to.
           scrollRef.current?.scrollTo({ top: 0, behavior: "smooth" });
@@ -560,30 +562,35 @@ export function JobWorkflowScreen({ jobId, onBack }: JobWorkflowScreenProps) {
               }
             }}
             onBackHome={onBack}
-            completionSummarySubmitted={Boolean(driverJobSummary)}
+            completionSummarySubmitted={Boolean(driverJobSummary) || !job.manualDetailsRequiredAt}
             onBlocked={reason => toast.error(reason)}
           />
         }
       >
+        <p className="px-4 py-2 text-helper text-fg-muted">
+          Scheduled duration: {scheduledDurationLabel(job)}
+        </p>
         {complete ? (
           <div className="px-4 pb-5">
-            {driverJobSummary ? (
+            {error && <Alert tone="danger">{error}</Alert>}
+            {driverJobSummary || !job.manualDetailsRequiredAt ? (
               <>
                 <CompletionSummary job={job} />
                 <div className="mt-4 rounded-card border border-success/25 bg-success-subtle px-4 py-3">
-                  <p className="text-label font-semibold text-success">Driver job entry submitted</p>
+                  <p className="text-label font-semibold text-success">{driverJobSummary ? "Manual details submitted" : "Historical job"}</p>
                   <p className="mt-1 text-helper text-fg-muted">
-                    This manual entry is locked and ready for admin comparison.
+                    {driverJobSummary ? "Submitted and locked." : "Manual details are not required for this historical job."}
                   </p>
                 </div>
               </>
             ) : (
               <DriverJobSummaryForm
+                key={`${job.driverInitials}:${job.jobId}`}
                 job={job}
                 submitting={summarySubmitting}
                 onSubmit={async input => {
                   if (!online) {
-                    toast.error("You're offline. Reconnect to submit this job entry.");
+                    toast.error("You're offline. Reconnect to submit Manual details.");
                     return;
                   }
                   setSummarySubmitting(true);
@@ -591,10 +598,14 @@ export function JobWorkflowScreen({ jobId, onBack }: JobWorkflowScreenProps) {
                   try {
                     const result = await submitDriverJobSummary(job.jobId, input);
                     setDriverJobSummary(result.summary);
-                    toast.success("Job entry submitted");
+                    clearManualDetailsDraft(job);
+                    toast.success("Manual details submitted");
+                    notifyJobsRefresh();
+                    onBack();
                   } catch (err) {
                     const apiError = err as ApiError;
-                    setError(apiError?.message || "Couldn't submit the job entry.");
+                    setError(apiError?.message || "Couldn't submit Manual details.");
+                    if (apiError?.code === "MANUAL_DETAILS_LOCKED") await load();
                   } finally {
                     setSummarySubmitting(false);
                   }
@@ -1083,8 +1094,8 @@ function StepBody({
   // *deselect* "Extra time / Charges" after having gone forward with it.
   useEffect(() => {
     formState.extraCharges = state === "WAITING_EXTRA_CHARGES" ? [...(job.extraCharges ?? [])] : [];
-    formState.overtimeMinutes =
-      state === "WAITING_OVERTIME" && job.overtimeMinutes ? String(job.overtimeMinutes) : "";
+    formState.overtimeMinutes = state === "WAITING_OVERTIME"
+      ? String(job.driverReportedOvertimeMinutes ?? Math.ceil(job.overtimeMinutes || 0)) : "";
     // Invoice jobs (see isInvoiceJob) skip collecting payment on site -- Invoice is
     // pre-selected so the driver doesn't have to tap it themselves.
     formState.payment = state === "WAITING_PAYMENT" && isInvoiceJob(job) ? ["Invoice"] : [];
@@ -1278,7 +1289,7 @@ function StepBody({
       return (
         <div className="flex flex-col gap-5">
           <div className="flex flex-col gap-2.5">
-            <span className="pl-0.5 text-label text-fg-muted">Overtime minutes</span>
+            <span className="pl-0.5 text-label text-fg-muted">Driver-reported extra minutes</span>
 
             {/* Quick-pick chips: overtime is almost always a round number, and typing
                 on a numeric keypad next to a van is slower than one tap. A fixed
@@ -1350,7 +1361,7 @@ function StepBody({
               £{suggestedTotal.toFixed(2)}
             </p>
             <p className="mt-1 text-helper text-fg-muted">
-              Base price plus the extras and overtime you entered.
+              Base price, additional charges and calculated overtime.
             </p>
           </div>
           <ChoiceGroup legend="Are these charges correct?">
@@ -1436,7 +1447,7 @@ function StepBody({
                         {control => (
                           <Input
                             {...control}
-                            prefix="Â£"
+                            prefix={"\u00a3"}
                             inputMode="decimal"
                             value={formState.paymentAmounts[option] ?? ""}
                             onChange={event => {
@@ -1833,7 +1844,7 @@ function StepDock({
           <Button
             fullWidth
             size="lg"
-            blockedReason={completionSummarySubmitted ? undefined : "Submit the job entry first."}
+            blockedReason={completionSummarySubmitted ? undefined : "Submit Manual details first."}
             onBlocked={onBlocked}
             onClick={onBackHome}
           >
@@ -1847,212 +1858,6 @@ function StepDock({
   }
 }
 
-const DRIVER_SUMMARY_PAYMENT_METHODS: DriverJobSummaryPaymentMethod[] = ["Cash", "Card", "Link", "Invoice/Transfer"];
-
-function isoForInput(value?: string): string {
-  const date = value ? new Date(value) : new Date();
-  if (Number.isNaN(date.getTime())) return "";
-  const local = new Date(date.getTime() - date.getTimezoneOffset() * 60_000);
-  return local.toISOString().slice(0, 16);
-}
-
-function inputToIso(value: string): string {
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? "" : date.toISOString();
-}
-
-function summaryMethodFor(rawMethod: string): DriverJobSummaryPaymentMethod {
-  const raw = rawMethod.toLowerCase();
-  if (raw.includes("cash")) return "Cash";
-  if (raw.includes("card")) return "Card";
-  if (raw.includes("link")) return "Link";
-  return "Invoice/Transfer";
-}
-
-function emptySummaryPaymentAmounts(): Record<DriverJobSummaryPaymentMethod, string> {
-  return { Cash: "", Card: "", Link: "", "Invoice/Transfer": "" };
-}
-
-function methodsForSummary(job: Job): DriverJobSummaryPaymentMethod[] {
-  if (job.paymentBreakdown?.length) {
-    return Array.from(new Set(job.paymentBreakdown.map(row => summaryMethodFor(row.method))));
-  }
-  if (!job.paymentMethod) return [];
-  return Array.from(new Set(job.paymentMethod.split(",").map(part => summaryMethodFor(part.trim())).filter(Boolean)));
-}
-
-function amountsForSummary(job: Job): Record<DriverJobSummaryPaymentMethod, string> {
-  const amounts = emptySummaryPaymentAmounts();
-  if (job.paymentBreakdown?.length) {
-    for (const row of job.paymentBreakdown) {
-      const method = summaryMethodFor(row.method);
-      amounts[method] = (((Number(amounts[method]) || 0) + (row.amount || 0))).toFixed(2);
-    }
-    return amounts;
-  }
-  const methods = methodsForSummary(job);
-  if (methods.length === 1 && job.amountCharged) amounts[methods[0]] = job.amountCharged.toFixed(2);
-  return amounts;
-}
-
-function DriverJobSummaryForm({
-  job,
-  submitting,
-  onSubmit
-}: {
-  job: Job;
-  submitting: boolean;
-  onSubmit: (input: DriverJobSummaryInput) => Promise<void>;
-}) {
-  const [startTime, setStartTime] = useState(() => isoForInput(job.actualStart || job.bookedStart));
-  const [endTime, setEndTime] = useState(() => isoForInput(job.actualFinish));
-  const [congestionCharge, setCongestionCharge] = useState(() => job.extraCharges?.includes(CONGESTION_CHARGE) ?? false);
-  const [congestionChargeAmount, setCongestionChargeAmount] = useState("");
-  const [helperName, setHelperName] = useState("");
-  const [helperHours, setHelperHours] = useState("");
-  const [paymentMethods, setPaymentMethods] = useState<DriverJobSummaryPaymentMethod[]>(() => methodsForSummary(job));
-  const [paymentAmounts, setPaymentAmounts] = useState<Record<DriverJobSummaryPaymentMethod, string>>(() => amountsForSummary(job));
-
-  const blockedReason = (() => {
-    if (!startTime) return "Enter the start time.";
-    if (!endTime) return "Enter the end time.";
-    if (new Date(endTime).getTime() < new Date(startTime).getTime()) return "End time cannot be before start time.";
-    if (congestionCharge && congestionChargeAmount && Number(congestionChargeAmount) < 0) return "Enter a valid congestion charge amount.";
-    if (helperHours.trim() && (!Number.isFinite(Number(helperHours)) || Number(helperHours) < 0)) return "Enter valid helper hours.";
-    if (paymentMethods.length === 0) return "Choose at least one payment method.";
-    for (const method of paymentMethods) {
-      const amount = paymentAmounts[method]?.trim() ?? "";
-      if (!amount) return `Enter the amount collected by ${method}.`;
-      if (!Number.isFinite(Number(amount)) || Number(amount) < 0) return `Enter a valid amount for ${method}.`;
-    }
-    return undefined;
-  })();
-
-  return (
-    <div className="flex flex-col gap-5">
-      <div className="rounded-card border border-brand-line bg-brand-subtle px-4 py-3.5">
-        <p className="text-eyebrow uppercase text-brand-subtle-fg">Job Completion Entry</p>
-        <p className="mt-1 text-body text-fg-muted">
-          Submit the manual details for this job before moving to the next one.
-        </p>
-      </div>
-
-      <div className="rounded-card border border-line bg-surface px-4 py-4">
-        <p className="text-heading text-fg">Job</p>
-        <p className="mt-1 font-mono text-body text-fg-muted">{job.jobId}</p>
-      </div>
-
-      <div className="rounded-card border border-line bg-surface px-4 py-4">
-        <p className="mb-3 text-heading text-fg">Time & charges</p>
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <Field label="Start time" required>
-            {control => <Input {...control} type="datetime-local" value={startTime} onChange={e => setStartTime(e.target.value)} />}
-          </Field>
-          <Field label="End time" required>
-            {control => <Input {...control} type="datetime-local" value={endTime} onChange={e => setEndTime(e.target.value)} />}
-          </Field>
-        </div>
-        <div className="mt-4">
-          <Choice
-            type="checkbox"
-            label="Add Congestion Charge"
-            selected={congestionCharge}
-            onToggle={() => setCongestionCharge(v => !v)}
-          />
-          {congestionCharge && (
-            <div className="mt-3">
-              <Field label="Congestion amount">
-                {control => (
-                  <Input
-                    {...control}
-                    prefix="GBP"
-                    inputMode="decimal"
-                    value={congestionChargeAmount}
-                    onChange={e => setCongestionChargeAmount(e.target.value)}
-                  />
-                )}
-              </Field>
-            </div>
-          )}
-        </div>
-      </div>
-
-      <div className="rounded-card border border-line bg-surface px-4 py-4">
-        <p className="mb-3 text-heading text-fg">Helper details</p>
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <Field label="Helper name">
-            {control => <Input {...control} value={helperName} onChange={e => setHelperName(e.target.value)} />}
-          </Field>
-          <Field label="Helper hours">
-            {control => <Input {...control} inputMode="decimal" value={helperHours} onChange={e => setHelperHours(e.target.value)} />}
-          </Field>
-        </div>
-      </div>
-
-      <div className="rounded-card border border-line bg-surface px-4 py-4">
-        <p className="mb-3 text-heading text-fg">Payment received</p>
-        <div className="flex flex-col gap-3">
-          {DRIVER_SUMMARY_PAYMENT_METHODS.map(method => {
-            const selected = paymentMethods.includes(method);
-            return (
-              <div key={method} className="flex flex-col gap-2">
-                <Choice
-                  type="checkbox"
-                  label={method}
-                  selected={selected}
-                  onToggle={() => {
-                    setPaymentMethods(current =>
-                      selected ? current.filter(value => value !== method) : [...current, method]
-                    );
-                    if (selected) {
-                      setPaymentAmounts(current => ({ ...current, [method]: "" }));
-                    }
-                  }}
-                />
-                {selected && (
-                  <div className="ml-4 rounded-card border border-line bg-surface px-4 py-3">
-                    <Field label={`${method} amount collected`} required>
-                      {control => (
-                        <Input
-                          {...control}
-                          prefix="GBP"
-                          inputMode="decimal"
-                          value={paymentAmounts[method] ?? ""}
-                          onChange={e => setPaymentAmounts(current => ({ ...current, [method]: e.target.value }))}
-                        />
-                      )}
-                    </Field>
-                  </div>
-                )}
-              </div>
-            )}
-          )}
-        </div>
-      </div>
-
-      {blockedReason && <Alert tone="warning">{blockedReason}</Alert>}
-      <Button
-        fullWidth
-        size="lg"
-        loading={submitting}
-        blockedReason={blockedReason}
-        onBlocked={() => undefined}
-        onClick={() => onSubmit({
-          startTime: inputToIso(startTime),
-          endTime: inputToIso(endTime),
-          congestionCharge,
-          congestionChargeAmount,
-          helperName,
-          helperHours,
-          paymentMethods,
-          paymentAmounts
-        })}
-      >
-        Submit job entry
-      </Button>
-    </div>
-  );
-}
 
 // Fallback shown until the job detail response's confirmationText loads. Reads the
 // same Settings key the admin dashboard already edits.

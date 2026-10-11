@@ -1,5 +1,7 @@
 import { jobsCollection } from "./mongo";
 import { Job } from "../jobs/job.types";
+import { DateTime } from "luxon";
+import { invalidateReportReads } from "../reports/report-read-cache";
 
 /** Replaces google/sheets.ts's upsertJob/getJob/listJobs. Same signatures deliberately,
  * so jobs.service.ts/booking.service.ts/workflow.engine.ts port by swapping the import
@@ -10,6 +12,7 @@ import { Job } from "../jobs/job.types";
 export async function upsertJob(job: Job): Promise<void> {
   const col = await jobsCollection();
   await col.replaceOne({ _id: job.jobId } as any, { _id: job.jobId, ...job } as any, { upsert: true });
+  invalidateReportReads();
 }
 
 export async function getJob(jobId: string): Promise<Job | null> {
@@ -30,6 +33,7 @@ export async function getJob(jobId: string): Promise<Job | null> {
 export async function deleteJob(jobId: string): Promise<boolean> {
   const col = await jobsCollection();
   const result = await col.deleteOne({ _id: jobId } as any);
+  if (result.deletedCount) invalidateReportReads();
   return result.deletedCount > 0;
 }
 
@@ -43,9 +47,9 @@ export async function deleteJob(jobId: string): Promise<boolean> {
  */
 export async function listJobs(filter?: { driverInitials?: string; gpsliveImei?: string }): Promise<Job[]> {
   const col = await jobsCollection();
-  const query: Record<string, string> = {};
+  const query: Record<string, unknown> = {};
   if (filter?.driverInitials) query.driverInitials = filter.driverInitials;
-  if (filter?.gpsliveImei) query.gpsliveImei = filter.gpsliveImei;
+  if (filter?.gpsliveImei) query.$or = [{ gpsliveImei: filter.gpsliveImei }, { "gpsDeviceHistory.imei": filter.gpsliveImei }];
   const docs = await col.find(query).toArray();
   return docs.map(({ _id, ...job }: any) => job as Job);
 }
@@ -63,10 +67,19 @@ function effectiveStartStage(): Record<string, any> {
   return {
     $addFields: {
       __effectiveStart: {
-        $cond: [{ $and: [{ $ne: ["$actualStart", ""] }, { $ne: ["$actualStart", null] }] }, "$actualStart", "$bookedStart"]
+        $ifNull: [{ $cond: [{ $eq: ["$actualStartSource", "completion-fallback"] }, null,
+          { $convert: { input: "$actualStart", to: "date", onError: null, onNull: null } }] },
+          { $convert: { input: "$bookedStart", to: "date", onError: null, onNull: null } }]
       }
     }
   };
+}
+
+function rangeBoundary(value: string, end = false): Date {
+  const dateOnly = /^\d{4}-\d{2}-\d{2}$/.test(value);
+  const parsed = DateTime.fromISO(value, { zone: dateOnly ? "Europe/London" : "utc", setZone: !dateOnly });
+  if (!parsed.isValid) throw new RangeError("Invalid job date filter.");
+  return (dateOnly && end ? parsed.endOf("day") : parsed).toJSDate();
 }
 
 /** Raw Job fields safe to sort on directly at the Mongo level -- anything else (e.g.
@@ -139,9 +152,9 @@ export async function listJobsPage(filter: JobsPageFilter): Promise<{ items: Job
     // has genuinely started) over bookedStart, so a job that ran late/early is filtered
     // by when it actually happened, not just when it was booked.
     pipeline.push(effectiveStartStage());
-    const range: Record<string, string> = {};
-    if (filter.from) range.$gte = filter.from;
-    if (filter.to) range.$lte = filter.to;
+    const range: Record<string, Date> = {};
+    if (filter.from) range.$gte = rangeBoundary(filter.from);
+    if (filter.to) range.$lte = rangeBoundary(filter.to, true);
     andClauses.push({ __effectiveStart: range });
   }
 
@@ -187,9 +200,9 @@ export async function listJobsPage(filter: JobsPageFilter): Promise<{ items: Job
 export async function listJobsInRange(from?: string, to?: string): Promise<Job[]> {
   if (!from && !to) return listJobs();
   const col = await jobsCollection();
-  const range: Record<string, string> = {};
-  if (from) range.$gte = from;
-  if (to) range.$lte = to;
+  const range: Record<string, Date> = {};
+  if (from) range.$gte = rangeBoundary(from);
+  if (to) range.$lte = rangeBoundary(to, true);
   const pipeline = [effectiveStartStage(), { $match: { __effectiveStart: range } }, { $project: { _id: 0 } }];
   return col.aggregate<Job>(pipeline).toArray();
 }

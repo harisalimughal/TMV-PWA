@@ -54,7 +54,7 @@ export function AppTopBar({ driver, onOpenProfile, className }: AppTopBarProps) 
         </div>
         <div className="flex shrink-0 items-center gap-0.5">
           <ThemeToggleButton />
-          <NotificationBell />
+          <NotificationBell showDetails />
           <button
             type="button"
             onClick={onOpenProfile}

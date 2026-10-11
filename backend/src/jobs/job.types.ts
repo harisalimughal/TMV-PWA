@@ -1,3 +1,6 @@
+import type { JobTimeBillingSnapshot } from "./job-time-billing";
+import type { JobTimeRateResolution } from "./job-time-rate";
+
 export enum JobStatus {
   READY = "READY",
   IN_PROGRESS = "IN_PROGRESS",
@@ -86,10 +89,29 @@ export interface Job {
   extraCharges: string[];
   overtimeMinutes: number;
   overtimeCharge: number;
+  driverReportedOvertimeMinutes?: number;
+  driverReportedOvertimeCrewSize?: number;
+  timeBilling?: JobTimeBillingSnapshot & {
+    rateResolution: JobTimeRateResolution;
+    driverInitials: string;
+    vehicleImei?: string;
+    capturedAt: string;
+  };
+  timeBillingStatus?: "verified" | "needs-verification" | "legacy";
+  timeBillingIssue?: string;
+  manualDetailsRequiredAt?: string;
+  actualStartSource?: "arrival-photo" | "completion-fallback";
+  bookingPackingService?: boolean;
+  actualFinishSource?: "empty-van-photo" | "admin-manual" | "completion-fallback";
+  chargeSnapshot?: { basePence: number; congestionPence: number; tunnelPence: number; roadEvidenceIds?: string[]; confirmedTunnelCrossings?: number; roadRuleVersion?: string;
+    roadFeeSources?: { congestion: "gps-observed" | "driver-selected-unverified" | "none"; tunnel: "gps-observed" | "driver-selected-unverified" | "none" } };
+  roadTariffSnapshot?: import("../gps/road-charge.rules").RoadTariffSnapshot;
   calculatedTotalCharges?: number;
   totalCharges: number;
   amountCharged?: number;
   totalAdjustmentNote?: string;
+  reportIdentity?: { initials: string; email: string | null; name: string | null; vehicleImei: string | null; source: string; capturedAt?: string };
+  confirmedPrepayments?: Array<{ reference: string; amountPence: number; confirmedAt: string; confirmedBy: string; manualScope: "separate" | "included" | "unverified" }>;
   paymentMethod: string;
   paymentBreakdown?: PaymentBreakdownItem[];
   paymentStatus: string;
@@ -119,6 +141,7 @@ export interface Job {
   vanLoadedAt?: string;
   /** First confirmed fresh GPSLive position at the pickup, from the assigned IMEI. */
   trackerArrivalAt?: string;
+  trackerArrivalSource?: "two-fresh-reports";
   /** First in-radius report awaiting a second report to rule out a drive-by. */
   trackerArrivalCandidateAt?: string;
   /** Latest fresh report from the assigned tracker while this job was checked. */
@@ -147,6 +170,7 @@ export interface Job {
    *  An active pin is retained for the job; an inactive/removed pin may be repaired
    *  from one unique active initials match. Unset if no device can be resolved. */
   gpsliveImei?: string;
+  gpsDeviceHistory?: import("../gps/gps.types").GpsDeviceAssignment[];
   /** Cloudinary URL of the customer's drawn signature, once captured -- replaces the
    * old Sheets "Signatures" tab. Empty until WAITING_CLIENT_CONFIRMATION is completed. */
   signatureUrl: string;

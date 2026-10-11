@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 import { EvidenceStatus, ExtraChargeType, JobStatus, PaymentMethod } from "../src/jobs/job.types";
 import { WorkflowState } from "../src/workflow/workflow.states";
+import { calculateJobTimeBilling } from "../src/jobs/job-time-billing";
+import { pence } from "../src/utils/money";
 
 vi.mock("../src/auth/driver-account.service", () => ({
   listDriverProfiles: vi.fn().mockResolvedValue([])
@@ -13,6 +15,79 @@ vi.mock("../src/db/settings.repo", () => ({
 import { normalizeMongoDataset } from "../src/admin/dashboard/normalize";
 
 describe("normalizeMongoDataset", () => {
+  it("uses verified GPS for arrival delay while keeping proof time and billing boundaries separate", async () => {
+    const [normalized] = await normalizeMongoDataset({
+      jobs: [{ jobId: "GPS-ARRIVAL", status: JobStatus.COMPLETED, driverInitials: "AB",
+        bookedStart: "2026-10-09T09:00:00Z", bookedFinish: "2026-10-09T10:30:00Z",
+        actualStart: "2026-10-09T09:20:00Z", actualFinish: "2026-10-09T11:00:00Z",
+        trackerArrivalAt: "2026-10-09T09:00:00Z", trackerArrivalSource: "two-fresh-reports",
+        totalCharges: 100, extraCharges: [] } as any],
+      evidence: [], activity: [], exceptions: [], scenarioSubmissions: [],
+      fetchedAt: "2026-10-09T12:00:00Z", durationMs: 0
+    });
+    expect(normalized).toMatchObject({ delayMinutes: 0, arrivalDelaySource: "gps-two-fresh-reports", actualStart: "2026-10-09T09:20:00.000Z" });
+    expect(normalized.actualMinutes).toBe(100);
+  });
+  it("uses saved duration, rates and fee snapshots for all financial/report consumers", async () => {
+    const billing = calculateJobTimeBilling({
+      bookedStart: "2026-09-25T09:00:00Z", bookedFinish: "2026-09-25T10:30:00Z",
+      actualStart: "2026-09-25T09:00:00Z", actualFinish: "2026-09-25T11:30:00Z",
+      rate: { per30Pence: pence(5500), source: "calendar" }, partialBlockPolicy: "round-up"
+    });
+    const [normalized] = await normalizeMongoDataset({
+      jobs: [{
+        jobId: "SNAPSHOT", status: JobStatus.COMPLETED, driverInitials: "AB",
+        bookedStart: billing.bookedStart, bookedFinish: billing.bookedFinish,
+        actualStart: billing.actualStart, actualFinish: billing.actualFinish,
+        bookedMinutes: 999, actualMinutes: 999, basePrice: 999, overtimeCharge: 999,
+        overtimeMinutes: 999, timeBilling: billing, timeBillingStatus: "verified",
+        chargeSnapshot: { basePence: 10000, congestionPence: 1800, tunnelPence: 1360 },
+        extraCharges: [ExtraChargeType.CONGESTION, ExtraChargeType.TUNNEL],
+        calculatedTotalCharges: 186.60, amountCharged: 186.60, paymentMethod: "Card"
+      } as any], evidence: [], activity: [], exceptions: [], scenarioSubmissions: [],
+      fetchedAt: "2026-09-25T12:00:00Z", durationMs: 0
+    });
+    expect(normalized).toMatchObject({ bookedMinutes: 90, allocatedMinutes: 120, actualMinutes: 150,
+      overtimeMinutes: 30, overtimeCharge: 5500, basePrice: 10000, extraCharges: 3160,
+      congestionCharge: 1800, tunnelCharge: 1360, totalCharges: 18660, timeBillingStatus: "verified" });
+  });
+
+  it("retains historical completed totals instead of repricing from current settings", async () => {
+    const [normalized] = await normalizeMongoDataset({
+      jobs: [{ jobId: "LEGACY", status: JobStatus.COMPLETED, driverInitials: "AB",
+        bookedStart: "2026-09-25T09:00:00Z", bookedFinish: "2026-09-25T10:30:00Z",
+        basePrice: 100, totalCharges: 120, amountCharged: 120, overtimeCharge: 0,
+        extraCharges: [ExtraChargeType.CONGESTION, ExtraChargeType.TUNNEL] } as any],
+      evidence: [], activity: [], exceptions: [], scenarioSubmissions: [],
+      fetchedAt: "2026-09-25T12:00:00Z", durationMs: 0
+    });
+    expect(normalized.totalCharges).toBe(12000);
+    expect(normalized.timeBillingStatus).toBe("legacy");
+    expect(normalized.timeBilling).toBeUndefined();
+    expect(normalized.roadFeeAmounts).toEqual({ congestionPence: null, tunnelPence: null });
+  });
+  it("keeps documented discounts reconciled while retaining the original automatic calculation", async () => {
+    const [normalized] = await normalizeMongoDataset({ jobs: [{ jobId: "DISCOUNT", status: JobStatus.COMPLETED, driverInitials: "AB",
+      bookedStart: "2026-10-09T09:00:00Z", bookedFinish: "2026-10-09T11:00:00Z", basePrice: 250, totalCharges: 220,
+      calculatedTotalCharges: 250, amountCharged: 220, totalAdjustmentNote: "Agreed discount", extraCharges: [] } as any],
+      evidence: [], activity: [], exceptions: [], scenarioSubmissions: [], fetchedAt: "2026-10-09T12:00:00Z", durationMs: 0 });
+    expect(normalized).toMatchObject({ calculatedTotalCharges: 25000, totalCharges: 22000, amountCharged: 22000, reconciled: true });
+  });
+
+  it("excludes fallback completion durations from working-hour summaries", async () => {
+    const [normalized] = await normalizeMongoDataset({
+      jobs: [{ jobId: "FALLBACK", status: JobStatus.COMPLETED, driverInitials: "AB",
+        bookedStart: "2026-09-25T09:00:00Z", bookedFinish: "2026-09-25T10:30:00Z",
+        actualStart: "2026-09-25T09:00:00Z", actualFinish: "2026-10-01T09:00:00Z",
+        actualFinishSource: "admin-manual", actualMinutes: 8640, timeBillingStatus: "needs-verification",
+        totalCharges: 100, extraCharges: [] } as any],
+      evidence: [], activity: [], exceptions: [], scenarioSubmissions: [],
+      fetchedAt: "2026-10-01T12:00:00Z", durationMs: 0
+    });
+    expect(normalized.actualMinutes).toBeUndefined();
+    expect(normalized.timeBillingStatus).toBe("needs-verification");
+  });
+
   it("includes the total adjustment note for admin displays", async () => {
     const [job] = await normalizeMongoDataset({
       jobs: [{
@@ -245,6 +320,7 @@ describe("normalizeMongoDataset", () => {
         differenceMinutes: 0,
         delayStatus: "Waiting",
         extraCharges: [ExtraChargeType.CONGESTION, ExtraChargeType.EXTRA_TIME],
+        chargeSnapshot: { basePence: 11500, congestionPence: 1800, tunnelPence: 0 },
         overtimeMinutes: 120,
         overtimeCharge: 120,
         totalCharges: 235,

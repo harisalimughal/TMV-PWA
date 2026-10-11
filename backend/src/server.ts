@@ -23,6 +23,14 @@ import { storageRoutes } from "./jobs/storage.routes";
 import { vanRoutes } from "./jobs/van.routes";
 import { pushRoutes } from "./push/push.routes";
 import { gpsLiveWebhookRoutes } from "./integrations/gpslive-webhook.routes";
+import { dashboardGpsRoutes } from "./admin/dashboard/gps.routes";
+import { ensureGpsIndexes } from "./gps/gps.repo";
+import { ensureRoadChargeIndexes } from "./gps/road-charge.repo";
+import { ensureLiabilityIndexes } from "./liabilities/liability.repo";
+import { dashboardLiabilitiesRoutes } from "./admin/dashboard/liabilities.routes";
+import { dashboardDriverReportsRoutes } from "./admin/dashboard/driver-reports.routes";
+import { ensureDriverReportIndexes } from "./reports/driver-report.repo";
+import { sweepGpsHistory } from "./gps/gps.sweep";
 import { runScheduledCalendarSync } from "./jobs/jobs.service";
 import { sweepJobReminders } from "./jobs/reminder.service";
 import { sweepPickupArrivals } from "./jobs/pickup-tracker.service";
@@ -59,6 +67,9 @@ app.use("/api/webhooks/gpslive", gpsLiveWebhookRoutes());
 // Finance/driver performance stats) -- same requireAdminAuth session as adminRoutes()
 // above, just a different set of (mostly read-only) endpoints. See admin/dashboard/*.
 app.use("/api/admin/jobs", requireAdminAuth, dashboardJobsRoutes());
+app.use("/api/admin/gps", requireAdminAuth, dashboardGpsRoutes());
+app.use("/api/admin/liabilities", requireAdminAuth, dashboardLiabilitiesRoutes());
+app.use("/api/admin/driver-reports", requireAdminAuth, dashboardDriverReportsRoutes());
 app.use("/api/admin/drivers", requireAdminAuth, dashboardDriversSummaryRoutes());
 app.use("/api/admin/summary", requireAdminAuth, dashboardSummaryRoutes());
 app.use("/api/admin/finance", requireAdminAuth, dashboardFinanceRoutes());
@@ -182,7 +193,7 @@ function startPickupTrackerSweep(): void {
  */
 function ensureIndexesWithRetry(): void {
   const RETRY_MS = 30_000;
-  Promise.all([ensureIndexes(), ensureExceptionsIndexes()])
+  Promise.all([ensureIndexes(), ensureExceptionsIndexes(), ensureGpsIndexes(), ensureRoadChargeIndexes(), ensureLiabilityIndexes(), ensureDriverReportIndexes()])
     .then(() => log.info("mongo indexes verified"))
     .catch(error => {
       log.warn("ensureIndexes failed; retrying", { error: String(error), retry_in_ms: RETRY_MS });
@@ -200,6 +211,9 @@ function main(): void {
   startBackgroundSync();
   startReminderSweep();
   startPickupTrackerSweep();
+  const gpsSweep = () => sweepGpsHistory().catch(error => log.warn("GPS history background sync failed", { error: String(error) }));
+  void gpsSweep();
+  setInterval(gpsSweep, 15 * 60_000);
 
   const shutdown = () => {
     log.info("SIGTERM received; draining");

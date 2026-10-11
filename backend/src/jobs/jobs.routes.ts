@@ -22,7 +22,8 @@ import { getSetting } from "../db/settings.repo";
 import { reverseGeocode } from "../integrations/geocode";
 import { log } from "../utils/logger";
 import { getDriverJobSummary } from "../db/driver-job-summary.repo";
-import { submitDriverJobSummary } from "./driver-job-summary.service";
+import { submitDriverJobSummary, ManualDetailsLockedError } from "./driver-job-summary.service";
+import { ManualDetailsPendingError } from "./manual-details-gate";
 
 export const JOB_EVIDENCE_UPLOAD_MAX_FILES = 5;
 export const SCENARIO_PHOTO_UPLOAD_MAX_FILES = 30;
@@ -68,6 +69,14 @@ function parseLiabilityCategories(raw: string): string[] {
 }
 
 function errorResponse(res: Response, error: unknown): void {
+  if (error instanceof ManualDetailsPendingError) {
+    res.status(409).json({ error: { code: "MANUAL_DETAILS_PENDING", message: error.message, jobId: error.jobId } });
+    return;
+  }
+  if (error instanceof ManualDetailsLockedError) {
+    res.status(409).json({ error: { code: "MANUAL_DETAILS_LOCKED", message: error.message } });
+    return;
+  }
   if (error instanceof ValidationError) {
     res.status(400).json({ error: { code: "VALIDATION_FAILED", message: error.message } });
     return;
@@ -139,10 +148,10 @@ export function jobsRoutes(): Router {
   // GET "/" above, which stays single-job (the active-workflow entry point).
   router.get("/list", async (req: Request, res: Response) => {
     try {
-      const { driver, today, past, next } = await getJobsGroupedForDriver(req.driverEmail!);
+      const { driver, today, past, next, pendingManualDetails } = await getJobsGroupedForDriver(req.driverEmail!);
       res.status(200).json({
         driver: { fullName: driver.fullName, initials: driver.initials },
-        today, past, next
+        today, past, next, pendingManualDetails
       });
     } catch (error) {
       errorResponse(res, error);

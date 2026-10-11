@@ -1,5 +1,6 @@
 import React from "react";
 import type { Job } from "../../api/jobs";
+import { scheduledDurationLabel } from "../../lib/jobTime";
 
 const LONDON = "Europe/London";
 
@@ -57,6 +58,7 @@ export interface BookingWindowHeaderProps {
  */
 export function BookingWindowHeader({ job }: BookingWindowHeaderProps) {
   const day = dateChip(job.bookedStart);
+  const duration = scheduledDurationLabel(job);
 
   return (
     <div className="rounded-card border border-line/40 bg-surface px-4 py-3 text-center shadow-[0_2px_12px_-2px_rgb(15_23_42/0.12)]">
@@ -76,6 +78,7 @@ export function BookingWindowHeader({ job }: BookingWindowHeaderProps) {
           {day}
         </div>
       )}
+      {duration && <p className="mt-2 text-helper text-fg-muted">Scheduled duration: {duration}</p>}
     </div>
   );
 }

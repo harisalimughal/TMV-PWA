@@ -20,6 +20,7 @@
 import { readMongoDataset, MongoDataset } from "./read";
 import { normalizeMongoDataset } from "./normalize";
 import { NormalizedJob } from "./types";
+import { invalidateReportReads } from "../../reports/report-read-cache";
 
 export interface DashboardDataset {
   dataset: MongoDataset;
@@ -57,4 +58,5 @@ export async function getDashboardDataset(): Promise<DashboardDataset> {
  *  reflects it immediately instead of waiting out the TTL. */
 export function invalidateDashboardDataset(): void {
   cached = null;
+  invalidateReportReads();
 }

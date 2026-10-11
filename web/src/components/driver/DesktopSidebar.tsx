@@ -33,7 +33,7 @@ export function DesktopSidebar({ active, onSelect, driver, onLogout }: DesktopSi
           <span className="block text-heading text-fg">The Man Van</span>
           <span className="mt-0.5 block text-meta text-fg-subtle">Driver Operations</span>
         </div>
-        <NotificationBell />
+        <NotificationBell showDetails />
       </div>
 
       <nav aria-label="Main" className="flex-1 px-2.5 py-2">

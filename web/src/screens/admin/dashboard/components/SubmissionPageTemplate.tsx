@@ -84,6 +84,7 @@ export function SubmissionPageTemplate({
           <div className="flex flex-wrap items-center gap-3">
             {onDriverFilterChange && (
               <select
+                aria-label="Filter by driver"
                 value={driverFilter || ""}
                 onChange={e => onDriverFilterChange(e.target.value)}
                 disabled={driverOptionsLoading}
@@ -99,6 +100,7 @@ export function SubmissionPageTemplate({
             <div className="relative flex-1 min-w-[200px]">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-admin-muted" />
               <input
+                aria-label="Search submissions"
                 type="text"
                 placeholder={searchPlaceholder}
                 value={search}

@@ -25,6 +25,7 @@ export interface ApiError {
   status?: number;
   pending?: string[];
   failedTypes?: string[];
+  jobId?: string;
 }
 
 /** Uploads carry photos over mobile data, so they get a much longer ceiling.
@@ -172,7 +173,8 @@ export async function request<T>(url: string, options: RequestOptions = {}): Pro
     throw apiError(status >= 500 ? "SERVER_ERROR" : server?.code ?? "UNKNOWN", message, {
       status,
       pending: server?.pending,
-      failedTypes: server?.failedTypes
+      failedTypes: server?.failedTypes,
+      jobId: server?.jobId
     });
   }
 

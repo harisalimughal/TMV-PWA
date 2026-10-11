@@ -64,12 +64,14 @@ export const SETTINGS_SPEC: SettingFieldSpec[] = [
     key: "OVERTIME_RATE_PER_30",
     label: "Overtime Rate per 30 min (£)",
     type: "number",
-    fallback: String(env.overtimeRatePer30Minutes),
-    hint: "Leave blank to use the relevant crew/packing rate above instead."
+    fallback: "",
+    hint: "Calendar overtime rate takes priority. If Calendar has no usable rate, use this rate per 30-minute block; leave blank to use crew/packing pricing. Any positive extra time bills a full block after the rounded allocation."
   },
-  { key: "OVERTIME_GRACE_MINS", label: "Overtime Grace (minutes)", type: "number", fallback: String(env.overtimeGraceMinutes) },
+  { key: "OVERTIME_GRACE_MINS", label: "Overtime Grace (minutes)", type: "number", fallback: String(env.overtimeGraceMinutes), hint: "Legacy setting. New Calendar-allocation billing uses the rounded internal allocation with no additional grace." },
   { key: "CONGESTION_CHARGE", label: "Congestion Charge (£)", type: "number", fallback: String(env.congestionCharge) },
   { key: "TUNNEL_CHARGE", label: "Tunnel Charge (£)", type: "number", fallback: String(env.tunnelCharge) },
+  { key: "GPS_TUNNEL_PORTAL_RULES", label: "Tunnel Portal Geometry", type: "textarea", fallback: "[]",
+    hint: "JSON portal rules with id, scheme, tunnelName, effectiveFrom and sideA/sideB latitude-longitude polygons. Only verified opposite-portal routes confirm physical crossings. Empty means geofence passages need verification." },
   {
     key: "JOB_STARTED_MESSAGE_TEXT",
     label: "Customer Message — Driver Introduction",

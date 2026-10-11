@@ -1,6 +1,7 @@
 import bcrypt from "bcryptjs";
 import { driverAccounts, DriverAccountDoc } from "../db/mongo";
 import { DriverProfile } from "../jobs/job.types";
+import { invalidateReportReads } from "../reports/report-read-cache";
 
 const BCRYPT_ROUNDS = 12;
 
@@ -66,6 +67,7 @@ export async function upsertDriverProfile(input: DriverProfileInput): Promise<vo
   if (wasActive && !input.active) update.$inc = { tokenVersion: 1 };
 
   await col.updateOne({ email }, update, { upsert: true });
+  invalidateReportReads();
 }
 
 /** All driver accounts, roster + login status combined -- the /admin Drivers list. */
@@ -122,6 +124,7 @@ export async function setDriverPassword(email: string, plainPassword: string): P
     },
     { upsert: true }
   );
+  invalidateReportReads();
 }
 
 /** Deactivates a driver's account without deleting it -- mirrors how Sheets driver rows
@@ -132,6 +135,7 @@ export async function deactivateDriverAccount(email: string): Promise<void> {
     { email: normalizeEmail(email) },
     { $set: { active: false, updatedAt: new Date() }, $inc: { tokenVersion: 1 } }
   );
+  invalidateReportReads();
 }
 
 /**
@@ -145,6 +149,7 @@ export async function deactivateDriverAccount(email: string): Promise<void> {
 export async function deleteDriverAccount(email: string): Promise<boolean> {
   const col = await driverAccounts();
   const result = await col.deleteOne({ email: normalizeEmail(email) });
+  if (result.deletedCount) invalidateReportReads();
   return result.deletedCount > 0;
 }
 

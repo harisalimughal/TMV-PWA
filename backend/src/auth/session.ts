@@ -50,7 +50,7 @@ export function issueSessionToken(email: string, tokenVersion: number): string {
  * session revoked by a password change" must compare exp/tokenVersion against a fresh
  * DriverAccountDoc lookup themselves (see requireDriverAuth). */
 export function verifySessionToken(token: string | undefined): SessionPayload | null {
-  if (!token) return null;
+  if (typeof token !== "string" || !token) return null;
   const dot = token.indexOf(".");
   if (dot === -1) return null;
 
@@ -60,7 +60,7 @@ export function verifySessionToken(token: string | undefined): SessionPayload | 
 
   try {
     const payload = JSON.parse(base64UrlDecode(payloadB64)) as SessionPayload;
-    if (typeof payload.exp !== "number" || Date.now() > payload.exp) return null;
+    if (typeof payload.exp !== "number" || !Number.isFinite(payload.exp) || Date.now() >= payload.exp) return null;
     if (typeof payload.email !== "string" || typeof payload.tokenVersion !== "number") return null;
     return payload;
   } catch {

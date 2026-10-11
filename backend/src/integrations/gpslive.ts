@@ -233,12 +233,13 @@ export async function fetchGpsLiveAlertsForDevice(
  * Falls back to an empty list (not an error) when the fleet has no devices, same
  * best-effort posture as the rest of this integration.
  */
-export async function fetchGpsLiveAlertsForFleet(dateFrom: string, dateTo: string): Promise<GpsLiveAlertEvent[]> {
+export async function fetchGpsLiveAlertsForFleet(dateFrom: string, dateTo: string, scopedImeis?: string[]): Promise<GpsLiveAlertEvent[]> {
   const apiKey = await getGpsApiKey();
   if (!apiKey) return [];
 
-  const devices = await fetchGpsLiveDevices();
-  const imeis = devices.map(d => d.imei).filter(Boolean);
+  const imeis = scopedImeis === undefined
+    ? (await fetchGpsLiveDevices()).map(d => d.imei).filter(Boolean)
+    : [...new Set(scopedImeis.filter(Boolean))];
   if (imeis.length === 0) return [];
 
   const response = await withTimeout(

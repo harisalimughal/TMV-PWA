@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { driverReportHref, navigateAdmin, retainRangeInUrl } from "../utils/reportNavigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { deleteDriver, fetchDrivers, saveDriver } from "../api";
 import {
@@ -24,8 +25,8 @@ export function DriversPage() {
   const queryClient = useQueryClient();
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [editingDriver, setEditingDriver] = useState<DriverSummaryItem | null>(null);
-  const [from, setFrom] = useState<string | undefined>(() => defaultDashboardDateRange().from);
-  const [to, setTo] = useState<string | undefined>(() => defaultDashboardDateRange().to);
+  const [from, setFrom] = useState<string | undefined>(() => new URLSearchParams(window.location.search).get("from") || defaultDashboardDateRange().from);
+  const [to, setTo] = useState<string | undefined>(() => new URLSearchParams(window.location.search).get("to") || defaultDashboardDateRange().to);
 
   // Real roster + real per-driver stats (assigned/completed/revenue/missing evidence,
   // avg delay/duration) -- all computed server-side against actual job data, not the
@@ -97,7 +98,7 @@ export function DriversPage() {
       {/* TOOLBAR -- scopes every card's Completed Jobs/Revenue/Total Move Time (and
           Avg Start Delay) to this range server-side, same as Finished Jobs' filter. */}
       <div className="p-2 bg-white rounded-module shadow-sm border border-admin-line flex flex-wrap items-center gap-4">
-        <DateRangePicker from={from} to={to} onChange={(f, t) => { setFrom(f); setTo(t); }} />
+        <DateRangePicker from={from} to={to} onChange={(f, t) => { setFrom(f); setTo(t); retainRangeInUrl(f, t); }} />
       </div>
 
       {isLoading && (
@@ -122,6 +123,7 @@ export function DriversPage() {
         {roster.map((driver) => (
           <div
             key={driver.initials}
+            onClick={event => { if ((event.target as Element).closest("button,a,input,select")) return; navigateAdmin(driverReportHref(driver.initials, from, to)); }}
             className="bg-white rounded-module shadow-[0_4px_20px_rgb(0,0,0,0.03)] border border-admin-line p-6 flex flex-col justify-between hover:-translate-y-0.5 hover:shadow-md transition-all cursor-pointer relative group"
           >
             {/* Header Row */}
@@ -132,7 +134,7 @@ export function DriversPage() {
                 </div>
                 <div className="min-w-0">
                   <h3 className="font-bold text-admin-ink text-[16px] flex items-center gap-1.5 leading-tight">
-                    <span className="truncate">{driver.fullName}</span>
+                    <button className="text-left truncate focus-visible:outline focus-visible:outline-2" onClick={event => { event.stopPropagation(); navigateAdmin(driverReportHref(driver.initials, from, to)); }} title={`Open report for ${driver.fullName}`}>{driver.fullName}</button>
                     {driver.active && (
                       <span title="Verified Active" className="cursor-help shrink-0">
                         <ShieldCheck className="w-4 h-4 text-[#10b981]" />

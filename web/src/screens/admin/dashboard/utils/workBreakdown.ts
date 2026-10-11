@@ -35,7 +35,7 @@ export function paymentBreakdownLines(job: NormalizedJob): string[] {
 }
 
 export function totalChargesForJob(job: NormalizedJob): number {
-  return job.totalCharges || job.calculatedTotalCharges || (job.basePrice || 0) + (job.extraCharges || 0) + (job.overtimeCharge || 0);
+  return job.totalCharges ?? job.calculatedTotalCharges ?? (job.basePrice || 0) + (job.extraCharges || 0) + (job.overtimeCharge || 0);
 }
 
 export function adjustmentReason(job: NormalizedJob): string {

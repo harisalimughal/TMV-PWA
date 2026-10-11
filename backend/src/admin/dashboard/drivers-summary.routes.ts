@@ -13,8 +13,12 @@ import { listJobsInRange } from "../../db/jobs.repo";
 import { listEvidenceForJobs } from "../../db/evidence.repo";
 import { listDriverJobSummariesForJobs } from "../../db/driver-job-summary.repo";
 import { normalizeMongoDataset } from "./normalize";
-import { DriverProfile } from "../../jobs/job.types";
+import { DriverProfile, Job } from "../../jobs/job.types";
+import { loadDriverMovement } from "./driver-summary-movement";
+import { createReportReadCache } from "../../reports/report-read-cache";
+import type { DriverMovingSummary } from "./driver-summary-movement";
 import { NormalizedJob } from "./types";
+import { normalizedPayments } from "../../reports/report-payments";
 
 interface DriverStat {
   initials: string;
@@ -37,11 +41,16 @@ interface DriverStat {
   totalDelayMinutes: number;
   delayJobsCount: number;
   totalChargesPence: number;
+  calculatedChargesPence: number;
   revenuePence: number;
   cashCollectedPence: number;
   cardCollectedPence: number;
+  linkCollectedPence: number;
   bankCollectedPence: number;
   invoiceCollectedPence: number;
+  unknownCollectionJobs: number;
+  congestionUnknownJobs: number;
+  tunnelUnknownJobs: number;
   congestionChargePence: number;
   tunnelChargePence: number;
   overtimeMinutes: number;
@@ -64,8 +73,8 @@ export function summarizeDrivers(drivers: DriverProfile[], jobs: NormalizedJob[]
       hasAccount: true,
       assignedCount: 0, completedCount: 0, cancelledCount: 0,
       totalDurationMinutes: 0, durationJobsCount: 0, totalDelayMinutes: 0, delayJobsCount: 0,
-      totalChargesPence: 0, revenuePence: 0, cashCollectedPence: 0, cardCollectedPence: 0, bankCollectedPence: 0,
-      invoiceCollectedPence: 0, congestionChargePence: 0, tunnelChargePence: 0, overtimeMinutes: 0,
+      totalChargesPence: 0, calculatedChargesPence: 0, revenuePence: 0, cashCollectedPence: 0, cardCollectedPence: 0, bankCollectedPence: 0,
+      invoiceCollectedPence: 0, linkCollectedPence: 0, unknownCollectionJobs: 0, congestionUnknownJobs: 0, tunnelUnknownJobs: 0, congestionChargePence: 0, tunnelChargePence: 0, overtimeMinutes: 0,
       missingEvidenceCount: 0, overtimeCount: 0, reviewSentCount: 0, reviewNotSentCount: 0
     });
   }
@@ -79,8 +88,8 @@ export function summarizeDrivers(drivers: DriverProfile[], jobs: NormalizedJob[]
         hasAccount: false,
         assignedCount: 0, completedCount: 0, cancelledCount: 0,
         totalDurationMinutes: 0, durationJobsCount: 0, totalDelayMinutes: 0, delayJobsCount: 0,
-        totalChargesPence: 0, revenuePence: 0, cashCollectedPence: 0, cardCollectedPence: 0, bankCollectedPence: 0,
-        invoiceCollectedPence: 0, congestionChargePence: 0, tunnelChargePence: 0, overtimeMinutes: 0,
+        totalChargesPence: 0, calculatedChargesPence: 0, revenuePence: 0, cashCollectedPence: 0, cardCollectedPence: 0, bankCollectedPence: 0,
+        invoiceCollectedPence: 0, linkCollectedPence: 0, unknownCollectionJobs: 0, congestionUnknownJobs: 0, tunnelUnknownJobs: 0, congestionChargePence: 0, tunnelChargePence: 0, overtimeMinutes: 0,
         missingEvidenceCount: 0, overtimeCount: 0, reviewSentCount: 0, reviewNotSentCount: 0
       };
       driverStats.set(init, stat);
@@ -91,18 +100,24 @@ export function summarizeDrivers(drivers: DriverProfile[], jobs: NormalizedJob[]
       stat.completedCount++;
       if (j.reviewEmailSent === true) stat.reviewSentCount++;
       else stat.reviewNotSentCount++;
-      stat.totalChargesPence += j.totalCharges || j.calculatedTotalCharges || 0;
+      stat.totalChargesPence += j.totalCharges ?? j.calculatedTotalCharges ?? 0;
+      // Preserve the original calculation separately from documented price adjustments.
+      stat.calculatedChargesPence += j.calculatedTotalCharges ?? j.totalCharges ?? 0;
       stat.revenuePence += j.amountCharged || 0;
       stat.congestionChargePence += j.congestionCharge || 0;
       stat.tunnelChargePence += j.tunnelCharge || 0;
+      if (j.roadFeeAmounts?.congestionPence === null) stat.congestionUnknownJobs++;
+      if (j.roadFeeAmounts?.tunnelPence === null) stat.tunnelUnknownJobs++;
       stat.overtimeMinutes += j.overtimeMinutes || 0;
       // Same substring categorization as finance.routes.ts's company-wide totals,
       // just kept per-driver here -- so this and the Finance page always agree.
-      const method = (j.paymentMethod || "").toLowerCase();
-      if (method.includes("cash")) stat.cashCollectedPence += j.amountCharged;
-      else if (method.includes("card")) stat.cardCollectedPence += j.amountCharged;
-      else if (method.includes("bank")) stat.bankCollectedPence += j.amountCharged;
-      else if (method.includes("invoice")) stat.invoiceCollectedPence += j.amountCharged;
+      const payments = normalizedPayments(j);
+      if (payments.collectedPence === null) stat.unknownCollectionJobs++;
+      stat.cashCollectedPence += payments.byMethod.Cash;
+      stat.cardCollectedPence += payments.byMethod.Card;
+      stat.linkCollectedPence += payments.byMethod.Link;
+      stat.bankCollectedPence += payments.byMethod["Bank Transfer"];
+      stat.invoiceCollectedPence += payments.invoicePence;
     } else if (j.status === "CANCELLED") {
       stat.cancelledCount++;
     }
@@ -130,11 +145,17 @@ export function summarizeDrivers(drivers: DriverProfile[], jobs: NormalizedJob[]
       assigned: s.assignedCount, completed: s.completedCount, cancelled: s.cancelledCount, completionRate,
       avgDurationMinutes: avgDuration, totalDurationMinutes: s.totalDurationMinutes, avgDelayMinutes: avgDelay,
       totalChargesPounds: toPounds(pence(s.totalChargesPence)),
+      calculatedChargesPounds: toPounds(pence(s.calculatedChargesPence)),
       revenuePounds: toPounds(pence(s.revenuePence)), revenueFormatted: formatGBP(pence(s.revenuePence)),
       cashCollectedPounds: toPounds(pence(s.cashCollectedPence)),
       cardCollectedPounds: toPounds(pence(s.cardCollectedPence)),
+      linkCollectedPounds: toPounds(pence(s.linkCollectedPence)),
+      totalCollectionsPounds: toPounds(pence(s.cashCollectedPence + s.cardCollectedPence + s.linkCollectedPence + s.bankCollectedPence)),
+      unknownCollectionJobs: s.unknownCollectionJobs,
+      congestionUnknownJobs: s.congestionUnknownJobs, tunnelUnknownJobs: s.tunnelUnknownJobs,
       bankCollectedPounds: toPounds(pence(s.bankCollectedPence)),
       invoiceCollectedPounds: toPounds(pence(s.invoiceCollectedPence)),
+      invoiceUncollectedPounds: toPounds(pence(s.invoiceCollectedPence)),
       congestionChargePounds: toPounds(pence(s.congestionChargePence)),
       tunnelChargePounds: toPounds(pence(s.tunnelChargePence)),
       overtimeMinutes: s.overtimeMinutes,
@@ -144,6 +165,7 @@ export function summarizeDrivers(drivers: DriverProfile[], jobs: NormalizedJob[]
   }).sort((a, b) => b.completed - a.completed);
 }
 
+const summaryCache = createReportReadCache<{ drivers: Array<ReturnType<typeof summarizeDrivers>[number] & Partial<DriverMovingSummary>>; meta: { fetchedAt: string } }>();
 export function dashboardDriversSummaryRoutes(): Router {
   const router = Router();
 
@@ -151,6 +173,8 @@ export function dashboardDriversSummaryRoutes(): Router {
     try {
       const from = typeof req.query.from === "string" ? req.query.from : undefined;
       const to = typeof req.query.to === "string" ? req.query.to : undefined;
+      const completedOnly = req.query.completedOnly === "1";
+      const response = await summaryCache.get(JSON.stringify([from, to, req.query.includeMoving === "1", completedOnly]), async () => {
 
       // A date-scoped request (this report's normal use -- pick a week, see what each
       // driver collected) only needs jobs in that range plus their own evidence, for
@@ -158,16 +182,18 @@ export function dashboardDriversSummaryRoutes(): Router {
       // whole company's job/evidence/activity/scenario/exception history) entirely;
       // "All Time" still needs everything, so it keeps using the cached full dataset.
       let drivers, jobs, fetchedAt: string;
+      let sourceJobs: Job[] = [];
       if (from || to) {
         const [driverList, scopedJobs] = await Promise.all([listDriverProfiles(), listJobsInRange(from, to)]);
         drivers = driverList;
-        const jobIds = scopedJobs.map(j => j.jobId);
+        sourceJobs = completedOnly ? scopedJobs.filter(job => job.status === "COMPLETED") : scopedJobs;
+        const jobIds = sourceJobs.map(j => j.jobId);
         const [evidence, driverJobSummaries] = await Promise.all([
           listEvidenceForJobs(jobIds),
           listDriverJobSummariesForJobs(jobIds)
         ]);
         jobs = await normalizeMongoDataset({
-          jobs: scopedJobs, evidence, activity: [], scenarioSubmissions: [], exceptions: [],
+          jobs: sourceJobs, evidence, activity: [], scenarioSubmissions: [], exceptions: [],
           driverJobSummaries,
           fetchedAt: new Date().toISOString(), durationMs: 0
         });
@@ -175,13 +201,23 @@ export function dashboardDriversSummaryRoutes(): Router {
       } else {
         const [driverList, { dataset, jobs: allJobs }] = await Promise.all([listDriverProfiles(), getDashboardDataset()]);
         drivers = driverList;
+        sourceJobs = dataset.jobs;
         jobs = allJobs;
         fetchedAt = dataset.fetchedAt;
       }
 
+      if (completedOnly) {
+        sourceJobs = sourceJobs.filter(job => job.status === "COMPLETED");
+        jobs = jobs.filter(job => job.status === "COMPLETED");
+      }
       const items = summarizeDrivers(drivers, jobs);
+      const movement = req.query.includeMoving === "1"
+        ? await loadDriverMovement(sourceJobs, new Map(jobs.map(job => [job.jobId, job.driverInitials || "UNASSIGNED"]))) : null;
+      const result = movement ? items.map(item => ({ ...item, ...(movement.get(item.initials) ?? { movingKnownSeconds: 0, movingUnknownJobs: item.completed, movingPartialJobs: 0 }) })) : items;
 
-      return res.status(200).json({ drivers: items, meta: { fetchedAt } });
+      return { drivers: result, meta: { fetchedAt } };
+      });
+      return res.status(200).json(response);
     } catch (error) {
       return res.status(500).json({ error: { code: "DRIVERS_FETCH_FAILED", message: "Failed to fetch driver performance summary." } });
     }

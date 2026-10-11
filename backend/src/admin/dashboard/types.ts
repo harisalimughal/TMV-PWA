@@ -4,7 +4,7 @@
  * Unchanged from the source.
  */
 import { Pence } from "../../utils/money";
-import { JobStatus } from "../../jobs/job.types";
+import { JobStatus, type Job } from "../../jobs/job.types";
 import { WorkflowState } from "../../workflow/workflow.states";
 
 export type Provenance = "recorded" | "derived";
@@ -80,7 +80,11 @@ export interface DriverJobSummary {
   helperHours: number;
   paymentMethod: string;
   amountCollectedPence: Pence;
-  paymentBreakdown?: Array<{ method: "Cash" | "Card" | "Link" | "Invoice/Transfer"; amountPence: Pence }>;
+  paymentBreakdown?: Array<{ method: "Cash" | "Card" | "Link" | "Bank Transfer" | "Invoice" | "Invoice/Transfer"; amountPence: Pence }>;
+  schemaVersion?: 2;
+  noPaymentReceived?: boolean;
+  invoiceAmountPence?: number;
+  chargeItems?: import("../../db/driver-job-summary.repo").DriverReportedCharge[];
   submittedAt: string;
 }
 
@@ -143,7 +147,13 @@ export interface NormalizedJob {
   driverViewedAt?: string;
   bookedMinutes: number;
   actualMinutes?: number;
+  allocatedMinutes?: number;
+  timeBilling?: Job["timeBilling"];
+  timeBillingStatus?: Job["timeBillingStatus"];
+  timeBillingIssue?: string;
+  driverReportedOvertimeMinutes?: number;
   delayMinutes: number;
+  arrivalDelaySource?: "gps-two-fresh-reports" | "proof-acceptance" | "unavailable";
   delayBand: DelayBand;
   timingTrustworthy: boolean;
 
@@ -176,8 +186,10 @@ export interface NormalizedJob {
   amountCharged: Pence;
   totalAdjustmentNote?: string;
   reconciled: boolean;
+  roadFeeAmounts?: { congestionPence: number | null; tunnelPence: number | null };
 
   paymentMethod: string;
+  paymentLedger?: import("../../reports/report-payments").PaymentLedger;
   paymentBreakdown?: MoneyBreakdownItem[];
   extraChargeBreakdown?: MoneyBreakdownItem[];
   paymentStatus: string;

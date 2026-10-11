@@ -3,6 +3,7 @@ import { Download, Printer } from "lucide-react";
 import { NormalizedJob } from "../types";
 import { formatLondonDateTime } from "../utils/date";
 import { adjustmentReasonForMismatch } from "../utils/workBreakdown";
+import { ReportDocumentHeader, ReportDocumentFooter, ReportRecordMeta } from "./ReportDocumentHeader";
 
 interface Props {
   job: NormalizedJob;
@@ -10,7 +11,7 @@ interface Props {
 }
 
 export function PaperJobReport({ job, onClose }: Props) {
-  const totalCharges = job.totalCharges || job.calculatedTotalCharges || job.basePrice + job.extraCharges + job.overtimeCharge;
+  const totalCharges = job.totalCharges ?? job.calculatedTotalCharges ?? job.basePrice + job.extraCharges + job.overtimeCharge;
   const adjustmentReason = adjustmentReasonForMismatch(job);
   const formatPounds = (pence: number | undefined) => `£${((pence || 0) / 100).toFixed(2)}`;
   const photoCategories = [
@@ -40,46 +41,12 @@ export function PaperJobReport({ job, onClose }: Props) {
   
   const totalPages = Math.max(1, photos.length + 1);
 
-  const PrintHeader = () => (
-    <div className="flex items-center justify-between pb-4 border-b border-admin-line mb-6">
-      <h1 className="text-[20px] font-bold text-[#1A1A1A]">Job Completed</h1>
-      <div className="flex flex-col items-end">
-        <img src={`/tmv-logo.png`} alt="The Man Van" className="w-24 object-contain" />
-        <span className="text-[10px] font-bold text-[#1A1A1A] tracking-wider mt-1">020 3773 9113</span>
-      </div>
-    </div>
-  );
-
   const PrintFooter = ({ page }: { page: number }) => (
-    <div className="mt-auto pt-4 border-t border-admin-line flex justify-end">
-      <span className="text-[11px] text-[#8A8A8A]">{page}/{totalPages}</span>
-    </div>
+    <ReportDocumentFooter reference={job.jobId} page={page} total={totalPages} />
   );
-
-  const MetaRow = () => {
-    const driverInit = job.driverInitials || "UN";
-    const driverColor = driverInit === "UN" ? "bg-amber-500" : "bg-[#F59E0B]"; // Orange as requested
-    
-    return (
-      <div className="flex items-start justify-between p-4 border border-admin-line rounded-card mb-6 bg-white shadow-sm">
-        <div className="flex items-center gap-3">
-          <div className={`w-9 h-9 rounded-full ${driverColor} text-white flex items-center justify-center text-[13px] font-bold`}>
-            {driverInit}
-          </div>
-          <div>
-            <div className="text-[14px] font-bold text-[#1A1A1A]">{job.driverName || "Unassigned"}</div>
-            <div className="text-[12px] text-[#8A8A8A] mt-0.5">{formatLondonDateTime(job.updated)} | Europe/London</div>
-          </div>
-        </div>
-        <div className="px-3 py-1 bg-admin-surface text-[#1A1A1A] text-[13px] font-semibold rounded-card border border-admin-line">
-          #{job.jobId}
-        </div>
-      </div>
-    );
-  };
 
   return (
-    <div className="paper-document bg-white font-sans text-[#1A1A1A]">
+    <div className="report-document report-document-preview paper-document bg-white font-sans text-[#1A1A1A]">
       
       {/* NO-PRINT CONTROLS */}
       <div className="no-print flex items-center justify-between p-4 mb-4 bg-admin-surface rounded-card border border-admin-line">
@@ -104,10 +71,10 @@ export function PaperJobReport({ job, onClose }: Props) {
         @media print {
           .print-page-container {
             page-break-after: always;
-            height: 100vh;
+            min-height: 297mm;
             display: flex;
             flex-direction: column;
-            padding: 20px;
+            padding: 14mm;
             box-sizing: border-box;
           }
           .print-page-container:last-child {
@@ -130,14 +97,14 @@ export function PaperJobReport({ job, onClose }: Props) {
 
       {photos.map((photo, index) => (
         <div key={index} className="print-page-container">
-          <PrintHeader />
-          {index === 0 && <MetaRow />}
+          <ReportDocumentHeader title="Job Completed" reference={job.jobId} page={index + 1} />
+          {index === 0 && <ReportRecordMeta name={job.driverName || "Unassigned"} initials={job.driverInitials || "UN"} timestamp={formatLondonDateTime(job.updated)} reference={job.jobId} />}
           
           <div className="flex-1 flex flex-col mb-4">
             <div className="text-[13px] font-semibold text-[#8A8A8A] mb-3">
               {photo.label}
             </div>
-            <div className="flex-1 flex items-center justify-center border border-admin-line rounded-card p-2 shadow-sm bg-[#FAFAFA]">
+            <div className="report-media-frame flex-1 flex items-center justify-center border border-admin-line rounded-card p-2 shadow-sm bg-[#FAFAFA]">
               <img 
                 src={photo.url!} 
                 alt={photo.label} 
@@ -152,15 +119,15 @@ export function PaperJobReport({ job, onClose }: Props) {
 
       {/* FINAL PAGE: SIGNATURE & CLIENT DETAILS */}
       <div className="print-page-container">
-        <PrintHeader />
-        {photos.length === 0 && <MetaRow />}
+        <ReportDocumentHeader title="Job Completed" reference={job.jobId} page={totalPages} />
+        {photos.length === 0 && <ReportRecordMeta name={job.driverName || "Unassigned"} initials={job.driverInitials || "UN"} timestamp={formatLondonDateTime(job.updated)} reference={job.jobId} />}
 
         <div className="flex-1 flex flex-col gap-6 mt-4">
           
           {/* Billing & Times (Key-Value) */}
-          <div className="bg-[#F7F7F7] rounded-card border border-admin-line p-6 shadow-sm">
+          <div className="report-legacy-details bg-[#F7F7F7] rounded-card border border-admin-line p-6 shadow-sm">
             <h3 className="text-[13px] font-semibold text-[#2563EB] mb-4">JOB DETAILS & CHARGES</h3>
-            <div className="grid grid-cols-2 gap-x-12 gap-y-3">
+            <div className="report-fact-grid grid grid-cols-2 gap-x-12 gap-y-3">
               <div className="flex justify-between py-1 border-b border-admin-line/50">
                 <span className="text-[12px] text-[#8A8A8A]">Base Price</span>
                 <span className="text-[12px] font-medium text-[#1A1A1A]">{formatPounds(job.basePrice)}</span>
@@ -245,7 +212,7 @@ export function PaperJobReport({ job, onClose }: Props) {
           {/* Client Details */}
           <div className="bg-[#F7F7F7] rounded-card border border-admin-line p-6 shadow-sm">
             <h3 className="text-[13px] font-semibold text-[#2563EB] mb-4">CLIENT DETAILS</h3>
-            <div className="grid grid-cols-2 gap-x-12 gap-y-3">
+            <div className="report-fact-grid grid grid-cols-2 gap-x-12 gap-y-3">
               <div className="flex justify-between py-1 border-b border-admin-line/50">
                 <span className="text-[12px] text-[#8A8A8A]">Client Name</span>
                 <span className="text-[12px] font-medium text-[#1A1A1A]">{job.customerName || "—"}</span>
@@ -275,7 +242,7 @@ export function PaperJobReport({ job, onClose }: Props) {
               By signing this document, you confirm that the service was completed to your satisfaction and all charges are accepted.
             </p>
             <div className="text-[12px] font-semibold text-[#8A8A8A] mb-2">Client Signature:</div>
-            <div className="w-full sm:w-1/2 h-[160px] border border-admin-line rounded-card bg-white p-4 shadow-sm flex items-center justify-center">
+            <div className="report-signature w-full sm:w-1/2 h-[160px] border border-admin-line rounded-card bg-white p-4 shadow-sm flex items-center justify-center">
               {job.signatureUrl ? (
                 <img src={job.signatureUrl} alt="Signature" className="max-w-full max-h-full object-contain" />
               ) : (

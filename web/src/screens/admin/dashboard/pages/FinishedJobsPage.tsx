@@ -29,6 +29,7 @@ import { DelayBandBadge, JobStatusBadge } from "../components/StatusBadge";
 const isTestOrIncomplete = (job: any) => { return job.customerName === "hh" || String(job.pickup).includes("test") || String(job.dropoff).includes("test"); };
 import { resolveDriver, formatVanReg } from "../utils/drivers";
 import { useDriverOptions } from "../hooks/useDriverOptions";
+import { ReportReturnButton } from "../components/ReportReturnButton";
 
 function paymentBreakdownSummary(job: NormalizedJob): string {
   if (!job.paymentBreakdown?.length) return job.paymentMethod || "Not recorded";
@@ -160,7 +161,7 @@ export function FinishedJobsPage({
   };
 
   const totalCharges = (job: NormalizedJob) =>
-    job.totalCharges || job.calculatedTotalCharges || job.basePrice + job.extraCharges + job.overtimeCharge;
+    job.totalCharges ?? job.calculatedTotalCharges ?? job.basePrice + job.extraCharges + job.overtimeCharge;
 
   const items = data?.items || [];
 
@@ -189,6 +190,7 @@ export function FinishedJobsPage({
 
   return (
     <div className="space-y-6 max-w-[1440px] mx-auto relative">
+      <ReportReturnButton />
       {/* BULK ACTION BAR (Floating) */}
       {selectedRows.size > 0 && (
         <div className="fixed bottom-4 sm:bottom-6 left-4 right-4 sm:left-1/2 sm:right-auto sm:-translate-x-1/2 z-50 animate-in slide-in-from-bottom-5 flex justify-center">

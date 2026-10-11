@@ -3,7 +3,7 @@ import { JobStatus } from "../src/jobs/job.types";
 import { WorkflowState } from "../src/workflow/workflow.states";
 
 const getJob = vi.fn();
-const listJobs = vi.fn();
+const listJobs = vi.fn().mockResolvedValue([]);
 const upsertJob = vi.fn().mockResolvedValue(undefined);
 const getDriverProfile = vi.fn();
 const appendActivity = vi.fn().mockResolvedValue(undefined);

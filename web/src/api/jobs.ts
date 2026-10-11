@@ -4,6 +4,19 @@ import type { CapturedLocation, PhotoCaptureMeta } from "../lib/geo";
 
 export type { ApiError };
 
+export interface JobTimeBilling {
+  ruleVersion: string;
+  scheduledMinutes: number;
+  allocatedMinutes: number;
+  actualMinutes: number;
+  extraMinutes: number;
+  billedExtraBlocks: number;
+  billedExtraMinutes: number;
+  ratePer30Pence: number | null;
+  rateSource: "calendar" | "settings" | "settings-crew-rate" | "settings-packing-rate" | "unavailable";
+  extraChargePence: number | null;
+}
+
 export interface Job {
   jobId: string;
   calendarEventId: string;
@@ -58,6 +71,12 @@ export interface Job {
   extraCharges: string[];
   overtimeMinutes: number;
   overtimeCharge: number;
+  timeBilling?: JobTimeBilling;
+  timeBillingStatus?: "verified" | "needs-verification" | "legacy";
+  timeBillingIssue?: string;
+  manualDetailsRequiredAt?: string;
+  chargeSnapshot?: { basePence: number; congestionPence: number; tunnelPence: number };
+  driverReportedOvertimeMinutes?: number;
   calculatedTotalCharges?: number;
   totalCharges: number;
   amountCharged?: number;
@@ -82,7 +101,7 @@ export interface Job {
   updatedAt: string;
 }
 
-export type DriverJobSummaryPaymentMethod = "Cash" | "Card" | "Link" | "Invoice/Transfer";
+export type DriverJobSummaryPaymentMethod = "Cash" | "Card" | "Link" | "Bank Transfer" | "Invoice";
 
 export interface DriverJobSummary {
   jobId: string;
@@ -96,15 +115,22 @@ export interface DriverJobSummary {
   helperHours: number;
   paymentMethod: string;
   amountCollectedPence: number;
-  paymentBreakdown?: Array<{ method: DriverJobSummaryPaymentMethod; amountPence: number }>;
+  paymentBreakdown?: Array<{ method: DriverJobSummaryPaymentMethod | "Invoice/Transfer"; amountPence: number }>;
+  schemaVersion?: 2;
+  noPaymentReceived?: boolean;
+  invoiceAmountPence?: number;
+  chargeItems?: Array<{ type: "congestion" | "tunnel"; amountPence: number | null; name?: string; reference?: string }>;
   submittedAt: string;
 }
 
 export interface DriverJobSummaryInput {
   startTime: string;
   endTime: string;
-  congestionCharge: boolean;
-  congestionChargeAmount: string;
+  schemaVersion?: 2;
+  noPaymentReceived?: boolean;
+  chargeItems?: Array<{ type: "congestion" | "tunnel"; amount: string; name?: string; reference?: string }>;
+  congestionCharge?: boolean;
+  congestionChargeAmount?: string;
   helperName: string;
   helperHours: string;
   paymentMethods: DriverJobSummaryPaymentMethod[];
@@ -170,6 +196,7 @@ export function fetchJobsList(): Promise<{
   today: Job[];
   past: Job[];
   next: Job[];
+  pendingManualDetails?: Job | null;
 }> {
   return request("/api/jobs/list");
 }

@@ -10,7 +10,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import {
   LayoutDashboard, Navigation, Truck, CheckSquare, LogIn, LogOut, AlertCircle, ShieldAlert,
-  Users, Banknote, RefreshCw, Trash2,
+  Users, Banknote, RefreshCw, Trash2, ClipboardList, FileWarning,
   ChevronLeft, ChevronRight, ChevronDown, Search, Command, MessageSquare, Bell, Menu, X, Settings
 } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -36,27 +36,14 @@ interface NavItem {
   desc?: string;
 }
 
-interface NavHeader {
-  type: "header";
-  label: string;
-}
-
-type NavSectionItem = NavItem | NavHeader;
-
-const NAV_CONFIG: NavSectionItem[] = [
-  { type: "header", label: "Operations" },
+const NAV_CONFIG: NavItem[] = [
   { id: "overview", label: "Overview", icon: LayoutDashboard, desc: "Executive KPI telemetry, revenue velocity and operational health" },
   { id: "livefleet", label: "Live Fleet", icon: Navigation, isLive: true, desc: "Real-time GPS vehicle positions and driver telemetry" },
   { id: "alerts", label: "Alerts", icon: ShieldAlert, desc: "GPSLive's fleet alert feed, including congestion zone crossings" },
-  { id: "jobs", label: "Jobs", icon: Truck, desc: "Operational moves joined across Jobs, Drivers, Workflow and Evidence" },
+  { id: "jobs", label: "Jobs", icon: ClipboardList, desc: "Operational moves joined across Jobs, Drivers, Workflow and Evidence" },
   { id: "van", label: "Van", icon: Truck, desc: "Driver mileage, fuel and service records" },
   { id: "notifications", label: "Notifications & Push", icon: Bell, desc: "Automated communication audit across Email, SMS and Web Push channels" },
-  { type: "header", label: "Scenarios" },
-  { id: "checkin", label: "Check In", icon: LogIn, desc: "Storage facility entry logs and client container check-ins" },
-  { id: "checkout", label: "Check Out", icon: LogOut, desc: "Storage retrieval and client drop-off confirmation records" },
-  { id: "parking", label: "Parking Liability", icon: AlertCircle, desc: "Driver parking risk waivers and client location sign-offs" },
-  { id: "liability", label: "Liability Report", icon: ShieldAlert, desc: "Vehicle or item damage categories with evidence photographs" },
-  { type: "header", label: "Management" },
+  { id: "liabilities", label: "Liability", icon: FileWarning, desc: "Check-in, check-out, parking liability and liability reports" },
   { id: "drivers", label: "Drivers", icon: Users, desc: "Driver scorecards, revenue handled and punctuality metrics" },
   { id: "pricing", label: "Pricing Settings", icon: Banknote, desc: "Configure crew rates, packing service pricing, and overtime rules" },
   { id: "messaging", label: "Messaging Content", icon: MessageSquare, desc: "Manage automated customer and driver communication templates" }
@@ -66,7 +53,9 @@ const NAV_CONFIG: NavSectionItem[] = [
  *  profile dropdown) still need a title/icon for the header bar -- looked up here
  *  after NAV_CONFIG comes up empty, instead of silently falling back to Overview's. */
 const EXTRA_NAV_TITLES: Record<string, NavItem> = {
-  maintenance: { id: "maintenance", label: "Data Maintenance", icon: Trash2 }
+  maintenance: { id: "maintenance", label: "Data Maintenance", icon: Trash2 },
+  finished: { id: "finished", label: "Finished Jobs", icon: CheckSquare },
+  driverreport: { id: "driverreport", label: "Driver Report", icon: Users }
 };
 
 export function Layout({ activeSection, onSelectSection, onLogout, children }: Props) {
@@ -82,6 +71,8 @@ export function Layout({ activeSection, onSelectSection, onLogout, children }: P
     return () => mql.removeEventListener("change", handler);
   }, []);
   const effectiveCollapsed = collapsed && !isMobile;
+  const activeNavSection = activeSection === "driverreport" ? "drivers" : activeSection === "finished" ? "jobs" :
+    ["checkin", "checkout", "parking", "liability"].includes(activeSection) ? "liabilities" : activeSection;
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
@@ -182,9 +173,9 @@ export function Layout({ activeSection, onSelectSection, onLogout, children }: P
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [onSelectSection, refreshMutation, paletteOpen, shortcutsOpen]);
 
-  const currentNav = (NAV_CONFIG.find(n => (n as NavItem).id === activeSection) as NavItem)
+  const currentNav = NAV_CONFIG.find(n => n.id === activeSection)
     || EXTRA_NAV_TITLES[activeSection]
-    || (NAV_CONFIG[1] as NavItem);
+    || NAV_CONFIG[0];
 
   return (
     <div className="flex min-h-screen bg-admin-bg text-admin-ink selection:bg-admin-brand-soft selection:text-admin-brand font-sans antialiased">
@@ -196,11 +187,11 @@ export function Layout({ activeSection, onSelectSection, onLogout, children }: P
         aria-label="Main navigation"
         aria-hidden={isMobile && !mobileNavOpen}
         className={`bg-admin-brand-soft border-r border-brand-line text-admin-ink flex flex-col justify-between transition-all duration-300 z-40 fixed inset-y-0 left-0 h-screen md:sticky md:top-0 md:z-30 w-[260px] ${
-          collapsed ? "md:w-16" : "md:w-[260px]"
+          collapsed ? "md:w-20" : "md:w-[260px]"
         } ${mobileNavOpen ? "translate-x-0" : "-translate-x-full"} md:translate-x-0`}
       >
         <div className="flex flex-col min-h-0">
-          <div className="pt-6 pb-4 px-6 flex items-center justify-between bg-transparent">
+          <div className={`pt-5 pb-4 flex items-center bg-transparent ${effectiveCollapsed ? "px-3 flex-col gap-3" : "px-6 justify-between"}`}>
             <div className={`flex items-center gap-2.5 overflow-hidden ${collapsed ? "md:hidden" : ""}`}>
               <img src="/tmv-logo.png" alt="" className="h-11 w-auto object-contain flex-shrink-0 rounded-card" />
               <div className="flex flex-col leading-none min-w-0">
@@ -212,16 +203,18 @@ export function Layout({ activeSection, onSelectSection, onLogout, children }: P
               <img
                 src="/tmv-logo.png"
                 alt="TMV"
-                className="hidden md:block w-8 h-8 rounded-card object-contain bg-admin-surface border border-admin-line p-0.5 mx-auto shadow-primary"
+                className="hidden md:block w-10 h-10 shrink-0 rounded-md object-contain bg-white border border-admin-line p-1"
                 title="The Man Van Operations"
               />
             )}
             <button
               onClick={() => setCollapsed(!collapsed)}
-              className="hidden md:block p-1 rounded hover:bg-admin-surface text-admin-muted hover:text-admin-ink transition"
+              className="hidden md:flex w-9 h-9 shrink-0 items-center justify-center rounded-md border border-admin-line bg-white text-admin-ink hover:bg-admin-surface hover:border-admin-brand focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-admin-brand transition"
               title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+              aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+              aria-expanded={!collapsed}
             >
-              {collapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronLeft className="w-4 h-4" />}
+              {collapsed ? <ChevronRight className="w-5 h-5 shrink-0" /> : <ChevronLeft className="w-5 h-5 shrink-0" />}
             </button>
             <button
               onClick={() => setMobileNavOpen(false)}
@@ -232,31 +225,24 @@ export function Layout({ activeSection, onSelectSection, onLogout, children }: P
             </button>
           </div>
 
-          <nav className="px-4 pb-4 space-y-1 overflow-y-auto flex-1 custom-scrollbar">
-            {NAV_CONFIG.map((item, idx) => {
-              if ((item as NavHeader).type === "header") {
-                if (effectiveCollapsed) return <div key={idx} className="my-4 border-t border-admin-line" />;
-                return (
-                  <div key={idx} className="pt-6 pb-2 px-3 text-eyebrow text-fg-subtle">
-                    {item.label}
-                  </div>
-                );
-              }
-
-              const navItem = item as NavItem;
+          <nav className={`${effectiveCollapsed ? "px-3" : "px-4"} space-y-1 pb-4 overflow-y-auto flex-1 custom-scrollbar`}>
+            {NAV_CONFIG.map((navItem, idx) => {
               const Icon = navItem.icon!;
-              const isActive = activeSection === navItem.id;
+              const isActive = activeNavSection === navItem.id;
 
               return (
+                <React.Fragment key={navItem.id}>
                 <button
-                  key={navItem.id}
                   onClick={() => { onSelectSection(navItem.id!); setMobileNavOpen(false); }}
-                  className={`w-full h-11 flex items-center gap-3 px-4 rounded-card text-[14px] font-medium transition group relative ${
-                    isActive ? "text-admin-ink font-semibold bg-white shadow-primary" : "text-admin-muted hover:bg-white/50 hover:text-admin-ink"
+                  aria-label={navItem.label}
+                  aria-current={isActive ? "page" : undefined}
+                  className={`w-full h-11 flex items-center rounded-md text-[14px] font-medium transition group relative focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-admin-brand ${effectiveCollapsed ? "justify-center p-0" : "gap-3 px-4"} ${
+                    isActive ? "text-admin-brand font-semibold bg-white shadow-primary ring-1 ring-admin-brand/25" : "text-admin-muted hover:bg-white/70 hover:text-admin-ink"
                   }`}
                   title={effectiveCollapsed ? navItem.label : undefined}
                 >
-                  <Icon className={`w-4 h-4 flex-shrink-0 transition-transform ${isActive ? "text-admin-brand scale-105" : "text-admin-muted group-hover:text-admin-ink-2"}`} />
+                  <Icon className={`w-5 h-5 flex-shrink-0 ${isActive ? "text-admin-brand" : "text-admin-ink-2 group-hover:text-admin-ink"}`} />
+                  {isActive && <span aria-hidden="true" className="absolute left-0 top-3 bottom-3 w-[3px] rounded-r bg-admin-brand" />}
 
                   {!effectiveCollapsed && <span className="truncate">{navItem.label}</span>}
 
@@ -268,9 +254,13 @@ export function Layout({ activeSection, onSelectSection, onLogout, children }: P
                   )}
 
                   {effectiveCollapsed && navItem.isLive && (
-                    <span className="w-2 h-2 rounded-full bg-admin-status-green absolute right-2 ring-2 ring-white" />
+                    <span aria-hidden="true" className="w-1.5 h-1.5 rounded-full bg-admin-status-green absolute top-2 right-2 ring-2 ring-white" />
                   )}
                 </button>
+                {idx + 1 < NAV_CONFIG.length && (
+                  <div aria-hidden="true" className="mx-2 border-t border-admin-line" />
+                )}
+                </React.Fragment>
               );
             })}
           </nav>

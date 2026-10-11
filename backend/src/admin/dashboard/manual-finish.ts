@@ -7,6 +7,8 @@ import { sendOpsJobCompletionEmail } from "../../google/gmail";
 import { Job, JobStatus } from "../../jobs/job.types";
 import { log } from "../../utils/logger";
 import { WorkflowState } from "../../workflow/workflow.states";
+import { prepareJobTimeBilling, freezeJobCharges, calculateJobTotal } from "../../jobs/job-billing.service";
+import { withJobLock, withLock } from "../../utils/lock";
 
 function delayStatus(bookedFinish: string, actualFinish: string): string {
   const booked = DateTime.fromISO(bookedFinish);
@@ -59,33 +61,46 @@ function sendManualCompletionEmailIfAny(job: Job): void {
 }
 
 export async function markJobFinishedManually(jobId: string, note: string): Promise<Job | null> {
+  return withJobLock(jobId, () => finishLockedJob(jobId, note));
+}
+
+async function finishLockedJob(jobId: string, note: string): Promise<Job | null> {
   const job = await getJob(jobId);
   if (!job) return null;
-  if (job.status === JobStatus.COMPLETED || job.currentState === WorkflowState.COMPLETED) return job;
+  return withLock(`driver-queue:${job.driverInitials}`, async () => {
+    if (job.status === JobStatus.COMPLETED || job.currentState === WorkflowState.COMPLETED) return job;
 
-  const from = job.currentState;
-  const now = new Date().toISOString();
-  if (!job.actualStart) job.actualStart = now;
-  job.actualFinish = now;
-  job.actualMinutes = Math.max(
-    0,
-    Math.round(DateTime.fromISO(job.actualFinish).diff(DateTime.fromISO(job.actualStart), "minutes").minutes)
-  );
-  job.differenceMinutes = job.actualMinutes - job.bookedMinutes;
-  job.delayStatus = delayStatus(job.bookedFinish, job.actualFinish);
-  job.status = JobStatus.COMPLETED;
-  job.currentState = WorkflowState.COMPLETED;
-  job.updatedAt = now;
+    const from = job.currentState;
+    const now = new Date().toISOString();
+    if (!job.actualStart) { job.actualStart = now; job.actualStartSource = "completion-fallback"; }
+    if (!job.actualFinish) { job.actualFinish = now; job.actualFinishSource = "admin-manual"; }
+    await prepareJobTimeBilling(job);
+    if (job.timeBilling && job.timeBilling.extraChargePence !== null && job.calculatedTotalCharges === undefined) {
+      await freezeJobCharges(job);
+      job.calculatedTotalCharges = await calculateJobTotal(job);
+      job.totalCharges = job.calculatedTotalCharges;
+    }
+    const elapsed = DateTime.fromISO(job.actualFinish).diff(DateTime.fromISO(job.actualStart), "minutes").minutes;
+    job.actualMinutes = job.timeBilling?.actualMinutes ?? (Number.isFinite(elapsed) ? Math.max(0, elapsed) : 0);
+    job.differenceMinutes = job.actualMinutes - job.bookedMinutes;
+    job.delayStatus = delayStatus(job.bookedFinish, job.actualFinish);
+    job.status = JobStatus.COMPLETED;
+    job.currentState = WorkflowState.COMPLETED;
+    job.updatedAt = now;
+    job.manualDetailsRequiredAt = now;
+    job.reportIdentity ??= { initials: job.timeBilling?.driverInitials || job.driverInitials, email: null, name: null,
+      vehicleImei: job.timeBilling?.vehicleImei || job.gpsliveImei || null, source: "admin-completion-assignment", capturedAt: now };
 
-  await upsertJob(job);
-  await appendActivity({
-    jobId,
-    driver: "admin dashboard",
-    action: "ADMIN_MARKED_COMPLETED",
-    fromState: from,
-    toState: WorkflowState.COMPLETED,
-    detail: note
+    await upsertJob(job);
+    await appendActivity({
+      jobId,
+      driver: "admin dashboard",
+      action: "ADMIN_MARKED_COMPLETED",
+      fromState: from,
+      toState: WorkflowState.COMPLETED,
+      detail: note
+    });
+    sendManualCompletionEmailIfAny(job);
+    return job;
   });
-  sendManualCompletionEmailIfAny(job);
-  return job;
 }

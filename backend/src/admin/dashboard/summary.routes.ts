@@ -5,6 +5,7 @@ import { getDashboardDataset } from "./dataset-cache";
 import { listJobsInRange } from "../../db/jobs.repo";
 import { listEvidenceForJobs } from "../../db/evidence.repo";
 import { normalizeMongoDataset } from "./normalize";
+import { normalizedPayments } from "../../reports/report-payments";
 
 export function dashboardSummaryRoutes(): Router {
   const router = Router();
@@ -56,11 +57,9 @@ export function dashboardSummaryRoutes(): Router {
           totalExtras = addPence(totalExtras, j.extraCharges);
           totalOvertime = addPence(totalOvertime, j.overtimeCharge);
 
-          if (j.paymentMethod.toLowerCase().includes("cash")) {
-            cashCollected = addPence(cashCollected, j.amountCharged);
-          } else if (["card", "bank", "invoice"].some(m => j.paymentMethod.toLowerCase().includes(m))) {
-            cardBankCollected = addPence(cardBankCollected, j.amountCharged);
-          }
+          const payments = normalizedPayments(j);
+          cashCollected = addPence(cashCollected, pence(payments.byMethod.Cash));
+          cardBankCollected = addPence(cardBankCollected, pence(payments.byMethod.Card + payments.byMethod.Link + payments.byMethod["Bank Transfer"]));
 
           if (j.actualMinutes && j.actualMinutes > 0) { totalDuration += j.actualMinutes; durationCount++; }
           if (j.delayMinutes !== undefined) { totalDelay += j.delayMinutes; delayCount++; }
@@ -102,11 +101,14 @@ export function dashboardSummaryRoutes(): Router {
       const paySplit = new Map<string, { pounds: number; count: number }>();
       for (const j of jobs) {
         if (j.status === "CANCELLED") continue;
-        const method = j.paymentMethod || "Not recorded";
-        const cur = paySplit.get(method) || { pounds: 0, count: 0 };
-        cur.pounds += toPounds(j.amountCharged);
-        cur.count++;
-        paySplit.set(method, cur);
+        const payments = normalizedPayments(j);
+        for (const method of ["Cash", "Card", "Link", "Bank Transfer"] as const) {
+          if (!payments.byMethod[method]) continue;
+          const cur = paySplit.get(method) || { pounds: 0, count: 0 };
+          cur.pounds += payments.byMethod[method] / 100;
+          cur.count++;
+          paySplit.set(method, cur);
+        }
       }
       const paymentMethodSplit = [...paySplit.entries()].map(([method, val]) => ({
         method, totalPounds: Math.round(val.pounds * 100) / 100, count: val.count

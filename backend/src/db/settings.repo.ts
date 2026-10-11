@@ -1,4 +1,5 @@
 import { settingsCollection } from "./mongo";
+import { invalidateReportReads } from "../reports/report-read-cache";
 
 /**
  * Admin-editable operational text/values -- replaces the old Sheets "Settings" tab
@@ -16,6 +17,7 @@ export async function getSetting(key: string, fallback: string): Promise<string>
 export async function setSetting(key: string, value: string): Promise<void> {
   const col = await settingsCollection();
   await col.updateOne({ key }, { $set: { value, updatedAt: new Date() } }, { upsert: true });
+  invalidateReportReads();
 }
 
 /** All stored overrides, keyed by setting key. Keys with no stored row are simply

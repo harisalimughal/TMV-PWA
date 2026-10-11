@@ -7,15 +7,12 @@ import { evidencePhotoCount } from "../utils/evidence";
 import { SubmissionDetailDrawer } from "../components/SubmissionDetailDrawer";
 import { SubmissionPageTemplate } from "../components/SubmissionPageTemplate";
 import { ApiErrorState } from "../components/ApiErrorState";
-import { defaultDashboardDateRange } from "../components/DateRangePicker";
+import { useScenarioFilters, type ScenarioFilterControl } from "../hooks/useScenarioFilters";
 import { ClipboardList, Search } from "lucide-react";
 import { useDriverOptions } from "../hooks/useDriverOptions";
 
-export function ParkingLiabilityPage() {
-  const [search, setSearch] = useState("");
-  const [from, setFrom] = useState<string | undefined>(() => defaultDashboardDateRange().from);
-  const [to, setTo] = useState<string | undefined>(() => defaultDashboardDateRange().to);
-  const [driverFilter, setDriverFilter] = useState<string>("");
+export function ParkingLiabilityPage({ filterControl }: { filterControl?: ScenarioFilterControl } = {}) {
+  const { searchQuery: search, setSearchQuery: setSearch, from, to, driverFilter, setFrom, setTo, setDriverFilter } = useScenarioFilters(filterControl);
 
   const [page, setPage] = useState(1);
   const pageSize = 25;

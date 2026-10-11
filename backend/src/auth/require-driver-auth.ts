@@ -24,7 +24,9 @@ export async function requireDriverAuth(req: Request, res: Response, next: NextF
     return;
   }
 
-  const account = await getDriverAccount(payload.email);
+  let account;
+  try { account = await getDriverAccount(payload.email); }
+  catch { res.status(503).json({ error: { code: "SESSION_UNAVAILABLE", message: "Your session could not be checked. Please retry shortly." } }); return; }
   if (!account || !account.active || account.tokenVersion !== payload.tokenVersion) {
     res.status(401).json({ error: { code: "SESSION_REVOKED", message: "Your session is no longer valid. Please log in again." } });
     return;

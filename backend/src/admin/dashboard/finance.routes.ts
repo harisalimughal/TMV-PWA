@@ -4,6 +4,7 @@ import { addPence, formatGBP, pence, toPounds } from "../../utils/money";
 import { getDashboardDataset } from "./dataset-cache";
 import { listJobsInRange } from "../../db/jobs.repo";
 import { normalizeMongoDataset } from "./normalize";
+import { normalizedPayments } from "../../reports/report-payments";
 
 export function dashboardFinanceRoutes(): Router {
   const router = Router();
@@ -35,7 +36,9 @@ export function dashboardFinanceRoutes(): Router {
       }
 
       let totalBase = pence(0), totalExtras = pence(0), totalOvertime = pence(0), totalRevenue = pence(0);
-      let totalCash = pence(0), totalCard = pence(0), totalBank = pence(0), totalInvoice = pence(0);
+      let totalCash = pence(0), totalCard = pence(0), totalBank = pence(0), totalInvoice = pence(0), totalLink = pence(0);
+      let unknownCollectionJobs = 0;
+      let unknownExtraChargeJobs = 0;
 
       const unreconciledJobs: Array<{
         jobId: string; customerName: string; basePrice: number; extraCharges: number;
@@ -52,11 +55,14 @@ export function dashboardFinanceRoutes(): Router {
         totalOvertime = addPence(totalOvertime, j.overtimeCharge);
         totalRevenue = addPence(totalRevenue, j.amountCharged);
 
-        const method = j.paymentMethod.toLowerCase();
-        if (method.includes("cash")) totalCash = addPence(totalCash, j.amountCharged);
-        else if (method.includes("card")) totalCard = addPence(totalCard, j.amountCharged);
-        else if (method.includes("bank")) totalBank = addPence(totalBank, j.amountCharged);
-        else if (method.includes("invoice")) totalInvoice = addPence(totalInvoice, j.amountCharged);
+        const payments = normalizedPayments(j);
+        if (j.roadFeeAmounts && (j.roadFeeAmounts.congestionPence === null || j.roadFeeAmounts.tunnelPence === null)) unknownExtraChargeJobs++;
+        totalCash = addPence(totalCash, pence(payments.byMethod.Cash));
+        totalCard = addPence(totalCard, pence(payments.byMethod.Card));
+        totalLink = addPence(totalLink, pence(payments.byMethod.Link));
+        totalBank = addPence(totalBank, pence(payments.byMethod["Bank Transfer"]));
+        totalInvoice = addPence(totalInvoice, pence(payments.invoicePence));
+        if (payments.collectedPence === null) unknownCollectionJobs++;
 
         if (!j.reconciled && j.status === "COMPLETED") {
           unreconciledJobs.push({
@@ -102,7 +108,8 @@ export function dashboardFinanceRoutes(): Router {
           totalRevenuePounds: toPounds(totalRevenue), totalRevenueFormatted: formatGBP(totalRevenue),
           basePricePounds: toPounds(totalBase), extraChargesPounds: toPounds(totalExtras),
           overtimePounds: toPounds(totalOvertime), cashPounds: toPounds(totalCash),
-          cardPounds: toPounds(totalCard), bankPounds: toPounds(totalBank), invoicePounds: toPounds(totalInvoice)
+          cardPounds: toPounds(totalCard), linkPounds: toPounds(totalLink), bankPounds: toPounds(totalBank), invoicePounds: toPounds(totalInvoice),
+          totalKnownCollectionsPounds: toPounds(addPence(totalCash, totalCard, totalLink, totalBank)), unknownCollectionJobs, unknownExtraChargeJobs, invoiceAmountsAreUncollected: true
         },
         unreconciledJobs, timeline,
         meta: { fetchedAt }

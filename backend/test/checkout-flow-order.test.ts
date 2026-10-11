@@ -84,7 +84,7 @@ function job(overrides: Partial<Job> = {}): Job {
     bookedStart,
     bookedFinish: "2026-09-24T11:00:00.000Z",
     actualStart: bookedStart,
-    actualFinish: "",
+    actualFinish: "2026-09-24T11:00:00.000Z",
     bookedMinutes: 120,
     actualMinutes: 0,
     differenceMinutes: 0,

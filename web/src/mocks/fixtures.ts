@@ -5,7 +5,7 @@
  * site and is tree-shaken out of `vite build`. Nothing here is imported by production
  * code.
  */
-import type { ActivityEntry, EvidenceItem, Job } from "../api/jobs";
+import type { ActivityEntry, EvidenceItem, Job, DriverJobSummary } from "../api/jobs";
 import type { DriverProfile } from "../api/auth";
 
 export const mockDriver: DriverProfile = {
@@ -173,6 +173,7 @@ export interface MockStore {
   /** Photos "uploaded" per job — so stepping back to a photo step shows them and
    *  delete/add actually change something in dev. */
   evidence: Record<string, EvidenceItem[]>;
+  manualDetails: Record<string, DriverJobSummary>;
 }
 
 let mockEvidenceSeq = 0;
@@ -302,6 +303,7 @@ export function seedStore(): MockStore {
     },
     activity: {},
     settings: {},
-    evidence: {}
+    evidence: {},
+    manualDetails: {}
   };
 }

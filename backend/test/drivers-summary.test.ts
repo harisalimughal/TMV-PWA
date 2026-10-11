@@ -3,6 +3,32 @@ import { ExtraChargeType, JobStatus } from "../src/jobs/job.types";
 import { summarizeDrivers } from "../src/admin/dashboard/drivers-summary.routes";
 
 describe("summarizeDrivers", () => {
+  it("separates original calculated charges from adjusted driver charges and receipts", () => {
+    const [row] = summarizeDrivers([], [
+      { driverInitials: "MA", status: JobStatus.COMPLETED, calculatedTotalCharges: 32660, totalCharges: 32660,
+        amountCharged: 32660, paymentMethod: "Card", paymentBreakdown: [{ method: "Card", amount: 32660 }], evidenceCompleteness: {} },
+      { driverInitials: "MA", status: JobStatus.COMPLETED, calculatedTotalCharges: 32660, totalCharges: 5000,
+        amountCharged: 5000, paymentMethod: "Card", paymentBreakdown: [{ method: "Card", amount: 18000 }], evidenceCompleteness: {} },
+      { driverInitials: "MA", status: JobStatus.READY, calculatedTotalCharges: 99999, totalCharges: 99999, evidenceCompleteness: {} }
+    ] as any);
+    expect(row).toMatchObject({ calculatedChargesPounds: 653.2, totalChargesPounds: 376.6,
+      revenuePounds: 376.6, totalCollectionsPounds: 506.6, completed: 2 });
+  });
+  it("preserves an explicit zero calculated total", () => {
+    const [row] = summarizeDrivers([], [{ driverInitials: "MA", status: JobStatus.COMPLETED,
+      calculatedTotalCharges: 0, totalCharges: 10000, amountCharged: 10000, evidenceCompleteness: {} } as any]);
+    expect(row.calculatedChargesPounds).toBe(0);
+  });
+  it("preserves an explicitly accepted zero total instead of falling back to the original calculation", () => {
+    const [row] = summarizeDrivers([], [{ driverInitials: "AB", status: JobStatus.COMPLETED, totalCharges: 0, calculatedTotalCharges: 25000,
+      amountCharged: 0, paymentMethod: "Cash", paymentBreakdown: [{ method: "Cash", amount: 0 }], evidenceCompleteness: {} } as any]);
+    expect(row.totalChargesPounds).toBe(0);
+  });
+  it("keeps split receipts, Link and unpaid invoices separate in settlement summaries", () => {
+    const [row] = summarizeDrivers([], [{ driverInitials: "AB", status: JobStatus.COMPLETED, amountCharged: 30000, totalCharges: 30000,
+      paymentMethod: "Cash + Card + Link + Invoice", paymentBreakdown: [{ method: "Cash", amount: 10000 }, { method: "Card", amount: 5000 }, { method: "Link", amount: 5000 }, { method: "Invoice", amount: 10000 }], evidenceCompleteness: {} } as any]);
+    expect(row).toMatchObject({ cashCollectedPounds: 100, cardCollectedPounds: 50, linkCollectedPounds: 50, totalCollectionsPounds: 200, invoiceUncollectedPounds: 100 });
+  });
   it("rolls up congestion, tunnel and overtime minutes per driver", () => {
     const [row] = summarizeDrivers(
       [{

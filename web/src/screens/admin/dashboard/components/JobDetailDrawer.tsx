@@ -19,11 +19,13 @@ import { formatLondonDateTime } from "../utils/date";
 import { htmlToPlainText } from "../../../../lib/htmlText";
 import { RawBookingText } from "../../../../components/driver/RawBookingText";
 import { JobScenarioSection } from "./JobScenarioSection";
+import { JobTimeBreakdown } from "./JobTimeBreakdown";
 import { fetchDrivers as fetchDriverRoster, type AdminDriver } from "../../../../api/admin";
 import { JobStatusBadge } from "./StatusBadge";
 import { PdfPreviewModal } from "./PdfPreviewModal";
 import { waitForPrintImages } from "../utils/printReady";
 import { PhotoModal } from "./PhotoModal";
+import { ReportReturnButton } from "./ReportReturnButton";
 import { ThumbnailPreview } from "./ThumbnailPreview";
 import { resolveDriver, formatVanReg, getAvatarColor } from "../utils/drivers";
 import { reassignJob, deleteEvidencePhoto, markJobFinishedManually } from "../api";
@@ -158,7 +160,7 @@ export function JobDetailDrawer({ job: initialJob, isOpen, onClose, onUpdated }:
     }
   };
 
-  const totalPounds = (job.totalCharges || job.calculatedTotalCharges || 0) / 100;
+  const totalPounds = (job.totalCharges ?? job.calculatedTotalCharges ?? 0) / 100;
 
   return (
     <div className="fixed inset-0 z-[100] overflow-hidden bg-admin-ink/70 backdrop-blur-sm flex items-center justify-center p-3 sm:p-6">
@@ -179,6 +181,7 @@ export function JobDetailDrawer({ job: initialJob, isOpen, onClose, onUpdated }:
         
         {/* 1. Header */}
         <div className="px-6 py-5 bg-white border-b border-admin-line shadow-[0_4px_20px_rgb(0,0,0,0.03)] z-10 flex flex-col gap-4">
+          <ReportReturnButton compact />
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               <h3 className="text-title text-fg leading-tight">{job.jobId}</h3>
@@ -252,6 +255,7 @@ export function JobDetailDrawer({ job: initialJob, isOpen, onClose, onUpdated }:
               </div>
               <div className="mt-2 border-t border-admin-line pt-2">
                 <span className="block text-[10px] font-bold uppercase tracking-wider text-admin-muted">Tracker arrival</span>
+                {job.arrivalDelaySource && <span className="mt-0.5 block text-[11px] text-admin-muted">Delay source: {job.arrivalDelaySource === "gps-two-fresh-reports" ? "Verified GPS reports" : job.arrivalDelaySource === "proof-acceptance" ? "Proof acceptance" : "Unavailable"}</span>}
                 {job.trackerArrivalAt ? (
                   <span className="mt-0.5 block text-[12px] font-semibold text-admin-ink">{formatLondonDateTime(job.trackerArrivalAt)}</span>
                 ) : (
@@ -337,6 +341,7 @@ export function JobDetailDrawer({ job: initialJob, isOpen, onClose, onUpdated }:
             </div>
           )}
 
+          <JobTimeBreakdown job={job} />
           <JobScenarioSection scenarios={job.scenarios} />
 
           {/* Reassign Modal / Dropdown (Inline) */}

@@ -19,7 +19,7 @@ vi.mock("../components/DateRangePicker", () => ({
 }));
 
 describe("OverviewPage work breakdown review reporting", () => {
-  it("shows selected-range review requests sent and not sent for each driver", async () => {
+  it("shows selected-range moving hours in the clean driver breakdown summary", async () => {
     fetchDrivers.mockResolvedValue({
       drivers: [{
         initials: "TI",
@@ -32,6 +32,9 @@ describe("OverviewPage work breakdown review reporting", () => {
         completionRate: 100,
         avgDurationMinutes: 0,
         totalDurationMinutes: 0,
+        movingKnownSeconds: 3600,
+        movingUnknownJobs: 0,
+        movingPartialJobs: 0,
         avgDelayMinutes: 0,
         totalChargesPounds: 0,
         revenuePounds: 0,
@@ -58,11 +61,12 @@ describe("OverviewPage work breakdown review reporting", () => {
       </QueryClientProvider>
     );
 
-    expect(await screen.findByText("RW Sent / Not sent")).toBeInTheDocument();
-    expect(await screen.findByText("2 / 1")).toBeInTheDocument();
+    expect(await screen.findByRole("columnheader", { name: "Moving Hours" })).toBeInTheDocument();
+    expect(await screen.findByText("1.0h")).toBeInTheDocument();
+    expect(screen.queryByText("RW Sent / Not sent")).not.toBeInTheDocument();
   });
 
-  it("shows the RW status for each job in an expanded driver breakdown", async () => {
+  it("opens a dedicated report with retained driver/range instead of fetching an inline breakdown", async () => {
     fetchDrivers.mockResolvedValue({
       drivers: [{
         initials: "TI",
@@ -111,10 +115,10 @@ describe("OverviewPage work breakdown review reporting", () => {
       </QueryClientProvider>
     );
 
-    const driverRow = (await screen.findByText("Tiago")).closest("tr");
-    expect(driverRow).not.toBeNull();
-    fireEvent.click(driverRow!);
-
-    expect(await screen.findByText("RW: No")).toBeInTheDocument();
+    fireEvent.click(await screen.findByText("Tiago"));
+    const params = new URLSearchParams(window.location.search);
+    expect(params.get("section")).toBe("driverreport"); expect(params.get("driver")).toBe("TI");
+    expect(params.get("from")).toBe("2026-10-01");
+    expect(fetchJobs).not.toHaveBeenCalled();
   });
 });

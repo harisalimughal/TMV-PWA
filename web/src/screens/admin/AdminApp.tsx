@@ -11,8 +11,8 @@ import { VanMileagePage } from "./dashboard/pages/VanMileagePage";
 import { FinishedJobsPage } from "./dashboard/pages/FinishedJobsPage";
 import { NotificationsPage } from "./dashboard/pages/NotificationsPage";
 import { DriversPage } from "./dashboard/pages/DriversPage";
-import { ScenariosPage } from "./dashboard/pages/ScenariosPage";
-import { ParkingLiabilityPage } from "./dashboard/pages/ParkingLiabilityPage";
+import { DriverReportPage } from "./dashboard/pages/DriverReportPage";
+import { LiabilityPage, LIABILITY_SECTIONS } from "./dashboard/pages/LiabilityPage";
 import { MessagingPage } from "./dashboard/pages/MessagingPage";
 import { PricingSettingsPage } from "./dashboard/pages/PricingSettingsPage";
 import { MaintenancePage } from "./dashboard/pages/MaintenancePage";
@@ -86,7 +86,7 @@ export function AdminApp() {
         setActiveSection("jobs");
         return;
       }
-      setActiveSection(sec === "settings" ? "pricing" : sec || "overview");
+      setActiveSection(LIABILITY_SECTIONS.includes(sec || "") ? "liabilities" : sec === "settings" ? "pricing" : sec || "overview");
     };
     readSection();
     window.addEventListener("popstate", readSection);
@@ -95,10 +95,12 @@ export function AdminApp() {
 
   function handleSelectSection(section: string) {
     if (section === activeSection) return; // don't stack duplicate history entries
-    setActiveSection(section);
+    setActiveSection(LIABILITY_SECTIONS.includes(section) ? "liabilities" : section === "settings" ? "pricing" : section);
     const url = new URL(window.location.href);
     url.searchParams.set("section", section);
+    url.searchParams.delete("reportReturn");
     window.history.pushState({ section }, "", url.toString());
+    window.dispatchEvent(new PopStateEvent("popstate"));
   }
 
   async function handleLogout() {
@@ -130,11 +132,9 @@ export function AdminApp() {
       {activeSection === "van" && <VanMileagePage />}
       {activeSection === "finished" && <JobsPage initialStatus="Finished" />}
       {activeSection === "notifications" && <NotificationsPage />}
-      {activeSection === "checkin" && <ScenariosPage kind="checkin" />}
-      {activeSection === "checkout" && <ScenariosPage kind="checkout" />}
-      {activeSection === "parking" && <ParkingLiabilityPage />}
-      {activeSection === "liability" && <ScenariosPage kind="liability" />}
+      {activeSection === "liabilities" && <LiabilityPage />}
       {activeSection === "drivers" && <DriversPage />}
+      {activeSection === "driverreport" && <DriverReportPage />}
       {activeSection === "pricing" && <PricingSettingsPage />}
       {activeSection === "messaging" && <MessagingPage />}
       {activeSection === "maintenance" && <MaintenancePage />}

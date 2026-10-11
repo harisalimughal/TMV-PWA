@@ -7,3 +7,5 @@ dist/
 .DS_Store
 credentials.json
 service-account*.json
+outputs/phase8-check/
+outputs/phase9-check/

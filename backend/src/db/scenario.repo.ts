@@ -1,7 +1,11 @@
 import { getDb } from "./mongo";
 import { ScenarioKey } from "../workflow/scenario.spec";
+import type { ObjectId } from "mongodb";
 
 export interface ScenarioSubmissionDoc {
+  _id?: ObjectId | string;
+  driverSnapshot?: { initials: string; fullName: string; email: string; imei?: string };
+  liabilityFinancial?: import("../liabilities/liability.model").ApprovedLiabilityFinancialSource;
   jobId: string;
   scenario: ScenarioKey;
   driver: string;
@@ -31,6 +35,11 @@ export interface ScenarioSubmissionDoc {
 async function scenarioSubmissions() {
   const db = await getDb();
   return db.collection<ScenarioSubmissionDoc>("scenario_submissions");
+}
+
+export async function listLiabilitySourcesForJob(jobId: string, limit = 2000): Promise<{ items: ScenarioSubmissionDoc[]; truncated: boolean }> {
+  const rows = await (await scenarioSubmissions()).find({ jobId, scenario: { $in: ["parking", "liability"] } }).sort({ submittedAt: 1, _id: 1 }).limit(limit + 1).toArray();
+  return { items: rows.slice(0, limit), truncated: rows.length > limit };
 }
 
 export async function insertScenarioSubmission(doc: ScenarioSubmissionDoc): Promise<void> {

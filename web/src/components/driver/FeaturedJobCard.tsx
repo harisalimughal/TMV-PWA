@@ -80,6 +80,8 @@ export function FeaturedJobCard({ job, onStarted }: FeaturedJobCardProps) {
       setSentLocally(true);
       notifyJobsRefresh();
     } catch (err) {
+      const error = err as ApiError;
+      if (error.code === "MANUAL_DETAILS_PENDING" && error.jobId) onStarted(error.jobId);
       toast.error((err as ApiError)?.message || "Couldn't notify the customer. Try again.");
     } finally {
       setNotifying(false);
@@ -98,6 +100,8 @@ export function FeaturedJobCard({ job, onStarted }: FeaturedJobCardProps) {
       await startJob(job.jobId);
       onStarted(job.jobId);
     } catch (err) {
+      const error = err as ApiError;
+      if (error.code === "MANUAL_DETAILS_PENDING" && error.jobId) onStarted(error.jobId);
       toast.error((err as ApiError)?.message || "Couldn't start this job. Try again.");
     } finally {
       setStarting(false);

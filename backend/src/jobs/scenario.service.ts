@@ -106,6 +106,7 @@ export async function submitScenario(
     jobId,
     scenario,
     driver: actor,
+    driverSnapshot: { initials: driver.initials, fullName: driver.fullName, email: driver.email, imei: job.gpsliveImei || driver.imei },
     fields,
     photoUrls: photoUrls.map(p => p.url),
     // Parallel to photoUrls, same index -- where/when each was taken.

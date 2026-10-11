@@ -1,144 +1,92 @@
-/**
- * Ported verbatim from TMV-Chat-bot's dashboard/server/pdf/pdf-generator.ts -- a
- * hand-rolled binary PDF writer (A4 page: 595 x 842 points), zero external library.
- */
-import { formatGBP, toPounds } from "../../utils/money";
+import PDFDocument from "pdfkit";
+import { existsSync } from "node:fs";
+import path from "node:path";
+import { formatGBP } from "../../utils/money";
 import { formatLondonDate } from "./timezone";
-import { NormalizedJob } from "./types";
+import type { NormalizedJob } from "./types";
 
-export function generateJobPdf(job: NormalizedJob): Buffer {
-  const contentLines: string[] = [];
-
-  const addText = (text: string, x: number, y: number, size = 10, font = "/F1", color = "0 0 0") => {
-    const escaped = text.replace(/\\/g, "\\\\").replace(/\(/g, "\\(").replace(/\)/g, "\\)");
-    contentLines.push(`BT`, `${font} ${size} Tf`, `${color} rg`, `1 0 0 1 ${x} ${y} Tm`, `(${escaped}) Tj`, `ET`);
-  };
-
-  const addLine = (x1: number, y1: number, x2: number, y2: number, color = "0.8 0.85 0.9", width = 1) => {
-    contentLines.push(`${color} RG`, `${width} w`, `${x1} ${y1} m`, `${x2} ${y2} l`, `S`);
-  };
-
-  const addRect = (x: number, y: number, w: number, h: number, fillColor = "0.95 0.96 0.98", strokeColor = "0.85 0.88 0.92") => {
-    contentLines.push(`${strokeColor} RG`, `${fillColor} rg`, `1 w`, `${x} ${y} ${w} ${h} re`, `B`);
-  };
-
-  const left = 45;
-  const right = 550;
-
-  addRect(left, 740, right - left, 65, "0.04 0.10 0.18", "0.04 0.10 0.18");
-  addText("TMV OPERATIONS", left + 20, 775, 16, "/F2", "0.16 0.67 0.89");
-  addText("OFFICIAL JOB COMPLETION & FIELD AUDIT REPORT", left + 20, 755, 9, "/F1", "0.75 0.82 0.90");
-  addText(job.jobId, right - 160, 765, 14, "/F2", "1 1 1");
-
-  addRect(left, 675, right - left, 50, "0.95 0.96 0.98", "0.85 0.88 0.92");
-  addText("STATUS", left + 15, 705, 8, "/F2", "0.4 0.48 0.58");
-  addText(job.status, left + 15, 690, 11, "/F2", job.status === "COMPLETED" ? "0.09 0.50 0.29" : "0.10 0.46 0.74");
-
-  addText("DRIVER", left + 140, 705, 8, "/F2", "0.4 0.48 0.58");
-  addText(`${job.driverName} (${job.driverInitials || "UN"})`, left + 140, 690, 10, "/F1", "0.06 0.11 0.18");
-
-  addText("TIMING VARIANCE", left + 320, 705, 8, "/F2", "0.4 0.48 0.58");
-  addText(`${job.delayBand} (${job.delayMinutes} mins)`, left + 320, 690, 10, "/F1", job.delayMinutes > 0 ? "0.75 0.19 0.15" : "0.09 0.50 0.29");
-
-  addRect(left, 550, right - left, 110, "1 1 1", "0.85 0.88 0.92");
-  addText("CUSTOMER & BOOKING DETAILS", left + 15, 638, 9, "/F2", "0.10 0.46 0.74");
-  addLine(left + 15, 630, right - 15, 630);
-
-  addText(`Customer Name: ${job.customerName}`, left + 15, 610, 10, "/F2", "0.06 0.11 0.18");
-  addText(`Phone: ${job.customerPhone || "Not recorded"}`, left + 15, 595, 9, "/F1", "0.23 0.31 0.39");
-  addText(`Email: ${job.customerEmail || "Not recorded"}`, left + 15, 580, 9, "/F1", "0.23 0.31 0.39");
-  addText(`Crew Size: ${job.crewSize} Crew Members`, left + 15, 565, 9, "/F1", "0.23 0.31 0.39");
-
-  addText(`Pickup: ${job.pickup}`, left + 260, 610, 9, "/F1", "0.06 0.11 0.18");
-  addText(`Dropoff: ${job.dropoff}`, left + 260, 585, 9, "/F1", "0.06 0.11 0.18");
-
-  addRect(left, 430, right - left, 105, "1 1 1", "0.85 0.88 0.92");
-  addText("SCHEDULED VS ACTUAL TIMINGS (EUROPE/LONDON)", left + 15, 518, 9, "/F2", "0.10 0.46 0.74");
-  addLine(left + 15, 510, right - 15, 510);
-
-  addText("Stage", left + 15, 495, 8, "/F2", "0.4 0.48 0.58");
-  addText("Scheduled", left + 100, 495, 8, "/F2", "0.4 0.48 0.58");
-  addText("Actual", left + 250, 495, 8, "/F2", "0.4 0.48 0.58");
-  addText("Duration / Variance", left + 380, 495, 8, "/F2", "0.4 0.48 0.58");
-
-  addText("Pickup Arrival", left + 15, 475, 9, "/F1", "0.06 0.11 0.18");
-  addText(formatLondonDate(job.bookedStart), left + 100, 475, 9, "/F1", "0.23 0.31 0.39");
-  addText(formatLondonDate(job.actualStart), left + 250, 475, 9, "/F2", "0.06 0.11 0.18");
-  addText(`${job.bookedMinutes}m scheduled / ${job.delayMinutes}m delay`, left + 380, 475, 9, "/F1", "0.23 0.31 0.39");
-
-  addText("Empty Van Photo", left + 15, 455, 9, "/F1", "0.06 0.11 0.18");
-  addText(formatLondonDate(job.bookedFinish), left + 100, 455, 9, "/F1", "0.23 0.31 0.39");
-  addText(formatLondonDate(job.actualFinish), left + 250, 455, 9, "/F2", "0.06 0.11 0.18");
-  addText(job.actualMinutes ? `${job.actualMinutes}m total (${job.overtimeMinutes}m overtime)` : "—", left + 380, 455, 9, "/F1", "0.23 0.31 0.39");
-
-  addRect(left, 290, right - left, 125, "1 1 1", "0.85 0.88 0.92");
-  addText("CHARGES & FINANCIAL RECONCILIATION", left + 15, 398, 9, "/F2", "0.10 0.46 0.74");
-  addLine(left + 15, 390, right - 15, 390);
-
-  addText("Base Price:", left + 15, 370, 9, "/F1", "0.23 0.31 0.39");
-  addText(formatGBP(job.basePrice), right - 100, 370, 9, "/F2", "0.06 0.11 0.18");
-
-  addText("Extra Charges (Congestion / Tunnel):", left + 15, 352, 9, "/F1", "0.23 0.31 0.39");
-  addText(formatGBP(job.extraCharges), right - 100, 352, 9, "/F2", "0.06 0.11 0.18");
-
-  addText(`Overtime (${job.overtimeMinutes} mins):`, left + 15, 334, 9, "/F1", "0.23 0.31 0.39");
-  addText(formatGBP(job.overtimeCharge), right - 100, 334, 9, "/F2", "0.06 0.11 0.18");
-
-  addLine(left + 15, 324, right - 15, 324);
-  addText("TOTAL CHARGES:", left + 15, 308, 10, "/F2", "0.06 0.11 0.18");
-  addText(formatGBP(job.totalCharges), right - 100, 308, 11, "/F2", "0.10 0.46 0.74");
-  addText("AMOUNT CHARGED:", left + 15, 292, 10, "/F2", "0.06 0.11 0.18");
-  addText(formatGBP(job.amountCharged), right - 100, 292, 11, "/F2", "0.10 0.46 0.74");
-
-  addRect(left, 160, right - left, 115, "1 1 1", "0.85 0.88 0.92");
-  addText("CUSTOMER SIGN-OFF & FIELD EVIDENCE AUDIT", left + 15, 258, 9, "/F2", "0.10 0.46 0.74");
-  addLine(left + 15, 250, right - 15, 250);
-
-  addText(`Client Confirmed By: ${job.clientConfirmedName || job.customerName}`, left + 15, 230, 9, "/F2", "0.06 0.11 0.18");
-  addText(`Customer Signature Time: ${job.clientSignatureAt ? formatLondonDate(job.clientSignatureAt) : "Not recorded"}`, left + 15, 215, 9, "/F1", "0.23 0.31 0.39");
-  addText(`Payment Method: ${job.paymentMethod} (${job.paymentStatus})`, left + 300, 215, 9, "/F1", "0.23 0.31 0.39");
-  addText(`Tracker Arrival: ${job.trackerArrivalAt ? formatLondonDate(job.trackerArrivalAt) : "Unverified"}`, left + 15, 200, 9, "/F1", "0.23 0.31 0.39");
-  addText(`Reconciliation Status: ${job.reconciled ? "RECONCILED" : "UNRECONCILED"}`, left + 300, 200, 9, "/F2", job.reconciled ? "0.09 0.50 0.29" : "0.75 0.19 0.15");
-  addText(`Proof of Arrival Photo: ${job.pickupArrivalAt ? formatLondonDate(job.pickupArrivalAt) : "Not recorded"}`, left + 15, 185, 9, "/F1", "0.23 0.31 0.39");
-  addText(`Review Report: RW=${job.reviewEmailStatus}`, left + 300, 185, 9, "/F2", job.reviewEmailStatus === "Yes" ? "0.09 0.50 0.29" : "0.75 0.19 0.15");
-  addText(`Empty Van Photo Time: ${job.actualFinish ? formatLondonDate(job.actualFinish) : "Not recorded"}`, left + 300, 170, 9, "/F1", "0.23 0.31 0.39");
-  if (job.arrivalProofLate || job.arrivalProofOverdue) {
-    addText(`ARRIVAL TO PROOF GAP: ${job.arrivalProofDelayMinutes || 0} mins`, left + 300, 185, 9, "/F2", "0.75 0.19 0.15");
-  }
-
-  const comp = job.evidenceCompleteness;
-  addText(`Arrival Photo: ${comp.arrival} | Loaded: ${comp.vanLoaded} | Empty: ${comp.emptyVan} | Org: ${comp.organized}`, left + 15, 170, 8, "/F1", "0.4 0.48 0.58");
-
-  addText("Generated by TMV Operations Dashboard (/admin) - Official Immutable Record", left + 80, 70, 8, "/F1", "0.5 0.58 0.68");
-
-  const streamContent = contentLines.join("\n");
-  const streamLength = Buffer.byteLength(streamContent, "utf8");
-
-  const obj1 = `1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n`;
-  const obj2 = `2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n`;
-  const obj3 = `3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595.28 841.89] /Resources << /Font << /F1 4 0 R /F2 5 0 R >> >> /Contents 6 0 R >>\nendobj\n`;
-  const obj4 = `4 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>\nendobj\n`;
-  const obj5 = `5 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>\nendobj\n`;
-  const obj6 = `6 0 obj\n<< /Length ${streamLength} >>\nstream\n${streamContent}\nendstream\nendobj\n`;
-
-  const header = `%PDF-1.4\n`;
-  const body = [obj1, obj2, obj3, obj4, obj5, obj6];
-
-  let offset = header.length;
-  const offsets: number[] = [0];
-
-  for (const obj of body) {
-    offsets.push(offset);
-    offset += obj.length;
-  }
-
-  const xrefOffset = offset;
-  let xref = `xref\n0 ${offsets.length}\n0000000000 65535 f \n`;
-  for (let i = 1; i < offsets.length; i++) {
-    xref += `${String(offsets[i]).padStart(10, "0")} 00000 n \n`;
-  }
-
-  const trailer = `trailer\n<< /Size ${offsets.length} /Root 1 0 R >>\nstartxref\n${xrefOffset}\n%%EOF\n`;
-
-  return Buffer.from(header + body.join("") + xref + trailer, "utf8");
+/** The API download is a textual summary; the browser dossier includes photo/signature evidence. */
+export function generateJobPdf(job: NormalizedJob): Promise<Buffer> {
+  return new Promise((resolve, reject) => {
+    const doc = new PDFDocument({ size: "A4", margins: { top: 40, bottom: 62, left: 40, right: 40 }, bufferPages: true,
+      info: { Title: `Job Completed - ${job.jobId}`, Author: "TMV Operations", Subject: "Job completion summary" } });
+    const chunks: Buffer[] = [];
+    doc.on("data", chunk => chunks.push(chunk)); doc.on("end", () => resolve(Buffer.concat(chunks))); doc.on("error", reject);
+    const width = doc.page.width - 80, ink = "#20272c", muted = "#65716f", line = "#dbe1e6";
+    const rule = (y: number) => doc.strokeColor(line).lineWidth(0.7).moveTo(40, y).lineTo(doc.page.width - 40, y).stroke();
+    const room = (height: number) => { if (doc.y + height > doc.page.height - 78) doc.addPage(); };
+    const section = (title: string) => {
+      room(64); doc.moveDown(0.7).font("Helvetica-Bold").fontSize(12).fillColor(ink).text(title, 40, doc.y, { width });
+      doc.moveDown(0.45); rule(doc.y); doc.y += 9;
+    };
+    const row = (label: string, value: unknown) => {
+      const text = value === null || value === undefined || value === "" ? "Not recorded" : String(value);
+      doc.font("Helvetica").fontSize(10);
+      const height = Math.max(doc.heightOfString(label, { width: 148 }), doc.heightOfString(text, { width: width - 166 })) + 12;
+      if (height > doc.page.height - 160) {
+        room(44); doc.fillColor(muted).text(label, 40, doc.y, { width });
+        doc.moveDown(0.4).fillColor(ink).text(text, 40, doc.y, { width, lineGap: 2 });
+        rule(doc.y + 6); doc.y += 15;
+        return;
+      }
+      room(Math.min(height, doc.page.height - 160));
+      const y = doc.y;
+      doc.fillColor(muted).text(label, 40, y, { width: 148 });
+      doc.fillColor(ink).text(text, 206, y, { width: width - 166, lineGap: 2 });
+      doc.y = Math.max(doc.y, y + height); rule(doc.y); doc.y += 3;
+    };
+    const logo = path.resolve(__dirname, "../../../../web/public/tmv-logo.png");
+    if (existsSync(logo)) doc.image(logo, 40, 40, { fit: [38, 38] });
+    doc.font("Helvetica-Bold").fontSize(19).fillColor(ink).text("Job Completed", 92, 42, { width: 310 });
+    doc.font("Helvetica").fontSize(9).fillColor(muted);
+    doc.text("020 3773 9113", 410, 45, { width: 145, align: "right" });
+    doc.y = 96; rule(doc.y); doc.y += 15;
+    row("Reference", job.jobId); row("Driver", `${job.driverName} (${job.driverInitials || "UN"})`);
+    row("Status", job.status); row("Timing variance", `${job.delayBand} (${job.delayMinutes} mins)`);
+    section("Customer & booking details");
+    row("Customer name", job.customerName); row("Phone", job.customerPhone); row("Email", job.customerEmail);
+    row("Crew size", `${job.crewSize} Crew Members`); row("Pickup", job.pickup); row("Dropoff", job.dropoff);
+    section("Scheduled & actual timings - Europe/London");
+    row("Scheduled pickup", formatLondonDate(job.bookedStart)); row("Actual arrival", formatLondonDate(job.actualStart));
+    row("Scheduled finish", formatLondonDate(job.bookedFinish)); row("Actual finish", formatLondonDate(job.actualFinish));
+    row("Scheduled / delay", `${job.bookedMinutes}m scheduled / ${job.delayMinutes}m delay`);
+    row("Actual / overtime", job.actualMinutes ? `${job.actualMinutes}m total (${job.overtimeMinutes}m overtime)` : "Not recorded");
+    section("Charges & financial reconciliation");
+    row("Base price", formatGBP(job.basePrice)); row("Extra charges", formatGBP(job.extraCharges));
+    row(`Overtime (${job.overtimeMinutes} mins)`, formatGBP(job.overtimeCharge));
+    row("Total charges", formatGBP(job.totalCharges)); row("Amount charged", formatGBP(job.amountCharged));
+    section("Customer sign-off & field evidence audit");
+    row("Client confirmed by", job.clientConfirmedName || job.customerName);
+    row("Customer signature time", job.clientSignatureAt ? formatLondonDate(job.clientSignatureAt) : "Not recorded");
+    row("Payment", `${job.paymentMethod} (${job.paymentStatus})`);
+    row("Tracker arrival", job.trackerArrivalAt ? formatLondonDate(job.trackerArrivalAt) : "Unverified");
+    row("Reconciliation", job.reconciled ? "RECONCILED" : "UNRECONCILED");
+    row("Proof of arrival time", job.pickupArrivalAt ? formatLondonDate(job.pickupArrivalAt) : "Not recorded");
+    row("Review report", `RW=${job.reviewEmailStatus}`);
+    row("Empty van photo time", job.actualFinish ? formatLondonDate(job.actualFinish) : "Not recorded");
+    if (job.arrivalProofLate || job.arrivalProofOverdue) row("Arrival to proof gap", `${job.arrivalProofDelayMinutes || 0} mins`);
+    const comp = job.evidenceCompleteness;
+    row("Evidence status", `Arrival Photo: ${comp.arrival} | Loaded: ${comp.vanLoaded} | Empty: ${comp.emptyVan} | Org: ${comp.organized}`);
+    section("Job time breakdown");
+    if (job.timeBilling) {
+      const b = job.timeBilling, minutes = (n: number) => Number(n.toFixed(2));
+      row("Calendar / allocation / actual", `${minutes(b.scheduledMinutes)} min / ${b.allocatedMinutes} min / ${minutes(b.actualMinutes)} min`);
+      row("Extra time / billed blocks", `${minutes(b.extraMinutes)} min / ${b.billedExtraBlocks} x 30 min`);
+      row("Extra charge", b.extraChargePence === null ? "Unknown" : formatGBP(b.extraChargePence));
+      row("Rate / 30 min", b.ratePer30Pence === null ? "Unknown" : formatGBP(b.ratePer30Pence));
+      row("Rate source", b.rateSource); row("Billing status", job.timeBillingStatus || "verified");
+    } else row("Billing status", `${job.timeBillingStatus || "legacy"}; recorded prices retained`);
+    row("Arrival delay source", job.arrivalDelaySource || "proof-acceptance");
+    const pages = doc.bufferedPageRange();
+    for (let index = 0; index < pages.count; index++) {
+      doc.switchToPage(index); rule(doc.page.height - 49);
+      const bottomMargin = doc.page.margins.bottom;
+      doc.page.margins.bottom = 0;
+      doc.font("Helvetica").fontSize(8).fillColor(muted);
+      doc.text(job.jobId, 40, doc.page.height - 39, { width: 245, lineBreak: false });
+      doc.text(`Page ${index + 1} of ${pages.count}`, 300, doc.page.height - 39, { width: width - 260, align: "right", lineBreak: false });
+      doc.page.margins.bottom = bottomMargin;
+    }
+    doc.end();
+  });
 }

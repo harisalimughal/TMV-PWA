@@ -53,6 +53,10 @@ function job(overrides: Partial<Job> = {}): Job {
 }
 
 describe("BookingWindowHeader", () => {
+  it("shows the exact 90-minute Calendar duration rather than the internal allocation", () => {
+    render(<BookingWindowHeader job={job({ bookedFinish: "2026-09-25T10:30:00+01:00", bookedMinutes: 120 })} />);
+    expect(screen.getByText("Scheduled duration: 1h 30m")).toBeInTheDocument();
+  });
   it("shows the raw Calendar title in the booking chip", () => {
     render(<BookingWindowHeader job={job()} />);
 

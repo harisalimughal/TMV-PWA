@@ -1,20 +1,24 @@
 import { evidenceCollection } from "./mongo";
 import { EvidenceProgress, EvidenceRecord, EvidenceStatus } from "../jobs/job.types";
 import { getJob } from "./jobs.repo";
+import { invalidateReportReads } from "../reports/report-read-cache";
 
 export async function insertEvidence(record: EvidenceRecord): Promise<void> {
   const col = await evidenceCollection();
   await col.insertOne({ _id: record.evidenceId, ...record } as any);
+  invalidateReportReads();
 }
 
 export async function updateEvidence(record: EvidenceRecord): Promise<void> {
   const col = await evidenceCollection();
   await col.replaceOne({ _id: record.evidenceId } as any, { _id: record.evidenceId, ...record } as any, { upsert: true });
+  invalidateReportReads();
 }
 
 export async function deleteEvidence(evidenceId: string): Promise<void> {
   const col = await evidenceCollection();
   await col.deleteOne({ _id: evidenceId } as any);
+  invalidateReportReads();
 }
 
 /** Used when a job is deleted -- see jobs.routes.ts's DELETE /:jobId, which deletes
@@ -22,6 +26,7 @@ export async function deleteEvidence(evidenceId: string): Promise<void> {
 export async function deleteEvidenceForJob(jobId: string): Promise<void> {
   const col = await evidenceCollection();
   await col.deleteMany({ jobId } as any);
+  invalidateReportReads();
 }
 
 export async function getEvidence(evidenceId: string): Promise<EvidenceRecord | null> {
@@ -53,6 +58,7 @@ export async function listAllEvidence(): Promise<EvidenceRecord[]> {
 export async function deleteAllEvidence(): Promise<number> {
   const col = await evidenceCollection();
   const result = await col.deleteMany({});
+  invalidateReportReads();
   return result.deletedCount ?? 0;
 }
 

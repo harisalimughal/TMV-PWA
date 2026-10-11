@@ -1,7 +1,7 @@
 import { DateTime } from "luxon";
 import { getDriverProfileByInitials } from "../auth/driver-account.service";
 import { jobsCollection } from "../db/mongo";
-import { listJobs } from "../db/jobs.repo";
+import { getJob, listJobs } from "../db/jobs.repo";
 import { reverseGeocode } from "../integrations/geocode";
 import {
   fetchGpsLiveDevices, findDeviceForDriver, isGpsLiveDeviceActive, type GpsLiveDevice
@@ -9,6 +9,9 @@ import {
 import { sendPushToDriver } from "../push/push.service";
 import { log } from "../utils/logger";
 import { Job, JobStatus } from "./job.types";
+import { recordGpsAssignment } from "../gps/gps.association";
+import { withJobLock } from "../utils/lock";
+import { gpsLocation, gpsTime } from "../gps/gps.parse";
 
 const ARRIVAL_RADIUS_METERS = 300;
 const MAX_REPORT_AGE_MS = 2 * 60_000;
@@ -28,10 +31,11 @@ export function assessPickupPosition(
   now: Date,
   maxReportAgeMs = MAX_REPORT_AGE_MS
 ): { state: "inside" | "outside" | "stale"; distanceMeters: number; reportedAt?: string } {
-  const report = DateTime.fromSQL(device.dtTracker || "", { zone: "utc" });
+  const parsed = gpsTime(device.dtTracker, now.toISOString());
+  const report = parsed.occurredAt ? DateTime.fromISO(parsed.occurredAt) : DateTime.invalid("missing GPS time");
   const age = now.getTime() - report.toMillis();
-  if (!report.isValid || !Number.isFinite(age) || age < -60_000 || age > maxReportAgeMs ||
-      !Number.isFinite(device.lat) || !Number.isFinite(device.lng)) return { state: "stale", distanceMeters: NaN };
+  if (!report.isValid || !Number.isFinite(age) || age < 0 || age > maxReportAgeMs ||
+      !gpsLocation(device.lat, device.lng) || (device.lat === 0 && device.lng === 0) || !gpsLocation(pickup.lat, pickup.lng)) return { state: "stale", distanceMeters: NaN };
   const reportedAt = report.toUTC().toISO()!;
   const distance = Math.round(distanceMeters(device, pickup));
   return {
@@ -55,7 +59,9 @@ export async function sweepPickupArrivals(now = new Date()): Promise<void> {
     const seenDrivers = new Set<string>();
     const jobs = allJobs.filter(job =>
       (job.status === JobStatus.READY || job.status === JobStatus.IN_PROGRESS) &&
-      job.onMyWayAt && job.pickupLocation && job.driverInitials && !job.actualStart && !busyDrivers.has(job.driverInitials)
+      job.onMyWayAt && job.pickupLocation && job.driverInitials &&
+      ((!job.actualStart && !busyDrivers.has(job.driverInitials)) ||
+        (job.actualStart && !job.trackerArrivalAt && now.getTime() - Date.parse(job.actualStart) <= 5 * 60_000))
     ).sort((a, b) =>
       Number(b.status === JobStatus.IN_PROGRESS) - Number(a.status === JobStatus.IN_PROGRESS) ||
       a.bookedStart.localeCompare(b.bookedStart)
@@ -70,36 +76,46 @@ export async function sweepPickupArrivals(now = new Date()): Promise<void> {
     const col = await jobsCollection();
     const profileCache = new Map<string, Awaited<ReturnType<typeof getDriverProfileByInitials>>>();
 
-    for (const job of jobs) {
+    for (const queuedJob of jobs) {
+      await withJobLock(queuedJob.jobId, async () => {
       try {
+        const job = await getJob(queuedJob.jobId);
+        if (!job || job.status === JobStatus.COMPLETED) return;
         let profile = profileCache.get(job.driverInitials);
         if (profile === undefined) {
           profile = await getDriverProfileByInitials(job.driverInitials);
           profileCache.set(job.driverInitials, profile);
         }
-        if (!profile) continue;
-        const device = findDeviceForDriver(profile, devices);
-        if (!device) continue;
+        if (!profile) return;
+        const pinned = job.gpsliveImei ? byImei.get(job.gpsliveImei) : undefined;
+        const device = pinned && isGpsLiveDeviceActive(pinned) ? pinned : findDeviceForDriver(profile, devices);
+        if (!device) return;
         // Keep an active tracker pinned to an in-flight job. An inactive/removed pin
         // may be repaired by the driver's one unique active initials match.
-        const pinned = job.gpsliveImei ? byImei.get(job.gpsliveImei) : undefined;
-        if (job.gpsliveImei && job.gpsliveImei !== device.imei && pinned && isGpsLiveDeviceActive(pinned)) continue;
+        if (job.gpsliveImei && job.gpsliveImei !== device.imei && pinned && isGpsLiveDeviceActive(pinned)) return;
         const assignedImei = device.imei;
+        const priorDeviceMatches = job.gpsliveImei === assignedImei;
         const deviceChanged = !!job.gpsliveImei && job.gpsliveImei !== assignedImei;
         const position = assessPickupPosition(device, job.pickupLocation!, now);
-        if (position.state === "stale" || !position.reportedAt) continue;
+        if (position.state === "stale" || !position.reportedAt) return;
         const reportMs = new Date(position.reportedAt).getTime();
-        if (reportMs < new Date(job.onMyWayAt!).getTime()) continue;
-        const filter = { _id: job.jobId, actualStart: "" } as any;
+        if (reportMs < new Date(job.onMyWayAt!).getTime()) return;
+        const filter = { _id: job.jobId, actualStart: job.actualStart || "" } as any;
         const dist = position.distanceMeters;
         const seenAt: Record<string, any> = {
           trackerLastSeenAt: position.reportedAt,
           gpsliveImei: assignedImei,
           trackerDistanceMeters: dist
         };
-        if (position.state === "outside") {
+        recordGpsAssignment(job, assignedImei, position.reportedAt, "pickup-report");
+        seenAt.gpsDeviceHistory = job.gpsDeviceHistory;
+        if (position.state === "outside" || !Number.isFinite(device.speed) || device.speed < 0 || device.speed > 5) {
           let reason: string;
-          if (dist >= 1000) {
+          if (!Number.isFinite(device.speed) || device.speed < 0) {
+            reason = "Tracker speed is unavailable; stationary arrival is unverified.";
+          } else if (device.speed > 5 && position.state === "inside") {
+            reason = "Tracker is moving near pickup; a drive-by is not confirmed arrival.";
+          } else if (dist >= 1000) {
             reason = `Van was ${(dist / 1000).toFixed(1)} km away from pickup point`;
           } else {
             reason = `Van was ${dist}m away from pickup point (outside 300m radius)`;
@@ -120,20 +136,20 @@ export async function sweepPickupArrivals(now = new Date()): Promise<void> {
               ...(locName ? {} : { trackerLocationName: "" })
             }
           } as any);
-          continue;
+          return;
         }
         if (!job.trackerArrivalAt) {
-          const candidateMs = !deviceChanged && job.trackerArrivalCandidateAt
+          const candidateMs = priorDeviceMatches && job.trackerArrivalCandidateAt
             ? new Date(job.trackerArrivalCandidateAt).getTime()
             : NaN;
           if (Number.isFinite(candidateMs) && reportMs > candidateMs && reportMs - candidateMs <= 5 * 60_000) {
             await col.updateOne(filter, {
-              $set: { ...seenAt, trackerArrivalAt: job.trackerArrivalCandidateAt },
+              $set: { ...seenAt, trackerArrivalAt: job.trackerArrivalCandidateAt, trackerArrivalSource: "two-fresh-reports" },
               $unset: {
                 trackerArrivalCandidateAt: "", trackerUnverifiedReason: "", trackerLocationName: ""
               }
             } as any);
-            continue;
+            return;
           }
           if (!Number.isFinite(candidateMs) || reportMs > candidateMs) {
             await col.updateOne(filter, {
@@ -141,17 +157,17 @@ export async function sweepPickupArrivals(now = new Date()): Promise<void> {
               $unset: { trackerUnverifiedReason: "", trackerLocationName: "" }
             } as any);
           }
-          continue;
+          return;
         }
         await col.updateOne(filter, {
           $set: seenAt,
           $unset: { trackerUnverifiedReason: "", trackerLocationName: "" }
         } as any);
-        if (job.arrivalProofReminderSentAt || now.getTime() - new Date(job.trackerArrivalAt).getTime() < PROOF_REMINDER_MS) continue;
+        if (job.actualStart || job.arrivalProofReminderSentAt || now.getTime() - new Date(job.trackerArrivalAt).getTime() < PROOF_REMINDER_MS) return;
         // Atomically claim the one reminder before sending, even if two sweeps overlap.
         const claimed = await col.updateOne({ ...filter, arrivalProofReminderSentAt: null } as any,
           { $set: { arrivalProofReminderSentAt: now.toISOString() } } as any);
-        if (!claimed.modifiedCount) continue;
+        if (!claimed.modifiedCount) return;
         await sendPushToDriver(job.driverInitials, {
           title: "Proof of arrival photo overdue",
           body: "Your van reached the pickup over 15 minutes ago. Please upload the proof of arrival photo if you have not already taken it.",
@@ -160,18 +176,17 @@ export async function sweepPickupArrivals(now = new Date()): Promise<void> {
           data: { kind: "arrival_proof_overdue", jobId: job.jobId }
         });
       } catch (error) {
-        log.warn("pickup tracker check failed", { job_id: job.jobId, error: String(error) });
+        log.warn("pickup tracker check failed", { job_id: queuedJob.jobId, error: String(error) });
       }
+      });
     }
   } finally {
     running = false;
   }
 }
 
-/** Called at the moment a Proof of Arrival photo lands. If the tracker arrival
- *  wasn't already confirmed, checks whether the van is currently (or recently)
- *  within the 300m radius. If so, immediately confirms trackerArrivalAt!
- *  If outside, records the distance and area name so the admin knows where the van was. */
+/** Proof upload retains GPS evidence separately from photo acceptance. Arrival
+ * requires two distinct fresh stationary reports from the same pinned tracker. */
 export async function verifyArrivalAtPhotoUpload(
   job: Job,
   driver: { initials?: string; imei?: string },
@@ -196,7 +211,8 @@ export async function verifyArrivalAtPhotoUpload(
   try {
     const devices = await fetchGpsLiveDevices();
     const profile = await getDriverProfileByInitials(driver.initials);
-    const device = findDeviceForDriver({
+    const pinned = devices.find(row => row.imei === job.gpsliveImei && isGpsLiveDeviceActive(row));
+    const device = pinned || findDeviceForDriver({
       initials: driver.initials,
       vanRegistration: profile?.vanRegistration || "",
       imei: driver.imei || profile?.imei || job.gpsliveImei
@@ -208,13 +224,15 @@ export async function verifyArrivalAtPhotoUpload(
     }
 
     const now = new Date();
-    // A parked tracker may sleep, so proof upload accepts a position up to 30 minutes
-    // old. Anything older must not produce a misleading distance from an old location.
-    const position = assessPickupPosition(device, job.pickupLocation, now, 30 * 60_000);
+    // Old sleeping-tracker coordinates do not establish arrival at photo upload.
+    const position = assessPickupPosition(device, job.pickupLocation, now);
     if (position.state === "stale" || !position.reportedAt) {
       job.trackerUnverifiedReason = "Tracker device signal was stale / offline";
+      job.trackerArrivalCandidateAt = undefined;
+      job.trackerDistanceMeters = undefined;
+      job.trackerLocationName = undefined;
       await col.updateOne(filter, {
-        $set: { trackerUnverifiedReason: job.trackerUnverifiedReason, gpsliveImei: device.imei },
+        $set: { trackerUnverifiedReason: job.trackerUnverifiedReason },
         $unset: { trackerArrivalCandidateAt: "", trackerDistanceMeters: "", trackerLocationName: "" }
       } as any);
       return;
@@ -223,27 +241,42 @@ export async function verifyArrivalAtPhotoUpload(
     const dist = position.distanceMeters;
     const reportedAt = position.reportedAt;
     const assignedImei = device.imei;
+    if (job.onMyWayAt && Date.parse(reportedAt) < Date.parse(job.onMyWayAt)) {
+      job.trackerUnverifiedReason = "Tracker report predates this job's on-my-way timestamp.";
+      return;
+    }
+    const previousImei = job.gpsliveImei;
+    recordGpsAssignment(job, assignedImei, reportedAt, "pickup-report");
 
-    if (position.state === "inside") {
-      // Van is at the pickup location! Verify arrival!
-      const arrivalTime = reportedAt || photoTakenAt;
-      job.trackerArrivalAt = arrivalTime;
-      job.trackerLastSeenAt = arrivalTime;
+    if (position.state === "inside" && Number.isFinite(device.speed) && device.speed >= 0 && device.speed <= 5) {
+      const candidate = previousImei === assignedImei ? job.trackerArrivalCandidateAt : undefined;
+      const confirmed = candidate && Date.parse(reportedAt) > Date.parse(candidate) && Date.parse(reportedAt) - Date.parse(candidate) <= 5 * 60_000;
+      if (confirmed) {
+        job.trackerArrivalAt = candidate;
+        job.trackerArrivalSource = "two-fresh-reports";
+        job.trackerArrivalCandidateAt = undefined;
+        job.trackerUnverifiedReason = undefined;
+      } else {
+        job.trackerArrivalCandidateAt = reportedAt;
+        job.trackerUnverifiedReason = "Awaiting a second distinct fresh stationary tracker report.";
+      }
+      job.trackerLastSeenAt = reportedAt;
       job.trackerDistanceMeters = dist;
+      job.trackerLocationName = undefined;
       job.gpsliveImei = assignedImei;
-      job.trackerUnverifiedReason = undefined;
       await col.updateOne(filter, {
         $set: {
-          trackerArrivalAt: arrivalTime,
-          trackerLastSeenAt: arrivalTime,
+          ...(confirmed ? { trackerArrivalAt: candidate, trackerArrivalSource: "two-fresh-reports" } : { trackerArrivalCandidateAt: reportedAt, trackerUnverifiedReason: job.trackerUnverifiedReason }),
+          trackerLastSeenAt: reportedAt,
           trackerDistanceMeters: dist,
-          gpsliveImei: assignedImei
+          gpsliveImei: assignedImei,
+          gpsDeviceHistory: job.gpsDeviceHistory
         },
         $unset: {
-          trackerArrivalCandidateAt: "", trackerUnverifiedReason: "", trackerLocationName: ""
+          ...(confirmed ? { trackerArrivalCandidateAt: "", trackerUnverifiedReason: "" } : {}), trackerLocationName: ""
         }
       } as any);
-      log.info("tracker arrival verified at photo upload", { job_id: job.jobId, distance_meters: dist });
+      log.info(confirmed ? "tracker arrival verified at photo upload" : "tracker arrival awaiting another report", { job_id: job.jobId, distance_meters: dist });
     } else {
       // Van was outside the radius at photo time
       let locName: string | undefined;
@@ -251,12 +284,15 @@ export async function verifyArrivalAtPhotoUpload(
         locName = (await reverseGeocode(device.lat, device.lng).catch(() => null)) || undefined;
       }
       let reason: string;
-      if (dist >= 1000) {
+      if (position.state === "inside") {
+        reason = "Tracker is moving near pickup; GPS arrival is unverified.";
+      } else if (dist >= 1000) {
         reason = `Van was ${(dist / 1000).toFixed(1)} km away from pickup point${locName ? ` in ${locName}` : ""}`;
       } else {
         reason = `Van was ${dist}m away from pickup point (outside 300m radius)${locName ? ` in ${locName}` : ""}`;
       }
       job.trackerDistanceMeters = dist;
+      job.trackerArrivalCandidateAt = undefined;
       job.trackerLocationName = locName;
       job.trackerUnverifiedReason = reason;
       job.trackerLastSeenAt = reportedAt;
@@ -267,8 +303,10 @@ export async function verifyArrivalAtPhotoUpload(
           trackerLocationName: locName,
           trackerUnverifiedReason: reason,
           trackerLastSeenAt: reportedAt,
-          gpsliveImei: assignedImei
-        }
+          gpsliveImei: assignedImei,
+          gpsDeviceHistory: job.gpsDeviceHistory
+        },
+        $unset: { trackerArrivalCandidateAt: "" }
       } as any);
       log.info("tracker outside radius at photo upload", { job_id: job.jobId, distance_meters: dist, reason });
     }

@@ -1,11 +1,7 @@
 import crypto from "node:crypto";
 import { Request, Response, Router } from "express";
 import { getGpsLiveWebhookToken } from "../config/live-settings";
-import { listDriverProfiles } from "../auth/driver-account.service";
-import { listJobs } from "../db/jobs.repo";
-import { flagCongestionZoneEntry, flagTunnelZoneEntry } from "../jobs/congestion-zone.service";
-import { buildDriverMatchIndex, guessPlateFromDeviceName, matchDriverByPlateAndName } from "./gpslive";
-import { JobStatus } from "../jobs/job.types";
+import { ingestGpsWebhook } from "../gps/gps.ingest";
 import { log } from "../utils/logger";
 
 /**
@@ -19,13 +15,6 @@ import { log } from "../utils/logger";
  * ignored. Undocumented beyond what a live payload showed us; treat every field as
  * possibly absent.
  */
-interface GpsLiveWebhookEvent {
-  event_id?: string;
-  type?: string;
-  event_desc?: string;
-  deviceName?: string;
-  imei?: string;
-}
 
 /**
  * GPSLive's webhook feature has no signing/HMAC option (confirmed against the
@@ -45,93 +34,19 @@ export function gpsLiveWebhookRoutes(): Router {
   const router = Router();
 
   router.post("/:token", async (req: Request, res: Response) => {
+    try {
     const expectedToken = await getGpsLiveWebhookToken();
     if (!expectedToken || !tokenMatches(String(req.params.token), expectedToken)) {
       res.status(404).end();
       return;
     }
 
-    const event = req.body as GpsLiveWebhookEvent;
-
-    try {
-      // event_desc's zone name also covers a separate "Tunnels-Black-Silver" zone
-      // under the same alert rule -- handled identically to Congestion below, just a
-      // different job field/push copy and a different Extra Charges suggestion.
-      const isCongestion = event.event_desc?.includes("Congestion");
-      const isTunnel = event.event_desc?.includes("Tunnel");
-      if (event.type !== "zone_in" || (!isCongestion && !isTunnel)) {
-        res.status(200).json({ ok: true, ignored: true });
-        return;
-      }
-
-      const jobs = await listJobs();
-      const inProgress = jobs.filter(j => j.status === JobStatus.IN_PROGRESS);
-
-      // Primary: the job this exact device was pinned to at start (see
-      // jobs/congestion-zone.service.ts's checkCongestionZoneAtJobStart) -- correct
-      // even if the driver's assigned van on file has changed since (a van swap),
-      // because it's keyed on the device identity that job actually started with,
-      // not a live re-derivation from the driver's current profile.
-      let activeJob = event.imei ? inProgress.find(j => j.gpsliveImei === event.imei) : undefined;
-      let driverInitials = activeJob?.driverInitials;
-      let matchedBy: "pinned_imei" | "plate_fallback" = "pinned_imei";
-
-      if (!activeJob) {
-        // Fallback for jobs that started with no device pinned -- no GPSLive key
-        // configured at start time, or no matching device for that driver yet. Same
-        // plate/initials guess this route always used, now only a safety net rather
-        // than the primary path.
-        matchedBy = "plate_fallback";
-        const deviceName = event.deviceName || "";
-        const drivers = await listDriverProfiles();
-        const driverIndex = buildDriverMatchIndex(drivers);
-        const matched = matchDriverByPlateAndName(guessPlateFromDeviceName(deviceName), deviceName, driverIndex);
-
-        if (!matched) {
-          log.debug("gpslive congestion webhook: no pinned job or driver matched", {
-            deviceName, imei: event.imei, event_id: event.event_id
-          });
-          res.status(200).json({ ok: true, matched: false });
-          return;
-        }
-
-        activeJob = inProgress.find(j => j.driverInitials === matched.initials);
-        driverInitials = matched.initials;
-      }
-
-      if (!activeJob || !driverInitials) {
-        // driverInitials is set as soon as either strategy identifies a driver, even
-        // if (as here) that driver turns out to have no job in progress -- so this
-        // correctly reports "matched: true, activeJob: false" for that case, not a
-        // false "no match" just because the fallback path was the one that found them.
-        res.status(200).json({ ok: true, matched: Boolean(driverInitials), activeJob: false });
-        return;
-      }
-
-      const zone = isCongestion ? "congestion" : "tunnel";
-      const alreadyFlagged = isCongestion ? activeJob.congestionZoneEnteredAt : activeJob.tunnelZoneEnteredAt;
-      if (alreadyFlagged) {
-        // Already notified for this job -- GPSLive fires "Zone In" on every pass
-        // through the zone (and retries failed deliveries), not just the first.
-        res.status(200).json({ ok: true, alreadyFlagged: true });
-        return;
-      }
-
-      // The job's own pinned imei when set (primary match), otherwise the event's --
-      // either way this is the physical device identity alreadyChargedTodayForVan
-      // needs, not something re-derived from the driver's current profile.
-      const imei = activeJob.gpsliveImei || event.imei || "";
-
-      if (isCongestion) {
-        await flagCongestionZoneEntry(activeJob.jobId, driverInitials, imei);
-      } else {
-        await flagTunnelZoneEntry(activeJob.jobId, driverInitials, imei);
-      }
-
-      log.info(`${zone} zone entry detected via webhook`, {
-        job_id: activeJob.jobId, driver: driverInitials, event_id: event.event_id, matched_by: matchedBy
-      });
-      res.status(200).json({ ok: true, flagged: true, zone });
+      const batch = Array.isArray(req.body) ? req.body : [req.body];
+      if (batch.length > 100) { res.status(413).json({ error: { code: "WEBHOOK_BATCH_TOO_LARGE" } }); return; }
+      const results = [];
+      const receivedAt = new Date().toISOString();
+      for (const event of batch) results.push(await ingestGpsWebhook(event, receivedAt));
+      res.status(200).json({ ok: true, results });
     } catch (error) {
       log.error("gpslive congestion webhook failed", error);
       res.status(500).json({ error: { code: "WEBHOOK_PROCESSING_FAILED" } });

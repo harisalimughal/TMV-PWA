@@ -3,6 +3,7 @@ import { formatLondonDateTime } from "../utils/date";
 import { resolveDriver } from "../utils/drivers";
 import { formatLocationLabel, type CapturedLocation } from "../../../../lib/geo";
 import { scenarioPointFromRecord } from "../utils/scenarioPoint";
+import { ReportDocumentHeader, ReportDocumentFooter, ReportRecordMeta } from "./ReportDocumentHeader";
 
 interface Props {
   item: any;
@@ -25,9 +26,9 @@ function PhotoSection({ title, src, capturedAt, location, locationName }: PhotoS
   const [failed, setFailed] = useState(false);
 
   return (
-    <div className="flex-1 flex flex-col mb-8 min-h-0">
+    <div className="report-media-section flex-1 flex flex-col mb-8 min-h-0">
       <h2 className="text-[14px] font-semibold text-[#1F2937] mb-3">{title}</h2>
-      <div className="flex-1 w-full bg-[#F3F4F6] rounded-card border border-[#E5E7EB] shadow-sm overflow-hidden flex items-center justify-center p-2">
+      <div className="report-media-frame flex-1 w-full bg-[#F3F4F6] rounded-card border border-[#E5E7EB] shadow-sm overflow-hidden flex items-center justify-center p-2">
         {src && !failed ? (
           <img
             src={src}
@@ -89,48 +90,9 @@ export function PaperScenarioReport({ item, kind, isPreview = false }: Props) {
     liability: "Liability Report"
   };
   const title = titleMap[kind] || "Report";
-  const refId: string | null = item.id || item.jobId?.split("-")[1] || null;
-  const driverColor = driverInitials === "UN" ? "bg-amber-500" : "bg-[#F59E0B]";
-
-  const Header = () => (
-    <div className="flex items-start justify-between mb-8 shrink-0">
-      <h1 className="text-[24px] font-bold text-admin-ink">{title}</h1>
-      <div className="flex flex-col items-end">
-        <div className="text-[20px] font-black text-admin-brand tracking-tighter mb-1">THE MAN VAN</div>
-        <span className="text-[12px] font-bold text-admin-ink tracking-wider">020 3773 9113</span>
-      </div>
-    </div>
-  );
-
-  const SubmitterCard = () => (
-    <div className="flex items-center justify-between p-4 mb-8 bg-[#F8F9FA] rounded-card border border-[#E5E7EB] shrink-0">
-      <div className="flex items-center gap-3 min-w-0">
-        <div className={`w-10 h-10 rounded-full ${driverColor} text-white font-bold text-[14px] flex items-center justify-center border border-admin-brand/20 shrink-0`}>
-          {driverInitials}
-        </div>
-        <div className="min-w-0">
-          <div className="text-[14px] font-bold text-admin-ink leading-tight truncate">{driverName}</div>
-          <div className="text-[12px] font-medium text-admin-muted mt-0.5">{formattedTime} | Europe/London</div>
-        </div>
-      </div>
-      <div className="flex flex-col items-end gap-1 shrink-0">
-        <div className="px-3 py-1.5 bg-white border border-[#E5E7EB] rounded-full text-[12px] font-bold text-admin-muted uppercase tracking-widest shadow-sm">
-          {refId ? `#${refId}` : "Reference pending"}
-        </div>
-        {scenarioPoint && (
-          <div
-            title={scenarioPoint.full}
-            className="px-2.5 py-1 bg-admin-brand-soft border border-admin-brand/20 rounded-full text-[10px] font-bold uppercase tracking-widest text-admin-brand"
-          >
-            {scenarioPoint.point}
-          </div>
-        )}
-      </div>
-    </div>
-  );
-
+  const refId: string | null = item.id || item.jobId || null;
   const ParkingNotice = () => (
-    <div className="bg-[#FFFBEB] border border-[#FDE68A] p-3 rounded-card mb-3 shadow-sm shrink-0">
+    <div className="report-notice bg-[#FFFBEB] border border-[#FDE68A] p-3 rounded-card mb-3 shadow-sm shrink-0">
       <h3 className="text-[12px] font-bold text-amber-600 mb-1">Penalty Charge Liability Notice</h3>
       <p className="text-[11px] text-amber-900 leading-relaxed">
         In the event a fine is received, you will cover the cost directly, ensuring the company and drivers are not held liable. Penalty Charge Notice fines typically start at GBP 60 and can go up to GBP 180, depending on the severity of the offence. If paid within 14 days, most fines are reduced by 50%.
@@ -140,7 +102,7 @@ export function PaperScenarioReport({ item, kind, isPreview = false }: Props) {
 
   const DetailsAndSignature = () => (
     <div className="mb-3 grid grid-cols-1 gap-3 shrink-0">
-      <div className="border border-[#E5E7EB] rounded-card overflow-hidden">
+      <div className="report-fact-list border border-[#E5E7EB] rounded-card overflow-hidden">
         {scenarioPoint && (
           <div className="flex items-center justify-between gap-4 p-3 border-b border-[#E5E7EB] bg-white">
             <span className="text-label font-medium text-fg-muted">Reported At</span>
@@ -192,7 +154,7 @@ export function PaperScenarioReport({ item, kind, isPreview = false }: Props) {
 
       <div className="mb-3 shrink-0">
         <h2 className="text-label font-medium text-fg-muted mb-1.5">Client Signature:</h2>
-        <div className="border border-[#E5E7EB] rounded-card p-4 bg-[#F8F9FA] flex flex-col items-center justify-center min-h-[100px]">
+        <div className="report-signature border border-[#E5E7EB] rounded-card p-4 bg-[#F8F9FA] flex flex-col items-center justify-center min-h-[100px]">
           {signatureUrl ? (
             <img src={signatureUrl} alt="Client Signature" className="max-h-[70px] object-contain mix-blend-multiply" />
           ) : (
@@ -213,26 +175,24 @@ export function PaperScenarioReport({ item, kind, isPreview = false }: Props) {
 
   const Page = ({ page, children }: { page: number; children: React.ReactNode }) => (
     <div
-      className={`bg-white text-admin-ink mx-auto ${isPreview ? "w-full shadow-lg border border-admin-line mb-8 overflow-hidden rounded-control p-8 min-h-[297mm]" : "scenario-print-page"}`}
+      className={`bg-white text-admin-ink mx-auto ${isPreview ? "report-preview-page w-full" : "scenario-print-page"}`}
       style={{
         boxSizing: "border-box",
         pageBreakAfter: page < totalPages ? "always" : "auto",
         breakAfter: page < totalPages ? "page" : "auto"
       }}
     >
-      <div className="flex h-full flex-col min-h-[260mm]">
-        <Header />
-        <SubmitterCard />
+      <div className="report-page-content">
+        <ReportDocumentHeader title={title} reference={refId || item.jobId || title} page={page} />
+        {page === 1 && <ReportRecordMeta name={driverName} initials={driverInitials} timestamp={formattedTime} reference={refId || "Not recorded"} jobId={item.jobId} point={scenarioPoint?.full} />}
         {children}
-        <div className="pt-3 mt-auto border-t border-[#E5E7EB] flex justify-end shrink-0">
-          <span className="text-[11px] font-semibold text-admin-muted">{page}/{totalPages}</span>
-        </div>
+        <ReportDocumentFooter reference={refId || item.jobId || title} page={page} total={totalPages} />
       </div>
     </div>
   );
 
   return (
-    <div className={`paper-document font-sans ${isPreview ? "w-full" : "block"}`}>
+    <div className={`report-document paper-document font-sans ${isPreview ? "report-document-preview w-full" : "block"}`}>
       <style>{`
         @page {
           size: 210mm 297mm;
@@ -242,13 +202,12 @@ export function PaperScenarioReport({ item, kind, isPreview = false }: Props) {
         @media print {
           .scenario-print-page {
             width: 210mm !important;
-            height: 297mm !important;
-            max-height: 297mm !important;
-            padding: 16mm 20mm !important;
+            min-height: 297mm !important;
+            padding: 14mm !important;
             margin: 0 !important;
             box-sizing: border-box !important;
             background-color: white !important;
-            overflow: hidden !important;
+            overflow: visible !important;
           }
           .scenario-print-page:not(:last-child) {
             page-break-after: always !important;

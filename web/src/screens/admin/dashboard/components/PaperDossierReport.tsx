@@ -4,6 +4,8 @@ import { formatLondonDateTime } from "../utils/date";
 import { formatLocationLabel, type CapturedLocation } from "../../../../lib/geo";
 import { scenarioPointFromRecord } from "../utils/scenarioPoint";
 import { adjustmentReasonForMismatch } from "../utils/workBreakdown";
+import { JobTimeBreakdown } from "./JobTimeBreakdown";
+import { ReportDocumentHeader, ReportDocumentFooter, ReportRecordMeta } from "./ReportDocumentHeader";
 
 interface Props {
   job: NormalizedJob;
@@ -84,7 +86,7 @@ export function PaperDossierReport({ job, isPreview = false }: Props) {
   
   // Helpers
   const formatPounds = (cents: number | undefined) => `£${((cents || 0) / 100).toFixed(2)}`;
-  const totalCharges = job.totalCharges || job.calculatedTotalCharges || (job.basePrice || 0) + (job.extraCharges || 0) + (job.overtimeCharge || 0);
+  const totalCharges = job.totalCharges ?? job.calculatedTotalCharges ?? (job.basePrice || 0) + (job.extraCharges || 0) + (job.overtimeCharge || 0);
   const adjustmentReason = adjustmentReasonForMismatch(job);
   const MoneyRow = ({ label, value, strong = false }: { label: string; value: number; strong?: boolean }) => (
     <div className="flex items-center justify-between p-3 border-b border-[#E5E7EB] bg-white last:border-b-0">
@@ -116,33 +118,6 @@ export function PaperDossierReport({ job, isPreview = false }: Props) {
   const submitterInitials = job.driverInitials || "UN";
   const formattedTime = formatLondonDateTime(job.actualFinish || job.bookedStart || now);
 
-  const Header = () => (
-    <div className="flex items-start justify-between mb-8 shrink-0">
-      <h1 className="text-[24px] font-bold text-admin-ink">Job Completed</h1>
-      <div className="flex flex-col items-end">
-        <div className="text-[20px] font-black text-admin-brand tracking-tighter mb-1">THE MAN VAN</div>
-        <span className="text-[12px] font-bold text-admin-ink tracking-wider">020 3773 9113</span>
-      </div>
-    </div>
-  );
-
-  const SubmitterCard = () => (
-    <div className="flex items-center justify-between p-4 mb-8 bg-[#F8F9FA] rounded-card border border-[#E5E7EB] shrink-0">
-      <div className="flex items-center gap-3">
-        <div className="w-10 h-10 rounded-full bg-admin-brand-soft text-admin-brand font-bold text-[14px] flex items-center justify-center border border-admin-brand/20">
-          {submitterInitials}
-        </div>
-        <div>
-          <div className="text-[14px] font-bold text-admin-ink leading-tight">{submitterName}</div>
-          <div className="text-[12px] font-medium text-admin-muted mt-0.5">{formattedTime}</div>
-        </div>
-      </div>
-      <div className="px-3 py-1.5 bg-white border border-[#E5E7EB] rounded-full text-[12px] font-bold text-admin-muted uppercase tracking-widest shadow-sm">
-        #{job.jobId.slice(0, 8)}
-      </div>
-    </div>
-  );
-
   const PhotoSection = ({
     title,
     src,
@@ -160,9 +135,9 @@ export function PaperDossierReport({ job, isPreview = false }: Props) {
   }) => {
     const [failed, setFailed] = useState(false);
     return (
-      <div className="flex flex-col mb-8">
+      <div className="report-media-section flex flex-col mb-8">
         <h2 className="text-[14px] font-semibold text-[#1F2937] mb-3">{title}</h2>
-        <div className="w-full h-[360px] bg-[#F3F4F6] rounded-card border border-[#E5E7EB] shadow-sm overflow-hidden flex items-center justify-center p-2">
+        <div className="report-media-frame w-full h-[360px] bg-[#F3F4F6] rounded-card border border-[#E5E7EB] shadow-sm overflow-hidden flex items-center justify-center p-2">
            {src && !failed ? (
              <img
                src={src}
@@ -207,7 +182,7 @@ export function PaperDossierReport({ job, isPreview = false }: Props) {
     const scenarioPoint = scenarioPointFromRecord(scenario);
     return (
       <div className="mb-3 grid grid-cols-1 gap-3 shrink-0">
-        <div className="border border-[#E5E7EB] rounded-card overflow-hidden">
+        <div className="report-fact-list border border-[#E5E7EB] rounded-card overflow-hidden">
           <DetailsRow label="Submitted" value={`${formatLondonDateTime(scenario.timestamp)} | ${scenario.driver || "Driver not recorded"}`} />
           {scenarioPoint && <DetailsRow label="Reported At" value={scenarioPoint.full} />}
           <DetailsRow label="Client Name" value={scenario.clientName || "Not recorded"} />
@@ -226,7 +201,7 @@ export function PaperDossierReport({ job, isPreview = false }: Props) {
         {showSignature && (
           <div className="mb-3 shrink-0">
             <h2 className="text-label font-medium text-fg-muted mb-1.5">Scenario Signature:</h2>
-            <div className="border border-[#E5E7EB] rounded-card p-4 bg-[#F8F9FA] flex flex-col items-center justify-center min-h-[100px]">
+            <div className="report-signature border border-[#E5E7EB] rounded-card p-4 bg-[#F8F9FA] flex flex-col items-center justify-center min-h-[100px]">
               {scenario.signature ? (
                 <img src={scenario.signature.thumbUrl} alt="Scenario signature" className="max-h-[70px] object-contain mix-blend-multiply" />
               ) : (
@@ -261,28 +236,26 @@ export function PaperDossierReport({ job, isPreview = false }: Props) {
   // boundary.
   const Page = ({ page, totalPages, children }: { page: number, totalPages: number, children: React.ReactNode }) => (
     <div
-      className={`bg-white text-admin-ink mx-auto ${isPreview ? 'w-full shadow-lg border border-admin-line mb-8 overflow-hidden rounded-control p-8 min-h-[297mm]' : 'print-page'}`}
+      className={`bg-white text-admin-ink mx-auto ${isPreview ? 'report-preview-page w-full' : 'print-page'}`}
       style={{
         boxSizing: 'border-box',
         pageBreakAfter: page < totalPages ? 'always' : 'auto',
         breakAfter: page < totalPages ? 'page' : 'auto'
       }}
     >
-      <div className="flex h-full flex-col min-h-[260mm]">
-        <Header />
-        {page === 1 && <SubmitterCard />}
+      <div className="report-page-content">
+        <ReportDocumentHeader title="Job Completed" reference={job.jobId} page={page} />
+        {page === 1 && <ReportRecordMeta name={submitterName} initials={submitterInitials} timestamp={formattedTime} reference={job.jobId} />}
         {children}
-        <div className="pt-3 mt-auto border-t border-[#E5E7EB] flex justify-end shrink-0">
-          <span className="text-[11px] font-semibold text-admin-muted">{page}/{totalPages}</span>
-        </div>
+        <ReportDocumentFooter reference={job.jobId} page={page} total={totalPages} />
       </div>
     </div>
   );
 
-  const totalPages = Math.max(reportPages.length, 1);
+  const totalPages = Math.max(reportPages.length, 1) + 1;
 
   return (
-    <div className={`font-sans ${isPreview ? 'w-full' : 'block'}`}>
+    <div className={`report-document font-sans ${isPreview ? 'report-document-preview w-full' : 'block'}`}>
       <style>{`
         @page {
           size: 210mm 297mm;
@@ -292,13 +265,12 @@ export function PaperDossierReport({ job, isPreview = false }: Props) {
         @media print {
           .print-page {
             width: 210mm !important;
-            height: 297mm !important;
-            max-height: 297mm !important;
-            padding: 16mm 20mm !important;
+            min-height: 297mm !important;
+            padding: 14mm !important;
             margin: 0 !important;
             box-sizing: border-box !important;
             background-color: white !important;
-            overflow: hidden !important;
+            overflow: visible !important;
           }
           .print-page:not(:last-child) {
             page-break-after: always !important;
@@ -347,9 +319,9 @@ export function PaperDossierReport({ job, isPreview = false }: Props) {
             />
             
             {/* Inject data blocks on specific pages if possible, or at the end */}
-            {pageNum === 1 && (
-              <div className="mb-3 grid grid-cols-1 gap-3 shrink-0">
-                <div className="border border-[#E5E7EB] rounded-card overflow-hidden">
+            {index === reportPages.findIndex(page => page.kind === "evidence") && (
+              <div className="report-facts report-job-facts mb-3 shrink-0">
+                <div className="report-fact-list border border-[#E5E7EB] rounded-card overflow-hidden">
                   <div className="flex items-center justify-between p-3 border-b border-[#E5E7EB] bg-white">
                     <span className="text-label font-medium text-fg-muted">Customer Name</span>
                     <span className="text-[13px] font-bold text-admin-ink">{job.customerName || "N/A"}</span>
@@ -407,7 +379,7 @@ export function PaperDossierReport({ job, isPreview = false }: Props) {
                     <span className="text-[13px] font-bold text-admin-ink truncate max-w-[240px]">{job.dropoff || "N/A"}</span>
                   </div>
                 </div>
-                <div className="border border-[#E5E7EB] rounded-card overflow-hidden">
+                <div className="report-fact-list border border-[#E5E7EB] rounded-card overflow-hidden">
                   <MoneyRow label="Base Price" value={job.basePrice || 0} />
                   <MoneyRow label="Extra Charges" value={job.extraCharges || 0} />
                   <MoneyRow label="Overtime" value={job.overtimeCharge || 0} />
@@ -442,10 +414,10 @@ export function PaperDossierReport({ job, isPreview = false }: Props) {
               </div>
             )}
 
-            {(pageNum === totalPages || (pageNum === 3 && totalPages >= 3)) && index === lastEvidenceReportIndex && (
+            {(pageNum === reportPages.length || (pageNum === 3 && reportPages.length >= 3)) && index === lastEvidenceReportIndex && (
               <div className="mb-3 shrink-0">
                 <h2 className="text-label font-medium text-fg-muted mb-1.5">Client Signature:</h2>
-                <div className="border border-[#E5E7EB] rounded-card p-4 bg-[#F8F9FA] flex flex-col items-center justify-center min-h-[100px]">
+                <div className="report-signature border border-[#E5E7EB] rounded-card p-4 bg-[#F8F9FA] flex flex-col items-center justify-center min-h-[100px]">
                   {job.signatureUrl ? (
                     <img src={job.signatureUrl} alt="Client Signature" className="max-h-[70px] object-contain mix-blend-multiply" />
                   ) : (
@@ -465,6 +437,9 @@ export function PaperDossierReport({ job, isPreview = false }: Props) {
         );
       })}
 
+      <Page page={totalPages} totalPages={totalPages}>
+        <JobTimeBreakdown job={job} />
+      </Page>
     </div>
   );
 }

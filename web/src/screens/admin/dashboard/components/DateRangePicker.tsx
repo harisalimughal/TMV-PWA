@@ -1,6 +1,8 @@
 /** Ported from TMV-Chat-bot's dashboard/web/src/components/DateRangePicker.tsx. */
 import React from "react";
 import { Calendar } from "lucide-react";
+import { DateTime } from "luxon";
+import { londonDateInput } from "../utils/reportNavigation";
 
 interface Props {
   from?: string;
@@ -15,24 +17,10 @@ function isoDay(date: Date): string {
 }
 
 export function dateRangeForPreset(preset: Preset): { from?: string; to?: string } {
-  const now = new Date();
-  const todayStr = isoDay(now);
-
-  if (preset === "today") {
-    return { from: `${todayStr}T00:00:00.000Z`, to: `${todayStr}T23:59:59.999Z` };
-  }
-  if (preset === "tomorrow") {
-    const tomorrow = new Date(now.getTime() + 86400000);
-    const tomorrowStr = isoDay(tomorrow);
-    return { from: `${tomorrowStr}T00:00:00.000Z`, to: `${tomorrowStr}T23:59:59.999Z` };
-  }
-  if (preset === "yesterday") {
-    const y = new Date(now.getTime() - 86400000);
-    const yStr = isoDay(y);
-    return { from: `${yStr}T00:00:00.000Z`, to: `${yStr}T23:59:59.999Z` };
-  }
-  const start = new Date(now.getTime() - 7 * 86400000);
-  return { from: start.toISOString(), to: now.toISOString() };
+  const today = DateTime.now().setZone("Europe/London").startOf("day");
+  const start = preset === "tomorrow" ? today.plus({ days: 1 }) : preset === "yesterday" ? today.minus({ days: 1 }) : preset === "7d" ? today.minus({ days: 6 }) : today;
+  const end = preset === "7d" ? today.endOf("day") : start.endOf("day");
+  return { from: start.toUTC().toISO()!, to: end.toUTC().toISO()! };
 }
 
 export const defaultDashboardDateRange = () => dateRangeForPreset("today");
@@ -46,21 +34,23 @@ export function DateRangePicker({ from, to, onChange }: Props) {
   const isPresetActive = (preset: Preset): boolean => {
     if (!from || !to) return false;
     const range = dateRangeForPreset(preset);
-    return from.slice(0, 10) === range.from?.slice(0, 10) && to.slice(0, 10) === range.to?.slice(0, 10);
+    return londonDateInput(from) === londonDateInput(range.from) && londonDateInput(to) === londonDateInput(range.to);
   };
 
   return (
     <div className="flex flex-wrap items-center gap-2 text-xs">
-      <div className="flex items-center gap-1 bg-admin-surface p-1 rounded-card border border-admin-line">
-        {(["today", "tomorrow", "7d"] as const).map(preset => (
+      <div className="flex flex-wrap items-center gap-1 bg-admin-surface p-1 rounded-card border border-admin-line">
+        {(["today", "yesterday", "tomorrow", "7d"] as const).map(preset => (
           <button
             key={preset}
+            type="button"
+            aria-pressed={isPresetActive(preset)}
             onClick={() => setPreset(preset)}
-            className={`px-2.5 py-1 rounded-control font-medium transition ${
-              isPresetActive(preset) ? "bg-white text-admin-brand shadow-sm font-bold" : "text-admin-muted hover:text-admin-ink"
+            className={`px-2.5 py-1 min-h-[44px] sm:min-h-[32px] rounded-control transition ${
+              isPresetActive(preset) ? "bg-admin-brand text-white shadow-sm font-bold" : "text-admin-muted hover:text-admin-ink font-medium"
             }`}
           >
-            {preset === "today" ? "Today" : preset === "tomorrow" ? "Tomorrow" : "7 Days"}
+            {{ today: "Today", yesterday: "Yesterday", tomorrow: "Tomorrow", "7d": "7 Days" }[preset]}
           </button>
         ))}
       </div>
@@ -69,15 +59,17 @@ export function DateRangePicker({ from, to, onChange }: Props) {
         <Calendar className="w-3.5 h-3.5 text-admin-muted" />
         <input
           type="date"
-          value={from ? from.slice(0, 10) : ""}
-          onChange={e => onChange(e.target.value ? `${e.target.value}T00:00:00.000Z` : undefined, to)}
+          aria-label="From date"
+          value={londonDateInput(from)}
+          onChange={e => onChange(e.target.value ? DateTime.fromISO(e.target.value, { zone: "Europe/London" }).startOf("day").toUTC().toISO()! : undefined, to)}
           className="bg-transparent border-0 text-xs focus:outline-none font-mono"
         />
         <span className="text-admin-muted">to</span>
         <input
           type="date"
-          value={to ? to.slice(0, 10) : ""}
-          onChange={e => onChange(from, e.target.value ? `${e.target.value}T23:59:59.999Z` : undefined)}
+          aria-label="To date"
+          value={londonDateInput(to)}
+          onChange={e => onChange(from, e.target.value ? DateTime.fromISO(e.target.value, { zone: "Europe/London" }).endOf("day").toUTC().toISO()! : undefined)}
           className="bg-transparent border-0 text-xs focus:outline-none font-mono"
         />
       </div>

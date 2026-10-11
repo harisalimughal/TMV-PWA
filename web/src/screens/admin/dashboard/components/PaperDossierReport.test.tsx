@@ -6,6 +6,18 @@ import { PaperDossierReport } from "./PaperDossierReport";
 import { PaperJobReport } from "./PaperJobReport";
 import type { JobScenarioSubmission, NormalizedJob } from "../types";
 import { vi } from "vitest";
+import { paperJobSample } from "../../../../../test/reportPreview.sample";
+
+describe("Formal dossier print consistency", () => {
+  it("retains matching preview/print information, full job references and first-page branding", () => {
+    const preview = render(<PaperDossierReport job={paperJobSample} isPreview />);
+    const printable = render(<PaperDossierReport job={paperJobSample} />);
+    expect(preview.container.textContent).toBe(printable.container.textContent);
+    expect(preview.container.querySelector(".report-record-meta")).toHaveTextContent(paperJobSample.jobId);
+    expect(preview.container.querySelectorAll(".report-heading img")).toHaveLength(1);
+    expect(printable.container.querySelectorAll(".report-page-footer")).toHaveLength(7);
+  });
+});
 
 vi.mock("../../../../api/admin", () => ({
   fetchDrivers: vi.fn().mockResolvedValue([])
@@ -166,6 +178,21 @@ describe("JobScenarioSection", () => {
 });
 
 describe("PaperDossierReport", () => {
+  it("uses one report title/contact header without repeating company branding and preserves report data", () => {
+    const source = { ...job, pickup: "A full collection address with building and access details", dropoff: "A full delivery address with floor and entry details",
+      scenarios: [checkinScenario, liabilityScenario] };
+    const before = JSON.stringify(source);
+    const { container } = render(<PaperDossierReport job={source} isPreview />);
+    expect(screen.getAllByRole("heading", { name: "Job Completed" })).toHaveLength(1);
+    expect(screen.getAllByText("020 3773 9113")).toHaveLength(1);
+    expect(screen.queryByText("THE MAN VAN")).not.toBeInTheDocument();
+    expect(screen.getByText(source.pickup)).toBeInTheDocument(); expect(screen.getByText(source.dropoff)).toBeInTheDocument();
+    expect(screen.getAllByText("£175.00").length).toBeGreaterThan(0);
+    expect(screen.getByRole("img", { name: "Arrival" })).toHaveAttribute("src", "/arrival.jpg");
+    expect(container.querySelectorAll(".report-preview-page")).toHaveLength(4);
+    expect(container.querySelectorAll(".report-document-continuation")).toHaveLength(0);
+    expect(JSON.stringify(source)).toBe(before);
+  });
   it("prints evidence metadata and linked job scenario submissions", () => {
     render(<PaperDossierReport job={{
       ...job,
@@ -255,6 +282,13 @@ describe("PaperDossierReport", () => {
 });
 
 describe("PaperJobReport", () => {
+  it("has one completion heading and no repeated brand logo across evidence and final pages", () => {
+    render(<PaperJobReport job={job} />);
+    expect(screen.getAllByRole("heading", { name: "Job Completed" })).toHaveLength(1);
+    expect(screen.queryByRole("img", { name: "The Man Van" })).not.toBeInTheDocument();
+    expect(screen.getByText(job.customerEmail)).toBeInTheDocument();
+    expect(screen.getAllByText("020 3773 9113")).toHaveLength(1);
+  });
   it("prints the driver's on-my-way timestamp in the finished job preview", () => {
     render(<PaperJobReport job={{
       ...job,

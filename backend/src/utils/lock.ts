@@ -30,13 +30,24 @@ export async function withLock<T>(key: string, fn: () => Promise<T>, options: Lo
   const gate = new Promise<void>(resolve => {
     release = resolve;
   });
-  locks.set(key, previous.then(() => gate));
+  const tail = previous.catch(() => undefined).then(() => gate);
+  locks.set(key, tail);
 
   const waitStarted = Date.now();
-  await Promise.race([
-    previous.catch(() => undefined),
-    new Promise<void>((_, reject) => setTimeout(() => reject(new Error(`Lock ${key} timed out`)), timeoutMs))
-  ]);
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    await Promise.race([
+      previous.catch(() => undefined),
+      new Promise<void>((_, reject) => { timer = setTimeout(() => reject(new Error(`Lock ${key} timed out`)), timeoutMs); })
+    ]);
+  } catch (error) {
+    // A cancelled waiter still leaves its predecessor in control of the queue.
+    release();
+    void tail.then(() => { if (locks.get(key) === tail) locks.delete(key); });
+    throw error;
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
   const waited = Date.now() - waitStarted;
   if (waited > 250) log.debug("waited for job lock", { lock_key: key, waited_ms: waited });
 
@@ -44,18 +55,7 @@ export async function withLock<T>(key: string, fn: () => Promise<T>, options: Lo
     return await fn();
   } finally {
     release();
-    // Drop the entry once nothing is queued behind it, so the map cannot grow forever.
-    queueMicrotask(() => {
-      if (locks.get(key) === undefined) return;
-      void Promise.resolve(locks.get(key)).then(() => {
-        const current = locks.get(key);
-        if (current) {
-          void Promise.race([current, Promise.resolve("free")]).then(value => {
-            if (value === "free") locks.delete(key);
-          });
-        }
-      });
-    });
+    if (locks.get(key) === tail) locks.delete(key);
   }
 }
 

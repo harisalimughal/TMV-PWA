@@ -15,6 +15,8 @@ import { WorkflowState } from "../src/workflow/workflow.states";
 const getJob = vi.fn();
 const listJobs = vi.fn().mockResolvedValue([]);
 const getDriverProfile = vi.fn();
+const summaries = vi.fn().mockResolvedValue([]);
+vi.mock("../src/db/driver-job-summary.repo", () => ({ listDriverJobSummariesForJobs: (...args: unknown[]) => summaries(...args) }));
 
 vi.mock("../src/config/env", () => ({
   env: { timezone: "Europe/London", calendarSyncTtlMs: 120_000 }
@@ -34,7 +36,7 @@ vi.mock("../src/jobs/booking.service", () => ({
   syncTodayBookings: vi.fn().mockResolvedValue([])
 }));
 
-import { getJobsGroupedForDriver, getNextJobForDriver, getTomorrowJobsForDriver } from "../src/jobs/jobs.service";
+import { getJobsGroupedForDriver, getNextJobForDriver, getTomorrowJobsForDriver, startJob, sendOnMyWay } from "../src/jobs/jobs.service";
 
 const driver = {
   initials: "HE",
@@ -52,6 +54,7 @@ describe("driver job lists are scoped to that driver's own initials", () => {
     vi.clearAllMocks();
     vi.useRealTimers();
     listJobs.mockResolvedValue([]);
+    summaries.mockResolvedValue([]);
     getDriverProfile.mockResolvedValue(driver);
   });
 
@@ -63,6 +66,26 @@ describe("driver job lists are scoped to that driver's own initials", () => {
     await getJobsGroupedForDriver("helena@example.com");
     expect(listJobs).toHaveBeenCalledTimes(1);
     expect(listJobs).toHaveBeenCalledWith({ driverInitials: "HE" });
+  });
+
+  it("restores pending Manual details after relogin and releases the next job after submission", async () => {
+    const completed = { jobId: "DONE", driverInitials: "HE", status: JobStatus.COMPLETED, currentState: WorkflowState.COMPLETED, bookedStart: new Date().toISOString(), manualDetailsRequiredAt: new Date().toISOString() };
+    const next = { jobId: "NEXT", driverInitials: "HE", status: JobStatus.READY, currentState: WorkflowState.READY, bookedStart: new Date().toISOString() };
+    listJobs.mockResolvedValue([completed, next]);
+    expect((await getNextJobForDriver("helena@example.com")).job?.jobId).toBe("DONE");
+    expect((await getJobsGroupedForDriver("helena@example.com")).pendingManualDetails?.jobId).toBe("DONE");
+    getJob.mockResolvedValue({ ...next, onMyWayAt: new Date().toISOString() });
+    await expect(startJob("NEXT", "helena@example.com")).rejects.toThrow("Manual details");
+    await expect(sendOnMyWay("NEXT", "helena@example.com")).rejects.toThrow("Manual details");
+    summaries.mockResolvedValue([{ jobId: "DONE" }]);
+    expect((await getNextJobForDriver("helena@example.com")).job?.jobId).toBe("NEXT");
+    expect((await getJobsGroupedForDriver("helena@example.com")).pendingManualDetails).toBeNull();
+  });
+
+  it("never gates drivers for historical completed jobs without the prospective marker", async () => {
+    listJobs.mockResolvedValue([{ jobId: "OLD", driverInitials: "HE", status: JobStatus.COMPLETED }]);
+    expect((await getNextJobForDriver("helena@example.com")).job).toBeNull();
+    expect(summaries).not.toHaveBeenCalled();
   });
 
   it("getNextJobForDriver (the home/active-job screen) queries only this driver's jobs", async () => {

@@ -10,13 +10,17 @@ import { WorkflowState } from "../workflow/workflow.states";
 import { DriverProfile, Job, JobStatus } from "./job.types";
 import { syncTodayBookings } from "./booking.service";
 import { log } from "../utils/logger";
-import { withJobLock } from "../utils/lock";
+import { withJobLock, withLock } from "../utils/lock";
+import { assertQueueReleased, pendingManualDetails } from "./manual-details-gate";
+import { recordGpsAssignment } from "../gps/gps.association";
+import { captureRoadTariff } from "../gps/road-charge.tariff";
 import { ValidationError } from "../workflow/validation.engine";
 import { sendJobStartedSms } from "../integrations/firetext";
 import { sendJobStartedEmail, sendOpsJobCompletionEmail } from "../google/gmail";
 import { JOB_STARTED_MESSAGE_TEMPLATE } from "../notifications/message";
 import { isMessageEnabled } from "../notifications/message-catalog";
 import { checkCongestionZoneAtJobStart } from "./congestion-zone.service";
+import { calculateJobTotal, freezeJobCharges, prepareJobTimeBilling } from "./job-billing.service";
 
 export function driverIdentifier(email?: string, chatUserName?: string): string {
   return email?.trim() || chatUserName?.trim() || "";
@@ -139,6 +143,8 @@ export async function getNextJobForDriver(
   // a single indexed document lookup, so this costs a few ms, not a second query.
   const driver = await resolveDriver(identifier);
   const jobs = await listJobs({ driverInitials: driver.initials });
+  const pending = await pendingManualDetails(jobs);
+  if (pending) return { job: pending, driver };
 
   const active = jobs
     .filter(j => j.status === JobStatus.IN_PROGRESS && j.driverInitials === driver.initials)
@@ -221,6 +227,7 @@ export async function getJobsGroupedForDriver(identifier: string): Promise<{
   today: Job[];
   past: Job[];
   next: Job[];
+  pendingManualDetails?: Job | null;
 }> {
   // This is the screen a driver actually watches for a newly-assigned job to appear
   // on, so a refresh here nudges a throttled, fire-and-forget Calendar re-check (see
@@ -235,6 +242,7 @@ export async function getJobsGroupedForDriver(identifier: string): Promise<{
   // collection grew.
   const driver = await resolveDriver(identifier);
   const jobs = await listJobs({ driverInitials: driver.initials });
+  const pending = await pendingManualDetails(jobs);
   const now = DateTime.now().setZone(env.timezone);
   const todayKey = now.toISODate();
   const tomorrowKey = now.plus({ days: 1 }).toISODate();
@@ -260,7 +268,7 @@ export async function getJobsGroupedForDriver(identifier: string): Promise<{
   past.sort(byBookedStart);
   next.sort(byBookedStart);
 
-  return { driver, today, past, next };
+  return { driver, today, past, next, pendingManualDetails: pending };
 }
 
 export interface JobLookupOptions {
@@ -438,27 +446,32 @@ function sendJobStartedEmailIfAny(job: Job, driver: DriverProfile): void {
 export async function sendOnMyWay(jobId: string, identifier: string): Promise<Job> {
   return withJobLock(jobId, async () => {
     const { job, driver } = await getJobForDriver(jobId, identifier);
-    await markJobViewed(jobId, identifier, "Tapped I'm on the Way");
+    return withLock(`driver-queue:${driver.initials}`, async () => {
+      await assertQueueReleased(await listJobs({ driverInitials: driver.initials }), job);
+      await markJobViewed(jobId, identifier, "Tapped I'm on the Way");
 
-    if (job.status === JobStatus.COMPLETED) throw new ValidationError("This job is already completed.");
-    // Idempotent, not an error -- a double-tap or a stale screen re-sending this
-    // shouldn't surface a scary error to the driver, and re-notifying the customer a
-    // second time for the same job would just be noise.
-    if (job.onMyWayAt) return job;
+      if (job.status === JobStatus.COMPLETED) throw new ValidationError("This job is already completed.");
+      // Idempotent, not an error -- a double-tap or a stale screen re-sending this
+      // shouldn't surface a scary error to the driver, and re-notifying the customer a
+      // second time for the same job would just be noise.
+      if (job.onMyWayAt) return job;
 
-    if (isFutureDay(job.bookedStart)) {
-      const bookedDay = DateTime.fromISO(job.bookedStart).setZone(env.timezone).toFormat("cccc d LLLL");
-      throw new ValidationError(`This job is booked for ${bookedDay}. You can't notify the customer until then.`);
-    }
+      if (isFutureDay(job.bookedStart)) {
+        const bookedDay = DateTime.fromISO(job.bookedStart).setZone(env.timezone).toFormat("cccc d LLLL");
+        throw new ValidationError(`This job is booked for ${bookedDay}. You can't notify the customer until then.`);
+      }
 
-    const from = job.currentState;
-    const now = new Date().toISOString();
-    job.onMyWayAt = now;
+      const from = job.currentState;
+      const now = new Date().toISOString();
+      job.onMyWayAt = now;
+      await captureRoadTariff(job, now);
+      if (driver.imei) recordGpsAssignment(job, driver.imei, now, "profile-snapshot");
 
-    const savedJob = await saveJob(job, driver, "ON_MY_WAY", from, `Server on-my-way timestamp ${now}`);
-    sendJobStartedSmsIfAny(savedJob, driver);
-    sendJobStartedEmailIfAny(savedJob, driver);
-    return savedJob;
+      const savedJob = await saveJob(job, driver, "ON_MY_WAY", from, `Server on-my-way timestamp ${now}`);
+      sendJobStartedSmsIfAny(savedJob, driver);
+      sendJobStartedEmailIfAny(savedJob, driver);
+      return savedJob;
+    });
   });
 }
 
@@ -470,58 +483,61 @@ export async function startJob(jobId: string, identifier: string): Promise<Job> 
    */
   return withJobLock(jobId, async () => {
     const { job, driver } = await getJobForDriver(jobId, identifier);
-    await markJobViewed(jobId, identifier, "Tapped Start Job");
+    return withLock(`driver-queue:${driver.initials}`, async () => {
+      await assertQueueReleased(await listJobs({ driverInitials: driver.initials }), job);
+      await markJobViewed(jobId, identifier, "Tapped Start Job");
 
-    if (job.status === JobStatus.COMPLETED) throw new ValidationError("This job is already completed.");
+      if (job.status === JobStatus.COMPLETED) throw new ValidationError("This job is already completed.");
 
-    if (job.status === JobStatus.IN_PROGRESS) {
-      // A job walked back to READY (the header back-arrow on the arrival-photo step
-      // maps GO_BACK to READY) keeps status IN_PROGRESS. Without this it dead-ends:
-      // Start sees IN_PROGRESS and returns the job unchanged, still on READY. Nudge
-      // it forward again -- but not through the congestion-zone side effect, which
-      // already ran on the first start (and onMyWayAt is already set from back then).
-      if (job.currentState === WorkflowState.READY) {
-        const from = job.currentState;
-        job.currentState = WorkflowState.WAITING_ARRIVAL_PHOTO;
-        return saveJob(job, driver, "START_JOB", from, "re-advanced from READY (already in progress)");
+      if (job.status === JobStatus.IN_PROGRESS) {
+        // A job walked back to READY (the header back-arrow on the arrival-photo step
+        // maps GO_BACK to READY) keeps status IN_PROGRESS. Without this it dead-ends:
+        // Start sees IN_PROGRESS and returns the job unchanged, still on READY. Nudge
+        // it forward again -- but not through the congestion-zone side effect, which
+        // already ran on the first start (and onMyWayAt is already set from back then).
+        if (job.currentState === WorkflowState.READY) {
+          const from = job.currentState;
+          job.currentState = WorkflowState.WAITING_ARRIVAL_PHOTO;
+          return saveJob(job, driver, "START_JOB", from, "re-advanced from READY (already in progress)");
+        }
+        log.info("start job ignored; already started", { job_id: job.jobId, state: job.currentState });
+        return job;
       }
-      log.info("start job ignored; already started", { job_id: job.jobId, state: job.currentState });
-      return job;
-    }
 
-    // The customer has to actually be told the driver's coming before the job can
-    // start -- see sendOnMyWay above. This only guards a genuinely fresh start (the
-    // IN_PROGRESS branch above, which never reaches here, covers every job that
-    // already started before this check existed).
-    if (!job.onMyWayAt) {
-      throw new ValidationError("Tap \"I'm on the Way\" first so the customer's told before you start the job.");
-    }
+      // The customer has to actually be told the driver's coming before the job can
+      // start -- see sendOnMyWay above. This only guards a genuinely fresh start (the
+      // IN_PROGRESS branch above, which never reaches here, covers every job that
+      // already started before this check existed).
+      if (!job.onMyWayAt) {
+        throw new ValidationError("Tap \"I'm on the Way\" first so the customer's told before you start the job.");
+      }
 
-    // A job tapped from the "Tomorrow" list is still just for browsing -- starting it
-    // early would set actualStart today, corrupting delay/duration figures computed
-    // against its real booked time. Overdue jobs from an earlier day are unaffected
-    // (isFutureDay, not the negation of isDueByToday).
-    if (isFutureDay(job.bookedStart)) {
-      const bookedDay = DateTime.fromISO(job.bookedStart).setZone(env.timezone).toFormat("cccc d LLLL");
-      throw new ValidationError(`This job is booked for ${bookedDay}. You can't start it until then.`);
-    }
+      // A job tapped from the "Tomorrow" list is still just for browsing -- starting it
+      // early would set actualStart today, corrupting delay/duration figures computed
+      // against its real booked time. Overdue jobs from an earlier day are unaffected
+      // (isFutureDay, not the negation of isDueByToday).
+      if (isFutureDay(job.bookedStart)) {
+        const bookedDay = DateTime.fromISO(job.bookedStart).setZone(env.timezone).toFormat("cccc d LLLL");
+        throw new ValidationError(`This job is booked for ${bookedDay}. You can't start it until then.`);
+      }
 
-    const from = job.currentState;
-    const now = new Date().toISOString();
+      const from = job.currentState;
+      const now = new Date().toISOString();
 
-    job.status = JobStatus.IN_PROGRESS;
-    // actualStart is set when the Arrival photo actually lands (workflow.engine.ts's
-    // handlePhotoStep), since that's the real physical start of the job, not the
-    // moment the driver taps a button in the app.
-    job.currentState = WorkflowState.WAITING_ARRIVAL_PHOTO;
+      job.status = JobStatus.IN_PROGRESS;
+      // actualStart is set when the Arrival photo actually lands (workflow.engine.ts's
+      // handlePhotoStep), since that's the real physical start of the job, not the
+      // moment the driver taps a button in the app.
+      job.currentState = WorkflowState.WAITING_ARRIVAL_PHOTO;
 
-    const startedJob = await saveJob(job, driver, "START_JOB", from, `Server start timestamp ${now}`);
-    // Best-effort, never awaited by the response -- see the function's own doc
-    // comment for why a job can need this even though the real-time webhook exists.
-    checkCongestionZoneAtJobStart(startedJob, driver).catch(error =>
-      log.warn("congestion zone job-start check failed to launch", { error: String(error), job_id: startedJob.jobId })
-    );
-    return startedJob;
+      const startedJob = await saveJob(job, driver, "START_JOB", from, `Server start timestamp ${now}`);
+      // Best-effort, never awaited by the response -- see the function's own doc
+      // comment for why a job can need this even though the real-time webhook exists.
+      checkCongestionZoneAtJobStart(startedJob, driver).catch(error =>
+        log.warn("congestion zone job-start check failed to launch", { error: String(error), job_id: startedJob.jobId })
+      );
+      return startedJob;
+    });
   });
 }
 
@@ -571,28 +587,39 @@ export async function completeJob(
   identifier: string,
   options: { reviewEmailSent?: boolean } = {}
 ): Promise<Job> {
-  const { job, driver } = await getJobForDriver(jobId, identifier);
-  if (job.status === JobStatus.COMPLETED) return job;
+  let { job, driver } = await getJobForDriver(jobId, identifier);
+  return withLock(`driver-queue:${driver.initials}`, async () => {
+    job = (await getJob(jobId)) ?? job;
+    if (job.status === JobStatus.COMPLETED) return job;
 
-  const from = job.currentState;
-  const now = new Date().toISOString();
-  // actualStart/actualFinish normally already landed when the Arrival/Empty Van photos
-  // were uploaded. These are just a defensive fallback so the diff below never feeds
-  // an invalid ISO string in and silently writes NaN.
-  if (!job.actualStart) job.actualStart = now;
-  if (!job.actualFinish) job.actualFinish = now;
-  job.actualMinutes = Math.max(
-    0,
-    Math.round(DateTime.fromISO(job.actualFinish).diff(DateTime.fromISO(job.actualStart), "minutes").minutes)
-  );
-  job.differenceMinutes = job.actualMinutes - job.bookedMinutes;
-  job.delayStatus = delayStatus(job.bookedFinish, job.actualFinish);
-  // Older/manual completions have no review action to replay. Persist an explicit
-  // No so the admin report never leaves the review outcome ambiguous.
-  job.reviewEmailSent = options.reviewEmailSent ?? job.reviewEmailSent ?? false;
-  job.status = JobStatus.COMPLETED;
-  job.currentState = WorkflowState.COMPLETED;
-  const completedJob = await saveJob(job, driver, "COMPLETE_JOB", from, `Server finish timestamp ${now}`);
-  sendOpsCompletionEmailIfAny(completedJob, driver);
-  return completedJob;
+    const from = job.currentState;
+    const now = new Date().toISOString();
+    // actualStart/actualFinish normally already landed when the Arrival/Empty Van photos
+    // were uploaded. These are just a defensive fallback so the diff below never feeds
+    // an invalid ISO string in and silently writes NaN.
+    if (!job.actualStart) { job.actualStart = now; job.actualStartSource = "completion-fallback"; }
+    if (!job.actualFinish) { job.actualFinish = now; job.actualFinishSource = "completion-fallback"; }
+    await prepareJobTimeBilling(job);
+    if (job.timeBilling && job.timeBilling.extraChargePence !== null && !job.chargeSnapshot && job.calculatedTotalCharges === undefined) {
+      await freezeJobCharges(job);
+      job.calculatedTotalCharges = await calculateJobTotal(job);
+      job.totalCharges = job.calculatedTotalCharges;
+    }
+    const elapsed = DateTime.fromISO(job.actualFinish).diff(DateTime.fromISO(job.actualStart), "minutes").minutes;
+    job.actualMinutes = job.timeBilling?.actualMinutes ?? (Number.isFinite(elapsed) ? Math.max(0, elapsed) : 0);
+    job.differenceMinutes = job.actualMinutes - job.bookedMinutes;
+    job.delayStatus = delayStatus(job.bookedFinish, job.actualFinish);
+    // Older/manual completions have no review action to replay. Persist an explicit
+    // No so the admin report never leaves the review outcome ambiguous.
+    job.reviewEmailSent = options.reviewEmailSent ?? job.reviewEmailSent ?? false;
+    job.manualDetailsRequiredAt = now;
+    job.reportIdentity ??= { initials: job.timeBilling?.driverInitials || driver.initials, email: !job.timeBilling || job.timeBilling.driverInitials === driver.initials ? driver.email || null : null,
+      name: !job.timeBilling || job.timeBilling.driverInitials === driver.initials ? driver.fullName || null : null,
+      vehicleImei: job.timeBilling?.vehicleImei || job.gpsliveImei || null, source: "completion-snapshot", capturedAt: now };
+    job.status = JobStatus.COMPLETED;
+    job.currentState = WorkflowState.COMPLETED;
+    const completedJob = await saveJob(job, driver, "COMPLETE_JOB", from, `Server finish timestamp ${now}`);
+    sendOpsCompletionEmailIfAny(completedJob, driver);
+    return completedJob;
+  });
 }

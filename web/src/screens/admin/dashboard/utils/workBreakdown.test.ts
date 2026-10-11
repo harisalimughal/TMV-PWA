@@ -71,12 +71,14 @@ describe("work breakdown helpers", () => {
   it("uses calculated total charges when the stored total is missing", () => {
     expect(totalChargesForJob({
       ...baseJob,
-      totalCharges: 0,
       calculatedTotalCharges: 12000,
       basePrice: 8000,
       extraCharges: 3000,
       overtimeCharge: 1000
     })).toBe(12000);
+  });
+  it("preserves a genuine zero stored price instead of replacing it with a calculation", () => {
+    expect(totalChargesForJob({ ...baseJob, totalCharges: 0, calculatedTotalCharges: 12000 })).toBe(0);
   });
 
   it("shows a fallback adjustment reason when no driver note was needed", () => {

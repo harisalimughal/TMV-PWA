@@ -147,7 +147,7 @@ export const MESSAGE_CATALOG: MessageDef[] = [
     audience: "driver",
     channel: "Push",
     label: "Congestion Zone Push",
-    hint: "Pushed when the driver's van enters the Congestion Charge zone during a job (or the job starts with the van already inside it).",
+    hint: "First in-job congestion-zone entry notification during the customer charging window. Pre-job occupancy is context only.",
     enabledKey: "MSG_ENABLED_DRIVER_CONGESTION_ZONE_PUSH",
     defaultEnabled: true,
     titleKey: "DRIVER_CONGESTION_ZONE_PUSH_TITLE",
@@ -161,13 +161,13 @@ export const MESSAGE_CATALOG: MessageDef[] = [
     audience: "driver",
     channel: "Push",
     label: "Tunnel Zone Push",
-    hint: "Pushed when the driver's van enters a tunnel toll zone during a job (or the job starts with the van already inside it).",
+    hint: "First in-job tunnel-zone alert during the customer charging window. Geofence entry alone does not prove a chargeable crossing.",
     enabledKey: "MSG_ENABLED_DRIVER_TUNNEL_ZONE_PUSH",
     defaultEnabled: true,
     titleKey: "DRIVER_TUNNEL_ZONE_PUSH_TITLE",
     titleFallback: "Tunnel Toll Zone",
     bodyKey: "DRIVER_TUNNEL_ZONE_PUSH_BODY",
-    bodyFallback: "Tunnel charge may apply -- add it on the Extra Charges step.",
+    bodyFallback: "Tunnel zone detected. Check the actual crossing and record any customer tunnel fees in Manual details.",
     variables: []
   }
 ];

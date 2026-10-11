@@ -13,6 +13,7 @@ import { downloadCsv, stampForFilename, toCsv } from "../utils/csv";
 import { resolveDriver, formatVanReg } from "../utils/drivers";
 import { useDriverOptions } from "../hooks/useDriverOptions";
 import { FinishedJobsPage } from "./FinishedJobsPage";
+import { ReportReturnButton } from "../components/ReportReturnButton";
 import {
   Search,
   Download,
@@ -265,6 +266,7 @@ export function JobsPage({ initialStatus = "All" }: JobsPageProps = {}) {
 
   return (
     <div className="space-y-6 max-w-[1440px] mx-auto pb-12 relative">
+      <ReportReturnButton />
       
       {/* BULK ACTION BAR (Floating) */}
       {selectedRows.size > 0 && (

@@ -3,6 +3,7 @@ import { NormalizedJob, DriverSummaryItem } from "../types";
 import { formatLondonDate, formatLondonDateTime } from "../utils/date";
 import { formatDuration } from "../utils/kpi";
 import { totalChargesForJob } from "../utils/workBreakdown";
+import { knownSubtotal } from "../utils/knownSubtotal";
 
 interface Props {
   reportType: string;
@@ -23,7 +24,7 @@ export function PaperAnalyticsReport({ reportType, from, to, driver, jobs = [], 
   const generatedAt = formatLondonDateTime(new Date().toISOString());
 
   const settlementRows = driverSettlement ?? [];
-  const totalCollectedPounds = settlementRows.reduce((sum, d) => sum + d.revenuePounds, 0);
+  const totalCollectedPounds = settlementRows.reduce((sum, d) => sum + (d.totalCollectionsPounds ?? d.cashCollectedPounds + d.cardCollectedPounds + d.bankCollectedPounds + (d.linkCollectedPounds ?? 0)), 0);
   const totalCompletedJobs = settlementRows.reduce((sum, d) => sum + d.completed, 0);
   const totalMovingMinutes = settlementRows.reduce((sum, d) => sum + d.totalDurationMinutes, 0);
 
@@ -96,7 +97,7 @@ export function PaperAnalyticsReport({ reportType, from, to, driver, jobs = [], 
             driver filter, which is exactly why they didn't match). */}
         <div className="grid grid-cols-4 gap-3 mb-6 shrink-0">
           <div className="p-3.5 bg-[#F9FAFB] rounded-card border border-[#E5E7EB]">
-            <div className="text-[11px] font-bold text-[#6B7280] uppercase tracking-wider">Total Collected</div>
+            <div className="text-[11px] font-bold text-[#6B7280] uppercase tracking-wider">{settlementRows.some(row => row.unknownCollectionJobs) ? "Known Collections" : "Total Collected"}</div>
             <div className="text-[20px] font-extrabold text-[#111827] mt-1">£{totalCollectedPounds.toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
           </div>
 
@@ -106,7 +107,7 @@ export function PaperAnalyticsReport({ reportType, from, to, driver, jobs = [], 
           </div>
 
           <div className="p-3.5 bg-[#F9FAFB] rounded-card border border-[#E5E7EB]">
-            <div className="text-[11px] font-bold text-[#6B7280] uppercase tracking-wider">Moving Hours</div>
+            <div className="text-[11px] font-bold text-[#6B7280] uppercase tracking-wider">Working Hours</div>
             <div className="text-[20px] font-extrabold text-[#111827] mt-1">{formatDuration(totalMovingMinutes)}</div>
           </div>
 
@@ -120,7 +121,7 @@ export function PaperAnalyticsReport({ reportType, from, to, driver, jobs = [], 
             selected range, the "who collected what, and how" slip. */}
         {driverSettlement && driverSettlement.length > 0 && (
           <div className="mb-6 shrink-0">
-            <h2 className="text-[14px] font-bold text-admin-ink mb-2 uppercase tracking-wide">Driver Settlement</h2>
+            <h2 className="text-[14px] font-bold text-admin-ink mb-2 uppercase tracking-wide">Driver Breakdown</h2>
             <table className="w-full text-[12px] border-collapse border border-[#E5E7EB]">
               <thead>
                 <tr className="bg-[#F3F4F6] text-left text-[#374151]">
@@ -130,11 +131,12 @@ export function PaperAnalyticsReport({ reportType, from, to, driver, jobs = [], 
                   <th className="p-2 border border-[#E5E7EB] font-bold text-right">Congestion (£)</th>
                   <th className="p-2 border border-[#E5E7EB] font-bold text-right">Tunnel (£)</th>
                   <th className="p-2 border border-[#E5E7EB] font-bold text-right">Overtime Hours</th>
-                  <th className="p-2 border border-[#E5E7EB] font-bold text-right">Moving Hours</th>
+                  <th className="p-2 border border-[#E5E7EB] font-bold text-right">Working Hours</th>
                   <th className="p-2 border border-[#E5E7EB] font-bold text-right">Cash (£)</th>
                   <th className="p-2 border border-[#E5E7EB] font-bold text-right">Card (£)</th>
+                  <th className="p-2 border border-[#E5E7EB] font-bold text-right">Link (£)</th>
                   <th className="p-2 border border-[#E5E7EB] font-bold text-right">Bank (£)</th>
-                  <th className="p-2 border border-[#E5E7EB] font-bold text-right">Invoice (£)</th>
+                  <th className="p-2 border border-[#E5E7EB] font-bold text-right">Invoice Pending (£)</th>
                   <th className="p-2 border border-[#E5E7EB] font-bold text-right">Total Charges (GBP)</th>
                   <th className="p-2 border border-[#E5E7EB] font-bold text-right">Driver Charged (GBP)</th>
                 </tr>
@@ -145,15 +147,16 @@ export function PaperAnalyticsReport({ reportType, from, to, driver, jobs = [], 
                     <td className="p-2 border border-[#E5E7EB] font-semibold text-[#111827]">{d.fullName}</td>
                     <td className="p-2 border border-[#E5E7EB] font-mono">{d.initials}</td>
                     <td className="p-2 border border-[#E5E7EB] text-right font-medium text-[#059669]">{d.completed}</td>
-                    <td className="p-2 border border-[#E5E7EB] text-right font-mono">{d.congestionChargePounds.toFixed(2)}</td>
-                    <td className="p-2 border border-[#E5E7EB] text-right font-mono">{d.tunnelChargePounds.toFixed(2)}</td>
+                    <td className="p-2 border border-[#E5E7EB] text-right font-mono">{knownSubtotal(d.congestionChargePounds, d.congestionUnknownJobs)}</td>
+                    <td className="p-2 border border-[#E5E7EB] text-right font-mono">{knownSubtotal(d.tunnelChargePounds, d.tunnelUnknownJobs)}</td>
                     <td className="p-2 border border-[#E5E7EB] text-right font-mono">{formatDuration(d.overtimeMinutes)}</td>
                     <td className="p-2 border border-[#E5E7EB] text-right font-mono">{formatDuration(d.totalDurationMinutes)}</td>
                     <td className="p-2 border border-[#E5E7EB] text-right font-mono">{d.cashCollectedPounds.toFixed(2)}</td>
                     <td className="p-2 border border-[#E5E7EB] text-right font-mono">{d.cardCollectedPounds.toFixed(2)}</td>
+                    <td className="p-2 border border-[#E5E7EB] text-right font-mono">{(d.linkCollectedPounds ?? 0).toFixed(2)}</td>
                     <td className="p-2 border border-[#E5E7EB] text-right font-mono">{d.bankCollectedPounds.toFixed(2)}</td>
                     <td className="p-2 border border-[#E5E7EB] text-right font-mono">{d.invoiceCollectedPounds.toFixed(2)}</td>
-                    <td className="p-2 border border-[#E5E7EB] text-right font-mono font-bold">{d.totalChargesPounds.toFixed(2)}</td>
+                    <td className="p-2 border border-[#E5E7EB] text-right font-mono font-bold">{(d.calculatedChargesPounds ?? d.totalChargesPounds).toFixed(2)}</td>
                     <td className="p-2 border border-[#E5E7EB] text-right font-mono font-bold">{d.revenuePounds.toFixed(2)}</td>
                   </tr>
                 ))}

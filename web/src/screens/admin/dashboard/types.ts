@@ -73,7 +73,11 @@ export interface DriverJobSummary {
   helperHours: number;
   paymentMethod: string;
   amountCollectedPence: number;
-  paymentBreakdown?: Array<{ method: "Cash" | "Card" | "Link" | "Invoice/Transfer"; amountPence: number }>;
+  paymentBreakdown?: Array<{ method: "Cash" | "Card" | "Link" | "Bank Transfer" | "Invoice" | "Invoice/Transfer"; amountPence: number }>;
+  schemaVersion?: 2;
+  noPaymentReceived?: boolean;
+  invoiceAmountPence?: number;
+  chargeItems?: Array<{ type: "congestion" | "tunnel"; amountPence: number | null; name?: string; reference?: string }>;
   submittedAt: string;
 }
 
@@ -138,7 +142,13 @@ export interface NormalizedJob {
   driverViewedAt?: string;
   bookedMinutes: number;
   actualMinutes?: number;
+  allocatedMinutes?: number;
+  timeBilling?: import("../../../api/jobs").JobTimeBilling;
+  timeBillingStatus?: "verified" | "needs-verification" | "legacy";
+  timeBillingIssue?: string;
+  driverReportedOvertimeMinutes?: number;
   delayMinutes: number;
+  arrivalDelaySource?: "gps-two-fresh-reports" | "proof-acceptance" | "unavailable";
   delayBand: DelayBand;
   timingTrustworthy: boolean;
   customerName: string;
@@ -265,14 +275,24 @@ export interface DriverSummaryItem {
   completionRate: number;
   avgDurationMinutes: number;
   totalDurationMinutes: number;
+  movingKnownSeconds?: number;
+  movingUnknownJobs?: number;
+  movingPartialJobs?: number;
   avgDelayMinutes: number;
   totalChargesPounds: number;
+  calculatedChargesPounds?: number;
   revenuePounds: number;
   revenueFormatted: string;
   cashCollectedPounds: number;
   cardCollectedPounds: number;
   bankCollectedPounds: number;
   invoiceCollectedPounds: number;
+  linkCollectedPounds?: number;
+  invoiceUncollectedPounds?: number;
+  totalCollectionsPounds?: number;
+  unknownCollectionJobs?: number;
+  congestionUnknownJobs?: number;
+  tunnelUnknownJobs?: number;
   congestionChargePounds: number;
   tunnelChargePounds: number;
   overtimeMinutes: number;

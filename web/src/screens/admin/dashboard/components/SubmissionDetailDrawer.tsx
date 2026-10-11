@@ -15,6 +15,8 @@ import { RawBookingText } from "../../../../components/driver/RawBookingText";
 import { JobScenarioSection } from "./JobScenarioSection";
 import { scenarioPointFromRecord } from "../utils/scenarioPoint";
 import { adjustmentReasonForMismatch } from "../utils/workBreakdown";
+import { ReportPreviewCanvas } from "./ReportPreviewCanvas";
+import { ReportReturnButton } from "./ReportReturnButton";
 
 type ScenarioKind = "checkin" | "checkout" | "parking" | "liability";
 
@@ -223,7 +225,7 @@ export function SubmissionDetailDrawer({ job: initialJob, isOpen, onClose, onNav
   const normalizedJob = !isScenario ? (job as NormalizedJob) : null;
   const scenarioPoint = isScenario ? scenarioPointFromRecord(scenarioItem) : null;
   const totalCharges = normalizedJob
-    ? normalizedJob.totalCharges || normalizedJob.calculatedTotalCharges || normalizedJob.basePrice + normalizedJob.extraCharges + normalizedJob.overtimeCharge
+    ? normalizedJob.totalCharges ?? normalizedJob.calculatedTotalCharges ?? normalizedJob.basePrice + normalizedJob.extraCharges + normalizedJob.overtimeCharge
     : 0;
 
   const handleSaveReview = async () => {
@@ -683,6 +685,7 @@ export function SubmissionDetailDrawer({ job: initialJob, isOpen, onClose, onNav
         {/* TOP HEADER */}
         <div className="min-h-[72px] bg-white border-b border-admin-line shadow-sm px-3 sm:px-6 py-2 flex flex-wrap items-center justify-between gap-2 shrink-0 relative z-20">
           <div className="flex items-center gap-3 sm:gap-4 min-w-0">
+             <ReportReturnButton compact />
              <div className="w-10 h-10 shrink-0 overflow-hidden rounded-full bg-admin-brand-soft text-admin-brand border border-admin-brand/20 flex items-center justify-center font-bold text-[14px]">
                {driverInitials}
              </div>
@@ -710,12 +713,16 @@ export function SubmissionDetailDrawer({ job: initialJob, isOpen, onClose, onNav
              )}
              <button
                onClick={() => setIsPreviewing(!isPreviewing)}
+               aria-label={isPreviewing ? "Back to Form" : "Preview PDF"}
+               title={isPreviewing ? "Back to Form" : "Preview PDF"}
                className={`h-10 px-2.5 sm:px-4 rounded-card border font-bold text-[13px] transition flex items-center gap-2 shadow-sm ${isPreviewing ? 'bg-admin-surface border-admin-line text-admin-ink' : 'border-admin-line bg-white hover:bg-admin-surface text-admin-ink'}`}
              >
                <Eye className="w-4 h-4 text-admin-muted" /> <span className="hidden sm:inline">{isPreviewing ? "Back to Form" : "Preview PDF"}</span>
              </button>
              <button
                onClick={handleDownload}
+               aria-label="Download PDF"
+               title="Download PDF"
                disabled={isGeneratingPdf}
                className="h-10 px-2.5 sm:px-4 rounded-card border border-transparent bg-admin-brand hover:bg-admin-brand-dark text-white font-bold text-[13px] transition flex items-center gap-2 shadow-sm disabled:opacity-70"
              >
@@ -728,64 +735,59 @@ export function SubmissionDetailDrawer({ job: initialJob, isOpen, onClose, onNav
         </div>
 
         {/* BODY -- stacked columns below lg, side-by-side panels at lg+ */}
-        <div className="flex-1 flex flex-col lg:flex-row overflow-y-auto lg:overflow-hidden">
+        <div className="min-h-0 flex-1 flex flex-col lg:flex-row overflow-y-auto lg:overflow-hidden">
           
           {/* Manager Sidebar -- finished jobs (not scenario submissions) drop this
               entirely and let the center content use the freed width instead. */}
-          {isScenario && (!isPreviewing || !isFullscreen) && <SidebarLeft />}
+          {isScenario && !isPreviewing && <SidebarLeft />}
 
           {/* Center Content */}
-          <div className="flex-1 overflow-y-auto relative bg-[#F5F5F5] custom-scrollbar">
+          <div className="min-h-0 min-w-0 flex-1 overflow-auto relative bg-[#edf1f4] custom-scrollbar">
              {isPreviewing ? (
-               <div className="min-h-full py-8 flex flex-col items-center">
-                  {/* transform-origin top so zooming grows downward rather than
-                      pushing the top of the page off-screen. */}
-                  <div
-                    className="w-full max-w-[210mm] relative transition-transform duration-150"
-                    style={{ transform: `scale(${zoom / 100})`, transformOrigin: "top center" }}
-                  >
+               <div className="min-h-full p-3 sm:p-6">
+                  <ReportPreviewCanvas zoom={zoom}>
                      {isScenario ? (
                        <PaperScenarioReport item={job} kind={kind!} isPreview={true} />
                      ) : (
                        <PaperDossierReport job={job as NormalizedJob} isPreview={true} />
                      )}
-                  </div>
-                  
-                  {/* Floating Toolbar */}
-                  <div className="fixed bottom-8 right-1/2 translate-x-1/2 flex items-center gap-2 p-2 bg-admin-ink/90 rounded-module shadow-xl backdrop-blur-md">
-                     {/* These two had no handlers and the readout was hardcoded to
-                         100%, so the zoom control was purely decorative. It now zooms. */}
-                     <button
-                       onClick={() => setZoom(z => Math.max(50, z - 10))}
-                       disabled={zoom <= 50}
-                       aria-label="Zoom out"
-                       className="w-10 h-10 rounded-card text-white/80 hover:text-white hover:bg-white/10 transition flex items-center justify-center disabled:opacity-40"
-                     >
-                       <ZoomOut className="w-4 h-4" />
-                     </button>
-                     <span className="text-[12px] font-bold text-white/90 px-2 font-mono tabular-nums">{zoom}%</span>
-                     <button
-                       onClick={() => setZoom(z => Math.min(200, z + 10))}
-                       disabled={zoom >= 200}
-                       aria-label="Zoom in"
-                       className="w-10 h-10 rounded-card text-white/80 hover:text-white hover:bg-white/10 transition flex items-center justify-center disabled:opacity-40"
-                     >
-                       <ZoomIn className="w-4 h-4" />
-                     </button>
-                     <div className="w-px h-6 bg-white/20 mx-1" />
-                     <button onClick={() => setIsFullscreen(!isFullscreen)} className="w-10 h-10 rounded-card text-white/80 hover:text-white hover:bg-white/10 transition flex items-center justify-center" title="Toggle Fullscreen">
-                       <Maximize2 className="w-4 h-4" />
-                     </button>
-                  </div>
+                  </ReportPreviewCanvas>
                </div>
              ) : (
                <FormAnswersView />
              )}
           </div>
 
-          {/* Activity/Comments Sidebar -- same as SidebarLeft, scenario-only now. */}
-          {isScenario && (!isPreviewing || !isFullscreen) && <SidebarRight />}
+          {/* Activity/Comments remain in the form view, not over the document. */}
+          {isScenario && !isPreviewing && <SidebarRight />}
         </div>
+        {isPreviewing && <div className="report-preview-footer">
+                     {/* These two had no handlers and the readout was hardcoded to
+                         100%, so the zoom control was purely decorative. It now zooms. */}
+                     <button
+                       onClick={() => setZoom(z => Math.max(50, z - 10))}
+                       disabled={zoom <= 50}
+                       aria-label="Zoom out"
+                       title="Zoom out"
+                       className="w-10 h-10 rounded-card transition flex items-center justify-center disabled:opacity-40"
+                     >
+                       <ZoomOut className="w-4 h-4" />
+                     </button>
+                     <span className="text-[12px] font-semibold text-admin-ink px-2 font-mono tabular-nums">{zoom}%</span>
+                     <button
+                       onClick={() => setZoom(z => Math.min(200, z + 10))}
+                       disabled={zoom >= 200}
+                       aria-label="Zoom in"
+                       title="Zoom in"
+                       className="w-10 h-10 rounded-card transition flex items-center justify-center disabled:opacity-40"
+                     >
+                       <ZoomIn className="w-4 h-4" />
+                     </button>
+                     <div className="w-px h-6 bg-admin-line mx-1" />
+                     <button onClick={() => setIsFullscreen(!isFullscreen)} className="w-10 h-10 rounded-card transition flex items-center justify-center" title="Toggle Fullscreen">
+                       <Maximize2 className="w-4 h-4" />
+                     </button>
+                  </div>}
       </div>
       
          </div>

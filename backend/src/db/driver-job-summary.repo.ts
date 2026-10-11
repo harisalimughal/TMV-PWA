@@ -1,6 +1,14 @@
 import { driverJobSummariesCollection } from "./mongo";
+import { invalidateReportReads } from "../reports/report-read-cache";
 
-export type DriverSummaryPaymentMethod = "Cash" | "Card" | "Link" | "Invoice/Transfer";
+export type DriverSummaryPaymentMethod = "Cash" | "Card" | "Link" | "Bank Transfer" | "Invoice" | "Invoice/Transfer";
+
+export interface DriverReportedCharge {
+  type: "congestion" | "tunnel";
+  amountPence: number | null;
+  name?: string;
+  reference?: string;
+}
 
 export interface DriverJobSummaryPaymentItem {
   method: DriverSummaryPaymentMethod;
@@ -22,6 +30,10 @@ export interface DriverJobSummaryDoc {
   paymentBreakdown?: DriverJobSummaryPaymentItem[];
   submittedAt: string;
   createdAt: Date;
+  schemaVersion?: 2;
+  noPaymentReceived?: boolean;
+  invoiceAmountPence?: number;
+  chargeItems?: DriverReportedCharge[];
 }
 
 export type NewDriverJobSummary = Omit<DriverJobSummaryDoc, "createdAt">;
@@ -30,6 +42,7 @@ export async function insertDriverJobSummary(summary: NewDriverJobSummary): Prom
   const col = await driverJobSummariesCollection();
   const doc: DriverJobSummaryDoc = { ...summary, createdAt: new Date() };
   await col.insertOne(doc);
+  invalidateReportReads();
   return doc;
 }
 

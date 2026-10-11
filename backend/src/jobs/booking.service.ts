@@ -3,13 +3,14 @@ import { calendar_v3 } from "googleapis";
 import { DateTime } from "luxon";
 import { env } from "../config/env";
 import { listCalendarEvents } from "../google/calendar";
-import { listJobs, upsertJob } from "../db/jobs.repo";
+import { getJob, listJobs, upsertJob } from "../db/jobs.repo";
 import { recordException } from "../db/exceptions.repo";
 import { notifyDriverJobAssigned } from "./driver-notify";
 import { Job, JobStatus, ParsedCalendarBooking } from "./job.types";
 import { WorkflowState } from "../workflow/workflow.states";
 import { log } from "../utils/logger";
 import { geocodeAddress } from "../integrations/geocode";
+import { withJobLock } from "../utils/lock";
 
 /**
  * Google Calendar's rich-text description editor (the Bold/Italic/link toolbar) saves
@@ -292,7 +293,7 @@ function jobIdForEvent(eventId: string): string {
 function minutesBetween(start: string, finish: string): number {
   const s = DateTime.fromISO(start);
   const f = DateTime.fromISO(finish);
-  return Math.max(0, Math.round(f.diff(s, "minutes").minutes));
+  return Math.max(0, f.diff(s, "minutes").minutes);
 }
 
 async function pickupLocationFor(parsed: ParsedCalendarBooking, existing?: Job): Promise<Job["pickupLocation"]> {
@@ -310,7 +311,7 @@ function toJob(parsed: ParsedCalendarBooking, existing: Job | undefined, pickupL
   const now = new Date().toISOString();
   const sameDriver = existing?.driverInitials === parsed.driverInitials;
   const samePickup = existing?.pickup === parsed.pickup && sameLocation(existing?.pickupLocation, pickupLocation);
-  const retainTrackerArrival = sameDriver && samePickup;
+  const retainTrackerArrival = sameDriver && samePickup && (Boolean(existing?.actualStart) || existing?.bookedStart === parsed.bookedStart);
 
   /*
    * Commercial terms freeze the moment work begins.
@@ -318,7 +319,7 @@ function toJob(parsed: ParsedCalendarBooking, existing: Job | undefined, pickupL
    * basePrice was re-read from the Calendar title on every sync. Ops editing the title
    * while the driver sat on the totals step would silently change the price under them.
    */
-  const started = Boolean(existing?.actualStart);
+  const started = Boolean(existing?.actualStart) || existing?.status === JobStatus.COMPLETED;
   const basePrice = started ? existing!.basePrice : parsed.price;
   const crewSize = started ? existing!.crewSize : parsed.crewSize;
   const paidOnline = started ? existing!.paidOnline : parsed.paidOnline;
@@ -349,9 +350,9 @@ function toJob(parsed: ParsedCalendarBooking, existing: Job | undefined, pickupL
     crewSize,
     vanSize: parsed.vanSize,
     hireDurationText: parsed.hireDurationText,
-    extraRequest: parsed.extraRequest,
+    extraRequest: started ? existing!.extraRequest : parsed.extraRequest,
     inventory: parsed.inventory,
-    extraChargeText: parsed.extraChargeText,
+    extraChargeText: started ? existing!.extraChargeText : parsed.extraChargeText,
     basePrice,
     paidOnline,
     bookedStart,
@@ -365,11 +366,25 @@ function toJob(parsed: ParsedCalendarBooking, existing: Job | undefined, pickupL
     extraCharges: existing?.extraCharges ?? [],
     overtimeMinutes: existing?.overtimeMinutes ?? 0,
     overtimeCharge: existing?.overtimeCharge ?? 0,
+    timeBilling: existing?.timeBilling,
+    timeBillingStatus: existing?.timeBillingStatus,
+    timeBillingIssue: existing?.timeBillingIssue,
+    manualDetailsRequiredAt: existing?.manualDetailsRequiredAt,
+    chargeSnapshot: existing?.chargeSnapshot,
+    reportIdentity: existing?.reportIdentity,
+    confirmedPrepayments: existing?.confirmedPrepayments,
+    roadTariffSnapshot: existing?.roadTariffSnapshot,
+    actualStartSource: existing?.actualStartSource,
+    bookingPackingService: existing?.bookingPackingService,
+    actualFinishSource: existing?.actualFinishSource,
+    driverReportedOvertimeMinutes: existing?.driverReportedOvertimeMinutes,
+    driverReportedOvertimeCrewSize: existing?.driverReportedOvertimeCrewSize,
     calculatedTotalCharges: existing?.calculatedTotalCharges,
     totalCharges: carriedTotalCharges,
     amountCharged: carriedAmountCharged,
     totalAdjustmentNote: existing?.totalAdjustmentNote ?? "",
     paymentMethod: existing?.paymentMethod ?? "",
+    paymentBreakdown: existing?.paymentBreakdown,
     paymentStatus: existing?.paymentStatus ?? (paidOnline ? "Paid Online" : "Pending"),
     clientNamePostcode: existing?.clientNamePostcode ?? "",
     clientConfirmedBy: existing?.clientConfirmedBy ?? "",
@@ -380,7 +395,9 @@ function toJob(parsed: ParsedCalendarBooking, existing: Job | undefined, pickupL
     reminderSentAt: existing?.bookedStart === bookedStart ? existing?.reminderSentAt : undefined,
     onMyWayAt: existing?.onMyWayAt,
     gpsliveImei: sameDriver ? existing?.gpsliveImei : undefined,
+    gpsDeviceHistory: existing?.gpsDeviceHistory,
     trackerArrivalAt: retainTrackerArrival ? existing?.trackerArrivalAt : undefined,
+    trackerArrivalSource: retainTrackerArrival ? existing?.trackerArrivalSource : undefined,
     trackerArrivalCandidateAt: retainTrackerArrival ? existing?.trackerArrivalCandidateAt : undefined,
     trackerLastSeenAt: retainTrackerArrival ? existing?.trackerLastSeenAt : undefined,
     trackerDistanceMeters: retainTrackerArrival ? existing?.trackerDistanceMeters : undefined,
@@ -428,6 +445,7 @@ export async function syncBookingsForDate(date = DateTime.now().setZone(env.time
   const existingByEvent = new Map(existingJobs.map(j => [j.calendarEventId, j]));
   const synced: Job[] = [];
   const writes: Job[] = [];
+  const parsedByJob = new Map<string, ParsedCalendarBooking>();
   const seenEventIds = new Set<string>();
   // Jobs newly assigned to a driver this pass (a brand-new job with a driver already on
   // the title, or an existing one whose driver initials just changed) -- notified once
@@ -456,6 +474,7 @@ export async function syncBookingsForDate(date = DateTime.now().setZone(env.time
     if (!parsed) continue;
     const existing = existingByEvent.get(parsed.calendarEventId);
     const job = toJob(parsed, existing, await pickupLocationFor(parsed, existing));
+    parsedByJob.set(job.jobId, parsed);
     synced.push(job);
 
     if (!isUnchanged(job, existing)) writes.push(job);
@@ -488,7 +507,18 @@ export async function syncBookingsForDate(date = DateTime.now().setZone(env.time
     if (reconciled) writes.push(reconciled);
   }
 
-  await Promise.all(writes.map(upsertJob));
+  await Promise.all(writes.map(job => withJobLock(job.jobId, async () => {
+    const latest = await getJob(job.jobId);
+    const parsed = parsedByJob.get(job.jobId);
+    if (parsed) {
+      await upsertJob(toJob(parsed, latest ?? existingByEvent.get(parsed.calendarEventId), job.pickupLocation));
+    } else if (latest) {
+      if (latest.actualStart || latest.status === JobStatus.COMPLETED) return;
+      await upsertJob({ ...latest, status: job.status, currentState: job.currentState, updatedAt: job.updatedAt });
+    } else {
+      await upsertJob(job);
+    }
+  })));
 
   for (const job of newlyAssigned) {
     notifyDriverJobAssigned(job, job.driverInitials).catch(err =>

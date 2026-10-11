@@ -1,0 +1,67 @@
+{
+  "description": "Phase 0 acceptance cases. Synthetic unless explicitly marked as anonymized observed durations. Proposed policies do not authorize financial activation.",
+  "clientTimeExamples": [
+    [90, 0, 0],
+    [120, 0, 0],
+    [150, 30, 5500],
+    [180, 60, 11000],
+    [210, 90, 16500],
+    [240, 120, 22000]
+  ],
+  "observedDurationExamples": [
+    { "source": "anonymized duration sample 1", "scheduledMinutes": 120, "actualMinutes": 158.39925, "allocatedMinutes": 120, "billedExtraBlocksUnderProposedPolicy": 2 },
+    { "source": "anonymized duration sample 2", "scheduledMinutes": 120, "actualMinutes": 0.5839333333333333, "allocatedMinutes": 120, "billedExtraBlocksUnderProposedPolicy": 0 },
+    { "source": "anonymized duration sample 3", "scheduledMinutes": 120, "actualMinutes": 159.47916666666666, "allocatedMinutes": 120, "billedExtraBlocksUnderProposedPolicy": 2 }
+  ],
+  "rateCases": [
+    { "id": "calendar-half-hour", "text": "GBP 55 per 30 minutes", "source": "calendar", "ratePer30Pence": 5500 },
+    { "id": "calendar-half-an-hour", "text": "75 pounds per half an hour", "source": "calendar", "ratePer30Pence": 7500 },
+    { "id": "calendar-hourly", "text": "GBP 110 per hour", "source": "calendar", "ratePer30Pence": 5500 },
+    { "id": "calendar-decimal", "text": "GBP 55.25 per 30 minutes", "source": "calendar", "ratePer30Pence": 5525 },
+    { "id": "multiple-ambiguous-rates", "text": "GBP 55 per 30 minutes or GBP 120 per hour", "source": "unavailable", "ratePer30Pence": null, "status": "NEEDS_VERIFICATION" },
+    { "id": "missing-calendar-rate-settings-fallback", "text": "", "settingsKey": "OVERTIME_RATE_PER_30", "settingsValuePence": 5500, "source": "settings", "ratePer30Pence": 5500 },
+    { "id": "missing-calendar-rate-crew-fallback", "text": "", "settingsKey": "OVERTIME_RATE_PER_30", "settingsValuePence": null, "crewRatePence": 5500, "source": "settings-crew-rate", "ratePer30Pence": 5500 }
+  ],
+  "financialCases": [
+    { "id": "exact-collection", "expectedPence": 25000, "manualPence": 25000, "confirmedSeparatePrepaidPence": 0, "outstandingPence": 0, "excessPence": 0 },
+    { "id": "remaining-collection", "expectedPence": 25000, "manualPence": 22000, "confirmedSeparatePrepaidPence": 0, "outstandingPence": 3000, "excessPence": 0 },
+    { "id": "excess-collection", "expectedPence": 25000, "manualPence": 28000, "confirmedSeparatePrepaidPence": 0, "outstandingPence": 0, "excessPence": 3000 },
+    { "id": "manual-missing", "expectedPence": 25000, "manualPence": null, "outstandingPence": null, "status": "PENDING_SUBMISSION" },
+    { "id": "unknown-rate", "expectedPence": null, "manualPence": 22000, "outstandingPence": null, "status": "NEEDS_VERIFICATION" },
+    { "id": "split-payments", "systemPayments": [{ "method": "Cash", "amountPence": 10000 }, { "method": "Card", "amountPence": 15000 }], "manualPayments": [{ "method": "Cash", "amountPence": 10000 }, { "method": "Card", "amountPence": 15000 }], "recordedTotalPence": 25000, "status": "MATCHED" },
+    { "id": "same-total-different-method", "systemPayments": [{ "method": "Card", "amountPence": 25000 }], "manualPayments": [{ "method": "Cash", "amountPence": 25000 }], "collectionDifferencePence": 0, "status": "PAYMENT_METHOD_MISMATCH" },
+    { "id": "separate-prepayment", "expectedPence": 25000, "manualPence": 15000, "confirmedSeparatePrepaidPence": 10000, "manualIncludesPrepayment": false, "outstandingPence": 0 },
+    { "id": "prepayment-already-included", "expectedPence": 25000, "manualPence": 25000, "confirmedPrepaidPence": 10000, "manualIncludesPrepayment": true, "outstandingPence": 0 },
+    { "id": "calendar-paid-flag-only", "expectedPence": 25000, "manualPence": 15000, "paidOnline": true, "confirmedPrepaidPence": null, "confirmedReceivedPence": 15000, "outstandingPence": null, "status": "PREPAYMENT_UNVERIFIED" },
+    { "id": "invoice-issued", "systemPayments": [{ "method": "Invoice", "amountPence": 0 }], "expectedPence": 25000, "confirmedReceivedPence": 0, "status": "PAYMENT_PENDING" },
+    { "id": "legacy-combined-method", "manualPayments": [{ "method": "Invoice/Transfer", "amountPence": 25000 }], "knownBankPence": 0, "knownInvoicePence": 0, "ambiguousMethodPence": 25000, "status": "NEEDS_VERIFICATION" },
+    { "id": "do-not-net-jobs", "jobDifferencesPence": [3000, -3000], "totalOutstandingPence": 3000, "totalExcessPence": 3000 },
+    { "id": "charge-already-in-total", "expectedPenceIncludingCongestion": 26800, "congestionComponentPence": 1800, "manualPence": 26800, "outstandingPence": 0 }
+  ],
+  "gpsCases": [
+    { "id": "repeated-delivery", "events": [{ "eventId": "synthetic-e1", "type": "zone_in" }, { "eventId": "synthetic-e1", "type": "zone_in" }], "uniqueEvents": 1, "newEntries": 1 },
+    { "id": "entry-exit-pair", "events": [{ "eventId": "synthetic-e1", "type": "zone_in" }, { "eventId": "synthetic-e2", "type": "zone_out" }], "entries": 1, "exits": 1, "visits": 1, "crossingRequiresPassageEvidence": true },
+    { "id": "overlapping-congestion-polygons", "samePhysicalEntryZoneIds": [10377, 10378], "physicalEntries": 1, "dailyObligations": 1 },
+    { "id": "repeated-congestion-jobs", "vehicle": "synthetic-van", "londonDate": "2026-10-09", "jobs": ["synthetic-j1", "synthetic-j2"], "entries": 2, "jobCustomerCharges": 2, "customerChargeBasis": "per job with a chargeable in-job entry" },
+    { "id": "same-vehicle-different-drivers", "vehicle": "synthetic-van", "drivers": ["synthetic-a", "synthetic-b"], "londonDate": "2026-10-09", "jobCustomerCharges": 2, "authorityDailyObligationsMayDiffer": true },
+    { "id": "two-genuine-tunnel-passages", "scheme": "dartford", "passageIds": ["synthetic-p1", "synthetic-p2"], "chargeablePassages": 2, "billableObligations": 2 },
+    { "id": "tunnel-opening-boundary", "londonTimestamp": "2026-10-09T06:00:00+01:00", "chargeableUnderProposedBoundary": true },
+    { "id": "tunnel-closing-boundary", "londonTimestamp": "2026-10-09T22:00:00+01:00", "chargeableUnderProposedBoundary": false, "expectedPence": 0 },
+    { "id": "weekday-congestion-opening", "londonTimestamp": "2026-10-09T07:00:00+01:00", "chargeableUnderProposedBoundary": true },
+    { "id": "weekend-congestion-before-opening", "londonTimestamp": "2026-10-10T11:59:59+01:00", "chargeable": false, "expectedPence": 0 },
+    { "id": "weekend-congestion-opening", "londonTimestamp": "2026-10-10T12:00:00+01:00", "chargeableUnderProposedBoundary": true },
+    { "id": "congestion-closing-boundary", "londonTimestamp": "2026-10-09T18:00:00+01:00", "chargeableUnderProposedBoundary": false, "expectedPence": 0 },
+    { "id": "entry-before-window-driving-after", "entryLondonTime": "06:50", "movementLondonTime": "07:05", "qualifyingCongestionDay": true, "additionalEntryCount": 0 },
+    { "id": "no-tracker", "gpsCoverage": "unavailable", "expectedPence": null, "status": "NEEDS_VERIFICATION" },
+    { "id": "grouped-tunnel-unidentified", "zoneId": 47814, "scheme": "blackwall-silvertown", "individualTunnel": null, "direction": null, "roadCostPence": null, "status": "NEEDS_VERIFICATION" },
+    { "id": "gap-near-tunnel", "positiveGapSeconds": 614, "confirmedCrossingCount": null, "gpsCoverage": "partial" },
+    { "id": "delayed-event", "eventTime": "2026-10-09T09:00:00Z", "receiptTime": "2026-10-09T11:00:00Z", "jobAtEvent": "synthetic-old-job", "jobAtReceipt": "synthetic-new-job", "associatedJob": "synthetic-old-job" },
+    { "id": "missing-exit", "entryTime": "2026-10-09T09:00:00Z", "exitTime": null, "timeInZoneMinutes": null, "status": "NEEDS_VERIFICATION" },
+    { "id": "no-job-association", "gpsEventId": "synthetic-e3", "jobId": null, "preserveEventInternally": true, "includedInDriverReport": false, "reportedEntryCount": 0, "reportedChargePence": 0 }
+  ],
+  "liabilityCases": [
+    { "id": "legacy-parking-evidence", "jobId": "synthetic-j1", "type": "parking", "amountPence": null, "paymentStatus": "unknown", "resolutionStatus": "pending_verification" },
+    { "id": "driver-reported-damage-evidence-only", "jobId": "synthetic-j2", "type": "damage", "amountPence": null, "paymentStatus": "unknown", "automaticallyAddToJobCollections": false },
+    { "id": "repeated-incident-import", "sourceReferences": ["synthetic-s1", "synthetic-s1"], "liabilityRecords": 1 }
+  ]
+}

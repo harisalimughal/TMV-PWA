@@ -47,7 +47,7 @@ function issueAdminSessionToken(): string {
 }
 
 function verifyAdminSessionToken(token: string | undefined): AdminSessionPayload | null {
-  if (!token || !env.adminPassword) return null;
+  if (typeof token !== "string" || !token || !env.adminPassword) return null;
   const dot = token.indexOf(".");
   if (dot === -1) return null;
 
@@ -58,7 +58,7 @@ function verifyAdminSessionToken(token: string | undefined): AdminSessionPayload
   try {
     const payload = JSON.parse(base64UrlDecode(payloadB64)) as AdminSessionPayload;
     if (payload.purpose !== PURPOSE) return null;
-    if (typeof payload.exp !== "number" || Date.now() > payload.exp) return null;
+    if (typeof payload.exp !== "number" || !Number.isFinite(payload.exp) || Date.now() >= payload.exp) return null;
     return payload;
   } catch {
     return null;

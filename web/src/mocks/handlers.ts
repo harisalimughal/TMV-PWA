@@ -5,7 +5,7 @@
  * DEV ONLY (see fixtures.ts). `handle()` returns null for any path it doesn't own, so
  * the caller falls through to the real network.
  */
-import type { ActivityEntry, EvidenceSummary, Job } from "../api/jobs";
+import type { ActivityEntry, EvidenceSummary, Job, DriverJobSummaryInput } from "../api/jobs";
 import { DAMAGE_CATEGORIES } from "../scenarioSpec";
 import { DEFAULT_CONFIRMATION_TEXT, makeEvidenceItem, seedStore, type MockStore } from "./fixtures";
 import { applyTrigger, type WorkflowTrigger } from "./workflow";
@@ -80,6 +80,7 @@ function logActivity(job: Job, action: string, fromState: string): void {
 }
 
 function sendMockOnMyWay(jobId: string): MockResponse {
+  if (pendingManual()) return err(409, "MANUAL_DETAILS_PENDING", "Submit Manual details before the next job.");
   const job = store.jobs[jobId];
   if (!job) return err(404, "JOB_NOT_FOUND", "That job no longer exists.");
   if (!job.onMyWayAt) {
@@ -94,10 +95,12 @@ function bucketJobs(ids: string[]): Job[] {
 }
 
 function transition(jobId: string, trigger: WorkflowTrigger, input?: Record<string, string[]>): MockResponse {
+  if (trigger === "start" && pendingManual()) return err(409, "MANUAL_DETAILS_PENDING", "Submit Manual details before the next job.");
   const job = store.jobs[jobId];
   if (!job) return err(404, "JOB_NOT_FOUND", "That job no longer exists.");
   const fromState = job.currentState;
   const updated = applyTrigger(job, trigger, input ?? {});
+  if (updated.status === "COMPLETED" && job.status !== "COMPLETED") updated.manualDetailsRequiredAt = new Date().toISOString();
   store.jobs[jobId] = updated;
   if (updated.currentState !== fromState) logActivity(updated, trigger, fromState);
   return ok({
@@ -105,6 +108,10 @@ function transition(jobId: string, trigger: WorkflowTrigger, input?: Record<stri
     suggestedTotal: suggestedTotal(updated),
     evidenceItems: store.evidence[jobId] ?? []
   });
+}
+
+function pendingManual(): Job | null {
+  return Object.values(store.jobs).find(job => job.status === "COMPLETED" && job.manualDetailsRequiredAt && !store.manualDetails[job.jobId]) ?? null;
 }
 
 const PHOTO_STATE_TYPE: Record<string, string> = {
@@ -220,7 +227,8 @@ export function handle(method: string, path: string, bodyText?: string): MockRes
       driver: { fullName: store.driver.fullName, initials: store.driver.initials },
       today: bucketJobs(store.buckets.today),
       past: bucketJobs(store.buckets.past),
-      next: bucketJobs(store.buckets.next)
+      next: bucketJobs(store.buckets.next),
+      pendingManualDetails: pendingManual()
     });
   }
   if (path === "/api/jobs/liability-categories" && method === "GET") {
@@ -241,11 +249,29 @@ export function handle(method: string, path: string, bodyText?: string): MockRes
         evidence: evidenceFor(job),
         evidenceItems: store.evidence[jobId] ?? [],
         suggestedTotal: suggestedTotal(job),
-        confirmationText: DEFAULT_CONFIRMATION_TEXT
+        confirmationText: DEFAULT_CONFIRMATION_TEXT,
+        driverJobSummary: store.manualDetails[jobId] ?? null
       });
     }
     if (sub === "/on-my-way" && method === "POST") return sendMockOnMyWay(jobId);
     if (sub === "/start" && method === "POST") return transition(jobId, "start");
+    if (sub === "/driver-summary" && method === "POST") {
+      if (!job || job.status !== "COMPLETED") return err(400, "VALIDATION_FAILED", "Complete this job first.");
+      const input = parse(bodyText) as DriverJobSummaryInput;
+      if (store.manualDetails[jobId]) return ok({ summary: store.manualDetails[jobId] });
+      const paymentBreakdown = input.paymentMethods.map(method => ({ method, amountPence: Math.round(Number(input.paymentAmounts[method]) * 100) }));
+      const chargeItems = (input.chargeItems ?? []).map(row => ({ type: row.type, amountPence: row.amount.trim() ? Math.round(Number(row.amount) * 100) : null, name: row.name, reference: row.reference }));
+      store.manualDetails[jobId] = {
+        schemaVersion: 2, jobId, driverEmail: store.driver.email, driverInitials: job.driverInitials,
+        startTime: input.startTime, endTime: input.endTime, helperName: input.helperName, helperHours: Number(input.helperHours || 0),
+        paymentBreakdown, paymentMethod: input.paymentMethods.join(", ") || "No payment received",
+        amountCollectedPence: paymentBreakdown.filter(row => row.method !== "Invoice").reduce((sum, row) => sum + row.amountPence, 0),
+        noPaymentReceived: input.noPaymentReceived, invoiceAmountPence: paymentBreakdown.find(row => row.method === "Invoice")?.amountPence ?? 0,
+        congestionCharge: chargeItems.some(row => row.type === "congestion"), congestionChargePence: chargeItems.find(row => row.type === "congestion")?.amountPence ?? 0,
+        chargeItems, submittedAt: new Date().toISOString()
+      };
+      return ok({ summary: store.manualDetails[jobId] });
+    }
     if (sub === "/evidence" && method === "POST") {
       recordMockEvidence(jobId);
       return transition(jobId, "evidence");

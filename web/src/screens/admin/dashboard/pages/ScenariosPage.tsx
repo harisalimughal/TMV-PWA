@@ -17,15 +17,17 @@ import { NormalizedJob } from "../types";
 import { fetchScenarios } from "../api";
 import { PaperScenarioReport } from "../components/PaperScenarioReport";
 import { formatLondonDateTime } from "../utils/date";
-import { DateRangePicker, defaultDashboardDateRange } from "../components/DateRangePicker";
+import { DateRangePicker } from "../components/DateRangePicker";
 import { LiabilityConfigModal } from "../components/LiabilityConfigModal";
 import { ApiErrorState } from "../components/ApiErrorState";
 import { Settings2 } from "lucide-react";
 import { useDriverOptions } from "../hooks/useDriverOptions";
 import { scenarioPointFromRecord } from "../utils/scenarioPoint";
+import { useScenarioFilters, type ScenarioFilterControl } from "../hooks/useScenarioFilters";
 
 interface Props {
   kind: "checkin" | "checkout" | "parking" | "liability";
+  filterControl?: ScenarioFilterControl;
 }
 
 const mapDriver = (raw: string) => {
@@ -72,11 +74,9 @@ const isTestGibberish = (text: string) => {
   return false;
 };
 
-export function ScenariosPage({ kind }: Props) {
+export function ScenariosPage({ kind, filterControl }: Props) {
   const [page, setPage] = useState(1);
-  const [from, setFrom] = useState<string | undefined>(() => defaultDashboardDateRange().from);
-  const [to, setTo] = useState<string | undefined>(() => defaultDashboardDateRange().to);
-  const [searchQuery, setSearchQuery] = useState("");
+  const { from, to, searchQuery, driverFilter, setFrom, setTo, setSearchQuery, setDriverFilter } = useScenarioFilters(filterControl);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [previewJob, setPreviewJob] = useState<any | null>(null);
   /** Set right before opening the drawer from the row-level "Download" action -- see
@@ -84,7 +84,6 @@ export function ScenariosPage({ kind }: Props) {
    *  autoDownload prop. */
   const [autoDownloadId, setAutoDownloadId] = useState<string | null>(null);
   const [isConfigOpen, setIsConfigOpen] = useState(false);
-  const [driverFilter, setDriverFilter] = useState<string>("");
 
   const { data, isLoading, isError, error, refetch } = useQuery({
     queryKey: ["scenarios", kind, page, from, to, driverFilter],
@@ -131,6 +130,7 @@ export function ScenariosPage({ kind }: Props) {
         <div className="flex flex-wrap items-center gap-3">
           {/* Driver filter -- same roster + behaviour as Finished Jobs' driver filter. */}
           <select
+            aria-label="Filter by driver"
             value={driverFilter}
             onChange={e => { setDriverFilter(e.target.value); setPage(1); }}
             disabled={driverOptionsLoading}
@@ -146,6 +146,7 @@ export function ScenariosPage({ kind }: Props) {
           <div className="relative flex-1 min-w-[200px]">
             <Search className="w-4 h-4 text-admin-muted absolute left-3 top-2.5" />
             <input
+              aria-label="Search submissions"
               type="text"
               placeholder="Search reference, job, or user..."
               value={searchQuery}

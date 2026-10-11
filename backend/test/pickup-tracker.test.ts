@@ -7,7 +7,7 @@ const getDriverProfileByInitials = vi.fn();
 const fetchGpsLiveDevices = vi.fn();
 const sendPushToDriver = vi.fn();
 
-vi.mock("../src/db/jobs.repo", () => ({ listJobs: (...args: any[]) => listJobs(...args) }));
+vi.mock("../src/db/jobs.repo", () => ({ listJobs: (...args: any[]) => listJobs(...args), getJob: async (id: string) => (await listJobs()).find((row: Job) => row.jobId === id) }));
 vi.mock("../src/db/mongo", () => ({ jobsCollection: (...args: any[]) => jobsCollection(...args) }));
 vi.mock("../src/auth/driver-account.service", () => ({ getDriverProfileByInitials: (...args: any[]) => getDriverProfileByInitials(...args) }));
 vi.mock("../src/integrations/gpslive", async importOriginal => {
@@ -24,6 +24,11 @@ const now = new Date("2026-10-01T10:00:00.000Z");
 const pickup = { lat: 51.501, lng: -0.1416 };
 
 describe("assessPickupPosition", () => {
+  it("rejects future timestamps, invalid coordinates and an unset GPS fix", () => {
+    expect(assessPickupPosition({ lat: pickup.lat, lng: pickup.lng, dtTracker: "2026-10-01 10:00:01" }, pickup, now).state).toBe("stale");
+    expect(assessPickupPosition({ lat: 95, lng: 0, dtTracker: "2026-10-01 09:59:30" }, pickup, now).state).toBe("stale");
+    expect(assessPickupPosition({ lat: 0, lng: 0, dtTracker: "2026-10-01 09:59:30" }, pickup, now).state).toBe("stale");
+  });
   it("accepts a fresh tracker report near the pickup", () => {
     expect(assessPickupPosition({ lat: 51.5012, lng: -0.1416, dtTracker: "2026-10-01 09:59:30" }, pickup, now))
       .toEqual({ state: "inside", distanceMeters: 22, reportedAt: "2026-10-01T09:59:30.000Z" });
@@ -63,7 +68,7 @@ describe("sweepPickupArrivals", () => {
         return { modifiedCount: 1 };
     });
     jobsCollection.mockResolvedValue({ updateOne });
-    const report = (dtTracker: string) => [{ imei: "123", lat: pickup.lat, lng: pickup.lng, dtTracker }];
+    const report = (dtTracker: string) => [{ imei: "123", lat: pickup.lat, lng: pickup.lng, dtTracker, speed: 0 }];
 
     fetchGpsLiveDevices.mockResolvedValueOnce(report("2026-10-01 09:55:00"));
     await sweepPickupArrivals(new Date("2026-10-01T10:00:00Z"));
@@ -151,6 +156,9 @@ describe("sweepPickupArrivals", () => {
       jobId: "TMV-STALE-PROOF",
       driverInitials: "AB",
       pickupLocation: pickup,
+      trackerArrivalCandidateAt: "2026-10-01T09:59:00Z",
+      trackerDistanceMeters: 20,
+      trackerLocationName: "Old location",
       gpsliveImei: "123"
     } as Job;
     const updateOne = vi.fn().mockResolvedValue({ modifiedCount: 1 });
@@ -166,11 +174,24 @@ describe("sweepPickupArrivals", () => {
       { _id: "TMV-STALE-PROOF" },
       expect.objectContaining({
         $set: expect.objectContaining({
-          trackerUnverifiedReason: "Tracker device signal was stale / offline",
-          gpsliveImei: "123"
+          trackerUnverifiedReason: "Tracker device signal was stale / offline"
         }),
         $unset: expect.objectContaining({ trackerDistanceMeters: "", trackerLocationName: "" })
       })
     );
+    expect(job.trackerArrivalCandidateAt).toBeUndefined();
+    expect(job.trackerDistanceMeters).toBeUndefined();
+    expect(job.trackerLocationName).toBeUndefined();
+  });
+  it("does not confirm arrival from a moving drive-by at pickup", async () => {
+    const job = { jobId: "DRIVE-BY", driverInitials: "AB", status: JobStatus.READY, actualStart: "", onMyWayAt: "2026-10-01T09:50:00Z", pickupLocation: pickup, gpsliveImei: "123", trackerArrivalCandidateAt: "2026-10-01T09:59:00Z" } as Job;
+    listJobs.mockResolvedValue([job]);
+    const updateOne = vi.fn(async (_filter, update) => { Object.assign(job, update.$set); for (const field of Object.keys(update.$unset ?? {})) delete (job as any)[field]; return { modifiedCount: 1 }; });
+    jobsCollection.mockResolvedValue({ updateOne });
+    fetchGpsLiveDevices.mockResolvedValue([{ imei: "123", lat: pickup.lat, lng: pickup.lng, dtTracker: "2026-10-01 09:59:30", speed: 25 }]);
+    await sweepPickupArrivals(now);
+    expect(job.trackerArrivalAt).toBeUndefined();
+    expect(job.trackerArrivalCandidateAt).toBeUndefined();
+    expect(job.trackerUnverifiedReason).toContain("drive-by");
   });
 });

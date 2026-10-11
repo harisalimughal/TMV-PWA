@@ -545,7 +545,7 @@ export function dashboardJobsRoutes(): Router {
       const headers = [
         "Job ID", "Calendar Event ID", "Driver", "Customer", "Phone", "Pickup", "Dropoff",
         "Booked Start (London)", "Actual Start (London)", "Actual Finish (London)",
-        "Scheduled Minutes", "Actual Minutes", "Delay (Minutes)", "Delay Band", "Status",
+        "Scheduled Minutes", "Actual Minutes", "Allocated Minutes", "Extra Minutes", "Billed 30-minute Blocks", "Rate per 30 (GBP)", "Rate Source", "Billing Status", "Delay (Minutes)", "Delay Band", "Status",
         "Base Price (£)", "Extra Charges (£)", "Overtime (£)", "Total Charges (£)", "Amount Charged (£)",
         "Payment Method", "Payment Status", "Evidence Status", "Drive Folder"
       ];
@@ -562,7 +562,13 @@ export function dashboardJobsRoutes(): Router {
         escapeCsvField(formatLondonDate(j.actualStart)),
         escapeCsvField(formatLondonDate(j.actualFinish)),
         escapeCsvField(j.bookedMinutes),
-        escapeCsvField(j.actualMinutes || ""),
+        escapeCsvField(j.actualMinutes ?? ""),
+        escapeCsvField(j.allocatedMinutes ?? ""),
+        escapeCsvField(j.timeBilling?.extraMinutes ?? ""),
+        escapeCsvField(j.timeBilling?.billedExtraBlocks ?? ""),
+        escapeCsvField(j.timeBilling?.ratePer30Pence == null ? "" : (j.timeBilling.ratePer30Pence / 100).toFixed(2)),
+        escapeCsvField(j.timeBilling?.rateSource ?? ""),
+        escapeCsvField(j.timeBillingStatus ?? ""),
         escapeCsvField(j.delayMinutes),
         escapeCsvField(j.delayBand),
         escapeCsvField(j.status),
@@ -614,7 +620,7 @@ export function dashboardJobsRoutes(): Router {
       if (!rawJob) return res.status(404).json({ error: { code: "JOB_NOT_FOUND", message: `Job ${jobId} not found.` } });
 
       const job = await buildNormalizedJob(rawJob);
-      const pdfBuffer = generateJobPdf(job);
+      const pdfBuffer = await generateJobPdf(job);
       const dateStr = new Date().toISOString().slice(0, 10);
       res.setHeader("Content-Type", "application/pdf");
       res.setHeader("Content-Disposition", `attachment; filename="TMV-Job-${job.jobId}-${dateStr}.pdf"`);

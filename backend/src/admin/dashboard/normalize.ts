@@ -8,10 +8,9 @@
  */
 import { listDriverProfiles } from "../../auth/driver-account.service";
 import { ExtraChargeType, Job } from "../../jobs/job.types";
-import { env } from "../../config/env";
-import { getSetting } from "../../db/settings.repo";
 import { EvidenceStatus, EvidenceType } from "../../jobs/job.types";
 import { fromPounds, Pence, pence } from "../../utils/money";
+import { reportPayments, poundsToReportPence } from "../../reports/report-payments";
 import { MongoDataset } from "./read";
 import { toThumbnailUrl } from "../../storage/cloudinary";
 import { calculateDelayMinutes, calculateMinutes, getDelayBand, isTimingTrustworthy, toUtcIso } from "./timezone";
@@ -98,6 +97,8 @@ function buildPaymentBreakdown(job: Job, amountCharged: Pence): NormalizedJob["p
   }
   const method = job.paymentMethod || "";
   if (!method) return [];
+  if (method !== "Invoice" && !/^(paid|received|collected)$/i.test(job.paymentStatus || "")) return [];
+  if (["Cash", "Card", "Link", "Bank Transfer", "Invoice"].indexOf(method) < 0) return [];
   return [{ method, amount: amountCharged }];
 }
 
@@ -239,12 +240,6 @@ function buildJobScenarios(rows: MongoDataset["scenarioSubmissions"]): JobScenar
 export async function normalizeMongoDataset(dataset: MongoDataset): Promise<NormalizedJob[]> {
   const drivers = await listDriverProfiles();
   const driversByInitials = new Map(drivers.filter(d => d.initials).map(d => [d.initials.toUpperCase(), d]));
-  const [congestionChargeSetting, tunnelChargeSetting] = await Promise.all([
-    getSetting("CONGESTION_CHARGE", String(env.congestionCharge)),
-    getSetting("TUNNEL_CHARGE", String(env.tunnelCharge))
-  ]);
-  const congestionCharge = parseFloat(congestionChargeSetting) || env.congestionCharge;
-  const tunnelCharge = parseFloat(tunnelChargeSetting) || env.tunnelCharge;
 
   const evidenceByJob = new Map<string, typeof dataset.evidence>();
   for (const e of dataset.evidence) {
@@ -296,10 +291,10 @@ export async function normalizeMongoDataset(dataset: MongoDataset): Promise<Norm
     const isDuplicate = seenJobIds.has(jobId);
     seenJobIds.add(jobId);
 
-    const driverInitials = (job.driverInitials || "").trim().toUpperCase();
+    const driverInitials = (job.reportIdentity?.initials || job.timeBilling?.driverInitials || driverJobSummaryByJob.get(jobId)?.driverInitials || job.driverInitials || "").trim().toUpperCase();
     const driverDoc = driverInitials ? driversByInitials.get(driverInitials) : undefined;
-    const driverName = driverDoc ? driverDoc.fullName : (driverInitials || "Unassigned");
-    const driverEmail = driverDoc ? driverDoc.email : undefined;
+    const driverName = job.reportIdentity?.name || (driverDoc ? driverDoc.fullName : (driverInitials || "Unassigned"));
+    const driverEmail = job.reportIdentity?.email || (driverDoc ? driverDoc.email : undefined);
 
     const bookedStart = toUtcIso(job.bookedStart);
     const bookedFinish = toUtcIso(job.bookedFinish);
@@ -308,23 +303,30 @@ export async function normalizeMongoDataset(dataset: MongoDataset): Promise<Norm
     const onMyWayAt = job.onMyWayAt ? toUtcIso(job.onMyWayAt) : undefined;
     const clientSignatureAt = job.clientSignatureAt ? toUtcIso(job.clientSignatureAt) : undefined;
 
-    const bookedMinutes = job.bookedMinutes || calculateMinutes(bookedStart, bookedFinish);
-    const actualMinutes = job.actualMinutes || (actualStart && actualFinish ? calculateMinutes(actualStart, actualFinish) : undefined);
+    const bookedMinutes = job.timeBilling?.scheduledMinutes ?? (job.bookedMinutes || calculateMinutes(bookedStart, bookedFinish));
+    const unverifiedBoundary = job.actualStartSource === "completion-fallback" ||
+      job.actualFinishSource === "completion-fallback" || job.actualFinishSource === "admin-manual";
+    const actualMinutes = job.timeBilling?.actualMinutes ?? (unverifiedBoundary ? undefined :
+      (job.actualMinutes || (actualStart && actualFinish ? calculateMinutes(actualStart, actualFinish) : undefined)));
+    const allocatedMinutes = job.timeBilling?.allocatedMinutes;
 
-    const delayMinutes = calculateDelayMinutes(bookedStart, actualStart);
+    const gpsArrival = job.trackerArrivalSource === "two-fresh-reports" && job.trackerArrivalAt &&
+      Number.isFinite(Date.parse(job.trackerArrivalAt)) && (!job.onMyWayAt || Date.parse(job.trackerArrivalAt) >= Date.parse(job.onMyWayAt))
+      ? toUtcIso(job.trackerArrivalAt) : undefined;
+    const arrivalDelaySource = gpsArrival ? "gps-two-fresh-reports" as const : actualStart ? "proof-acceptance" as const : "unavailable" as const;
+    const delayMinutes = calculateDelayMinutes(bookedStart, gpsArrival || actualStart);
     const delayBand = getDelayBand(delayMinutes);
     const timingTrustworthy = isTimingTrustworthy(job.bookedStart) && isTimingTrustworthy(job.actualStart);
 
-    const basePrice = safePence(job.basePrice);
+    const basePrice = job.chargeSnapshot ? pence(job.chargeSnapshot.basePence) : safePence(job.basePrice);
     const extraChargeSelections = Array.isArray(job.extraCharges) ? job.extraCharges : [];
-    const congestionChargePence = extraChargeSelections.includes(ExtraChargeType.CONGESTION) ? fromPounds(congestionCharge) : pence(0);
-    const tunnelChargePence = extraChargeSelections.includes(ExtraChargeType.TUNNEL) ? fromPounds(tunnelCharge) : pence(0);
-    let extraChargesPounds = 0;
-    if (extraChargeSelections.includes(ExtraChargeType.CONGESTION)) extraChargesPounds += congestionCharge;
-    if (extraChargeSelections.includes(ExtraChargeType.TUNNEL)) extraChargesPounds += tunnelCharge;
-    const extraCharges = extraChargesPounds > 0 ? fromPounds(extraChargesPounds) : pence(0);
-    const overtimeMinutes = job.overtimeMinutes || 0;
-    const overtimeCharge = safePence(job.overtimeCharge);
+    const roadFeeAmounts = { congestionPence: job.chargeSnapshot?.congestionPence ?? (extraChargeSelections.includes(ExtraChargeType.CONGESTION) ? job.roadTariffSnapshot?.congestionPence ?? null : 0),
+      tunnelPence: job.chargeSnapshot?.tunnelPence ?? (extraChargeSelections.includes(ExtraChargeType.TUNNEL) ? job.roadTariffSnapshot?.tunnelPence ?? null : 0) };
+    const congestionChargePence = pence(roadFeeAmounts.congestionPence ?? 0);
+    const tunnelChargePence = pence(roadFeeAmounts.tunnelPence ?? 0);
+    const extraCharges = pence(congestionChargePence + tunnelChargePence);
+    const overtimeMinutes = job.timeBilling?.extraMinutes ?? (job.overtimeMinutes || 0);
+    const overtimeCharge = job.timeBilling?.extraChargePence ?? safePence(job.overtimeCharge);
     const status = job.status;
     const currentState = job.currentState || status;
     const totalSubmittedStates = new Set([
@@ -340,13 +342,17 @@ export async function normalizeMongoDataset(dataset: MongoDataset): Promise<Norm
     const hasSubmittedTotal = totalSubmittedStates.has(currentState) || status === "COMPLETED";
     const calculatedTotalCharges = job.calculatedTotalCharges !== undefined && job.calculatedTotalCharges !== null
       ? safePence(job.calculatedTotalCharges)
-      : pence(basePrice + extraCharges + overtimeCharge);
-    const totalCharges = calculatedTotalCharges;
+      : job.status === "COMPLETED" && job.totalCharges !== undefined && job.totalCharges !== null
+        ? safePence(job.totalCharges) : pence(basePrice + extraCharges + overtimeCharge);
+    const totalCharges = job.totalAdjustmentNote?.trim() && hasSubmittedTotal
+      ? safePence(job.amountCharged ?? job.totalCharges) : calculatedTotalCharges;
     const amountCharged = hasSubmittedTotal
       ? (job.amountCharged !== undefined && job.amountCharged !== null ? safePence(job.amountCharged) : safePence(job.totalCharges))
       : pence(0);
     const reconciled = amountCharged === pence(0) || totalCharges === amountCharged;
     const paymentBreakdown = buildPaymentBreakdown(job, amountCharged);
+    const paymentLedger = reportPayments(job.paymentBreakdown?.map(row => ({ method: row.method, amountPence: poundsToReportPence(row.amount) })),
+      { method: job.paymentMethod, amountPence: amountCharged, status: job.paymentStatus, invoiceExpectedPence: amountCharged });
     const extraChargeBreakdown = buildExtraChargeBreakdown(
       extraChargeSelections,
       congestionChargePence,
@@ -368,6 +374,10 @@ export async function normalizeMongoDataset(dataset: MongoDataset): Promise<Norm
     const exceptions = exceptionsByJob.get(jobId) || [];
     const driverJobSummaryDoc = driverJobSummaryByJob.get(jobId);
     const driverJobSummary = driverJobSummaryDoc ? {
+      schemaVersion: driverJobSummaryDoc.schemaVersion,
+      noPaymentReceived: driverJobSummaryDoc.noPaymentReceived,
+      invoiceAmountPence: driverJobSummaryDoc.invoiceAmountPence,
+      chargeItems: driverJobSummaryDoc.chargeItems,
       jobId: driverJobSummaryDoc.jobId,
       driverInitials: driverJobSummaryDoc.driverInitials,
       driverEmail: driverJobSummaryDoc.driverEmail,
@@ -411,6 +421,11 @@ export async function normalizeMongoDataset(dataset: MongoDataset): Promise<Norm
       calendarEventId: job.calendarEventId || "",
       bookedStart, bookedFinish, actualStart, actualFinish, ...arrivalProofTiming, onMyWayAt, driverViewedAt,
       bookedMinutes, actualMinutes, delayMinutes, delayBand, timingTrustworthy,
+      arrivalDelaySource,
+      allocatedMinutes, timeBilling: job.timeBilling,
+      timeBillingStatus: job.timeBillingStatus ?? (job.status === "COMPLETED" ? "legacy" : undefined),
+      timeBillingIssue: job.timeBillingIssue,
+      driverReportedOvertimeMinutes: job.driverReportedOvertimeMinutes,
       customerName: job.customerName || "Not recorded",
       customerEmail: job.customerEmail || undefined,
       customerPhone: job.customerPhone || undefined,
@@ -423,6 +438,8 @@ export async function normalizeMongoDataset(dataset: MongoDataset): Promise<Norm
       status, currentState, workflowCompletionPct,
       basePrice, extraChargeSelections, extraCharges, congestionCharge: congestionChargePence, tunnelCharge: tunnelChargePence,
       overtimeMinutes, overtimeCharge, calculatedTotalCharges, totalCharges, amountCharged, reconciled,
+      paymentLedger,
+      roadFeeAmounts,
       totalAdjustmentNote: job.totalAdjustmentNote?.trim() || "",
       paymentMethod: job.paymentMethod || "Not recorded",
       paymentBreakdown,

@@ -24,6 +24,8 @@ import {
 import { REVIEW_REQUEST_EMAIL_TEMPLATE } from "../notifications/message";
 import { isMessageEnabled } from "../notifications/message-catalog";
 import { sendPushToAdmins } from "../push/push.service";
+import { calculateJobTotal, freezeJobCharges, prepareJobTimeBilling } from "../jobs/job-billing.service";
+import { withJobLock } from "../utils/lock";
 
 export const DEFAULT_CUSTOMER_CONFIRMATION_TEXT =
   "I confirm that the moving service has been completed and all my belongings have been unloaded. I have checked the van and confirm that nothing has been left behind. By signing, I agree that the job is complete and the team is released to leave. Any request to return after sign-off will be subject to availability and additional charges.";
@@ -34,46 +36,10 @@ export async function getConfirmationText(): Promise<string> {
   return getSetting("CUSTOMER_CONFIRMATION_TEXT", DEFAULT_CUSTOMER_CONFIRMATION_TEXT);
 }
 
-function crewRateKey(crewSize: number): string {
-  return `CREW_RATE_${crewSize}_MAN`;
-}
-
-function bookingMentionsPacking(job: Job): boolean {
-  const text = [job.extraRequest, job.rawTitle, job.rawDescription].filter(Boolean).join("\n").toLowerCase();
-  return /\b(pack|packing|full packing|packing service)\b/.test(text);
-}
-
-function calendarOvertimeRate(extraChargeText: string): { rate: number; unitMins: number } | null {
-  const text = extraChargeText.trim().toLowerCase();
-  if (!text) return null;
-
-  const amountMatch = text.match(/(?:\u00a3|\u00c2\u00a3|gbp\s*)\s*(\d+(?:\.\d+)?)/i) ?? text.match(/\b(\d+(?:\.\d+)?)\s*(?:pounds?|gbp)\b/i);
-  const rate = amountMatch ? Number(amountMatch[1]) : NaN;
-  if (!Number.isFinite(rate) || rate <= 0) return null;
-
-  if (/\b(?:half\s+(?:an?\s+)?hour|30\s*(?:mins?|minutes?))\b/i.test(text)) {
-    return { rate, unitMins: 30 };
-  }
-  if (/\b(?:full\s+hour|hours?|hrs?|hourly)\b/i.test(text)) {
-    return { rate, unitMins: 60 };
-  }
-  return null;
-}
-
-async function extraChargeAmount(job: Job): Promise<number> {
-  let total = 0;
-  if (job.extraCharges.includes(ExtraChargeType.CONGESTION)) {
-    total += parseFloat(await getSetting("CONGESTION_CHARGE", String(env.congestionCharge))) || env.congestionCharge;
-  }
-  if (job.extraCharges.includes(ExtraChargeType.TUNNEL)) {
-    total += parseFloat(await getSetting("TUNNEL_CHARGE", String(env.tunnelCharge))) || env.tunnelCharge;
-  }
-  total += job.overtimeCharge;
-  return total;
-}
-
 export async function suggestedTotal(job: Job): Promise<number> {
-  return Math.round((job.basePrice + await extraChargeAmount(job)) * 100) / 100;
+  const preview = { ...job };
+  await prepareJobTimeBilling(preview);
+  return calculateJobTotal(preview);
 }
 
 function validateManualTotal(raw: string): number {
@@ -151,6 +117,10 @@ export async function handlePhotoStep(
   photos: UploadedPhoto[]
 ): Promise<Job> {
   setContext({ jobId });
+  return withJobLock(jobId, () => handleLockedPhotoStep(jobId, identifier, photos));
+}
+
+async function handleLockedPhotoStep(jobId: string, identifier: string, photos: UploadedPhoto[]): Promise<Job> {
   const { job, driver } = await getJobForDriver(jobId, identifier);
 
   const state = job.currentState as WorkflowState;
@@ -193,13 +163,18 @@ export async function handlePhotoStep(
   const now = new Date().toISOString();
   if (evidenceType === "Arrival" && !job.actualStart) {
     job.actualStart = now;
+    job.actualStartSource = "arrival-photo";
+    job.bookingPackingService = /\b(pack|packing)\b/i.test([job.extraRequest, job.rawTitle, job.rawDescription].join("\n"));
     if (!job.pickupArrivalAt) job.pickupArrivalAt = now;
     await verifyArrivalAtPhotoUpload(job, driver, now).catch(err =>
       log.warn("verifyArrivalAtPhotoUpload failed (non-fatal)", { job_id: job.jobId, error: String(err) })
     );
   }
   if (evidenceType === "VanLoaded" && !job.vanLoadedAt) job.vanLoadedAt = now;
-  if (evidenceType === "EmptyVan" && !job.actualFinish) job.actualFinish = now;
+  if (evidenceType === "EmptyVan" && !job.actualFinish) {
+    job.actualFinish = now;
+    job.actualFinishSource = "empty-van-photo";
+  }
 
   const saved = await saveJob(job, driver, `PHOTO_${evidenceType.toUpperCase()}_RECEIVED`, from, `${photos.length} file(s)`);
   if (evidenceType === "VanLoaded") notifyOpsVanLoaded(saved, driver, from);
@@ -363,8 +338,15 @@ export async function handleAction(
 ): Promise<Job> {
   setContext({ jobId });
   if (action === "START_JOB") return beginJob(jobId, identifier);
+  return withJobLock(jobId, () => handleLockedAction(action, jobId, identifier, input));
+}
 
+async function handleLockedAction(action: string, jobId: string, identifier: string, input: Record<string, string[]>): Promise<Job> {
   const { job, driver } = await getJobForDriver(jobId, identifier);
+  if (job.status === "COMPLETED") {
+    if (["COMPLETE_JOB", "REVIEW_NONE", "REVIEW_YES", "SEND_REVIEW_EMAIL"].includes(action)) return job;
+    throw new ValidationError("This job is already completed.");
+  }
   const actor = driver.email || driver.chatUserName;
 
   switch (action) {
@@ -379,16 +361,14 @@ export async function handleAction(
     case "SUBMIT_EXTRA_CHARGES": {
       assertState(job.currentState, WorkflowState.WAITING_EXTRA_CHARGES);
       const values = validateExtraCharges(input.extra_charges ?? []);
+      if (job.timeBilling && [...job.extraCharges].sort().join("|") !== [...values].sort().join("|")) job.chargeSnapshot = undefined;
       job.extraCharges = values;
       const from = job.currentState;
 
       // Minimise typing: a driver who selected "No Extras Time" skips straight to
       // totals instead of being asked for overtime minutes and typing 0.
       const claimsOvertime = values.includes(ExtraChargeType.EXTRA_TIME);
-      if (!claimsOvertime) {
-        job.overtimeMinutes = 0;
-        job.overtimeCharge = 0;
-      }
+      await prepareJobTimeBilling(job, true);
       job.currentState = claimsOvertime ? WorkflowState.WAITING_OVERTIME : WorkflowState.WAITING_TOTAL_CHARGES;
 
       return saveJob(job, driver, action, from, values.join(", "));
@@ -398,89 +378,30 @@ export async function handleAction(
       assertState(job.currentState, WorkflowState.WAITING_OVERTIME);
       const driverMinutes = validateMinutes(input.overtime_minutes?.[0] ?? "");
 
-      // Overtime reconciliation: cross-check the driver's entered overtime against
-      // actual server-recorded timestamps. If the server elapsed time implies MORE
-      // overtime than the driver entered, use the server figure to prevent
-      // under-reporting.
-      let reconciledMinutes = driverMinutes;
-      if (job.actualStart && job.bookedMinutes > 0) {
-        const elapsedNowMinutes = Math.round((Date.now() - new Date(job.actualStart).getTime()) / 60_000);
-        const serverOvertimeEstimate = Math.max(0, elapsedNowMinutes - job.bookedMinutes);
-        const discrepancy = serverOvertimeEstimate - driverMinutes;
-        if (discrepancy > 0) {
-          reconciledMinutes = serverOvertimeEstimate;
-          await appendActivity({
-            jobId, driver: actor, action: "OVERTIME_RECONCILED",
-            detail: `Driver entered ${driverMinutes} min; server timestamps indicate ${serverOvertimeEstimate} min elapsed — using server estimate.`
-          });
-        } else if (Math.abs(discrepancy) >= 15) {
-          await appendActivity({
-            jobId, driver: actor, action: "OVERTIME_NOTE",
-            detail: `Driver entered ${driverMinutes} min; server timestamps indicate ~${serverOvertimeEstimate} min elapsed.`
-          });
-        }
-      }
-
-      job.overtimeMinutes = reconciledMinutes;
-
-      // Crew size for the overtime period, as picked by the driver -- may differ from
-      // the job's booked crewSize (a helper joined partway through, or left early), so
-      // it's asked explicitly rather than assumed from the booking. Falls back to the
-      // booked crew size if the client didn't send one (older cached frontend build).
-      const overtimeCrewSize = input.overtime_crew_size?.[0]
+      job.driverReportedOvertimeMinutes = driverMinutes;
+      job.driverReportedOvertimeCrewSize = input.overtime_crew_size?.[0]
         ? validateCrewSize(input.overtime_crew_size[0])
         : job.crewSize;
-
-      // Same keys the /admin Settings screen edits -- ops can override any of these
-      // without a redeploy; env.ts's values are only the fallback.
-      const otGraceStr = await getSetting("OVERTIME_GRACE_MINS", String(env.overtimeGraceMinutes));
-      const otGrace = parseInt(otGraceStr, 10) || 0;
-
-      const rateKey = crewRateKey(overtimeCrewSize);
-      const rateFallback =
-        overtimeCrewSize === 1 ? env.crewRate1Man :
-        overtimeCrewSize === 2 ? env.crewRate2Man :
-        overtimeCrewSize === 3 ? env.crewRate3Man :
-        env.crewRate3Man;
-
-      const isPackingService = job.extraCharges.includes(ExtraChargeType.PACKING) || bookingMentionsPacking(job);
-      const defaultRateStr = isPackingService
-        ? await getSetting("PACKING_RATE", String(env.packingRate))
-        : await getSetting(rateKey, String(rateFallback));
-      const defaultRate = parseFloat(defaultRateStr) || rateFallback;
-
-      // Bug fixed here: this used to fall back to the flat env.overtimeRatePer30Minutes
-      // (£55) whenever OVERTIME_RATE_PER_30 wasn't explicitly set, which -- since that
-      // env default is always truthy -- meant the crew/packing-based defaultRate below
-      // was silently never used. Matches TMV-Chat-bot's original logic: an explicit
-      // OVERTIME_RATE_PER_30 setting is a real override; otherwise always use the
-      // crew-size (or packing) rate, exactly as documented in admin/settings-spec.ts's
-      // hint for this key.
-      const calendarRate = calendarOvertimeRate(job.extraChargeText);
-      const otRateStr = await getSetting("OVERTIME_RATE_PER_30", "");
-      const otRate = calendarRate?.rate ?? (otRateStr ? (parseFloat(otRateStr) || defaultRate) : defaultRate);
-
-      const unitStr = isPackingService ? "Per 30 minutes" : await getSetting("CREW_BILLING_UNIT", env.crewBillingUnit);
-      const unitMins = calendarRate?.unitMins ?? (unitStr.toLowerCase().includes("hour") ? 60 : 30);
-
-      const chargeableMinutes = Math.max(0, reconciledMinutes - otGrace);
-      job.overtimeCharge = chargeableMinutes === 0
-        ? 0
-        : calendarRate
-          ? Math.round((chargeableMinutes / unitMins) * otRate * 100) / 100
-          : Math.ceil(chargeableMinutes / unitMins) * otRate;
+      await prepareJobTimeBilling(job, true);
+      if (driverMinutes !== job.overtimeMinutes) {
+        await appendActivity({
+          jobId, driver: actor, action: "OVERTIME_RECONCILED",
+          detail: `Driver reported ${driverMinutes} min; recorded move exceeds allocation by ${job.overtimeMinutes} min. Recorded timing determines billing.`
+        });
+      }
 
       const from = job.currentState;
       job.currentState = WorkflowState.WAITING_TOTAL_CHARGES;
-      const crewLabel = isPackingService ? "packing rate" : `${overtimeCrewSize}-man rate`;
-      return saveJob(job, driver, action, from, `${reconciledMinutes} minutes @ ${crewLabel} / ${formatPounds(job.overtimeCharge)}`);
+      return saveJob(job, driver, action, from, `${job.overtimeMinutes} minutes / ${formatPounds(job.overtimeCharge)}; driver reported ${driverMinutes} minutes`);
     }
 
     case "SUBMIT_TOTAL_CHARGES": {
       assertState(job.currentState, WorkflowState.WAITING_TOTAL_CHARGES);
       const manualTotal = input.total_charges?.[0];
       const adjustmentNote = input.total_adjustment_note?.[0]?.trim() ?? "";
-      const systemTotal = await suggestedTotal(job);
+      await prepareJobTimeBilling(job, true);
+      await freezeJobCharges(job);
+      const systemTotal = await calculateJobTotal(job);
       const total = manualTotal ? validateManualTotal(manualTotal) : systemTotal;
       if (manualTotal && !adjustmentNote) {
         throw new ValidationError("Add a reason for the total charges adjustment.");
@@ -577,6 +498,9 @@ export async function handleAction(
     }
 
     case "GO_BACK": {
+      if (!job.timeBilling && [WorkflowState.WAITING_PAYMENT, WorkflowState.WAITING_REVIEW_CHECK, WorkflowState.WAITING_REVIEW_SEND].includes(job.currentState as WorkflowState)) {
+        job.timeBillingStatus = "legacy";
+      }
       const from = job.currentState;
       const backTarget = BACK_TARGET[from as WorkflowState];
       if (!backTarget) throw new ValidationError("There's no previous step to go back to here.");
@@ -645,6 +569,10 @@ export async function submitDrawnSignature(
   customerName: string,
   signatureUrl: string
 ): Promise<Job> {
+  return withJobLock(jobId, () => submitLockedSignature(jobId, identifier, customerName, signatureUrl));
+}
+
+async function submitLockedSignature(jobId: string, identifier: string, customerName: string, signatureUrl: string): Promise<Job> {
   const { job, driver } = await getJobForDriver(jobId, identifier);
   if (job.currentState !== WorkflowState.WAITING_CLIENT_CONFIRMATION) {
     throw new SignatureAlreadyCapturedError();

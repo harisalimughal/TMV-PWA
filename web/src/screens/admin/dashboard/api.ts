@@ -11,6 +11,7 @@ import {
   DriverSummaryItem, FinanceSummaryResponse, NormalizedJob, ScenarioItem, SummaryResponse, VanComplianceItem, VanDriverRecordItem, VanRecordItem
 } from "./types";
 import { SERVER_ERROR_MESSAGE } from "../../../lib/apiErrors";
+import type { DriverReport } from "./driverReport.types";
 
 /**
  * Every admin fetch goes through this instead of a bare `fetch()`. A 5xx, or the
@@ -47,6 +48,25 @@ export interface PaginationMeta {
   total: number;
   totalPages: number;
   hasMore: boolean;
+}
+
+export async function fetchJobLiabilityReport(jobId: string): Promise<{ items: import("./driverReport.types").ReportLiability[]; coverage: string }> {
+  const res = await apiFetch("/api/admin/liabilities/jobs/" + encodeURIComponent(jobId));
+  if (!res.ok) throw await apiError(res, "Job liability evidence could not be loaded.");
+  return res.json();
+}
+
+export async function fetchDriverReport(initials: string, query: Record<string, string | number>, signal?: AbortSignal): Promise<DriverReport> {
+  const params = new URLSearchParams(Object.entries(query).map(([key, value]) => [key, String(value)]));
+  const res = await apiFetch(`/api/admin/driver-reports/${encodeURIComponent(initials)}?${params}`, { signal });
+  if (!res.ok) throw await apiError(res, "Driver report could not be loaded.");
+  return res.json();
+}
+
+export async function fetchRoadAssessment(jobId: string): Promise<{ flags: import("./driverReport.types").ReportFlag[]; comparisons: Array<{ type: string; observedExpectedPence: number | null; jobRecordedPence: number | null; manualReportedPence: number | null }>; activity: Array<{ visitId: string; reason: string; chargeable: boolean | null }> }> {
+  const res = await apiFetch(`/api/admin/gps/jobs/${encodeURIComponent(jobId)}/charges`);
+  if (!res.ok) throw await apiError(res, "Charge evidence could not be loaded.");
+  return res.json();
 }
 
 export interface JobsResponse {
@@ -128,11 +148,13 @@ export async function saveJobReview(
   return res.json();
 }
 
-export async function fetchDrivers(from?: string, to?: string): Promise<{ drivers: DriverSummaryItem[] }> {
+export async function fetchDrivers(from?: string, to?: string, includeMoving = false, signal?: AbortSignal, completedOnly = false): Promise<{ drivers: DriverSummaryItem[] }> {
   const params = new URLSearchParams();
   if (from) params.set("from", from);
   if (to) params.set("to", to);
-  const res = await apiFetch(`/api/admin/drivers/summary?${params.toString()}`);
+  if (includeMoving) params.set("includeMoving", "1");
+  if (completedOnly) params.set("completedOnly", "1");
+  const res = await apiFetch(`/api/admin/drivers/summary?${params.toString()}`, { signal });
   if (!res.ok) throw await apiError(res, "Failed to load drivers summary");
   return res.json();
 }
