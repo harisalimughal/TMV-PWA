@@ -8,7 +8,7 @@ Driver mobile/tablet top-bar and desktop-sidebar bells now opt into a detail mod
 
 The modal displays the full saved title/body without truncation or line clamps, preserving paragraph breaks. It includes a type badge, London received timestamp, highlighted title and accented message content; congestion/tunnel/arrival reminders use warning styling. Long text scrolls inside the modal. Portal rendering avoids header/sidebar clipping; existing modal focus trapping, scroll locking and focus return are reused. Close, Escape and backdrop dismissal work, while non-dismissible forms remain protected.
 
-An explicit Open related page link is offered only for valid same-origin HTTP(S) destinations. Message content is rendered as plain React text, never HTML. Invalid times and unknown kinds have safe fallbacks. Local read-storage failure does not prevent opening the message. Existing mark-all-read, notification retention, persistent alert banners, operating-system push clicks and push-worker message storage are unchanged.
+The Open related page button was removed at the user's request on 2026-10-12. The detail modal is read-only with its existing close controls. Message content is rendered as plain React text, never HTML. Invalid times and unknown kinds have safe fallbacks. Local read-storage failure does not prevent opening the message. Existing mark-all-read, notification retention, persistent alert banners, operating-system push clicks and push-worker message storage are unchanged.
 
 This reveals complete content already stored in the notification log; it cannot reconstruct a message that was shortened before reaching the application. No notifications, database jobs or API/provider writes were created to test it.
 

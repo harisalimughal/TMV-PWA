@@ -32,7 +32,8 @@ describe("Driver notification details", () => {
     expect(mocks.markRead).toHaveBeenCalledWith(42);
     expect(location.href).toBe(before); expect(screen.queryByRole("menu")).not.toBeInTheDocument();
     expect(container).not.toContainElement(dialog);
-    expect(within(dialog).getByRole("link", { name: "Open related page" })).toHaveAttribute("href", "/?tab=jobs");
+    expect(within(dialog).queryByRole("link")).not.toBeInTheDocument();
+    expect(within(dialog).queryByText("Open related page")).not.toBeInTheDocument();
   });
   it("closes on Escape, unlocks scrolling and restores focus to the bell", () => {
     render(<NotificationBell showDetails />); const trigger = screen.getByRole("button", { name: "Notifications, 1 unread" });
@@ -65,7 +66,7 @@ describe("Driver notification details", () => {
     expect(dialog.querySelector("p")?.textContent).toBe(body); expect(dialog.querySelector("img")).toBeNull();
     expect(dialog.querySelector(".border-warning")).toBeInTheDocument();
   });
-  it.each(["javascript:alert(1)", "https://other.example.invalid/job", "//other.example.invalid/job"])("does not offer an unsafe or cross-origin destination: %s", url => {
+  it.each(["/?tab=jobs", "javascript:alert(1)", "https://other.example.invalid/job", "//other.example.invalid/job"])("does not offer a related-page link for destination: %s", url => {
     render(<NotificationDetailModal notification={{ ...notification, url, kind: "__proto__", receivedAt: NaN }} onClose={vi.fn()} />);
     const dialog = screen.getByRole("dialog"); expect(within(dialog).queryByRole("link")).not.toBeInTheDocument();
     expect(within(dialog).getByText("Time unavailable")).toBeInTheDocument();
