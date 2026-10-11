@@ -90,13 +90,17 @@ beforeEach(async () => {
 afterEach(() => { vi.useRealTimers(); vi.unstubAllEnvs(); });
 
 describe("Real HTTP job/manual/report/export integration with synthetic persistence", () => {
-  it("completes, gates the queue, locks/retries manual details, survives HTTP restart and exports matching totals", async () => {
+  it("completes, defers missing manual details without blocking starts, locks/retries, survives restart and exports matching totals", async () => {
     const driver = driverCookie(), admin = adminCookie();
     expect((await request("/api/jobs/INTEGRATION/actions", driver, { action: "REVIEW_NONE" })).status).toBe(200);
     expect(state.jobs.get("INTEGRATION")).toMatchObject({ status: "COMPLETED", timeBilling: { scheduledMinutes: 90, allocatedMinutes: 120, actualMinutes: 150, extraChargePence: 5500 }, totalCharges: 273 });
-    const blocked = await request("/api/jobs/NEXT/start", driver, {}); expect(blocked.status).toBe(409); expect((await blocked.json()).error.code).toBe("MANUAL_DETAILS_PENDING");
+    const pending = await request("/api/jobs/pending-submissions", driver); expect(pending.status).toBe(200);
+    expect((await pending.json()).jobs.map((job: { jobId: string }) => job.jobId)).toEqual(["INTEGRATION"]);
+    expect((await (await request("/api/jobs/list", driver)).json()).pendingManualDetails).toBeNull();
+    expect((await request("/api/jobs/NEXT/start", driver, {})).status).toBe(200);
     const submissions = await Promise.all([request("/api/jobs/INTEGRATION/driver-summary", driver, manualBody()), request("/api/jobs/INTEGRATION/driver-summary", driver, manualBody())]);
     expect(submissions.map(row => row.status)).toEqual([200, 200]); expect(state.inserts).toBe(1);
+    expect((await (await request("/api/jobs/pending-submissions", driver)).json()).jobs).toEqual([]);
     await stopServer(); vi.resetModules(); await startServer();
     expect((await request("/api/jobs/INTEGRATION/driver-summary", driver, manualBody())).status).toBe(200); expect(state.inserts).toBe(1);
     const changed = await request("/api/jobs/INTEGRATION/driver-summary", driver, { ...manualBody(), helperName: "Changed" }); expect(changed.status).toBe(409);
@@ -109,6 +113,9 @@ describe("Real HTTP job/manual/report/export integration with synthetic persiste
     const pdf = await request(`/api/admin/driver-reports/AB/export.pdf?${range}`, admin); expect(pdf.status).toBe(200); expect(Buffer.from(await pdf.arrayBuffer()).subarray(0, 5).toString()).toBe("%PDF-");
     expect((await request("/api/jobs/NEXT/start", driver, {})).status).toBe(200);
   }, 30000);
+  it("requires a driver session for pending submissions", async () => {
+    expect((await request("/api/jobs/pending-submissions", "")).status).toBe(401);
+  });
   it("denies missing, forged, expired, driver and JSON-object cookies at the admin boundary", async () => {
     for (const cookie of ["", "tmv_admin_session=forged", adminCookie(Date.now()), driverCookie(), `tmv_admin_session=${encodeURIComponent('j:{"purpose":"admin_session"}')}`]) {
       expect((await request(`/api/admin/driver-reports/AB/export.xlsx?${range}`, cookie)).status).toBe(401);

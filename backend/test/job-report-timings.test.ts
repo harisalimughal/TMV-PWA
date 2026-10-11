@@ -4,6 +4,11 @@ import { EvidenceStatus, type EvidenceRecord, type Job } from "../src/jobs/job.t
 const job = { jobId: "ONE", actualStart: "2026-10-09T09:00:00Z", actualFinish: "2026-10-09T11:00:00Z", actualStartSource: "arrival-photo", actualFinishSource: "empty-van-photo",
   pickupArrivalAt: "2026-10-09T09:00:00Z", vanLoadedAt: "2026-10-09T09:20:00Z", trackerArrivalAt: "2026-10-09T08:58:00Z", clientSignatureAt: "2026-10-09T11:05:00Z" } as Job;
 describe("Recorded job milestones", () => {
+  it("includes the recorded On the Way time without inventing it from other milestones", () => {
+    expect(jobReportTimings({ ...job, onMyWayAt: "2026-10-09T09:40:00+01:00" }).onMyWayAt).toBe("2026-10-09T08:40:00.000Z");
+    expect(jobReportTimings(job).onMyWayAt).toBeNull();
+    expect(jobReportTimings({ ...job, onMyWayAt: "invalid" }).onMyWayAt).toBeNull();
+  });
   it("includes the same stored missing-arrival explanation used by Jobs", () => {
     const missing = { ...job, trackerArrivalAt: undefined, trackerUnverifiedReason: "Van was 405m away" };
     expect(jobReportTimings(missing)).toMatchObject({ trackerArrivalAt: null, trackerUnverifiedReason: "Van was 405m away from pickup point" });

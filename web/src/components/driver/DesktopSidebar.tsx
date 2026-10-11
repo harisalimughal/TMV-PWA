@@ -1,5 +1,5 @@
 import React from "react";
-import { ClipboardList, FileWarning, LogOut, Settings, Truck } from "lucide-react";
+import { ClipboardList, FileClock, FileWarning, LogOut, Settings, Truck } from "lucide-react";
 import { cx } from "../../ui";
 import type { DriverProfile } from "../../api/auth";
 import type { TabId } from "./BottomNav";
@@ -18,6 +18,8 @@ export interface DesktopSidebarProps {
   onSelect: (tab: TabId) => void;
   driver: DriverProfile;
   onLogout: () => void;
+  onOpenPendingSubmissions?: () => void;
+  pendingSubmissionsActive?: boolean;
 }
 
 /**
@@ -25,7 +27,7 @@ export interface DesktopSidebarProps {
  * active item takes a faint blue wash and a left accent rule; nothing else is
  * coloured.
  */
-export function DesktopSidebar({ active, onSelect, driver, onLogout }: DesktopSidebarProps) {
+export function DesktopSidebar({ active, onSelect, driver, onLogout, onOpenPendingSubmissions, pendingSubmissionsActive }: DesktopSidebarProps) {
   return (
     <aside className="fixed inset-y-0 left-0 z-30 hidden w-[var(--sidebar-width)] flex-col border-r border-line bg-surface lg:flex">
       <div className="flex items-start justify-between gap-2 px-5 pb-4 pt-5">
@@ -39,7 +41,7 @@ export function DesktopSidebar({ active, onSelect, driver, onLogout }: DesktopSi
       <nav aria-label="Main" className="flex-1 px-2.5 py-2">
         <ul className="flex flex-col gap-0.5">
           {NAV.map(item => {
-            const isActive = item.id === active;
+            const isActive = item.id === active && !pendingSubmissionsActive;
             const Icon = item.icon;
             return (
               <li key={item.id}>
@@ -64,6 +66,7 @@ export function DesktopSidebar({ active, onSelect, driver, onLogout }: DesktopSi
               </li>
             );
           })}
+          {onOpenPendingSubmissions && <li><button type="button" aria-current={pendingSubmissionsActive ? "page" : undefined} onClick={onOpenPendingSubmissions} className={cx("flex min-h-11 w-full items-center gap-2.5 rounded-card px-3 py-2 text-left text-label", pendingSubmissionsActive ? "bg-surface-raised font-semibold text-fg" : "text-fg-muted hover:bg-surface-sunken")}><FileClock className="size-[17px] shrink-0" />Pending Submissions</button></li>}
         </ul>
       </nav>
 

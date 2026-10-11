@@ -11,8 +11,7 @@ import { DriverProfile, Job, JobStatus } from "./job.types";
 import { syncTodayBookings } from "./booking.service";
 import { log } from "../utils/logger";
 import { withJobLock, withLock } from "../utils/lock";
-import { assertQueueReleased, pendingManualDetails } from "./manual-details-gate";
-import { isQueueBlockingJob } from "./job-queue-policy";
+import { pendingManualSubmissions } from "./manual-details-gate";
 import { recordGpsAssignment } from "../gps/gps.association";
 import { captureRoadTariff } from "../gps/road-charge.tariff";
 import { ValidationError } from "../workflow/validation.engine";
@@ -144,11 +143,8 @@ export async function getNextJobForDriver(
   // a single indexed document lookup, so this costs a few ms, not a second query.
   const driver = await resolveDriver(identifier);
   const jobs = await listJobs({ driverInitials: driver.initials });
-  const pending = await pendingManualDetails(jobs);
-  if (pending) return { job: pending, driver };
-
   const active = jobs
-    .filter(j => isQueueBlockingJob(j) && j.driverInitials === driver.initials)
+    .filter(j => j.status === JobStatus.IN_PROGRESS && j.driverInitials === driver.initials)
     .sort((a, b) => a.bookedStart.localeCompare(b.bookedStart))[0];
   if (active) return { job: active, driver };
 
@@ -156,7 +152,6 @@ export async function getNextJobForDriver(
     jobs
       .filter(j => isDueByToday(j.bookedStart))
       .filter(j => j.status !== JobStatus.COMPLETED && j.status !== JobStatus.CANCELLED)
-      .filter(j => j.status !== JobStatus.IN_PROGRESS || isQueueBlockingJob(j))
       // Assigned-only: a driver only ever sees their own jobs, never every unassigned
       // booking in the calendar (the "open pool, first to start it claims it" design
       // this used to have -- see startJob's still-present claim logic below, now only
@@ -244,7 +239,6 @@ export async function getJobsGroupedForDriver(identifier: string): Promise<{
   // collection grew.
   const driver = await resolveDriver(identifier);
   const jobs = await listJobs({ driverInitials: driver.initials });
-  const pending = await pendingManualDetails(jobs);
   const now = DateTime.now().setZone(env.timezone);
   const todayKey = now.toISODate();
   const tomorrowKey = now.plus({ days: 1 }).toISODate();
@@ -258,14 +252,6 @@ export async function getJobsGroupedForDriver(identifier: string): Promise<{
   const next: Job[] = [];
 
   for (const job of relevant) {
-    if (isQueueBlockingJob(job, now.toJSDate(), env.timezone)) {
-      today.push(job);
-      continue;
-    }
-    if (job.status === JobStatus.IN_PROGRESS) {
-      past.push(job);
-      continue;
-    }
     const dayKey = londonDayKey(job.bookedStart);
     if (!dayKey || !todayKey) continue;
     if (dayKey === todayKey) today.push(job);
@@ -278,7 +264,15 @@ export async function getJobsGroupedForDriver(identifier: string): Promise<{
   past.sort(byBookedStart);
   next.sort(byBookedStart);
 
-  return { driver, today, past, next, pendingManualDetails: pending };
+  return { driver, today, past, next, pendingManualDetails: null };
+}
+
+export async function getPendingSubmissionsForDriver(identifier: string) {
+  const driver = await resolveDriver(identifier);
+  const jobs = await listJobs({ driverInitials: driver.initials });
+  const pending = await pendingManualSubmissions(jobs.filter(job => job.driverInitials === driver.initials));
+  return pending.map(job => ({ jobId: job.jobId, customerName: job.customerName, bookedStart: job.bookedStart,
+    actualFinish: job.actualFinish, requiredAt: job.manualDetailsRequiredAt! }));
 }
 
 export interface JobLookupOptions {
@@ -457,7 +451,6 @@ export async function sendOnMyWay(jobId: string, identifier: string): Promise<Jo
   return withJobLock(jobId, async () => {
     const { job, driver } = await getJobForDriver(jobId, identifier);
     return withLock(`driver-queue:${driver.initials}`, async () => {
-      await assertQueueReleased(await listJobs({ driverInitials: driver.initials }), job);
       await markJobViewed(jobId, identifier, "Tapped I'm on the Way");
 
       if (job.status === JobStatus.COMPLETED) throw new ValidationError("This job is already completed.");
@@ -494,7 +487,6 @@ export async function startJob(jobId: string, identifier: string): Promise<Job> 
   return withJobLock(jobId, async () => {
     const { job, driver } = await getJobForDriver(jobId, identifier);
     return withLock(`driver-queue:${driver.initials}`, async () => {
-      await assertQueueReleased(await listJobs({ driverInitials: driver.initials }), job);
       await markJobViewed(jobId, identifier, "Tapped Start Job");
 
       if (job.status === JobStatus.COMPLETED) throw new ValidationError("This job is already completed.");

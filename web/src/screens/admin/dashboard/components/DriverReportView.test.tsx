@@ -126,7 +126,7 @@ describe("Driver report evidence and comparison UI", () => {
     const tag = screen.getByText("Arrival to proof gap (15 min)");
     expect(tag).toHaveClass("rpt-bad");
     expect(tag.closest("td")).toHaveAttribute("colspan", "2");
-    expect(tag.closest("tr")?.firstElementChild).toHaveAttribute("colspan", "3");
+    expect(tag.closest("tr")?.firstElementChild).toHaveAttribute("colspan", "4");
     for (const [arrival, proof] of [["2026-10-05T09:00:00Z", "2026-10-05T09:14:59Z"], ["2026-10-05T09:00:00Z", null], [null, "2026-10-05T09:15:00Z"], ["invalid", "2026-10-05T09:15:00Z"], ["2026-10-05T09:30:00Z", "2026-10-05T09:15:00Z"]]) {
       rerender(<DriverReportView {...props} report={withTimes(arrival, proof)} tab="performance" />);
       expect(screen.queryByText(/Arrival to proof gap/)).not.toBeInTheDocument();
@@ -145,22 +145,22 @@ describe("Driver report evidence and comparison UI", () => {
     expect(card()).toHaveTextContent("Unknown"); expect(card()).toHaveTextContent("1 missing charges");
     expect(card()).toHaveClass("rpt-metric-incomplete");
   });
-  it("shows the five milestones below the Performance & Timings cards, with no invented missing timestamps", async () => {
+  it("shows all six milestones including On the Way below the Performance & Timings cards", async () => {
     const report = await sampleDriverReport("DEMO", { from: props.from, to: props.to, pageSize: 1 });
     const { container, rerender } = render(<DriverReportView {...props} report={report} tab="performance" />);
     expect(screen.getByRole("tab", { name: "Performance & Timings" })).toHaveAttribute("aria-selected", "true");
     expect(container.querySelector(".rpt-coverage")).toBeNull();
     expect(screen.queryByText(/Observed GPS evidence/)).not.toBeInTheDocument();
     const timings = screen.getByRole("table", { name: "Job timings" });
-    expect(within(timings).getAllByRole("columnheader").map(cell => cell.textContent)).toEqual(["Job", "Date", "Customer", "Tracker Arrival", "Proof Photo", "Van Loaded", "Empty Van", "Customer Signed"]);
+    expect(within(timings).getAllByRole("columnheader").map(cell => cell.textContent)).toEqual(["Job", "Date", "Customer", "On the Way", "Tracker Arrival", "Proof Photo", "Van Loaded", "Empty Van", "Customer Signed"]);
     const cells = timings.querySelectorAll("tbody td");
     expect(cells[1]).toHaveTextContent("05 Oct 2026");
-    expect([...cells].slice(3).map(cell => cell.textContent)).toEqual(["09:58 (distance not recorded)", "10:00", "10:20", "12:30", "12:35"]);
+    expect([...cells].slice(3).map(cell => cell.textContent)).toEqual(["09:40", "09:58 (distance not recorded)", "10:00", "10:20", "12:30", "12:35"]);
     expect(timings).not.toHaveTextContent("Captured");
     expect(container.querySelector('.rpt-metrics')?.nextElementSibling).toContainElement(timings);
     const missing = { ...report, jobs: { ...report.jobs, items: [{ ...report.jobs.items[0], timings: undefined }] } };
     rerender(<DriverReportView {...props} report={missing} tab="performance" />);
-    expect(within(screen.getByRole("table", { name: "Job timings" })).getAllByText("Not recorded")).toHaveLength(5);
+    expect(within(screen.getByRole("table", { name: "Job timings" })).getAllByText("Not recorded")).toHaveLength(6);
   });
   it("shows three date-filtered charts without metric or grouping selectors", async () => {
     const report = await sampleDriverReport("DEMO", { from: props.from, to: props.to });
@@ -200,8 +200,9 @@ describe("Driver report evidence and comparison UI", () => {
     expect(job).toHaveTextContent("sample@example.test");
     expect(within(job as HTMLElement).getByRole("table", { name: "Job Performance & Timings" })).toBeInTheDocument();
     expect(within(job as HTMLElement).getByRole("table", { name: "Job Payments" })).toHaveTextContent("Driver Collected - Manual Entries");
-    for (const label of ["Tracker Arrival", "Proof Photo", "Van Loaded", "Empty Van", "Customer Signed", "Moving Hours", "Manual Helper Hours", "Review report"]) expect(within(job as HTMLElement).getByRole("table", { name: "Job Performance & Timings" })).toHaveTextContent(label);
+    for (const label of ["On the Way", "Tracker Arrival", "Proof Photo", "Van Loaded", "Empty Van", "Customer Signed", "Moving Hours", "Manual Helper Hours", "Review report"]) expect(within(job as HTMLElement).getByRole("table", { name: "Job Performance & Timings" })).toHaveTextContent(label);
     const jobTimings = within(job as HTMLElement).getByRole("table", { name: "Job Performance & Timings" });
+    expect(within(jobTimings).getByRole("cell", { name: "On the Way" }).closest("tr")?.lastElementChild).toHaveTextContent("09:40");
     expect(within(jobTimings).getAllByRole("columnheader").map(cell => cell.textContent)).toEqual(["Detail", "Value", "Timing", "Time"]);
     expect(within(jobTimings).queryByRole("row", { name: /Completion status/ })).not.toBeInTheDocument();
     expect(within(job as HTMLElement).queryByRole("columnheader", { name: "Notes" })).not.toBeInTheDocument();
@@ -230,7 +231,7 @@ describe("Driver report evidence and comparison UI", () => {
     const { container } = render(<QueryClientProvider client={new QueryClient()}><DriverReportView {...props} report={report} tab="jobs" /></QueryClientProvider>);
     fireEvent.click(container.querySelector(".rpt-job > summary")!);
     const timings = screen.getByRole("table", { name: "Job Performance & Timings" });
-    expect(within(timings).getAllByText("Not recorded")).toHaveLength(5);
+    expect(within(timings).getAllByText("Not recorded")).toHaveLength(6);
     const payments = screen.getByRole("table", { name: "Job Payments" });
     expect(within(payments).getByRole("row", { name: /^Driver Collected/ })).toHaveTextContent("£376.00");
     expect(within(payments).getByRole("row", { name: /Adjustment reason/ })).toHaveTextContent("Agreed discount");

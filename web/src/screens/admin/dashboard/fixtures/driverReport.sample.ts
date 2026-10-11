@@ -12,7 +12,7 @@ export const sampleJobs: DriverReportJob[] = Array.from({ length: 36 }, (_, inde
   const manual = pending ? null : invoice ? payments(0, 0, 0, expected) : payments(Math.round(manualAmount * .4), Math.round(manualAmount * .4), Math.round(manualAmount * .2));
   return { jobId, jobDetailsUrl: `/admin?section=jobs&job=${jobId}`, status: "COMPLETED", customer: { name: `Sample Customer ${index + 1}`, email: "sample@example.test", phone: "Not supplied" }, pickup: "Sample pickup, London", dropoff: "Sample delivery, London",
     bookedStart: start, bookedFinish: start.replace("09:00", "10:30"), actualStart: start, actualFinish: finish, operationalDate: start,
-    timings: { trackerArrivalAt: start.replace("09:00", "08:58"), proofPhotoAt: start, vanLoadedAt: start.replace("09:00", "09:20"), emptyVanAt: finish, customerSignedAt: finish.replace("11:30", "11:35"),
+    timings: { onMyWayAt: start.replace("09:00", "08:40"), trackerArrivalAt: start.replace("09:00", "08:58"), proofPhotoAt: start, vanLoadedAt: start.replace("09:00", "09:20"), emptyVanAt: finish, customerSignedAt: finish.replace("11:30", "11:35"),
       proofPhotoSource: "captured", vanLoadedSource: "captured", emptyVanSource: "captured" },
     duration: { bookedMinutes: 90, allocatedMinutes: 120, workingMinutes: 150, manualMinutes: pending ? null : index % 4 === 0 ? 155 : 150, differenceMinutes: pending ? null : index % 4 === 0 ? -5 : 0, overtimeMinutes: 30, arrivalDelayMinutes: index % 3 * 5, arrivalSource: "verified-gps" },
     finance: { systemCalculatedPence: expected, acceptedPence: expected, expectedPence: expected, adjustmentNote: null, systemPayments: system, manualPayments: manual, separatePrepaymentPence: 0,

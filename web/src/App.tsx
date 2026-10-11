@@ -5,6 +5,7 @@ import { LoginScreen } from "./screens/LoginScreen";
 import { ForgotPasswordScreen } from "./screens/ForgotPasswordScreen";
 import { ResetPasswordScreen } from "./screens/ResetPasswordScreen";
 import { JobListScreen } from "./screens/JobListScreen";
+import { PendingSubmissionsScreen } from "./screens/PendingSubmissionsScreen";
 import { JobWorkflowScreen } from "./screens/JobWorkflowScreen";
 import { LiabilityScreen, type LiabilityCheckpoint } from "./screens/LiabilityScreen";
 import { AccountSettingsScreen } from "./screens/AccountSettingsScreen";
@@ -73,16 +74,18 @@ type View =
   | { name: "forgot-password" }
   // ---- tab destinations (chrome: sidebar on desktop, bottom nav on mobile) ----
   | { name: "jobs"; driver: DriverProfile }
+  | { name: "pending-submissions"; driver: DriverProfile }
   | { name: "liability"; driver: DriverProfile; checkpoint?: LiabilityCheckpoint; jobId?: string }
   | { name: "van"; driver: DriverProfile }
   | { name: "settings"; driver: DriverProfile }
   // ---- drill-in flows (own the whole screen, no tab chrome) -------------------
   | { name: "pwa-settings"; driver: DriverProfile }
-  | { name: "job"; driver: DriverProfile; jobId: string };
+  | { name: "job"; driver: DriverProfile; jobId: string; returnTo?: "jobs" | "pending-submissions" };
 
 const TAB_FOR_VIEW: Record<string, TabId> = {
   jobs: "jobs",
   job: "jobs",
+  "pending-submissions": "jobs",
   liability: "liability",
   van: "van",
   settings: "profile"
@@ -317,9 +320,13 @@ export function App() {
       screen = (
         <JobWorkflowScreen
           jobId={view.jobId}
-          onBack={() => setView({ name: "jobs", driver: view.driver })}
+          onBack={() => setView(view.returnTo === "pending-submissions" ? { name: "pending-submissions", driver: view.driver } : { name: "jobs", driver: view.driver })}
         />
       );
+      break;
+
+    case "pending-submissions":
+      screen = <PendingSubmissionsScreen onOpenJob={jobId => setView({ name: "job", driver: view.driver, jobId, returnTo: "pending-submissions" })} />;
       break;
 
     case "liability":
@@ -372,6 +379,7 @@ export function App() {
 
   const isTabView =
     view.name === "jobs" ||
+    view.name === "pending-submissions" ||
     view.name === "liability" ||
     view.name === "van" ||
     view.name === "settings" ||
@@ -401,6 +409,8 @@ export function App() {
         }}
         driver={view.driver}
         onLogout={() => setConfirmLogout(true)}
+        onOpenPendingSubmissions={() => setView({ name: "pending-submissions", driver: view.driver })}
+        pendingSubmissionsActive={view.name === "pending-submissions"}
         showTopBar={view.name !== "job"}
       >
         <div key={view.name} className="screen-enter h-full">

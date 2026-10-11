@@ -1,6 +1,6 @@
 import React from "react";
-import { Truck } from "lucide-react";
-import { cx } from "../../ui";
+import { Menu, Truck } from "lucide-react";
+import { cx, IconButton } from "../../ui";
 import type { DriverProfile } from "../../api/auth";
 import { ThemeToggleButton } from "./ThemeToggle";
 import { NotificationBell } from "./NotificationBell";
@@ -9,6 +9,8 @@ export interface AppTopBarProps {
   driver: DriverProfile;
   /** Opens the Settings screen — wired to the "profile" tab. */
   onOpenProfile: () => void;
+  onOpenMenu?: () => void;
+  menuOpen?: boolean;
   className?: string;
 }
 
@@ -28,7 +30,7 @@ function initials(driver: DriverProfile): string {
  *
  * A blurred translucent bar with a hairline rule beneath it, clearing the notch.
  */
-export function AppTopBar({ driver, onOpenProfile, className }: AppTopBarProps) {
+export function AppTopBar({ driver, onOpenProfile, onOpenMenu, menuOpen, className }: AppTopBarProps) {
   return (
     <header
       className={cx(
@@ -41,14 +43,14 @@ export function AppTopBar({ driver, onOpenProfile, className }: AppTopBarProps) 
     >
       <div className="flex min-h-[64px] items-center justify-between gap-2 px-3 min-[375px]:px-[18px]">
         <div className="flex min-w-0 items-center gap-2.5">
-          <span
+          {onOpenMenu ? <IconButton title="Open menu" aria-label="Open driver menu" aria-haspopup="dialog" aria-expanded={menuOpen} icon={<Menu />} onClick={onOpenMenu} /> : <span
             className="grid size-[34px] shrink-0 place-items-center rounded-[11px] bg-brand text-brand-fg"
             aria-hidden
           >
             <Truck className="size-5" strokeWidth={2} />
-          </span>
+          </span>}
           <div className="min-w-0 leading-none">
-            <div className="text-[17px] font-bold tracking-normal text-fg">The Man Van</div>
+            <div className="text-[15px] min-[375px]:text-[17px] font-bold tracking-normal text-fg">The Man Van</div>
             <div className="mt-[3px] text-eyebrow text-fg-subtle">Driver</div>
           </div>
         </div>

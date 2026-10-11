@@ -1839,12 +1839,12 @@ function StepDock({
       return null;
 
     case "COMPLETED":
+      if (!completionSummarySubmitted) return null;
       return (
         <BottomActionBar>
           <Button
             fullWidth
             size="lg"
-            blockedReason={completionSummarySubmitted ? undefined : "Submit Manual details first."}
             onBlocked={onBlocked}
             onClick={onBackHome}
           >

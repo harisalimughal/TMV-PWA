@@ -2,7 +2,7 @@ import { Request, Response, Router } from "express";
 import multer from "multer";
 import { env } from "../config/env";
 import { requireDriverAuth } from "../auth/require-driver-auth";
-import { getJobForDriver, getJobsGroupedForDriver, getNextJobForDriver, getTomorrowJobsForDriver, markJobViewed, sendOnMyWay, startJob } from "./jobs.service";
+import { getJobForDriver, getJobsGroupedForDriver, getNextJobForDriver, getPendingSubmissionsForDriver, getTomorrowJobsForDriver, markJobViewed, sendOnMyWay, startJob } from "./jobs.service";
 import { uploadEvidenceImage } from "../storage/cloudinary";
 import { looksLikeImage } from "./evidence.service";
 import {
@@ -23,7 +23,6 @@ import { reverseGeocode } from "../integrations/geocode";
 import { log } from "../utils/logger";
 import { getDriverJobSummary } from "../db/driver-job-summary.repo";
 import { submitDriverJobSummary, ManualDetailsLockedError } from "./driver-job-summary.service";
-import { ManualDetailsPendingError } from "./manual-details-gate";
 
 export const JOB_EVIDENCE_UPLOAD_MAX_FILES = 5;
 export const SCENARIO_PHOTO_UPLOAD_MAX_FILES = 30;
@@ -69,10 +68,6 @@ function parseLiabilityCategories(raw: string): string[] {
 }
 
 function errorResponse(res: Response, error: unknown): void {
-  if (error instanceof ManualDetailsPendingError) {
-    res.status(409).json({ error: { code: "MANUAL_DETAILS_PENDING", message: error.message, jobId: error.jobId } });
-    return;
-  }
   if (error instanceof ManualDetailsLockedError) {
     res.status(409).json({ error: { code: "MANUAL_DETAILS_LOCKED", message: error.message } });
     return;
@@ -156,6 +151,12 @@ export function jobsRoutes(): Router {
     } catch (error) {
       errorResponse(res, error);
     }
+  });
+
+  router.get("/pending-submissions", async (req: Request, res: Response) => {
+    try {
+      res.json({ jobs: await getPendingSubmissionsForDriver(req.driverEmail!) });
+    } catch (error) { errorResponse(res, error); }
   });
 
   // Live reverse-geocode preview -- called from the camera the moment a location fix

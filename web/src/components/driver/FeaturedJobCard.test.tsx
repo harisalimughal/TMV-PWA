@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { act, render, screen, waitFor } from "@testing-library/react";
 import { ToastProvider } from "../ui/Toast";
 import { FeaturedJobCard } from "./FeaturedJobCard";
+import { UpcomingJobCard } from "./UpcomingJobCard";
 import type { Job } from "../../api/jobs";
 
 const startJob = vi.fn().mockResolvedValue({});
@@ -111,6 +112,11 @@ describe("FeaturedJobCard arrival automation", () => {
 
     await waitFor(() => expect(startJob).toHaveBeenCalledWith("TMV-ARRIVAL"));
     expect(onStarted).toHaveBeenCalledWith("TMV-ARRIVAL");
+  });
+  it("keeps read-only Upcoming cards without a start action", () => {
+    render(<ToastProvider><UpcomingJobCard job={job()} expanded onToggle={vi.fn()} /></ToastProvider>);
+    expect(screen.queryByRole("button", { name: /Proof of Arrival/i })).not.toBeInTheDocument();
+    expect(startJob).not.toHaveBeenCalled();
   });
 
   it("opens Proof of Arrival from a confirmed tracker arrival without phone geolocation", async () => {

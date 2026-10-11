@@ -7,7 +7,7 @@ import type { Job } from "../api/jobs";
 const mocks = vi.hoisted(() => ({ detail: vi.fn(), submit: vi.fn(), toast: { success: vi.fn(), error: vi.fn() } }));
 vi.mock("../api/jobs", async original => ({ ...await original<typeof import("../api/jobs")>(), fetchJobDetail: mocks.detail, submitDriverJobSummary: mocks.submit }));
 vi.mock("../components/ui/Toast", () => ({ useToast: () => mocks.toast }));
-vi.mock("../app/AppShell", () => ({ AppShell: ({ children }: { children: React.ReactNode }) => <div>{children}</div> }));
+vi.mock("../app/AppShell", () => ({ AppShell: ({ children, header, dock }: { children: React.ReactNode; header?: React.ReactNode; dock?: React.ReactNode }) => <div>{header}{children}{dock}</div> }));
 vi.mock("../lib/jobsRefresh", () => ({ notifyJobsRefresh: vi.fn() }));
 
 const job: Job = {
@@ -28,6 +28,17 @@ describe("Automatic Manual details workflow", () => {
   it("opens the form automatically for a newly completed job", async () => {
     render(<JobWorkflowScreen jobId={job.jobId} onBack={vi.fn()} />);
     expect(await screen.findByRole("heading", { name: "Manual details" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Do later" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Back to your jobs" })).not.toBeInTheDocument();
+  });
+  it("preserves the draft if normal navigation leaves the immediate completion form", async () => {
+    const back = vi.fn();
+    render(<JobWorkflowScreen jobId={job.jobId} onBack={back} />);
+    await screen.findByRole("heading", { name: "Manual details" });
+    fireEvent.change(screen.getByLabelText(/Cash amount/), { target: { value: "95" } });
+    fireEvent.click(screen.getByRole("button", { name: "Back to jobs" }));
+    expect(back).toHaveBeenCalledOnce(); expect(mocks.submit).not.toHaveBeenCalled();
+    expect(localStorage.getItem(`tmv:manual-details:v2:AB:${job.jobId}`)).not.toBeNull();
   });
   it("preserves the edited draft and shows save failure, then releases the queue on retry success", async () => {
     const back = vi.fn();

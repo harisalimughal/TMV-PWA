@@ -49,6 +49,15 @@ function job(jobId: string, bookedStart: string, status: Job["status"] = "READY"
 }
 
 describe("selectVisibleDriverJobs", () => {
+  it("keeps an unfinished 8am job active with a 9am job in Upcoming after both scheduled times", () => {
+    const current = job("8AM", "2026-10-12T07:00:00Z", "IN_PROGRESS");
+    current.bookedFinish = "2026-10-12T08:00:00Z";
+    current.actualFinish = "2026-10-12T08:15:00Z";
+    const later = job("9AM", "2026-10-12T08:00:00Z");
+    const visible = selectVisibleDriverJobs({ today: [later, current], past: [], next: [] });
+    expect(visible.today?.jobId).toBe("8AM");
+    expect(visible.upcomingGroups.flatMap(group => group.jobs.map(job => job.jobId))).toEqual(["9AM"]);
+  });
   it("promotes a newly assigned earlier today job and moves the later one back to upcoming", () => {
     const visible = selectVisibleDriverJobs({
       today: [

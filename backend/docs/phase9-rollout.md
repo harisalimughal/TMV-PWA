@@ -4,6 +4,8 @@ Status: local implementation/QA only. No release date is approved. No deployment
 
 ## Prospective Activation
 
+Local client amendment (2026-10-12, not deployed yet): the pending-submissions revision supersedes the start-gating policy below. Manual Details still opens immediately after completion, but missing entries do not block another visible active job. The marker identifies records for the Pending Submissions menu instead of forcing Jobs redirects. Upcoming remains read-only; scheduled finish timestamps do not hide a same-day unfinished workflow. No Do later or earlier-job reopening controls are added. See driver-pending-submissions.md and the latest plan.md checkpoint before any release.
+
 The activation instant is the UTC start of an explicitly approved release, recorded in the deployment/change log. Do not invent or backdate that date. Before a release, drain active jobs or approve a documented transition for them, confirm driver PWA updates, and verify that the frontend/backend build identifiers match.
 
 Driver gating is marker-based, not based on a historical booking date: only completed jobs bearing `manualDetailsRequiredAt` require a manual record before a new job starts. Never bulk-add that marker to already completed legacy jobs. Jobs that finish after activation receive the marker atomically with completion, even if an older accepted payment/billing snapshot is retained.

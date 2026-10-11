@@ -29,6 +29,8 @@ vi.mock("../src/db/jobs.repo", () => ({
 vi.mock("../src/auth/driver-account.service", () => ({
   getDriverProfile: (...args: any[]) => getDriverProfile(...args)
 }));
+vi.mock("../src/db/activity.repo", () => ({ appendActivity: vi.fn().mockResolvedValue(undefined), listActivityForJob: vi.fn().mockResolvedValue([]) }));
+vi.mock("../src/jobs/congestion-zone.service", () => ({ checkCongestionZoneAtJobStart: vi.fn().mockResolvedValue(undefined) }));
 // getJobsGroupedForDriver also triggers a throttled Calendar syncIfStale() (see its
 // own doc comment) -- irrelevant to what this file locks in (the Mongo query
 // scoping), so stubbed out rather than left to hit the real Google Calendar client.
@@ -36,7 +38,7 @@ vi.mock("../src/jobs/booking.service", () => ({
   syncTodayBookings: vi.fn().mockResolvedValue([])
 }));
 
-import { getJobsGroupedForDriver, getNextJobForDriver, getTomorrowJobsForDriver, startJob, sendOnMyWay } from "../src/jobs/jobs.service";
+import { getJobsGroupedForDriver, getNextJobForDriver, getPendingSubmissionsForDriver, getTomorrowJobsForDriver, startJob, sendOnMyWay } from "../src/jobs/jobs.service";
 
 const driver = {
   initials: "HE",
@@ -67,41 +69,58 @@ describe("driver job lists are scoped to that driver's own initials", () => {
     expect(listJobs).toHaveBeenCalledTimes(1);
     expect(listJobs).toHaveBeenCalledWith({ driverInitials: "HE" });
   });
-  it("shows an ongoing overnight queue blocker in the driver list, not inaccessible past jobs", async () => {
+  it("keeps earlier unfinished jobs available in Past regardless of elapsed scheduled time", async () => {
     vi.useFakeTimers(); vi.setSystemTime(new Date("2026-10-12T07:00:00Z"));
     const active = { jobId: "OVERNIGHT", driverInitials: "HE", status: JobStatus.IN_PROGRESS,
       bookedStart: "2026-10-11T22:00:00Z", bookedFinish: "2026-10-12T08:00:00Z" };
     const expired = { ...active, jobId: "EXPIRED", bookedFinish: "2026-10-12T06:00:00Z" };
     listJobs.mockResolvedValue([expired, active]);
     const grouped = await getJobsGroupedForDriver("helena@example.com");
-    expect(grouped.today.map(job => job.jobId)).toEqual(["OVERNIGHT"]);
-    expect(grouped.past.map(job => job.jobId)).toEqual(["EXPIRED"]);
-    expect((await getNextJobForDriver("helena@example.com")).job?.jobId).toBe("OVERNIGHT");
+    expect(grouped.today).toEqual([]);
+    expect(grouped.past.map(job => job.jobId)).toEqual(["EXPIRED", "OVERNIGHT"]);
+    expect((await getNextJobForDriver("helena@example.com")).job?.jobId).toBe("EXPIRED");
   });
-  it("does not let an expired current-day job occupy the only visible active slot", async () => {
+  it("keeps today's unfinished job visible after its scheduled end while the next remains visible too", async () => {
     vi.useFakeTimers(); vi.setSystemTime(new Date("2026-10-12T07:00:00Z"));
     listJobs.mockResolvedValue([
       { jobId: "EXPIRED", driverInitials: "HE", status: JobStatus.IN_PROGRESS, bookedStart: "2026-10-12T05:00:00Z", bookedFinish: "2026-10-12T06:00:00Z" },
       { jobId: "NEXT", driverInitials: "HE", status: JobStatus.READY, bookedStart: "2026-10-12T07:00:00Z", bookedFinish: "2026-10-12T08:00:00Z" }
     ]);
     const grouped = await getJobsGroupedForDriver("helena@example.com");
-    expect(grouped.today.map(job => job.jobId)).toEqual(["NEXT"]);
-    expect(grouped.past.map(job => job.jobId)).toEqual(["EXPIRED"]);
-    expect((await getNextJobForDriver("helena@example.com")).job?.jobId).toBe("NEXT");
+    expect(grouped.today.map(job => job.jobId)).toEqual(["EXPIRED", "NEXT"]);
+    expect(grouped.past).toEqual([]);
+    expect((await getNextJobForDriver("helena@example.com")).job?.jobId).toBe("EXPIRED");
   });
 
-  it("restores pending Manual details after relogin and releases the next job after submission", async () => {
+  it("tracks pending Manual details without redirecting jobs or blocking the next start", async () => {
     const completed = { jobId: "DONE", driverInitials: "HE", status: JobStatus.COMPLETED, currentState: WorkflowState.COMPLETED, bookedStart: new Date().toISOString(), manualDetailsRequiredAt: new Date().toISOString() };
     const next = { jobId: "NEXT", driverInitials: "HE", status: JobStatus.READY, currentState: WorkflowState.READY, bookedStart: new Date().toISOString() };
     listJobs.mockResolvedValue([completed, next]);
-    expect((await getNextJobForDriver("helena@example.com")).job?.jobId).toBe("DONE");
-    expect((await getJobsGroupedForDriver("helena@example.com")).pendingManualDetails?.jobId).toBe("DONE");
-    getJob.mockResolvedValue({ ...next, onMyWayAt: new Date().toISOString() });
-    await expect(startJob("NEXT", "helena@example.com")).rejects.toThrow("Manual details");
-    await expect(sendOnMyWay("NEXT", "helena@example.com")).rejects.toThrow("Manual details");
-    summaries.mockResolvedValue([{ jobId: "DONE" }]);
     expect((await getNextJobForDriver("helena@example.com")).job?.jobId).toBe("NEXT");
     expect((await getJobsGroupedForDriver("helena@example.com")).pendingManualDetails).toBeNull();
+    expect((await getPendingSubmissionsForDriver("helena@example.com")).map(job => job.jobId)).toEqual(["DONE"]);
+    getJob.mockResolvedValue({ ...next, onMyWayAt: new Date().toISOString() });
+    await expect(startJob("NEXT", "helena@example.com")).resolves.toMatchObject({ status: JobStatus.IN_PROGRESS });
+    await expect(sendOnMyWay("NEXT", "helena@example.com")).resolves.toMatchObject({ jobId: "NEXT" });
+    summaries.mockResolvedValue([{ jobId: "DONE" }]);
+    expect(await getPendingSubmissionsForDriver("helena@example.com")).toEqual([]);
+    expect((await getNextJobForDriver("helena@example.com")).job?.jobId).toBe("NEXT");
+    expect((await getJobsGroupedForDriver("helena@example.com")).pendingManualDetails).toBeNull();
+  });
+  it("allows starting an assigned new job despite another unfinished job", async () => {
+    const target = { jobId: "NEXT", driverInitials: "HE", status: JobStatus.READY, currentState: WorkflowState.READY,
+      bookedStart: new Date().toISOString(), onMyWayAt: new Date().toISOString() };
+    getJob.mockResolvedValue(target);
+    listJobs.mockResolvedValue([{ ...target, jobId: "OLDER", status: JobStatus.IN_PROGRESS }]);
+    await expect(startJob("NEXT", "helena@example.com")).resolves.toMatchObject({ status: JobStatus.IN_PROGRESS });
+  });
+  it("scopes pending submissions to the authenticated driver's assigned jobs and returns minimal fields", async () => {
+    const pending = { jobId: "OWN", driverInitials: "HE", status: JobStatus.COMPLETED, customerName: "Customer",
+      bookedStart: "2026-10-12T07:00:00Z", actualFinish: "2026-10-12T08:00:00Z", manualDetailsRequiredAt: "2026-10-12T08:01:00Z", customerEmail: "private@example.test" };
+    listJobs.mockResolvedValue([pending, { ...pending, jobId: "OTHER", driverInitials: "MA" }]);
+    expect(await getPendingSubmissionsForDriver("helena@example.com")).toEqual([{ jobId: "OWN", customerName: "Customer", bookedStart: pending.bookedStart, actualFinish: pending.actualFinish, requiredAt: pending.manualDetailsRequiredAt }]);
+    expect(listJobs).toHaveBeenCalledWith({ driverInitials: "HE" });
+    expect(summaries).toHaveBeenCalledWith(["OWN"]);
   });
 
   it("never gates drivers for historical completed jobs without the prospective marker", async () => {

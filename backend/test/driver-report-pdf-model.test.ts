@@ -2,6 +2,13 @@ import { describe, expect, it } from "vitest";
 import { driverPdfSections } from "../src/reports/driver-report-pdf.model";
 import { driverExportSample } from "./fixtures/driver-export.sample";
 describe("Concise table-only Driver Breakdown PDF", () => {
+  it("includes the recorded On the Way milestone in the job timings table", () => {
+    const report = driverExportSample(1);
+    report.jobs[0].timings.onMyWayAt = "2026-10-09T07:40:00Z";
+    const table = driverPdfSections(report)[0].tables.find(table => table.title === "Job timings")!;
+    expect(table.headers[1]).toBe("On the Way");
+    expect(table.rows[0][1]).toBe("09 Oct, 08:40");
+  });
   it("compares per-job GPS charges instead of the saved tunnel fee", () => {
     const report = driverExportSample(1), job = report.jobs[0];
     job.finance.tunnelPence = 1360;

@@ -19,8 +19,8 @@ export interface ModalProps {
   footer?: React.ReactNode;
   /** Set false to keep Esc / backdrop click from closing (e.g. mid-submit). */
   dismissible?: boolean;
-  /** `responsive` keeps the current mobile bottom-sheet behavior; `center` is always a dialog. */
-  placement?: "responsive" | "center";
+  /** Responsive bottom sheet, centered dialog, or full-height left navigation drawer. */
+  placement?: "responsive" | "center" | "left";
   children: React.ReactNode;
 }
 
@@ -92,8 +92,8 @@ export function Modal({
   return (
     <div
       className={cx(
-        "fixed inset-0 z-[100] flex justify-center",
-        placement === "center" ? "items-center p-4" : "items-end p-0 sm:items-center sm:p-4"
+        "fixed inset-0 z-[100] flex",
+        placement === "left" ? "items-stretch justify-start" : placement === "center" ? "items-center justify-center p-4" : "items-end justify-center p-0 sm:items-center sm:p-4"
       )}
       onMouseDown={event => {
         if (dismissible && event.target === event.currentTarget) onClose();
@@ -107,13 +107,14 @@ export function Modal({
         aria-labelledby={titleId}
         tabIndex={-1}
         className={cx(
-          "relative flex w-full flex-col overflow-hidden bg-surface outline-none",
-          placement === "center" ? "rounded-panel shadow-md" : "rounded-t-panel sm:rounded-panel shadow-md",
-          placement === "center" ? "max-h-[92vh] animate-in zoom-in-95" : "max-h-[92vh] animate-in slide-in-from-bottom-5 sm:zoom-in-95",
-          SIZES[size]
+          "relative flex flex-col overflow-hidden bg-surface outline-none",
+          placement === "left" ? "h-screen-safe w-[min(320px,85vw)] shadow-md" : "w-full",
+          placement !== "left" && (placement === "center" ? "rounded-panel shadow-md" : "rounded-t-panel sm:rounded-panel shadow-md"),
+          placement !== "left" && (placement === "center" ? "max-h-[92vh] animate-in zoom-in-95" : "max-h-[92vh] animate-in slide-in-from-bottom-5 sm:zoom-in-95"),
+          placement !== "left" && SIZES[size]
         )}
       >
-        <header className="flex items-center justify-between gap-3 border-b border-line px-4 py-3">
+        <header className={cx("flex items-center justify-between gap-3 border-b border-line px-4 py-3", placement === "left" && "pt-[calc(env(safe-area-inset-top)+12px)]")}>
           <h2 id={titleId} className={cx("text-heading font-semibold text-fg truncate", hideTitle && "sr-only")}>
             {title}
           </h2>

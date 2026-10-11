@@ -202,6 +202,17 @@ export function fetchJobsList(): Promise<{
   return request("/api/jobs/list");
 }
 
+export interface PendingSubmissionJob {
+  jobId: string;
+  customerName: string;
+  bookedStart: string;
+  actualFinish: string;
+  requiredAt: string;
+}
+export function fetchPendingSubmissions(): Promise<{ jobs: PendingSubmissionJob[] }> {
+  return request("/api/jobs/pending-submissions");
+}
+
 export function fetchJobDetail(jobId: string): Promise<{
   job: Job;
   activity: ActivityEntry[];

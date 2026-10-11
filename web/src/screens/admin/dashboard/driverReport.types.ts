@@ -5,7 +5,7 @@ export interface ReportFlag { code: string; type: string; source: string; reason
 export interface ReportManual { startTime: string; endTime: string; helperName: string; helperHours: number; amountCollectedPence: number; submittedAt: string; congestionCharge?: boolean; congestionChargePence?: number; paymentBreakdown?: Array<{ method: string; amountPence: number }>; chargeItems?: Array<{ type: string; name?: string; amountPence: number | null }> }
 export interface ReportMovement { coverage: string; movingSeconds: number | null; stationarySeconds: number | null; idleSeconds: number | null; engineOffSeconds: number | null; unknownSeconds: number | null }
 export interface DriverReportJob {
-  timings?: { trackerArrivalAt: string | null; trackerArrivalDistanceMeters?: number | null; trackerUnverifiedReason?: string | null; proofPhotoAt: string | null; vanLoadedAt: string | null; emptyVanAt: string | null; customerSignedAt: string | null;
+  timings?: { onMyWayAt?: string | null; trackerArrivalAt: string | null; trackerArrivalDistanceMeters?: number | null; trackerUnverifiedReason?: string | null; proofPhotoAt: string | null; vanLoadedAt: string | null; emptyVanAt: string | null; customerSignedAt: string | null;
     proofPhotoSource?: "captured" | "recorded" | null; vanLoadedSource?: "captured" | "recorded" | null; emptyVanSource?: "captured" | "recorded" | null };
   roadAlerts?: ReportRoadAlert[];
   alertHistoryTruncated?: boolean;

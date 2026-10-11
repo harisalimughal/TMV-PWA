@@ -103,17 +103,13 @@ export function JobListScreen({ driver, onOpenJob }: JobListScreenProps) {
     setError(null);
     try {
       const result = await fetchJobsList();
-      if (result.pendingManualDetails) {
-        onOpenJob(result.pendingManualDetails.jobId);
-        return;
-      }
       setJobsList({ today: result.today, past: result.past, next: result.next });
     } catch (err) {
       setError((err as ApiError)?.message || "Couldn't load your jobs.");
     } finally {
       setLoading(false);
     }
-  }, [onOpenJob]);
+  }, []);
 
   useEffect(() => {
     void load("initial");
