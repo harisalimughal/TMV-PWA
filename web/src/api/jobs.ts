@@ -63,6 +63,7 @@ export interface Job {
    *  which is now a prerequisite for Start Job (see api's on-my-way endpoint). */
   onMyWayAt?: string;
   trackerArrivalAt?: string;
+  trackerArrivalDistanceMeters?: number;
   arrivalProofReminderSentAt?: string;
   bookedMinutes: number;
   actualMinutes: number;

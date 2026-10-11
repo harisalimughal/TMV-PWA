@@ -1,5 +1,5 @@
 import { DateTime } from "luxon";
-export function driverReportHref(initials: string, from?: string, to?: string, tab = "performance") {
+export function driverReportHref(initials: string, from?: string, to?: string, tab = "jobs") {
   const url = new URL(window.location.href);
   url.searchParams.set("section", "driverreport"); url.searchParams.set("driver", initials); url.searchParams.set("reportTab", tab);
   url.searchParams.delete("job");

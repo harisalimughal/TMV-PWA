@@ -34,4 +34,17 @@ describe("Job time breakdown", () => {
     expect(screen.getByText("Historical billing: saved charges retained.")).toBeInTheDocument();
     expect(screen.queryByText("Internal allocation")).not.toBeInTheDocument();
   });
+  it("opens historical jobs with a null driver-reported overtime value", () => {
+    render(<JobTimeBreakdown job={{ bookedMinutes: 180, actualMinutes: 44, overtimeCharge: 0, status: "COMPLETED",
+      driverReportedOvertimeMinutes: null } as unknown as NormalizedJob} />);
+    expect(screen.getByText("180 min")).toBeInTheDocument();
+    expect(screen.getByText("44 min")).toBeInTheDocument();
+    expect(screen.queryByText("Driver-reported extra time")).not.toBeInTheDocument();
+  });
+  it("labels missing or invalid durations without guessing zero minutes", () => {
+    render(<JobTimeBreakdown job={{ bookedMinutes: null, actualMinutes: NaN, overtimeCharge: 0,
+      driverReportedOvertimeMinutes: -1 } as unknown as NormalizedJob} />);
+    expect(screen.getAllByText("Not recorded")).toHaveLength(3);
+    expect(screen.queryByText("0 min")).not.toBeInTheDocument();
+  });
 });

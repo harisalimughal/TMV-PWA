@@ -141,9 +141,12 @@ export interface Job {
   vanLoadedAt?: string;
   /** First confirmed fresh GPSLive position at the pickup, from the assigned IMEI. */
   trackerArrivalAt?: string;
+  /** Distance of the first report that established this arrival timestamp. */
+  trackerArrivalDistanceMeters?: number;
   trackerArrivalSource?: "two-fresh-reports";
   /** First in-radius report awaiting a second report to rule out a drive-by. */
   trackerArrivalCandidateAt?: string;
+  trackerArrivalCandidateDistanceMeters?: number;
   /** Latest fresh report from the assigned tracker while this job was checked. */
   trackerLastSeenAt?: string;
   /** Distance in meters from pickup location when tracker last reported. */

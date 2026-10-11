@@ -12,8 +12,8 @@ import { Job, JobStatus } from "./job.types";
 import { recordGpsAssignment } from "../gps/gps.association";
 import { withJobLock } from "../utils/lock";
 import { gpsLocation, gpsTime } from "../gps/gps.parse";
+import { PICKUP_ARRIVAL_RADIUS_METERS, recordedArrivalDistance } from "./pickup-arrival.rules";
 
-const ARRIVAL_RADIUS_METERS = 300;
 const MAX_REPORT_AGE_MS = 2 * 60_000;
 const PROOF_REMINDER_MS = 15 * 60_000;
 
@@ -39,7 +39,7 @@ export function assessPickupPosition(
   const reportedAt = report.toUTC().toISO()!;
   const distance = Math.round(distanceMeters(device, pickup));
   return {
-    state: distance <= ARRIVAL_RADIUS_METERS ? "inside" : "outside",
+    state: distance <= PICKUP_ARRIVAL_RADIUS_METERS ? "inside" : "outside",
     distanceMeters: distance,
     reportedAt
   };
@@ -118,7 +118,7 @@ export async function sweepPickupArrivals(now = new Date()): Promise<void> {
           } else if (dist >= 1000) {
             reason = `Van was ${(dist / 1000).toFixed(1)} km away from pickup point`;
           } else {
-            reason = `Van was ${dist}m away from pickup point (outside 300m radius)`;
+            reason = `Van was ${dist}m away from pickup point (outside ${PICKUP_ARRIVAL_RADIUS_METERS}m radius)`;
           }
           let locName = deviceChanged ? undefined : job.trackerLocationName;
           if (!locName && dist >= 500) {
@@ -133,6 +133,7 @@ export async function sweepPickupArrivals(now = new Date()): Promise<void> {
             $set: seenAt,
             $unset: {
               trackerArrivalCandidateAt: "",
+              trackerArrivalCandidateDistanceMeters: "",
               ...(locName ? {} : { trackerLocationName: "" })
             }
           } as any);
@@ -144,16 +145,17 @@ export async function sweepPickupArrivals(now = new Date()): Promise<void> {
             : NaN;
           if (Number.isFinite(candidateMs) && reportMs > candidateMs && reportMs - candidateMs <= 5 * 60_000) {
             await col.updateOne(filter, {
-              $set: { ...seenAt, trackerArrivalAt: job.trackerArrivalCandidateAt, trackerArrivalSource: "two-fresh-reports" },
+              $set: { ...seenAt, trackerArrivalAt: job.trackerArrivalCandidateAt, trackerArrivalSource: "two-fresh-reports",
+                ...(recordedArrivalDistance(job.trackerArrivalCandidateDistanceMeters) !== undefined ? { trackerArrivalDistanceMeters: recordedArrivalDistance(job.trackerArrivalCandidateDistanceMeters) } : {}) },
               $unset: {
-                trackerArrivalCandidateAt: "", trackerUnverifiedReason: "", trackerLocationName: ""
+                trackerArrivalCandidateAt: "", trackerArrivalCandidateDistanceMeters: "", trackerUnverifiedReason: "", trackerLocationName: ""
               }
             } as any);
             return;
           }
           if (!Number.isFinite(candidateMs) || reportMs > candidateMs) {
             await col.updateOne(filter, {
-              $set: { ...seenAt, trackerArrivalCandidateAt: position.reportedAt },
+              $set: { ...seenAt, trackerArrivalCandidateAt: position.reportedAt, trackerArrivalCandidateDistanceMeters: dist },
               $unset: { trackerUnverifiedReason: "", trackerLocationName: "" }
             } as any);
           }
@@ -229,11 +231,12 @@ export async function verifyArrivalAtPhotoUpload(
     if (position.state === "stale" || !position.reportedAt) {
       job.trackerUnverifiedReason = "Tracker device signal was stale / offline";
       job.trackerArrivalCandidateAt = undefined;
+      job.trackerArrivalCandidateDistanceMeters = undefined;
       job.trackerDistanceMeters = undefined;
       job.trackerLocationName = undefined;
       await col.updateOne(filter, {
         $set: { trackerUnverifiedReason: job.trackerUnverifiedReason },
-        $unset: { trackerArrivalCandidateAt: "", trackerDistanceMeters: "", trackerLocationName: "" }
+        $unset: { trackerArrivalCandidateAt: "", trackerArrivalCandidateDistanceMeters: "", trackerDistanceMeters: "", trackerLocationName: "" }
       } as any);
       return;
     }
@@ -252,12 +255,15 @@ export async function verifyArrivalAtPhotoUpload(
       const candidate = previousImei === assignedImei ? job.trackerArrivalCandidateAt : undefined;
       const confirmed = candidate && Date.parse(reportedAt) > Date.parse(candidate) && Date.parse(reportedAt) - Date.parse(candidate) <= 5 * 60_000;
       if (confirmed) {
+        job.trackerArrivalDistanceMeters = recordedArrivalDistance(job.trackerArrivalCandidateDistanceMeters);
         job.trackerArrivalAt = candidate;
         job.trackerArrivalSource = "two-fresh-reports";
         job.trackerArrivalCandidateAt = undefined;
+        job.trackerArrivalCandidateDistanceMeters = undefined;
         job.trackerUnverifiedReason = undefined;
       } else {
         job.trackerArrivalCandidateAt = reportedAt;
+        job.trackerArrivalCandidateDistanceMeters = dist;
         job.trackerUnverifiedReason = "Awaiting a second distinct fresh stationary tracker report.";
       }
       job.trackerLastSeenAt = reportedAt;
@@ -266,14 +272,16 @@ export async function verifyArrivalAtPhotoUpload(
       job.gpsliveImei = assignedImei;
       await col.updateOne(filter, {
         $set: {
-          ...(confirmed ? { trackerArrivalAt: candidate, trackerArrivalSource: "two-fresh-reports" } : { trackerArrivalCandidateAt: reportedAt, trackerUnverifiedReason: job.trackerUnverifiedReason }),
+          ...(confirmed ? { trackerArrivalAt: candidate, trackerArrivalSource: "two-fresh-reports",
+            ...(job.trackerArrivalDistanceMeters !== undefined ? { trackerArrivalDistanceMeters: job.trackerArrivalDistanceMeters } : {}) } :
+            { trackerArrivalCandidateAt: reportedAt, trackerArrivalCandidateDistanceMeters: dist, trackerUnverifiedReason: job.trackerUnverifiedReason }),
           trackerLastSeenAt: reportedAt,
           trackerDistanceMeters: dist,
           gpsliveImei: assignedImei,
           gpsDeviceHistory: job.gpsDeviceHistory
         },
         $unset: {
-          ...(confirmed ? { trackerArrivalCandidateAt: "", trackerUnverifiedReason: "" } : {}), trackerLocationName: ""
+          ...(confirmed ? { trackerArrivalCandidateAt: "", trackerArrivalCandidateDistanceMeters: "", trackerUnverifiedReason: "" } : {}), trackerLocationName: ""
         }
       } as any);
       log.info(confirmed ? "tracker arrival verified at photo upload" : "tracker arrival awaiting another report", { job_id: job.jobId, distance_meters: dist });
@@ -289,10 +297,11 @@ export async function verifyArrivalAtPhotoUpload(
       } else if (dist >= 1000) {
         reason = `Van was ${(dist / 1000).toFixed(1)} km away from pickup point${locName ? ` in ${locName}` : ""}`;
       } else {
-        reason = `Van was ${dist}m away from pickup point (outside 300m radius)${locName ? ` in ${locName}` : ""}`;
+        reason = `Van was ${dist}m away from pickup point (outside ${PICKUP_ARRIVAL_RADIUS_METERS}m radius)${locName ? ` in ${locName}` : ""}`;
       }
       job.trackerDistanceMeters = dist;
       job.trackerArrivalCandidateAt = undefined;
+      job.trackerArrivalCandidateDistanceMeters = undefined;
       job.trackerLocationName = locName;
       job.trackerUnverifiedReason = reason;
       job.trackerLastSeenAt = reportedAt;
@@ -306,7 +315,7 @@ export async function verifyArrivalAtPhotoUpload(
           gpsliveImei: assignedImei,
           gpsDeviceHistory: job.gpsDeviceHistory
         },
-        $unset: { trackerArrivalCandidateAt: "" }
+        $unset: { trackerArrivalCandidateAt: "", trackerArrivalCandidateDistanceMeters: "" }
       } as any);
       log.info("tracker outside radius at photo upload", { job_id: job.jobId, distance_meters: dist, reason });
     }

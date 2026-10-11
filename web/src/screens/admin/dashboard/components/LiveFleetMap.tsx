@@ -137,7 +137,6 @@ export function LiveFleetMap({ jobs, onSelectJob }: Props) {
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [activeFilter, setActiveFilter] = useState<FilterId>("ALL");
-  const [mapTheme, setMapTheme] = useState<"osm" | "voyager" | "light">("osm");
   const [showCongestionZone, setShowCongestionZone] = useState(true);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(true);
@@ -231,21 +230,6 @@ export function LiveFleetMap({ jobs, onSelectJob }: Props) {
     const id = setTimeout(() => mapInstanceRef.current?.invalidateSize(), 250);
     return () => clearTimeout(id);
   }, [isFullscreen, drawerOpen]);
-
-  // ---- 2. tile theme ---------------------------------------------------------
-  useEffect(() => {
-    const map = mapInstanceRef.current;
-    if (!map) return;
-    const tileUrls = {
-      voyager: "https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png",
-      light: "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png",
-      osm: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-    };
-    map.eachLayer(layer => {
-      if (layer instanceof L.TileLayer) map.removeLayer(layer);
-    });
-    L.tileLayer(tileUrls[mapTheme], { maxZoom: 19, subdomains: "abc" }).addTo(map);
-  }, [mapTheme]);
 
   // ---- 3. congestion zone polygons -----------------------------------------
   useEffect(() => {
@@ -557,14 +541,12 @@ export function LiveFleetMap({ jobs, onSelectJob }: Props) {
           </div>
 
           <select
-            value={mapTheme}
-            onChange={e => setMapTheme(e.target.value as any)}
+            defaultValue="osm"
+            aria-label="Map provider"
             className="shrink-0 h-8 px-2 bg-admin-surface border border-admin-line rounded text-xs text-admin-ink font-medium"
-            title="Map tile theme"
+            title="Map provider"
           >
             <option value="osm">OpenStreetMap</option>
-            <option value="voyager">Navigation (Voyager) -- needs CARTO key</option>
-            <option value="light">Clean Positron -- needs CARTO key</option>
           </select>
 
           <button

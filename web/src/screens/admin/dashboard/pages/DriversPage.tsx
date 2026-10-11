@@ -16,6 +16,7 @@ import { getAvatarColor, formatVanReg } from "../utils/drivers";
 import { AddDriverModal } from "../components/AddDriverModal";
 import { ApiErrorState } from "../components/ApiErrorState";
 import { DateRangePicker, defaultDashboardDateRange } from "../components/DateRangePicker";
+import { AdminFilterBar } from "../components/AdminFilterBar";
 import { DriverSummaryItem } from "../types";
 import { Button } from "../../../../ui";
 import { formatDuration } from "../utils/kpi";
@@ -97,12 +98,10 @@ export function DriversPage() {
 
       {/* TOOLBAR -- scopes every card's Completed Jobs/Revenue/Total Move Time (and
           Avg Start Delay) to this range server-side, same as Finished Jobs' filter. */}
-      <div className="p-2 bg-white rounded-module shadow-sm border border-admin-line flex flex-wrap items-center gap-4">
-        <DateRangePicker from={from} to={to} onChange={(f, t) => { setFrom(f); setTo(t); retainRangeInUrl(f, t); }} />
-      </div>
+      <AdminFilterBar dates={<DateRangePicker from={from} to={to} onChange={(f, t) => { setFrom(f); setTo(t); retainRangeInUrl(f, t); }} />} />
 
       {isLoading && (
-        <div className="h-64 bg-white rounded-module border border-admin-line animate-pulse flex items-center justify-center">
+        <div className="h-64 bg-white rounded-[6px] border border-admin-line animate-pulse flex items-center justify-center">
           <span className="text-admin-muted font-medium">Loading drivers...</span>
         </div>
       )}
@@ -112,7 +111,7 @@ export function DriversPage() {
       )}
 
       {!isLoading && !isError && roster.length === 0 && (
-        <div className="h-64 bg-white rounded-module border border-admin-line flex items-center justify-center">
+        <div className="h-64 bg-white rounded-[6px] border border-admin-line flex items-center justify-center">
           <span className="text-admin-muted font-medium">No drivers to show.</span>
         </div>
       )}
@@ -124,7 +123,7 @@ export function DriversPage() {
           <div
             key={driver.initials}
             onClick={event => { if ((event.target as Element).closest("button,a,input,select")) return; navigateAdmin(driverReportHref(driver.initials, from, to)); }}
-            className="bg-white rounded-module shadow-[0_4px_20px_rgb(0,0,0,0.03)] border border-admin-line p-6 flex flex-col justify-between hover:-translate-y-0.5 hover:shadow-md transition-all cursor-pointer relative group"
+            className="bg-white rounded-[6px] border border-admin-line p-6 flex flex-col justify-between hover:border-admin-brand/40 transition-colors cursor-pointer relative group"
           >
             {/* Header Row */}
             <div className="flex items-start justify-between gap-3 mb-4">

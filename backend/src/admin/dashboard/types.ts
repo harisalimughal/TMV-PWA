@@ -131,6 +131,7 @@ export interface NormalizedJob {
   /** Van loaded photo timestamp, informational only. */
   vanLoadedAt?: string;
   trackerArrivalAt?: string;
+  trackerArrivalDistanceMeters?: number;
   trackerLastSeenAt?: string;
   trackerStatus?: "reporting" | "stale" | "unverified";
   trackerDistanceMeters?: number;

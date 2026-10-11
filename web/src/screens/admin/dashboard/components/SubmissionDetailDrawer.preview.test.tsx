@@ -6,6 +6,16 @@ import { paperJobSample, paperScenarioSample } from "../../../../../test/reportP
 
 vi.mock("../api", async original => ({ ...await original<typeof import("../api")>(), saveJobReview: vi.fn(), deleteEvidencePhoto: vi.fn() }));
 describe("Submission document preview", () => {
+  it("opens and previews a historical job with null reported overtime without crashing", () => {
+    const job = { ...paperJobSample, timeBilling: null, bookedMinutes: 180, actualMinutes: 44, driverReportedOvertimeMinutes: null } as unknown as typeof paperJobSample;
+    const before = JSON.stringify(job);
+    const { container } = render(<SubmissionDetailDrawer job={job} isOpen onClose={vi.fn()} />);
+    const view = within(container);
+    fireEvent.click(view.getByRole("button", { name: "Preview PDF" }));
+    expect(view.getByRole("heading", { name: "Job Completed" })).toBeInTheDocument();
+    expect(view.queryByText("Driver-reported extra time")).not.toBeInTheDocument();
+    expect(JSON.stringify(job)).toBe(before);
+  });
   it("keeps scenario editing/activity available in form mode but clears them from preview mode", () => {
     const { container } = render(<SubmissionDetailDrawer job={paperScenarioSample as any} kind="parking" isOpen onClose={vi.fn()} />);
     const view = within(container);

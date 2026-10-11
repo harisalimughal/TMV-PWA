@@ -38,15 +38,13 @@ interface NavItem {
 
 const NAV_CONFIG: NavItem[] = [
   { id: "overview", label: "Overview", icon: LayoutDashboard, desc: "Executive KPI telemetry, revenue velocity and operational health" },
-  { id: "livefleet", label: "Live Fleet", icon: Navigation, isLive: true, desc: "Real-time GPS vehicle positions and driver telemetry" },
-  { id: "alerts", label: "Alerts", icon: ShieldAlert, desc: "GPSLive's fleet alert feed, including congestion zone crossings" },
   { id: "jobs", label: "Jobs", icon: ClipboardList, desc: "Operational moves joined across Jobs, Drivers, Workflow and Evidence" },
-  { id: "van", label: "Van", icon: Truck, desc: "Driver mileage, fuel and service records" },
-  { id: "notifications", label: "Notifications & Push", icon: Bell, desc: "Automated communication audit across Email, SMS and Web Push channels" },
   { id: "liabilities", label: "Liability", icon: FileWarning, desc: "Check-in, check-out, parking liability and liability reports" },
   { id: "drivers", label: "Drivers", icon: Users, desc: "Driver scorecards, revenue handled and punctuality metrics" },
-  { id: "pricing", label: "Pricing Settings", icon: Banknote, desc: "Configure crew rates, packing service pricing, and overtime rules" },
-  { id: "messaging", label: "Messaging Content", icon: MessageSquare, desc: "Manage automated customer and driver communication templates" }
+  { id: "van", label: "Van", icon: Truck, desc: "Driver mileage, fuel and service records" },
+  { id: "notifications", label: "Notifications & Alerts", icon: Bell, desc: "Email, SMS, Web Push notifications and GPSLive fleet alerts" },
+  { id: "livefleet", label: "Live Fleet", icon: Navigation, isLive: true, desc: "Real-time GPS vehicle positions and driver telemetry" },
+  { id: "configurations", label: "Configurations", icon: Settings, desc: "Pricing settings and messaging content" }
 ];
 
 /** Sections reachable without a sidebar entry (Data Maintenance, opened from the
@@ -59,8 +57,19 @@ const EXTRA_NAV_TITLES: Record<string, NavItem> = {
 };
 
 export function Layout({ activeSection, onSelectSection, onLogout, children }: Props) {
-  const [collapsed, setCollapsed] = useState(false);
+  const [collapsed, setCollapsed] = useState(() => activeSection === "driverreport");
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const previousSection = useRef(activeSection);
+  useEffect(() => {
+    if (activeSection === "driverreport") {
+      setCollapsed(true);
+      setMobileNavOpen(false);
+    } else if (previousSection.current === "driverreport") {
+      setCollapsed(false);
+      setMobileNavOpen(false);
+    }
+    previousSection.current = activeSection;
+  }, [activeSection]);
   const [isMobile, setIsMobile] = useState(
     () => typeof window !== "undefined" && window.matchMedia("(max-width: 767px)").matches
   );
@@ -71,7 +80,7 @@ export function Layout({ activeSection, onSelectSection, onLogout, children }: P
     return () => mql.removeEventListener("change", handler);
   }, []);
   const effectiveCollapsed = collapsed && !isMobile;
-  const activeNavSection = activeSection === "driverreport" ? "drivers" : activeSection === "finished" ? "jobs" :
+  const activeNavSection = ["pricing", "messaging", "settings"].includes(activeSection) ? "configurations" : activeSection === "alerts" ? "notifications" : activeSection === "driverreport" ? "overview" : activeSection === "finished" ? "jobs" :
     ["checkin", "checkout", "parking", "liability"].includes(activeSection) ? "liabilities" : activeSection;
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
@@ -173,7 +182,7 @@ export function Layout({ activeSection, onSelectSection, onLogout, children }: P
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [onSelectSection, refreshMutation, paletteOpen, shortcutsOpen]);
 
-  const currentNav = NAV_CONFIG.find(n => n.id === activeSection)
+  const currentNav = NAV_CONFIG.find(n => n.id === (["pricing", "messaging", "settings"].includes(activeSection) ? "configurations" : activeSection === "alerts" ? "notifications" : activeSection))
     || EXTRA_NAV_TITLES[activeSection]
     || NAV_CONFIG[0];
 

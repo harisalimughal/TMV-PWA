@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildReportJob, operationalDate, reportIdentity, reportPage, reportRange, reportTrends, summarizeReportJobs } from "../src/reports/driver-report.model";
+import { buildReportJob, manualRoadFee, operationalDate, reportIdentity, reportPage, reportRange, reportTrends, summarizeReportJobs } from "../src/reports/driver-report.model";
 import { normalizedPayments, reportPayments } from "../src/reports/report-payments";
 import type { Job } from "../src/jobs/job.types";
 import { JobStatus } from "../src/jobs/job.types";
@@ -28,6 +28,18 @@ describe("Split payment receipt accounting", () => {
   });
 });
 describe("Per-job reconciliation", () => {
+  it("sums manual road charges across completed jobs without mixing missing, legacy and invalid entries with zero", () => {
+    const reported = manual(25000, { chargeItems: [{ type: "tunnel", amountPence: 1360 }, { type: "tunnel", amountPence: 1360 }, { type: "congestion", amountPence: 1800 }] });
+    const rows = [buildReportJob(job(), reported), buildReportJob(job({ jobId: "ZERO" }), manual(25000, { chargeItems: [] })),
+      buildReportJob(job({ jobId: "MISSING" }), null), buildReportJob(job({ jobId: "LEGACY" }), manual(25000, { congestionCharge: false })),
+      buildReportJob(job({ jobId: "INVALID" }), manual(25000, { chargeItems: [{ type: "tunnel", amountPence: -1 }] })),
+      buildReportJob(job({ status: JobStatus.IN_PROGRESS }), reported)];
+    expect(summarizeReportJobs(rows).manualRoadChargeTotals).toEqual({
+      tunnel: { knownPence: 2720, knownJobs: 2, missingJobs: 1, unavailableJobs: 2 },
+      congestion: { knownPence: 1800, knownJobs: 4, missingJobs: 1, unavailableJobs: 0 } });
+    expect(manualRoadFee(null, "tunnel")).toBeNull();
+    expect(manualRoadFee(manual(25000, { congestionCharge: true, congestionChargePence: 1800 }), "congestion")).toBe(1800);
+  });
   it("aggregates saved job road fees without using GPS estimates or including unfinished jobs", () => {
     const snapshot = { basePence: 25000, congestionPence: 1800, tunnelPence: 2720 } as NonNullable<Job["chargeSnapshot"]>;
     const rows = [buildReportJob(job({ chargeSnapshot: snapshot }), null), buildReportJob(job({ jobId: "ZERO", extraCharges: [] }), null),
@@ -40,6 +52,14 @@ describe("Per-job reconciliation", () => {
     expect(legacy.finance).toMatchObject({ congestionPence: 1800, tunnelPence: 1360 });
     const missing = buildReportJob(job({ extraCharges: ["Tunnel Charges"] }), null);
     expect(summarizeReportJobs([missing]).roadChargeTotals).toMatchObject({ congestionPence: 0, tunnelPence: null, tunnelUnknownJobs: 1 });
+  });
+  it("shows available road-charge subtotals even when other completed jobs have missing amounts", () => {
+    const known = buildReportJob(job({ chargeSnapshot: { basePence: 25000, congestionPence: 1800, tunnelPence: 1360 } }), null);
+    const missing = buildReportJob(job({ jobId: "MISSING", extraCharges: ["London Congestion charge", "Tunnel Charges"] }), null);
+    expect(summarizeReportJobs([known, missing]).roadChargeTotals).toEqual({ congestionPence: 1800, tunnelPence: 1360, congestionUnknownJobs: 1, tunnelUnknownJobs: 1 });
+    const zero = buildReportJob(job({ jobId: "ZERO", extraCharges: [] }), null);
+    expect(summarizeReportJobs([zero, missing]).roadChargeTotals).toMatchObject({ congestionPence: 0, tunnelPence: 0, congestionUnknownJobs: 1, tunnelUnknownJobs: 1 });
+    expect(summarizeReportJobs([missing]).roadChargeTotals).toMatchObject({ congestionPence: null, tunnelPence: null, congestionUnknownJobs: 1, tunnelUnknownJobs: 1 });
   });
   it("totals saved overtime money and hours across completed jobs only", () => {
     const rows = [buildReportJob(job({ overtimeCharge: 55, overtimeMinutes: 30 }), null),

@@ -1,3 +1,5 @@
+import { withArrivalDistance } from "../../../../lib/trackerArrival";
+import { AdminFilterBar } from "../components/AdminFilterBar";
 import React, { useState, useRef, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -218,17 +220,8 @@ export function FinishedJobsPage({
       )}
 
       {/* CONSOLIDATED TOOLBAR CARD -- identical layout to JobsPage */}
-      <div className="p-2 bg-white rounded-module shadow-sm border border-transparent flex flex-col gap-3">
-        <div className="flex flex-wrap items-center gap-3">
-          <DateRangePicker from={from} to={to} onChange={handleDateChange} />
-
-          <span className="shrink-0 text-label font-medium text-fg-muted px-2 whitespace-nowrap sm:min-w-[120px] sm:text-right ml-auto">
-            {isLoading || isFetching ? "Updating..." : `${data?.pagination?.total ?? items.length} moves`}
-          </span>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-3">
-          <div className="flex items-center p-1 bg-admin-surface rounded-card border border-admin-line/50 shrink-0">
+      <AdminFilterBar dates={<DateRangePicker from={from} to={to} onChange={handleDateChange} />} count={<>{isLoading || isFetching ? "Updating..." : `${data?.pagination?.total ?? items.length} moves`}</>}>
+<div className="flex items-center p-1 bg-admin-surface rounded-card border border-admin-line/50 shrink-0">
             <button
               onClick={() => setViewMode("table")}
               className={`p-1.5 rounded-control transition ${viewMode === "table" ? "bg-white shadow-sm text-admin-ink" : "text-admin-muted hover:text-admin-ink"}`}
@@ -307,11 +300,10 @@ export function FinishedJobsPage({
           >
             <Download className="w-4 h-4" />
           </button>
-        </div>
-      </div>
+      </AdminFilterBar>
 
       {isLoading && (
-        <div className="h-64 bg-white rounded-module border border-admin-line animate-pulse flex items-center justify-center">
+        <div className="h-64 bg-white rounded-[6px] border border-admin-line animate-pulse flex items-center justify-center">
           <span className="text-admin-muted font-medium">Loading records...</span>
         </div>
       )}
@@ -345,7 +337,7 @@ export function FinishedJobsPage({
               return (
                 <article
                   key={job.jobId}
-                  className={`rounded-module bg-white border p-4 transition ${
+                  className={`rounded-[6px] bg-white border p-4 transition-colors ${
                     isSelected ? "border-admin-brand ring-2 ring-admin-brand/20" : "border-admin-line"
                   }`}
                 >
@@ -487,7 +479,7 @@ export function FinishedJobsPage({
                   const onMyWayTime = job.onMyWayAt ? formatLondonDateTime(job.onMyWayAt) : null;
                   const customerSignatureTime = job.clientSignatureAt ? formatLondonDateTime(job.clientSignatureAt) : null;
                   const pickupArrivalTime = job.pickupArrivalAt ? formatLondonDateTime(job.pickupArrivalAt) : null;
-                  const trackerArrivalTime = job.trackerArrivalAt ? formatLondonDateTime(job.trackerArrivalAt) : null;
+                  const trackerArrivalTime = job.trackerArrivalAt ? withArrivalDistance(formatLondonDateTime(job.trackerArrivalAt), job.trackerArrivalDistanceMeters) : null;
                   const vanLoadedTime = job.vanLoadedAt ? formatLondonDateTime(job.vanLoadedAt) : null;
 
                   const p = job.pickup || <span className="text-[14px] font-normal text-[#B0B0B0] italic">Not recorded</span>;

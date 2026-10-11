@@ -4,6 +4,19 @@ import { DriverRoadAlerts, roadZoneLabel } from "./DriverRoadAlerts";
 import { sampleDriverReport } from "../fixtures/driverReport.sample";
 
 describe("GPSLive tunnel charge wording", () => {
+  it.each(["tunnel", "congestion"] as const)("uses full-range manual %s totals even on a paginated job page", async type => {
+    const report = await sampleDriverReport("DEMO", { from: "2026-10-05", to: "2026-10-11", activityScheme: type, pageSize: 1 });
+    report.summary.manualRoadChargeTotals = { tunnel: { knownPence: 4080, knownJobs: 3, missingJobs: 1, unavailableJobs: 0 },
+      congestion: { knownPence: 3600, knownJobs: 2, missingJobs: 1, unavailableJobs: 1 } };
+    const { container } = render(<DriverRoadAlerts report={report} type={type} onJob={vi.fn()} onPage={vi.fn()} />);
+    const card = [...container.querySelectorAll(".rpt-metric")].find(row => row.querySelector(".rpt-metric-label")?.textContent === "Manual Entry")!;
+    expect(card).toHaveTextContent(type === "tunnel" ? "£40.80" : "£36.00");
+    expect(card).toHaveTextContent("(reported)");
+    expect(card.querySelector(".rpt-metric-label")?.nextElementSibling).toHaveClass("rpt-metric-caption");
+    expect(card.querySelector(".rpt-metric-caption")?.nextElementSibling?.tagName).toBe("STRONG");
+    expect(within(card as HTMLElement).getByText("1 missing entry")).toHaveClass("rpt-unavailable-count");
+    if (type === "congestion") expect(within(card as HTMLElement).getByText("1 unavailable job charge")).toHaveClass("rpt-unavailable-count");
+  });
   it.each(["congestion", "tunnel"] as const)("shows the current %s charging schedule in a yellow card", async type => {
     const report = await sampleDriverReport("DEMO", { from: "2026-10-05", to: "2026-10-11", activityScheme: type });
     render(<DriverRoadAlerts report={report} type={type} onJob={vi.fn()} onPage={vi.fn()} />);
@@ -25,7 +38,7 @@ describe("GPSLive tunnel charge wording", () => {
     const before = JSON.stringify(report);
     const onJob = vi.fn();
     const { container } = render(<DriverRoadAlerts report={report} type="tunnel" onJob={onJob} onPage={vi.fn()} />);
-    expect(screen.getByText("Total Tunnel Charges")).toBeInTheDocument();
+    expect(screen.getByText("Expected")).toBeInTheDocument();
     expect(screen.getByRole("columnheader", { name: "Tunnel Fee" })).toBeInTheDocument();
     expect(screen.getByText("Current Pricing Settings")).toBeInTheDocument();
     expect(container.textContent).not.toMatch(/estimate/i);
@@ -48,11 +61,11 @@ describe("GPSLive tunnel charge wording", () => {
     expect(screen.queryByText("No matching job")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Unlinked alerts" })).not.toBeInTheDocument();
   });
-  it("does not change congestion wording", async () => {
+  it("uses expected wording for congestion charges", async () => {
     const report = await sampleDriverReport("DEMO", { from: "2026-10-05", to: "2026-10-11", activityScheme: "congestion" });
     render(<DriverRoadAlerts report={report} type="congestion" onJob={vi.fn()} onPage={vi.fn()} />);
-    expect(screen.getByText("Estimated Charges")).toBeInTheDocument();
-    expect(screen.getByRole("columnheader", { name: "Estimated fee" })).toBeInTheDocument();
+    expect(screen.getByText("Expected")).toBeInTheDocument();
+    expect(screen.getByRole("columnheader", { name: "Expected fee" })).toBeInTheDocument();
   });
   it.each(["congestion", "tunnel"] as const)("cleans zone labels and removes Exited from %s without altering stored alerts", async type => {
     const report = await sampleDriverReport("DEMO", { from: "2026-10-05", to: "2026-10-11", activityScheme: type });

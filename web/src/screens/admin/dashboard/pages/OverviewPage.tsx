@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { knownSubtotal } from "../utils/knownSubtotal";
 import { DriverSettlement } from "../components/DriverSettlement";
+import { AdminFilterBar } from "../components/AdminFilterBar";
 import { retainRangeInUrl } from "../utils/reportNavigation";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -83,10 +84,7 @@ export function OverviewPage({ onSelectSection }: Props) {
         />
       </div>
 
-      {/* Date filter -- secondary to the view switcher above, centered under it */}
-      <div className="flex justify-center px-2">
-        <DateRangePicker from={from} to={to} onChange={(f, t) => { setFrom(f); setTo(t); retainRangeInUrl(f, t); }} />
-      </div>
+      <AdminFilterBar dates={<DateRangePicker from={from} to={to} onChange={(f, t) => { setFrom(f); setTo(t); retainRangeInUrl(f, t); }} />} />
 
       {tab === "overview" ? (
         <OverviewSummary from={from} to={to} onSelectSection={onSelectSection} />

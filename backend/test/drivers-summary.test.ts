@@ -3,6 +3,14 @@ import { ExtraChargeType, JobStatus } from "../src/jobs/job.types";
 import { summarizeDrivers } from "../src/admin/dashboard/drivers-summary.routes";
 
 describe("summarizeDrivers", () => {
+  it("sums recorded working minutes and counts missing completed-job timings separately", () => {
+    const [row] = summarizeDrivers([], [
+      { driverInitials: "WD", status: JobStatus.COMPLETED, actualMinutes: 90, evidenceCompleteness: {} },
+      { driverInitials: "WD", status: JobStatus.COMPLETED, evidenceCompleteness: {} },
+      { driverInitials: "WD", status: JobStatus.COMPLETED, actualMinutes: 0, evidenceCompleteness: {} }
+    ] as any);
+    expect(row).toMatchObject({ totalDurationMinutes: 90, completed: 3, workingUnknownJobs: 1 });
+  });
   it("separates original calculated charges from adjusted driver charges and receipts", () => {
     const [row] = summarizeDrivers([], [
       { driverInitials: "MA", status: JobStatus.COMPLETED, calculatedTotalCharges: 32660, totalCharges: 32660,

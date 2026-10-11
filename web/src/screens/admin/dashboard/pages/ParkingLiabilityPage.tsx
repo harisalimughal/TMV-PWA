@@ -11,7 +11,7 @@ import { useScenarioFilters, type ScenarioFilterControl } from "../hooks/useScen
 import { ClipboardList, Search } from "lucide-react";
 import { useDriverOptions } from "../hooks/useDriverOptions";
 
-export function ParkingLiabilityPage({ filterControl }: { filterControl?: ScenarioFilterControl } = {}) {
+export function ParkingLiabilityPage({ filterControl, viewSwitcher }: { filterControl?: ScenarioFilterControl; viewSwitcher?: React.ReactNode } = {}) {
   const { searchQuery: search, setSearchQuery: setSearch, from, to, driverFilter, setFrom, setTo, setDriverFilter } = useScenarioFilters(filterControl);
 
   const [page, setPage] = useState(1);
@@ -194,6 +194,7 @@ export function ParkingLiabilityPage({ filterControl }: { filterControl?: Scenar
   return (
     <>
       <SubmissionPageTemplate
+        viewSwitcher={viewSwitcher}
         title="Parking Liability"
         icon={ClipboardList}
         status="Active"

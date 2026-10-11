@@ -8,6 +8,10 @@ The sidebar and command palette have one Liability destination (`section=liabili
 
 Only the active scenario page mounts/loads. Switching resets its pagination and closes its old detail/configuration view. On mobile all four switch labels remain visible in a two-row layout; desktop uses one row, following existing segmented-control conventions.
 
+Revision 2026-10-11: Parking Liability is the default when no valid view is specified. Explicit liabilityTab values and legacy section links still open their requested view. All four views use the shared AdminFilterBar layout: date presets/inputs and record count on the first row, driver/search filters and existing actions on the second. Filter state and callback behavior are unchanged. The same layout is used by Jobs, Finished Jobs, Alerts, Notifications, Van, Drivers and Overview; pages without date filters do not gain artificial controls.
+
+Placement refinement: Parking Liability's filter bar is now outside and above the table frame, matching Jobs. The Liability view switch is in the second row after driver/search, followed by refresh/export actions; category management stays available for Liability Reports. View-switch shape, selected state and search-field classes match the Jobs filters. Mobile keeps a two-column view switch so every label remains visible. Keyboard focus is retained on the selected radio when switching/remounting views.
+
 ## Filters and Existing Actions
 
 Driver, search and from/to dates are shared across the four views and retained when switching. Date presets remain Today, Yesterday, Tomorrow and 7 Days, with custom dates. Existing scenarios/parking tables, submission details, evidence, refresh, exports and liability-category management are reused rather than replaced. Standalone page callers retain their prior local-filter behavior through the optional shared filter control.

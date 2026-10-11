@@ -102,6 +102,19 @@ export function buildReportJob(job: Job, manual: DriverJobSummaryDoc | null, pre
     issues: [...issues, ...systemPayments.issues, ...(manualPayments?.issues ?? []), ...(!manual && completed ? ["Manual details are missing; outstanding and manual hours are unknown."] : [])] };
 }
 export type ReportJob = ReturnType<typeof buildReportJob>;
+export function manualRoadFee(manual: DriverJobSummaryDoc | null, type: "congestion" | "tunnel"): number | null {
+  if (!manual) return null;
+  if (manual.chargeItems) {
+    const items = manual.chargeItems.filter(row => row.type === type);
+    if (items.some(row => !validPence(row.amountPence))) return null;
+    return items.reduce((total, row) => addReportMoney(total, row.amountPence!), 0);
+  }
+  if (type === "congestion") {
+    if (manual.congestionCharge === false) return 0;
+    if (manual.congestionCharge === true && validPence(manual.congestionChargePence)) return manual.congestionChargePence!;
+  }
+  return null;
+}
 function savedRoadFee(job: Job, type: "congestion" | "tunnel"): number | null {
   const field = type === "congestion" ? "congestionPence" : "tunnelPence";
   if (job.chargeSnapshot) return validPence(job.chargeSnapshot[field]) ? job.chargeSnapshot[field] : null;
@@ -134,6 +147,13 @@ export function summarizeReportJobs(rows: ReportJob[]) {
   const manualEntriesKnownPence = validManualRows.reduce((total, row) => addReportMoney(total, row.manualDetails!.amountCollectedPence), 0);
   const jobFlowTotalKnownPence = Object.values(byMethod).reduce(addReportMoney, 0);
   const jobFlowUnknownJobs = completed.filter(row => row.finance.systemPayments.issues.length > 0).length;
+  const manualRoadTotals = (type: "congestion" | "tunnel") => {
+    const amounts = completed.map(row => manualRoadFee(row.manualDetails, type));
+    const missingJobs = completed.filter(row => !row.manualDetails).length;
+    return { knownPence: amounts.reduce<number>((total, amount) => addReportMoney(total, amount ?? 0), 0),
+      knownJobs: amounts.filter(amount => amount !== null).length, missingJobs,
+      unavailableJobs: amounts.filter(amount => amount === null).length - missingJobs };
+  };
   const paymentCards = {
     basis: "driver-charged-minus-manual-form-collections", endExclusive: true,
     totalChargesPence: totalChargeUnknownJobs ? null : sumMoney(row => row.finance.systemCalculatedPence), totalChargeUnknownJobs,
@@ -146,9 +166,10 @@ export function summarizeReportJobs(rows: ReportJob[]) {
   };
   return { assignedJobs: rows.length, completedJobs: completed.length, cancelledJobs: rows.filter(row => row.status === "CANCELLED").length,
     paymentCards,
+    manualRoadChargeTotals: { tunnel: manualRoadTotals("tunnel"), congestion: manualRoadTotals("congestion") },
     roadChargeTotals: {
-      congestionPence: completed.some(row => row.finance.congestionPence === null) ? null : sumMoney(row => row.finance.congestionPence),
-      tunnelPence: completed.some(row => row.finance.tunnelPence === null) ? null : sumMoney(row => row.finance.tunnelPence),
+      congestionPence: completed.length > 0 && completed.every(row => row.finance.congestionPence === null) ? null : sumMoney(row => row.finance.congestionPence),
+      tunnelPence: completed.length > 0 && completed.every(row => row.finance.tunnelPence === null) ? null : sumMoney(row => row.finance.tunnelPence),
       congestionUnknownJobs: completed.filter(row => row.finance.congestionPence === null).length,
       tunnelUnknownJobs: completed.filter(row => row.finance.tunnelPence === null).length
     },

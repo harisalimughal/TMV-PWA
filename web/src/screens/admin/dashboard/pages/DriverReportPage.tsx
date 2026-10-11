@@ -10,8 +10,8 @@ import { useDriverOptions } from "../hooks/useDriverOptions";
 
 function locationState() {
   const params = new URLSearchParams(window.location.search), fallback = dateRangeForPreset("today");
-  const tab = params.get("reportTab") || "performance";
-  return { driver: params.get("driver") || "", tab: REPORT_TABS.includes(tab as ReportTab) ? tab as ReportTab : "performance" as ReportTab,
+  const tab = params.get("reportTab") || "jobs";
+  return { driver: params.get("driver") || "", tab: REPORT_TABS.includes(tab as ReportTab) ? tab as ReportTab : "jobs" as ReportTab,
     from: params.get("from") || fallback.from!, to: params.get("to") || fallback.to!, groupBy: "day" as const,
     pages: Object.fromEntries(["jobs", "events", "visits", "charges", "roadAlerts"].map(key => [key, Number(params.get(`${key}Page`) || 1)])) };
 }

@@ -39,7 +39,27 @@ describe("Breakdown summary cache", () => {
   it("reuses recent filter results without repeating job/GPS reads and isolates dates/moving requests", async () => {
     await request(); await request(); expect(mocks.jobs).toHaveBeenCalledTimes(1); expect(mocks.movement).toHaveBeenCalledTimes(1);
     await request("2026-10-08"); expect(mocks.jobs).toHaveBeenCalledTimes(2);
-    await request("2026-10-09", "0"); expect(mocks.jobs).toHaveBeenCalledTimes(3); expect(mocks.movement).toHaveBeenCalledTimes(2);
+    await request("2026-10-09", "0"); expect(mocks.jobs).toHaveBeenCalledTimes(2); expect(mocks.movement).toHaveBeenCalledTimes(2);
+  });
+  it("returns the core table without waiting for movement and reuses its financial reads", async () => {
+    let finish!: (value: Map<string, { movingKnownSeconds: number; movingUnknownJobs: number; movingPartialJobs: number }>) => void;
+    mocks.movement.mockImplementation(() => new Promise(resolve => { finish = resolve; }));
+    const core = await request("2026-10-09", "0", "1");
+    expect(core.drivers[0].calculatedChargesPounds).toBe(100);
+    expect(core.drivers[0].movingKnownSeconds).toBeUndefined();
+    expect(mocks.movement).not.toHaveBeenCalled();
+    const background = request("2026-10-09", "1", "1");
+    await vi.waitFor(() => expect(finish).toBeDefined());
+    const repeated = await request("2026-10-09", "0", "1");
+    expect(repeated).toEqual(core);
+    finish(new Map([["MA", { movingKnownSeconds: 1800, movingUnknownJobs: 0, movingPartialJobs: 0 }]]));
+    const full = await background;
+    expect(full.drivers[0].movingKnownSeconds).toBe(1800);
+    expect(full.drivers[0].calculatedChargesPounds).toBe(core.drivers[0].calculatedChargesPounds);
+    expect(mocks.jobs).toHaveBeenCalledOnce();
+    expect(mocks.normalize).toHaveBeenCalledOnce();
+    expect(full).not.toHaveProperty("sourceJobs");
+    expect(full).not.toHaveProperty("identities");
   });
   it("reloads changed totals immediately after invalidation rather than serving old cached amounts", async () => {
     expect((await request()).drivers[0].calculatedChargesPounds).toBe(100);

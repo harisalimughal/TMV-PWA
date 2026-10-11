@@ -19,7 +19,7 @@ vi.mock("../components/DateRangePicker", () => ({
 }));
 
 describe("OverviewPage work breakdown review reporting", () => {
-  it("shows selected-range moving hours in the clean driver breakdown summary", async () => {
+  it("shows saved working hours and review counts without requesting GPS movement", async () => {
     fetchDrivers.mockResolvedValue({
       drivers: [{
         initials: "TI",
@@ -31,7 +31,7 @@ describe("OverviewPage work breakdown review reporting", () => {
         cancelled: 0,
         completionRate: 100,
         avgDurationMinutes: 0,
-        totalDurationMinutes: 0,
+        totalDurationMinutes: 60,
         movingKnownSeconds: 3600,
         movingUnknownJobs: 0,
         movingPartialJobs: 0,
@@ -61,9 +61,10 @@ describe("OverviewPage work breakdown review reporting", () => {
       </QueryClientProvider>
     );
 
-    expect(await screen.findByRole("columnheader", { name: "Moving Hours" })).toBeInTheDocument();
+    expect(await screen.findByRole("columnheader", { name: "Working Hours" })).toBeInTheDocument();
     expect(await screen.findByText("1.0h")).toBeInTheDocument();
-    expect(screen.queryByText("RW Sent / Not sent")).not.toBeInTheDocument();
+    expect(screen.getByRole("columnheader", { name: "RW Sent / Not Sent" })).toBeInTheDocument();
+    expect(fetchDrivers.mock.calls.every(call => call[2] === false)).toBe(true);
   });
 
   it("opens a dedicated report with retained driver/range instead of fetching an inline breakdown", async () => {

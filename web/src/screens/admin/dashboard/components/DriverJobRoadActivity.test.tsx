@@ -11,7 +11,7 @@ describe("Complete job-level GPSLive activity", () => {
     const { container } = render(<DriverJobRoadActivity job={job} report={report} onJob={vi.fn()} />);
     const tunnel = screen.getByRole("region", { name: `Tunnel activity for ${job.jobId}` });
     expect(tunnel.querySelectorAll("tbody tr")).toHaveLength(2);
-    expect(within(tunnel).getByText("Total Tunnel Charges")).toBeInTheDocument();
+    expect(within(tunnel).getByText("Expected")).toBeInTheDocument();
     expect(container.querySelector(".rpt-pager")).toBeNull();
     expect(tunnel).toHaveTextContent("£13.60");
     fireEvent.click(within(tunnel).getAllByRole("button", { name: roadZoneLabel(original) })[0]);

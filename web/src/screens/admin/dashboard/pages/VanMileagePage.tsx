@@ -1,3 +1,4 @@
+import { AdminFilterBar } from "../components/AdminFilterBar";
 import React, { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Camera, Download, Fuel, Loader2, Pencil, RefreshCw, Search, ShieldCheck, Trash2, Wrench, X } from "lucide-react";
@@ -95,9 +96,9 @@ export function VanMileagePage() {
 
   return (
     <div className="space-y-6 max-w-[1440px] mx-auto">
-      <div className="p-2 bg-white rounded-module shadow-sm border border-admin-line flex flex-wrap items-center gap-4">
-        <div className="relative flex-1 min-w-[220px]">
-          <Search className="w-4 h-4 text-admin-muted absolute left-3 top-2.5" />
+      <AdminFilterBar dates={<DateRangePicker from={from} to={to} onChange={(f, t) => { setFrom(f); setTo(t); setPage(1); }} />} count={isLoading ? "..." : `${pagination?.total ?? 0} driver${(pagination?.total ?? 0) === 1 ? "" : "s"}`}>
+        <div className="relative w-full sm:w-64 order-last sm:order-none">
+          <Search className="w-4 h-4 text-admin-muted absolute left-3 top-1/2 -translate-y-1/2" />
           <input
             type="text"
             placeholder="Search driver, initials, van, fuel or service..."
@@ -106,27 +107,22 @@ export function VanMileagePage() {
               setSearch(e.target.value);
               setPage(1);
             }}
-            className="w-full h-9 pl-9 pr-3 rounded-full border border-admin-line bg-admin-surface text-[13px] outline-none focus:border-admin-brand focus:ring-1 focus:ring-admin-brand focus:bg-white transition"
+            className="w-full pl-9 pr-4 h-10 rounded-card bg-admin-surface border border-admin-line/50 text-[13px] text-admin-ink focus:border-admin-brand focus:ring-1 focus:ring-admin-brand outline-none transition"
           />
         </div>
-        <div className="w-[1px] h-6 bg-admin-line hidden sm:block" />
-        <DateRangePicker from={from} to={to} onChange={(f, t) => { setFrom(f); setTo(t); setPage(1); }} />
-        <span className="text-[13px] text-admin-muted font-medium ml-auto">
-          {isLoading ? "..." : `${pagination?.total ?? 0} driver${(pagination?.total ?? 0) === 1 ? "" : "s"}`}
-        </span>
         <button
           onClick={() => { window.location.href = "/api/admin/van/records/export.csv"; }}
-          className="h-9 px-3 rounded-card border border-admin-line bg-white text-[13px] font-medium text-admin-ink hover:bg-admin-surface transition flex items-center gap-2"
+          className="h-10 px-3 rounded-card border border-admin-line bg-white text-[13px] font-medium text-admin-ink hover:bg-admin-surface transition flex items-center gap-2"
         >
           <Download className="w-4 h-4 text-admin-muted" /> Export CSV
         </button>
         <button
           onClick={() => refetch()}
-          className="w-9 h-9 flex items-center justify-center rounded-full hover:bg-admin-surface text-admin-muted hover:text-admin-ink transition"
+          className="w-10 h-10 flex items-center justify-center rounded-[6px] border border-admin-line hover:bg-admin-surface text-admin-muted hover:text-admin-ink transition"
         >
           <RefreshCw className={`w-4 h-4 ${isFetching ? "animate-spin text-admin-brand" : ""}`} />
         </button>
-      </div>
+      </AdminFilterBar>
 
       {isError && <ApiErrorState message={(error as Error)?.message} onRetry={() => void refetch()} />}
 

@@ -2,15 +2,39 @@
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   width: 100%;
+  gap: 0;
+  padding: 4px;
+  border: 1px solid rgb(var(--line) / 0.5);
+  border-radius: var(--radius-md);
+  background: rgb(var(--surface-sunken));
 }
 .liability-view-switcher[role="radiogroup"] button {
   min-width: 0;
   min-height: 44px;
   height: 44px;
+  padding: 6px 12px;
+  border-radius: var(--radius);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.5;
+  letter-spacing: 0;
+  color: rgb(var(--fg-subtle));
+}
+.liability-view-switcher[role="radiogroup"] button:hover {
+  color: rgb(var(--fg));
+}
+.liability-view-switcher[role="radiogroup"] button[aria-checked="true"] {
+  background: #fff;
+  color: rgb(var(--fg));
+  box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05);
 }
 @media (min-width: 640px) {
   .liability-view-switcher[role="radiogroup"] {
     display: inline-flex;
     width: auto;
+  }
+  .liability-view-switcher[role="radiogroup"] button {
+    min-height: 0;
+    height: auto;
   }
 }

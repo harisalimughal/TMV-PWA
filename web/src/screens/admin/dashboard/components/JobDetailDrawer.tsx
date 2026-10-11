@@ -1,3 +1,4 @@
+import { withArrivalDistance } from "../../../../lib/trackerArrival";
 import React, { useState, useEffect } from "react";
 import {
   X,
@@ -257,7 +258,7 @@ export function JobDetailDrawer({ job: initialJob, isOpen, onClose, onUpdated }:
                 <span className="block text-[10px] font-bold uppercase tracking-wider text-admin-muted">Tracker arrival</span>
                 {job.arrivalDelaySource && <span className="mt-0.5 block text-[11px] text-admin-muted">Delay source: {job.arrivalDelaySource === "gps-two-fresh-reports" ? "Verified GPS reports" : job.arrivalDelaySource === "proof-acceptance" ? "Proof acceptance" : "Unavailable"}</span>}
                 {job.trackerArrivalAt ? (
-                  <span className="mt-0.5 block text-[12px] font-semibold text-admin-ink">{formatLondonDateTime(job.trackerArrivalAt)}</span>
+                  <span className="mt-0.5 block text-[12px] font-semibold text-admin-ink">{withArrivalDistance(formatLondonDateTime(job.trackerArrivalAt), job.trackerArrivalDistanceMeters)}</span>
                 ) : (
                   <div>
                     <span className="mt-0.5 block text-[12px] font-semibold text-admin-status-red">Unverified</span>

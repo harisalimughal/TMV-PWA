@@ -23,4 +23,12 @@ Cold requests still need Mongo/GPSLive reads and can remain limited by network/p
 
 ## Verification
 
+### Summary Table Follow-Up (2026-10-11)
+
+Working Hours is also displayed from the existing totalDurationMinutes field, in the same core summary request. No additional GPS, provider or backend request is introduced. workingUnknownJobs counts missing/invalid durations on completed jobs, preserving explicit recorded zero minutes. Known hours remain visible when other jobs have missing timings; all-missing data is Unavailable rather than a guessed zero. This follow-up passed 12 focused backend tests and 11 table UI tests.
+
+The front Breakdown table now requests the completed-only summary with `includeMoving` disabled. RW Sent / Not Sent replaces Moving Hours, using the saved review-email status already aggregated from completed jobs. There is no background GPS request from this table; Moving Hours remains available in the dedicated driver report. The query reuses recent responses for 30 seconds, with distinct date-range keys and no previous-range placeholder totals.
+
+Backend core-summary reads share a bounded six-entry, 30-second cache with optional movement-summary requests. Oversized raw-job cohorts are not retained. Normalized financial data is read once per cache window; private source jobs/identity maps are never serialized to the response. Existing report-read invalidation clears this cache too. Focused checks passed: 18 backend tests, 10 table UI tests and both TypeScript checks. No new push, deployment, database writes or provider changes were performed.
+
 Full backend: 60 files / 528 tests passed. Frontend full run: 59 files / 285 tests passed, with one outdated Overview assertion expecting the previously removed review column; updated that fixture and its 2-test rerun passed. The focused Breakdown/filter suite passed all 38 tests. TypeScript, both production builds and synthetic browser tab/date navigation passed. No real database writes or provider changes were part of these checks.

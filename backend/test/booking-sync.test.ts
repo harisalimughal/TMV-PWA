@@ -107,7 +107,9 @@ describe("syncBookingsForDate", () => {
       pickupLocation: { lat: 51.5, lng: -0.14 },
       gpsliveImei: "123456789012345",
       trackerArrivalAt: "2026-09-24T08:00:00.000Z",
+      trackerArrivalDistanceMeters: 405,
       trackerArrivalCandidateAt: "2026-09-24T07:58:00.000Z",
+      trackerArrivalCandidateDistanceMeters: 430,
       arrivalProofReminderSentAt: "2026-09-24T08:16:00.000Z"
     })]);
     listCalendarEvents.mockResolvedValue([
@@ -129,7 +131,9 @@ describe("syncBookingsForDate", () => {
       onMyWayAt: "2026-09-24T07:45:00.000Z",
       gpsliveImei: "123456789012345",
       trackerArrivalAt: undefined,
+      trackerArrivalDistanceMeters: undefined,
       trackerArrivalCandidateAt: undefined,
+      trackerArrivalCandidateDistanceMeters: undefined,
       arrivalProofReminderSentAt: undefined
     }));
   });

@@ -83,6 +83,8 @@ GPS collection/passage evidence does not prove a customer paid a fee. Mark charg
 
 ### Finished-Job Reporting Scope
 
+Recorded road-charge summary values are available subtotals: they sum non-null saved fee amounts across completed jobs and retain separate congestionUnknownJobs/tunnelUnknownJobs counts. A missing fee does not hide other recorded amounts. An explicit saved zero counts as known; null is returned only when every completed job lacks that fee amount. Empty cohorts retain zero aggregates and the UI's finished-job empty state. Individual missing fees remain null, and current settings/GPS estimates never replace missing historical billed amounts. The UI displays unavailable-job counts in red beneath the available subtotal.
+
 Driver Breakdown requests `completedOnly=1` from the driver summary endpoint; the operational Drivers summary retains its existing all-status behavior and a separate cache entry. Detailed reports and exports load only COMPLETED jobs for their financial/date cohort, before row limits. GPS road activity is shown only when linked to a COMPLETED job; unfinished contextual jobs remain available internally for ambiguity checks, never as report records or charge contributors. Completed contextual jobs retain occurrence-date filtering for road evidence. Liability exports exclude unfinished-job records; the separate operational liability module is unchanged.
 
 When the selected financial cohort has no finished jobs, every report tab shows `No finished job data`, retains driver/date controls, and does not start background GPS/road-history/chart loading. Breakdown summary rows with no completed jobs are hidden, but registered drivers remain selectable.

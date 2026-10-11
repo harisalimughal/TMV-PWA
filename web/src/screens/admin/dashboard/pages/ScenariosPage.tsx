@@ -1,3 +1,4 @@
+import { AdminFilterBar } from "../components/AdminFilterBar";
 import React, { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -11,7 +12,6 @@ import {
 } from "lucide-react";
 import { FolderActionDropdown } from "../components/FolderActionDropdown";
 import { SubmissionDetailDrawer } from "../components/SubmissionDetailDrawer";
-import { Button } from "../../../../ui";
 import { PaperDossierReport } from "../components/PaperDossierReport";
 import { NormalizedJob } from "../types";
 import { fetchScenarios } from "../api";
@@ -28,6 +28,7 @@ import { useScenarioFilters, type ScenarioFilterControl } from "../hooks/useScen
 interface Props {
   kind: "checkin" | "checkout" | "parking" | "liability";
   filterControl?: ScenarioFilterControl;
+  viewSwitcher?: React.ReactNode;
 }
 
 const mapDriver = (raw: string) => {
@@ -74,7 +75,7 @@ const isTestGibberish = (text: string) => {
   return false;
 };
 
-export function ScenariosPage({ kind, filterControl }: Props) {
+export function ScenariosPage({ kind, filterControl, viewSwitcher }: Props) {
   const [page, setPage] = useState(1);
   const { from, to, searchQuery, driverFilter, setFrom, setTo, setSearchQuery, setDriverFilter } = useScenarioFilters(filterControl);
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -122,19 +123,15 @@ export function ScenariosPage({ kind, filterControl }: Props) {
 
   return (
     <div className="space-y-6 max-w-[1440px] mx-auto">
-      {/* TOOLBAR -- same two-row shape as Parking Liability's SubmissionPageTemplate:
-          filters on their own row, count/refresh on a second, so neither wraps mid-row
-          on a typical desktop width the way one long flex-wrap row of driver+search+
-          date-range+count+refresh used to. */}
-      <div className="p-3 bg-white rounded-module shadow-sm border border-admin-line flex flex-col gap-3">
-        <div className="flex flex-wrap items-center gap-3">
+      <AdminFilterBar dates={<DateRangePicker from={from} to={to} onChange={(f, t) => { setFrom(f); setTo(t); setPage(1); }} />} count={isLoading ? "..." : `${filteredItems.length} submission${filteredItems.length === 1 ? "" : "s"}`}>
+
           {/* Driver filter -- same roster + behaviour as Finished Jobs' driver filter. */}
           <select
             aria-label="Filter by driver"
             value={driverFilter}
             onChange={e => { setDriverFilter(e.target.value); setPage(1); }}
             disabled={driverOptionsLoading}
-            className="shrink-0 h-9 px-3 rounded-control border border-admin-line bg-admin-surface text-[13px] font-medium text-admin-ink outline-none focus:border-admin-brand"
+            className="shrink-0 h-10 px-3 rounded-card border border-admin-line/50 bg-admin-surface text-[13px] font-medium text-admin-ink outline-none focus:border-admin-brand"
           >
             <option value="">{driverOptionsLoading ? "Loading drivers..." : "All drivers"}</option>
             {!driverOptionsLoading && driverOptions.map(d => (
@@ -143,68 +140,26 @@ export function ScenariosPage({ kind, filterControl }: Props) {
           </select>
 
           {/* Search */}
-          <div className="relative flex-1 min-w-[200px]">
-            <Search className="w-4 h-4 text-admin-muted absolute left-3 top-2.5" />
+          <div className="relative w-full sm:w-64 order-last sm:order-none">
+            <Search className="w-4 h-4 text-admin-muted absolute left-3 top-1/2 -translate-y-1/2" />
             <input
               aria-label="Search submissions"
               type="text"
               placeholder="Search reference, job, or user..."
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
-              className="w-full h-9 pl-9 pr-3 rounded-full border border-admin-line bg-admin-surface text-[13px] outline-none focus:border-admin-brand focus:ring-1 focus:ring-admin-brand focus:bg-white transition"
+              className="w-full pl-9 pr-4 h-10 rounded-card bg-admin-surface border border-admin-line/50 text-[13px] text-admin-ink focus:border-admin-brand focus:ring-1 focus:ring-admin-brand outline-none transition"
             />
           </div>
 
-          <div className="hidden sm:block w-[1px] h-6 bg-admin-line mx-1" />
-
-          {/* DateRangePicker already renders its own Today/Tomorrow/7 Days
-              preset chips alongside the calendar inputs -- a second, separately-driven
-              set of the same four chips used to sit here too. */}
-          <DateRangePicker from={from} to={to} onChange={(f, t) => { setFrom(f); setTo(t); setPage(1); }} />
-        </div>
-
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <span className="text-[13px] text-admin-muted font-medium">
-            {isLoading ? "..." : `${filteredItems.length} submission${filteredItems.length === 1 ? "" : "s"}`}
-          </span>
-
-          <div className="flex items-center gap-2 sm:gap-3">
-            {kind === "liability" && (
-              <>
-                <Button
-                  variant="secondary"
-                  onClick={() => setIsConfigOpen(true)}
-                  iconLeft={<Settings2 />}
-                  aria-label="Manage categories"
-                  className="shrink-0"
-                >
-                  <span className="hidden sm:inline">Manage categories</span>
-                </Button>
-                <div className="hidden sm:block w-[1px] h-6 bg-admin-line" />
-              </>
-            )}
-            <Button
-              variant="secondary"
-              onClick={() => {
-                window.location.href = `/api/admin/scenarios/${kind}/export.csv`;
-              }}
-              iconLeft={<Download />}
-              aria-label="Export CSV"
-              className="shrink-0"
-            >
-              <span className="hidden sm:inline">Export CSV</span>
-            </Button>
-
-            <button
-              onClick={() => refetch()}
-              className="w-9 h-9 shrink-0 flex items-center justify-center rounded-full hover:bg-admin-surface text-admin-muted hover:text-admin-ink transition"
-              title="Refresh"
-            >
-              <RefreshCw className={`w-4 h-4 ${isLoading ? "animate-spin" : ""}`} />
-            </button>
-          </div>
-        </div>
-      </div>
+          {viewSwitcher}
+          <div className="hidden sm:block w-px h-6 bg-admin-line mx-1 shrink-0" />
+          <button onClick={() => refetch()} className="shrink-0 w-10 h-10 rounded-card flex items-center justify-center bg-admin-surface border border-admin-line/50 hover:bg-admin-line/40 text-admin-muted hover:text-admin-ink transition" title="Refresh" aria-label="Refresh">
+            <RefreshCw className={`w-4 h-4 ${isLoading ? "animate-spin" : ""}`} />
+          </button>
+          <button onClick={() => { window.location.href = `/api/admin/scenarios/${kind}/export.csv`; }} className="shrink-0 w-10 h-10 rounded-card flex items-center justify-center bg-admin-surface border border-admin-line/50 hover:bg-admin-line/40 text-admin-muted hover:text-admin-ink transition" title="Export CSV" aria-label="Export CSV"><Download className="w-4 h-4" /></button>
+          {kind === "liability" && <button onClick={() => setIsConfigOpen(true)} className="shrink-0 w-10 h-10 rounded-card flex items-center justify-center bg-admin-surface border border-admin-line/50 hover:bg-admin-line/40 text-admin-muted hover:text-admin-ink transition" title="Manage categories" aria-label="Manage categories"><Settings2 className="w-4 h-4" /></button>}
+      </AdminFilterBar>
 
       {isLoading && (
         <div className="h-64 bg-white rounded-module border border-admin-line animate-pulse flex items-center justify-center">

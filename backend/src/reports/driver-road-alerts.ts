@@ -8,6 +8,17 @@ import { getSetting } from "../db/settings.repo";
 import { env } from "../config/env";
 import type { DriverProfile, Job } from "../jobs/job.types";
 import type { GpsEvent } from "../gps/gps.types";
+import { addReportMoney } from "./report-payments";
+
+export function summarizeExpectedRoadCharges(alerts: Array<{ jobId: string | null; type: string; estimatedPence: number | null }>, jobIds: Set<string>, available: boolean) {
+  const total = (type: "tunnel" | "congestion") => {
+    const rows = alerts.filter(row => row.type === type && !!row.jobId && jobIds.has(row.jobId));
+    const unpricedEntries = rows.filter(row => row.estimatedPence === null).length;
+    const knownPence = rows.reduce((sum, row) => addReportMoney(sum, row.estimatedPence ?? 0), 0);
+    return { pence: !available || rows.length > 0 && unpricedEntries === rows.length ? null : knownPence, knownPence, unpricedEntries };
+  };
+  return { tunnel: total("tunnel"), congestion: total("congestion") };
+}
 
 export async function readReportAlerts(from: string, to: string, imeis?: string[]) {
   const rows = await fetchGpsLiveAlertsForFleet(DateTime.fromISO(from).toUTC().toFormat("yyyy-MM-dd HH:mm:ss"), DateTime.fromISO(to).toUTC().toFormat("yyyy-MM-dd HH:mm:ss"), imeis);

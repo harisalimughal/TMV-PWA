@@ -127,6 +127,7 @@ export interface NormalizedJob {
   pickupArrivalAt?: string;
   vanLoadedAt?: string;
   trackerArrivalAt?: string;
+  trackerArrivalDistanceMeters?: number;
   trackerLastSeenAt?: string;
   trackerStatus?: "reporting" | "stale" | "unverified";
   trackerDistanceMeters?: number;
@@ -275,6 +276,7 @@ export interface DriverSummaryItem {
   completionRate: number;
   avgDurationMinutes: number;
   totalDurationMinutes: number;
+  workingUnknownJobs?: number;
   movingKnownSeconds?: number;
   movingUnknownJobs?: number;
   movingPartialJobs?: number;

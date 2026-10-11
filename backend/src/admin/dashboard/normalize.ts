@@ -6,6 +6,7 @@
  * (`listObjects(SHEETS.DRIVERS)`), now from tmv-pwa's own `driver_accounts` Mongo
  * collection (`listDriverProfiles()`) -- the actual point of this whole migration.
  */
+import { recordedArrivalDistance, trackerArrivalReason } from "../../jobs/pickup-arrival.rules";
 import { listDriverProfiles } from "../../auth/driver-account.service";
 import { ExtraChargeType, Job } from "../../jobs/job.types";
 import { EvidenceStatus, EvidenceType } from "../../jobs/job.types";
@@ -117,7 +118,7 @@ function calculateArrivalProofTiming(
   items: NormalizedEvidenceItem[],
   job: Job,
   fetchedAt: string
-): Pick<NormalizedJob, "pickupArrivalAt" | "vanLoadedAt" | "trackerArrivalAt" | "trackerLastSeenAt" | "trackerStatus" | "trackerDistanceMeters" | "trackerLocationName" | "trackerUnverifiedReason" | "arrivalProofDelayMinutes" | "arrivalProofLate" | "arrivalProofOverdue"> {
+): Pick<NormalizedJob, "pickupArrivalAt" | "vanLoadedAt" | "trackerArrivalAt" | "trackerArrivalDistanceMeters" | "trackerLastSeenAt" | "trackerStatus" | "trackerDistanceMeters" | "trackerLocationName" | "trackerUnverifiedReason" | "arrivalProofDelayMinutes" | "arrivalProofLate" | "arrivalProofOverdue"> {
   const arrivalItem = items.find(item => item.category === "Arrival" && item.state === "COMPLETED");
   const vanLoadedItem = items.find(item => item.category === "VanLoaded" && item.state === "COMPLETED");
   const pickupArrivalAt = evidenceTimestamp(arrivalItem) || (job.pickupArrivalAt ? toUtcIso(job.pickupArrivalAt) : undefined) || (job.actualStart ? toUtcIso(job.actualStart) : undefined);
@@ -131,33 +132,13 @@ function calculateArrivalProofTiming(
     ? minutesBetween(trackerArrivalAt, pickupArrivalAt || fetchedAt)
     : undefined;
 
-  let trackerUnverifiedReason = job.trackerUnverifiedReason;
-  if (trackerUnverifiedReason && trackerUnverifiedReason.includes(" away") && !trackerUnverifiedReason.includes(" away from pickup point")) {
-    trackerUnverifiedReason = trackerUnverifiedReason.replace(/ away(\b)/, " away from pickup point$1");
-  }
-  if (!trackerArrivalAt && !trackerUnverifiedReason) {
-    if (!job.pickupLocation) {
-      trackerUnverifiedReason = "Pickup address could not be geocoded";
-    } else if (!job.onMyWayAt) {
-      trackerUnverifiedReason = "Driver did not tap On My Way";
-    } else if (typeof job.trackerDistanceMeters === "number") {
-      const loc = job.trackerLocationName ? ` in ${job.trackerLocationName}` : "";
-      if (job.trackerDistanceMeters >= 1000) {
-        trackerUnverifiedReason = `Van was ${(job.trackerDistanceMeters / 1000).toFixed(1)} km away from pickup point${loc}`;
-      } else {
-        trackerUnverifiedReason = `Van was ${job.trackerDistanceMeters}m away from pickup point (outside 300m radius)${loc}`;
-      }
-    } else if (trackerStatus === "stale") {
-      trackerUnverifiedReason = "Tracker device signal was stale / offline";
-    } else if (!trackerLastSeenAt) {
-      trackerUnverifiedReason = "No tracker signal received";
-    }
-  }
+  const trackerUnverifiedReason = trackerArrivalReason(job, trackerStatus);
 
   return {
     pickupArrivalAt,
     vanLoadedAt,
     trackerArrivalAt,
+    trackerArrivalDistanceMeters: recordedArrivalDistance(job.trackerArrivalDistanceMeters),
     trackerLastSeenAt,
     trackerStatus,
     trackerDistanceMeters: job.trackerDistanceMeters,

@@ -17,6 +17,13 @@
 @media (max-width: 600px) { .rpt-export-actions { width: 100%; flex: none; } .rpt-export-actions .rpt-driver-filter { flex: 1 1 0; max-width: none; } }
 .rpt-metric-incomplete { border-color: #dba9ad; }
 .rpt-metric .rpt-unavailable-count { color: #a32f40; }
+.rpt-comparison-row .rpt-unavailable-count { color: #a32f40; font-size: 13px; font-weight: 400; }
+.rpt-metric-caption { display: block; }
+.rpt-page small.rpt-unavailable-count { color: #a32f40; }
+.rpt-page .rpt-job { border: 1px solid #dae1e5; border-radius: 6px; margin-bottom: 12px; }
+.rpt-page .rpt-job > summary { padding: 16px; border-radius: 6px; }
+.rpt-page .rpt-job[open] > summary { border-bottom: 1px solid #dae1e5; border-radius: 6px 6px 0 0; }
+.rpt-page .rpt-job > summary:hover { background: #f4f7f8; }
 .rpt-page .rpt-timings-table { min-width: 1000px; }
 .rpt-timings-table td { min-width: 120px; }
 .rpt-job > summary::before, .rpt-job[open] > summary::before { content: none; }
@@ -82,13 +89,13 @@
 .rpt-chargeable-times dt { font-size: 13px; line-height: 1.5; }
 .rpt-chargeable-times dd { margin: 0; font-size: 16px; font-weight: 650; line-height: 1.5; overflow-wrap: anywhere; }
 .rpt-page .rpt-schedule-table th:first-child { width: 22%; }
-.rpt-job-road-summary .rpt-metrics { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; padding: 0; }
+.rpt-job-road-summary .rpt-metrics { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; padding: 0; }
 .rpt-job-road-summary .rpt-metric { min-height: 96px; padding: 12px; }
 .rpt-job-road-summary .rpt-metric-label { font-size: 12px; min-height: 32px; }
 .rpt-page .rpt-job-road-summary .rpt-metric strong { font-size: 21px; margin: 8px 0 0; }
 .rpt-page .rpt-job-road-summary .rpt-metric strong.rpt-road-value-long { font-size: 14px; }
 @media (max-width: 600px) {
-  .rpt-job-road-summary .rpt-metrics { gap: 6px; }
+  .rpt-job-road-summary .rpt-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
   .rpt-job-road-summary .rpt-metric { padding: 8px; }
   .rpt-job-road-summary .rpt-metric-label { font-size: 11px; }
   .rpt-page .rpt-job-road-summary .rpt-metric strong { font-size: 16px; }

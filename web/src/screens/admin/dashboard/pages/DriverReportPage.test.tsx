@@ -61,11 +61,11 @@ describe("Driver report URL and request lifecycle", () => {
     await waitFor(() => expect(load.mock.calls.filter(call => call[1].detail === "full").length).toBeGreaterThan(2));
     expect(load.mock.calls.filter(call => call[1].detail === "core")).toHaveLength(coreCalls);
   });
-  it("defaults to Today in London when no date filters are supplied", async () => {
+  it("defaults to Jobs and Today in London when no tab/date filters are supplied", async () => {
     window.history.replaceState({}, "", "/admin?section=driverreport&driver=DEMO");
     const today = dateRangeForPreset("today");
     load.mockImplementation(sampleDriverReport); renderPage();
-    await screen.findByRole("tab", { name: "Performance & Timings" });
+    expect(await screen.findByRole("tab", { name: "Jobs" })).toHaveAttribute("aria-selected", "true");
     expect(load.mock.calls[0][1].from).toBe(today.from);
     expect(load.mock.calls[0][1].to).toBe(new Date(Date.parse(today.to!) + 1).toISOString());
     expect(screen.getByRole("button", { name: /^Today$/ })).toHaveClass("font-bold");
@@ -103,10 +103,10 @@ describe("Driver report URL and request lifecycle", () => {
     expect(selector.compareDocumentPosition(pdf) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(selector.closest(".rpt-driver-filter")?.nextElementSibling).toBe(pdf);
   });
-  it("falls back to Performance for links to the removed liabilities tab", async () => {
+  it("falls back to Jobs for links to the removed liabilities tab", async () => {
     window.history.replaceState({}, "", location.pathname + location.search.replace("reportTab=comparison", "reportTab=liabilities"));
     load.mockImplementation(sampleDriverReport); renderPage();
-    expect(await screen.findByRole("tab", { name: "Performance & Timings" })).toHaveAttribute("aria-selected", "true");
+    expect(await screen.findByRole("tab", { name: "Jobs" })).toHaveAttribute("aria-selected", "true");
     expect(screen.queryByRole("tab", { name: "Penalties & Liabilities" })).not.toBeInTheDocument();
   });
   it("switches drivers while retaining dates and tab, resetting pages and using daily charts despite legacy grouping", async () => {

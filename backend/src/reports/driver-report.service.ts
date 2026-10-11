@@ -12,7 +12,7 @@ import { buildLiabilityRecord, summarizeLiabilities } from "../liabilities/liabi
 import { listDriverJobSummariesForJobs } from "../db/driver-job-summary.repo";
 import { reportRoadAllocations } from "./report-road-allocations";
 import { mergeRoadAllocation } from "../gps/road-charge.repo";
-import { projectRoadAlerts, readReportAlerts, reportAlertRates } from "./driver-road-alerts";
+import { projectRoadAlerts, readReportAlerts, reportAlertRates, summarizeExpectedRoadCharges } from "./driver-road-alerts";
 import { listEvidenceForJobs } from "../db/evidence.repo";
 import type { EvidenceRecord } from "../jobs/job.types";
 import { createReportReadCache } from "./report-read-cache";
@@ -162,7 +162,7 @@ export async function buildDriverReport(initials: string, range: { from: string;
   return { version: "driver-report-v1", generatedAt: now, driver: { initials, name: profile?.fullName || rows[0]?.identity.name || initials, email: profile?.email || null,
       hasCurrentAccount: !!profile, currentVehicleImei: profile?.imei || null }, range, groupBy,
     dateBasis: { jobs: "recorded-operational-start-else-booking", events: "occurrence", liabilities: "approved-incident-else-labelled-submission", endExclusive: true, timezone: "Europe/London" },
-    summary: { ...summarizeReportJobs(rows), movingKnownSeconds, movingUnknownJobs: includeGps ? completedMovement.filter(entry => entry.onJob.movingSeconds === null).length : rows.filter(row => row.status === "COMPLETED").length,
+    summary: { ...summarizeReportJobs(rows), expectedRoadChargeTotals: summarizeExpectedRoadCharges(roadAlerts, new Set(rows.map(row => row.jobId)), includeGps), movingKnownSeconds, movingUnknownJobs: includeGps ? completedMovement.filter(entry => entry.onJob.movingSeconds === null).length : rows.filter(row => row.status === "COMPLETED").length,
       movingPartialJobs: completedMovement.filter(entry => entry.onJob.coverage === "partial").length },
     trends, jobs: rows.map(row => ({ ...row, movement: movementByJob.get(row.jobId), roadCharges: chargesByJob.get(row.jobId),
       roadAlerts: alertsByJob.get(row.jobId) ?? [], alertHistoryTruncated: alertHistory.truncated })),

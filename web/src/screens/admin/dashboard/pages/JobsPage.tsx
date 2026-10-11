@@ -1,3 +1,4 @@
+import { AdminFilterBar } from "../components/AdminFilterBar";
 import React, { useState, useMemo, useEffect, useRef } from "react";
 import { useQuery, keepPreviousData } from "@tanstack/react-query";
 import { fetchDrivers, fetchJobs, fetchJobDetail, markJobFinishedManually, reassignJob } from "../api";
@@ -309,18 +310,8 @@ export function JobsPage({ initialStatus = "All" }: JobsPageProps = {}) {
 
       {/* CONSOLIDATED TOOLBAR CARD -- date range on its own row up top, everything
           else (including the driver filter) on a second row below. */}
-      <div className="p-2 bg-white rounded-module shadow-sm border border-transparent flex flex-col gap-3">
-
-        <div className="flex flex-wrap items-center gap-3">
-          <DateRangePicker from={from} to={to} onChange={(f, t) => { setFrom(f); setTo(t); setPage(1); }} />
-
-          <span className="shrink-0 text-label font-medium text-fg-muted px-2 whitespace-nowrap sm:min-w-[120px] sm:text-right ml-auto">
-            {isLoading || isFetching ? "Updating..." : `${total} moves`}
-          </span>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-3">
-          <div className="flex items-center p-1 bg-admin-surface rounded-card border border-admin-line/50 shrink-0">
+      <AdminFilterBar dates={<DateRangePicker from={from} to={to} onChange={(f, t) => { setFrom(f); setTo(t); setPage(1); }} />} count={<>{isLoading || isFetching ? "Updating..." : `${total} moves`}</>}>
+<div className="flex items-center p-1 bg-admin-surface rounded-card border border-admin-line/50 shrink-0">
             <button
               onClick={() => setViewMode("table")}
               className={`p-1.5 rounded-control transition ${viewMode === 'table' ? 'bg-white shadow-sm text-admin-ink' : 'text-admin-muted hover:text-admin-ink'}`}
@@ -389,8 +380,7 @@ export function JobsPage({ initialStatus = "All" }: JobsPageProps = {}) {
           >
             <Download className="w-4 h-4" />
           </button>
-        </div>
-      </div>
+      </AdminFilterBar>
 
       {isError && <ApiErrorState message={(error as Error)?.message} onRetry={() => refetch()} />}
 
@@ -761,7 +751,7 @@ function JobCardList({
     return (
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
         {Array.from({ length: 6 }).map((_, i) => (
-          <div key={i} className="h-[150px] rounded-module bg-white border border-admin-line skeleton" />
+          <div key={i} className="h-[150px] rounded-[6px] bg-white border border-admin-line skeleton" />
         ))}
       </div>
     );
@@ -769,7 +759,7 @@ function JobCardList({
 
   if (jobs.length === 0) {
     return (
-      <div className="text-center p-12 bg-white rounded-module border border-admin-line">
+      <div className="text-center p-12 bg-white rounded-[6px] border border-admin-line">
         <h3 className="text-card text-fg mb-1">No jobs match your filters</h3>
         <p className="text-[13px] text-admin-muted">Try adjusting your search or clearing the date range.</p>
       </div>
@@ -787,7 +777,7 @@ function JobCardList({
           return (
             <article
               key={job.jobId}
-              className={`rounded-module bg-white border p-4 transition ${
+              className={`rounded-[6px] bg-white border p-4 transition-colors ${
                 isSelected ? "border-admin-brand ring-2 ring-admin-brand/20" : "border-admin-line"
               }`}
             >

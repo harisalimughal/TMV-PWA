@@ -1,3 +1,4 @@
+import { AdminFilterBar } from "../components/AdminFilterBar";
 import React, { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { DateTime } from "luxon";
@@ -203,7 +204,7 @@ export function AlertsPage() {
       </p>
 
       {/* TOOLBAR */}
-      <div className="p-2 bg-white rounded-module shadow-sm border border-admin-line flex flex-wrap items-center gap-4">
+      <AdminFilterBar dates={<DateRangePicker from={from} to={to} onChange={(f, t) => { setFrom(f); setTo(t); }} />}>
         <div className="flex items-center gap-1 bg-admin-surface p-1 rounded-card">
           {(["All", "congestion", "tunnel"] as const).map(c => (
             <button
@@ -218,19 +219,19 @@ export function AlertsPage() {
           ))}
         </div>
 
-        <DateRangePicker from={from} to={to} onChange={(f, t) => { setFrom(f); setTo(t); }} />
 
-        <div className="flex-1 min-w-[200px] relative">
+
+        <div className="relative w-full sm:w-64 order-last sm:order-none">
           <Search className="w-4 h-4 text-admin-muted absolute left-3 top-1/2 -translate-y-1/2" />
           <input
             type="text"
             placeholder="Search by description, van or driver..."
             value={searchQuery}
             onChange={e => setSearchQuery(e.target.value)}
-            className="w-full h-9 pl-9 pr-3 rounded-card bg-admin-surface border border-admin-line text-[13px] text-admin-ink placeholder:text-admin-muted outline-none focus:border-admin-brand transition"
+            className="w-full pl-9 pr-4 h-10 rounded-card bg-admin-surface border border-admin-line/50 text-[13px] text-admin-ink focus:border-admin-brand focus:ring-1 focus:ring-admin-brand outline-none transition"
           />
         </div>
-      </div>
+      </AdminFilterBar>
 
       {/* TABLE CONTENT */}
       {isLoading && (

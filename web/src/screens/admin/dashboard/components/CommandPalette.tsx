@@ -1,7 +1,7 @@
 /** Ported verbatim from TMV-Chat-bot's dashboard/web/src/components/CommandPalette.tsx. */
 import React, { useState, useEffect } from "react";
 import {
-  Search, LayoutDashboard, Truck, CheckSquare, LogIn, LogOut, Users, Banknote,
+  Search, LayoutDashboard, Truck, CheckSquare, LogIn, LogOut, Users, Banknote, Bell, Settings,
   AlertTriangle, RefreshCw, Download, ShieldAlert, ArrowRight, X
 } from "lucide-react";
 
@@ -18,6 +18,8 @@ const PALETTE_ITEMS = [
   { id: "jobs", label: "Jobs", section: "jobs", icon: Truck, category: "Operations" },
   { id: "finished", label: "Finished Jobs", section: "finished", icon: CheckSquare, category: "Operations" },
   { id: "liabilities", label: "Liability", section: "liabilities", icon: ShieldAlert, category: "Operations" },
+  { id: "notifications", label: "Notifications & Alerts", section: "notifications", icon: Bell, category: "Operations" },
+  { id: "configurations", label: "Configurations", section: "configurations", icon: Settings, category: "Management" },
   { id: "drivers", label: "Drivers", section: "drivers", icon: Users, category: "Management" },
   { id: "finance", label: "Finance", section: "finance", icon: Banknote, category: "Management" },
   { id: "act_refresh", label: "Sync Live Sheets Data", action: "refresh", icon: RefreshCw, category: "Actions" },

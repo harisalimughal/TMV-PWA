@@ -1,3 +1,4 @@
+import { withArrivalDistance } from "../../../../lib/trackerArrival";
 import React, { useEffect, useRef, useState } from "react";
 import { X, Download, Eye, Maximize2, ZoomIn, ZoomOut, Check, ChevronLeft, ChevronRight, RefreshCw, Save, FileText, Trash2, Loader2 } from "lucide-react";
 import { IconButton } from "../../../../ui";
@@ -454,7 +455,7 @@ export function SubmissionDetailDrawer({ job: initialJob, isOpen, onClose, onNav
               label="Tracker arrival time"
               value={
                 normalizedJob.trackerArrivalAt ? (
-                  formatLondonDateTime(normalizedJob.trackerArrivalAt)
+                  withArrivalDistance(formatLondonDateTime(normalizedJob.trackerArrivalAt), normalizedJob.trackerArrivalDistanceMeters)
                 ) : (
                   <div>
                     <span className="text-admin-status-red font-semibold">Unverified</span>

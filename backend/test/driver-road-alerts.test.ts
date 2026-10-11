@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { projectRoadAlerts } from "../src/reports/driver-road-alerts";
+import { projectRoadAlerts, summarizeExpectedRoadCharges } from "../src/reports/driver-road-alerts";
 import { parseGpsEvent } from "../src/gps/gps.parse";
 import type { DriverProfile, Job } from "../src/jobs/job.types";
 const now = "2026-10-11T23:00:00Z", range = { from: "2026-10-10T00:00:00Z", to: "2026-10-11T00:00:00Z" };
@@ -8,6 +8,17 @@ const job = { jobId: "ONE", status: "COMPLETED", driverInitials: "MA", actualSta
 const event = (id: string, at: string, zone: string, type = "zone_in", imei = "123") => parseGpsEvent({ event_id: id, dt_tracker: at, type, event_desc: zone, device: { imei, name: "TEST - MA" } }, "alerts-history", now)!;
 const project = (events: ReturnType<typeof event>[], jobs = [job]) => projectRoadAlerts(events, jobs, driver, "MA", range, { congestion: 1800, tunnel: 1360 }, now);
 describe("Read-only road alert projections", () => {
+  it("totals expected charges across the full selected job cohort, excluding context and unlinked jobs", () => {
+    const alerts = [{ jobId: "ONE", type: "tunnel", estimatedPence: 1360 }, { jobId: "TWO", type: "tunnel", estimatedPence: 2720 },
+      { jobId: "TWO", type: "tunnel", estimatedPence: null }, { jobId: "ONE", type: "congestion", estimatedPence: 1800 },
+      { jobId: "ONE", type: "congestion", estimatedPence: 0 }, { jobId: "CONTEXT", type: "tunnel", estimatedPence: 9999 },
+      { jobId: null, type: "congestion", estimatedPence: 9999 }];
+    expect(summarizeExpectedRoadCharges(alerts, new Set(["ONE", "TWO"]), true)).toEqual({
+      tunnel: { pence: 4080, knownPence: 4080, unpricedEntries: 1 }, congestion: { pence: 1800, knownPence: 1800, unpricedEntries: 0 } });
+    expect(summarizeExpectedRoadCharges([], new Set(["ONE"]), false).tunnel.pence).toBeNull();
+    expect(summarizeExpectedRoadCharges([], new Set(["ONE"]), true).tunnel.pence).toBe(0);
+    expect(summarizeExpectedRoadCharges([{ jobId: "ONE", type: "tunnel", estimatedPence: null }], new Set(["ONE"]), true).tunnel.pence).toBeNull();
+  });
   it("keeps today's linked entries when a seven-day query contains older unclosed sectors", () => {
     const firstJob = { ...job, jobId: "FRIDAY", actualStart: "2026-10-09T09:00:00Z", actualFinish: "2026-10-09T11:00:00Z" } as Job;
     const todayJob = { ...job, jobId: "TODAY", actualStart: "2026-10-11T06:00:00Z", actualFinish: "2026-10-11T08:00:00Z" } as Job;

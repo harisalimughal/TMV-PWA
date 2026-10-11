@@ -160,6 +160,7 @@ describe("normalizeMongoDataset", () => {
         bookedFinish: "2026-09-25T11:00:00.000Z",
         actualStart: "2026-09-25T09:00:00.000Z",
         trackerArrivalAt: "2026-09-25T08:45:00.000Z",
+        trackerArrivalDistanceMeters: 405,
         trackerLastSeenAt: "2026-09-25T08:45:00.000Z",
         actualFinish: "",
         bookedMinutes: 120,
@@ -231,6 +232,7 @@ describe("normalizeMongoDataset", () => {
     expect(job.pickupArrivalAt).toBe("2026-09-25T09:00:00.000Z");
     expect(job.vanLoadedAt).toBe("2026-09-25T09:18:00.000Z");
     expect(job.trackerArrivalAt).toBe("2026-09-25T08:45:00.000Z");
+    expect(job.trackerArrivalDistanceMeters).toBe(405);
     expect(job.trackerStatus).toBeUndefined();
     expect(job.arrivalProofDelayMinutes).toBe(15);
     expect(job.arrivalProofLate).toBe(true);

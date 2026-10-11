@@ -1,4 +1,5 @@
 import { DateTime } from "luxon";
+import { manualRoadFee } from "../components/ManualRoadChargeCard";
 import type { DriverReport, DriverReportJob, ReportPayments, ReportSummary, ReportVisit, ReportCharge, ReportLiability, ReportRoadAlert } from "../driverReport.types";
 
 const payments = (cash: number, card = 0, link = 0, invoice = 0): ReportPayments => ({ byMethod: { Cash: cash, Card: card, Link: link, "Bank Transfer": 0, Invoice: invoice, Unknown: 0 }, knownCollectedPence: cash + card + link, collectedPence: cash + card + link, invoicePence: invoice, issues: [] });
@@ -30,10 +31,16 @@ function summary(jobs: DriverReportJob[]): ReportSummary {
   const sum = (select: (job: DriverReportJob) => number | null | undefined) => jobs.reduce((total, job) => total + (select(job) ?? 0), 0);
   const helpers = jobs.filter(job => job.manualDetails?.helperName);
   const missingManual = jobs.filter(job => !job.manualDetails).length;
+  const manualRoadTotals = (type: "tunnel" | "congestion") => {
+    const amounts = jobs.map(job => manualRoadFee(job.manualDetails, type));
+    return { knownPence: amounts.reduce<number>((total, amount) => total + (amount ?? 0), 0), knownJobs: amounts.filter(amount => amount !== null).length,
+      missingJobs: missingManual, unavailableJobs: amounts.filter(amount => amount === null).length - missingManual };
+  };
   const driverCollection = sum(job => job.finance.acceptedPence), manualEntries = sum(job => job.manualDetails?.amountCollectedPence);
   const jobFlowTotal = sum(job => Object.values(job.finance.systemPayments.byMethod).reduce((total, amount) => total + amount, 0));
   return { assignedJobs: jobs.length, completedJobs: jobs.length, cancelledJobs: 0, expectedKnownPence: sum(job => job.finance.expectedPence), expectedUnknownJobs: 0,
-    roadChargeTotals: { congestionPence: jobs.some(job => job.finance.congestionPence === null) ? null : sum(job => job.finance.congestionPence), tunnelPence: jobs.some(job => job.finance.tunnelPence === null) ? null : sum(job => job.finance.tunnelPence), congestionUnknownJobs: jobs.filter(job => job.finance.congestionPence === null).length, tunnelUnknownJobs: jobs.filter(job => job.finance.tunnelPence === null).length },
+    manualRoadChargeTotals: { tunnel: manualRoadTotals("tunnel"), congestion: manualRoadTotals("congestion") },
+    roadChargeTotals: { congestionPence: jobs.length > 0 && jobs.every(job => job.finance.congestionPence === null) ? null : sum(job => job.finance.congestionPence), tunnelPence: jobs.length > 0 && jobs.every(job => job.finance.tunnelPence === null) ? null : sum(job => job.finance.tunnelPence), congestionUnknownJobs: jobs.filter(job => job.finance.congestionPence === null).length, tunnelUnknownJobs: jobs.filter(job => job.finance.tunnelPence === null).length },
     paymentCards: { basis: "driver-charged-minus-manual-form-collections", totalChargesPence: sum(job => job.finance.systemCalculatedPence), totalChargeUnknownJobs: 0,
       driverCollectionPence: driverCollection, driverCollectionUnknownJobs: 0, manualEntriesPence: missingManual ? null : manualEntries,
       manualEntriesKnownPence: manualEntries, manualEntryMissingJobs: missingManual, manualEntryUnknownJobs: missingManual, outstandingPence: missingManual ? null : driverCollection - manualEntries,

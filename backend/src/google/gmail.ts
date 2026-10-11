@@ -1,3 +1,4 @@
+import { withArrivalDistance } from "../jobs/pickup-arrival.rules";
 import { DateTime } from "luxon";
 import { google, gmail_v1 } from "googleapis";
 import { createGoogleAuth, env, SCOPES } from "../config/env";
@@ -88,7 +89,7 @@ function formatBookedTime(bookedStart?: string, bookedFinish?: string): string {
 
 function formatTrackerArrival(job: Job): string {
   if (job.trackerArrivalAt) {
-    return formatLondonTimeOnly(job.trackerArrivalAt);
+    return withArrivalDistance(formatLondonTimeOnly(job.trackerArrivalAt), job.trackerArrivalDistanceMeters);
   }
   let reason = job.trackerUnverifiedReason;
   if (reason && reason.includes(" away") && !reason.includes(" away from pickup point")) {

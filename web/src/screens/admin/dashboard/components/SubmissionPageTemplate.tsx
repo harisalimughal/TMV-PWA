@@ -1,13 +1,14 @@
+import { AdminFilterBar } from "./AdminFilterBar";
 import React from "react";
 import {
   Search,
   Download, RefreshCw, ChevronLeft, ChevronRight
 } from "lucide-react";
 import { DateRangePicker } from "./DateRangePicker";
-import { Button } from "../../../../ui";
 
 interface Props {
   title: string;
+  viewSwitcher?: React.ReactNode;
   icon: React.ElementType;
   status?: string;
   statusColor?: "green" | "amber" | "gray";
@@ -47,7 +48,7 @@ interface Props {
 }
 
 export function SubmissionPageTemplate({
-  title, icon: Icon, status = "Published", statusColor = "green",
+  title, viewSwitcher, icon: Icon, status = "Published", statusColor = "green",
   search, onSearchChange, searchPlaceholder = "Search...",
   driverFilter, onDriverFilterChange, driverOptions, driverOptionsLoading = false,
   from, to, onDateChange,
@@ -74,21 +75,14 @@ export function SubmissionPageTemplate({
           CSV (the one real action) now sits with Row 2's refresh button below instead
           of alone up top, where it left an empty-looking strip above the filters. */}
 
-      {/* MAIN CARD CONTAINER */}
-      <div className="bg-white rounded-module shadow-[0_4px_24px_rgb(0,0,0,0.04)] border border-admin-line overflow-hidden flex flex-col">
-
-        {/* STANDARD TOOLBAR */}
-        <div className="p-4 flex flex-col gap-4 bg-[#FAFAFA] border-b border-admin-line">
-
-          {/* Row 1: Core Controls */}
-          <div className="flex flex-wrap items-center gap-3">
-            {onDriverFilterChange && (
+      <AdminFilterBar dates={<DateRangePicker from={from} to={to} onChange={(f, t) => onDateChange(f, t)} />} count={<>{itemCount} record{itemCount !== 1 ? "s" : ""}</>}>
+{onDriverFilterChange && (
               <select
                 aria-label="Filter by driver"
                 value={driverFilter || ""}
                 onChange={e => onDriverFilterChange(e.target.value)}
                 disabled={driverOptionsLoading}
-                className="shrink-0 h-9 px-3 rounded-card bg-admin-surface border border-admin-line text-[13px] font-medium text-admin-ink outline-none focus:border-admin-brand"
+                className="shrink-0 h-10 px-3 rounded-card border border-admin-line/50 bg-admin-surface text-[13px] font-medium text-admin-ink outline-none focus:border-admin-brand"
               >
                 <option value="">{driverOptionsLoading ? "Loading drivers..." : "All drivers"}</option>
                 {!driverOptionsLoading && (driverOptions || []).map(d => (
@@ -97,7 +91,7 @@ export function SubmissionPageTemplate({
               </select>
             )}
 
-            <div className="relative flex-1 min-w-[200px]">
+            <div className="relative w-full sm:w-64 order-last sm:order-none">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-admin-muted" />
               <input
                 aria-label="Search submissions"
@@ -105,44 +99,20 @@ export function SubmissionPageTemplate({
                 placeholder={searchPlaceholder}
                 value={search}
                 onChange={e => onSearchChange(e.target.value)}
-                className="w-full pl-9 pr-4 h-9 rounded-full bg-admin-surface border border-admin-line text-[13px] text-admin-ink focus:border-admin-brand outline-none transition"
+                className="w-full pl-9 pr-4 h-10 rounded-card bg-admin-surface border border-admin-line/50 text-[13px] text-admin-ink focus:border-admin-brand focus:ring-1 focus:ring-admin-brand outline-none transition"
               />
             </div>
 
-            <div className="hidden sm:block w-px h-6 bg-admin-line mx-1 shrink-0" />
 
-            <DateRangePicker from={from} to={to} onChange={(f, t) => onDateChange(f, t)} />
-          </div>
+          {viewSwitcher}
+          <div className="hidden sm:block w-px h-6 bg-admin-line mx-1 shrink-0" />
+          <button onClick={onRefresh} className="shrink-0 w-10 h-10 rounded-card flex items-center justify-center bg-admin-surface border border-admin-line/50 hover:bg-admin-line/40 text-admin-muted hover:text-admin-ink transition" title="Refresh Data" aria-label="Refresh Data">
+            <RefreshCw className={`w-4 h-4 ${isFetching ? "animate-spin text-admin-brand" : ""}`} />
+          </button>
+          {onExportCsv && <button onClick={onExportCsv} className="shrink-0 w-10 h-10 rounded-card flex items-center justify-center bg-admin-surface border border-admin-line/50 hover:bg-admin-line/40 text-admin-muted hover:text-admin-ink transition" title="Export CSV" aria-label="Export CSV"><Download className="w-4 h-4" /></button>}
+        </AdminFilterBar>
 
-          {/* Row 2: Secondary Controls */}
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <span className="text-label font-medium text-fg-muted whitespace-nowrap">
-              {itemCount} record{itemCount !== 1 ? 's' : ''}
-            </span>
-
-            <div className="flex items-center gap-2 sm:gap-3">
-              {onExportCsv && (
-                <Button
-                  variant="secondary"
-                  onClick={onExportCsv}
-                  iconLeft={<Download />}
-                  aria-label="Export CSV"
-                  className="shrink-0"
-                >
-                  <span className="hidden sm:inline">Export CSV</span>
-                </Button>
-              )}
-              <button
-                onClick={onRefresh}
-                className="w-8 h-8 shrink-0 rounded-full border border-admin-line bg-admin-surface hover:bg-white text-admin-muted hover:text-admin-ink transition flex items-center justify-center shadow-sm"
-                title="Refresh Data"
-              >
-                <RefreshCw className={`w-3.5 h-3.5 ${isFetching ? 'animate-spin text-admin-brand' : ''}`} />
-              </button>
-            </div>
-          </div>
-        </div>
-
+      <div className="bg-white rounded-module border border-admin-line overflow-hidden flex flex-col">
         {/* STANDARD TABLE */}
         <div className="overflow-x-auto min-h-[400px]">
           <table className="w-full text-left text-[14px] border-collapse">

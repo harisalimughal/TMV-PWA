@@ -5,16 +5,14 @@ import { AdminLoginScreen } from "./AdminLoginScreen";
 import { Layout } from "./dashboard/Layout";
 import { OverviewPage } from "./dashboard/pages/OverviewPage";
 import { LiveFleetPage } from "./dashboard/pages/LiveFleetPage";
-import { AlertsPage } from "./dashboard/pages/AlertsPage";
 import { JobsPage } from "./dashboard/pages/JobsPage";
 import { VanMileagePage } from "./dashboard/pages/VanMileagePage";
 import { FinishedJobsPage } from "./dashboard/pages/FinishedJobsPage";
-import { NotificationsPage } from "./dashboard/pages/NotificationsPage";
+import { NotificationsAlertsPage } from "./dashboard/pages/NotificationsAlertsPage";
 import { DriversPage } from "./dashboard/pages/DriversPage";
 import { DriverReportPage } from "./dashboard/pages/DriverReportPage";
 import { LiabilityPage, LIABILITY_SECTIONS } from "./dashboard/pages/LiabilityPage";
-import { MessagingPage } from "./dashboard/pages/MessagingPage";
-import { PricingSettingsPage } from "./dashboard/pages/PricingSettingsPage";
+import { ConfigurationsPage, CONFIGURATION_SECTIONS } from "./dashboard/pages/ConfigurationsPage";
 import { MaintenancePage } from "./dashboard/pages/MaintenancePage";
 import { usePushNotifications } from "../../lib/pwa/usePushNotifications";
 import { useServiceWorkerUpdate } from "../pwa-settings/hooks/useServiceWorkerUpdate";
@@ -86,7 +84,7 @@ export function AdminApp() {
         setActiveSection("jobs");
         return;
       }
-      setActiveSection(LIABILITY_SECTIONS.includes(sec || "") ? "liabilities" : sec === "settings" ? "pricing" : sec || "overview");
+      setActiveSection(LIABILITY_SECTIONS.includes(sec || "") ? "liabilities" : sec === "alerts" ? "notifications" : CONFIGURATION_SECTIONS.includes(sec || "") ? "configurations" : sec || "overview");
     };
     readSection();
     window.addEventListener("popstate", readSection);
@@ -95,9 +93,11 @@ export function AdminApp() {
 
   function handleSelectSection(section: string) {
     if (section === activeSection) return; // don't stack duplicate history entries
-    setActiveSection(LIABILITY_SECTIONS.includes(section) ? "liabilities" : section === "settings" ? "pricing" : section);
+    setActiveSection(LIABILITY_SECTIONS.includes(section) ? "liabilities" : section === "alerts" ? "notifications" : CONFIGURATION_SECTIONS.includes(section) ? "configurations" : section);
     const url = new URL(window.location.href);
     url.searchParams.set("section", section);
+    if (section === "notifications") url.searchParams.delete("notificationsTab");
+    if (section === "configurations") url.searchParams.delete("configurationTab");
     url.searchParams.delete("reportReturn");
     window.history.pushState({ section }, "", url.toString());
     window.dispatchEvent(new PopStateEvent("popstate"));
@@ -127,16 +127,14 @@ export function AdminApp() {
     <Layout activeSection={activeSection} onSelectSection={handleSelectSection} onLogout={handleLogout}>
       {activeSection === "overview" && <OverviewPage onSelectSection={handleSelectSection} />}
       {activeSection === "livefleet" && <LiveFleetPage onSelectSection={handleSelectSection} />}
-      {activeSection === "alerts" && <AlertsPage />}
       {activeSection === "jobs" && <JobsPage />}
       {activeSection === "van" && <VanMileagePage />}
       {activeSection === "finished" && <JobsPage initialStatus="Finished" />}
-      {activeSection === "notifications" && <NotificationsPage />}
+      {activeSection === "notifications" && <NotificationsAlertsPage />}
       {activeSection === "liabilities" && <LiabilityPage />}
       {activeSection === "drivers" && <DriversPage />}
       {activeSection === "driverreport" && <DriverReportPage />}
-      {activeSection === "pricing" && <PricingSettingsPage />}
-      {activeSection === "messaging" && <MessagingPage />}
+      {activeSection === "configurations" && <ConfigurationsPage />}
       {activeSection === "maintenance" && <MaintenancePage />}
     </Layout>
   );

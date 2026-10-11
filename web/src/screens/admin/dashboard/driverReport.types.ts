@@ -5,7 +5,7 @@ export interface ReportFlag { code: string; type: string; source: string; reason
 export interface ReportManual { startTime: string; endTime: string; helperName: string; helperHours: number; amountCollectedPence: number; submittedAt: string; congestionCharge?: boolean; congestionChargePence?: number; paymentBreakdown?: Array<{ method: string; amountPence: number }>; chargeItems?: Array<{ type: string; name?: string; amountPence: number | null }> }
 export interface ReportMovement { coverage: string; movingSeconds: number | null; stationarySeconds: number | null; idleSeconds: number | null; engineOffSeconds: number | null; unknownSeconds: number | null }
 export interface DriverReportJob {
-  timings?: { trackerArrivalAt: string | null; proofPhotoAt: string | null; vanLoadedAt: string | null; emptyVanAt: string | null; customerSignedAt: string | null;
+  timings?: { trackerArrivalAt: string | null; trackerArrivalDistanceMeters?: number | null; trackerUnverifiedReason?: string | null; proofPhotoAt: string | null; vanLoadedAt: string | null; emptyVanAt: string | null; customerSignedAt: string | null;
     proofPhotoSource?: "captured" | "recorded" | null; vanLoadedSource?: "captured" | "recorded" | null; emptyVanSource?: "captured" | "recorded" | null };
   roadAlerts?: ReportRoadAlert[];
   alertHistoryTruncated?: boolean;
@@ -25,6 +25,8 @@ export interface ReportVisit { id: string; imei: string; scheme: string; entryAt
 export interface ReportCharge { id: string; jobId: string; type: string; scheme: string; occurredAt: string; londonDate: string; expectedPence: number | null; authorityExpectedPence: null; tunnelName: string | null; direction: string | null; visitIds: string[]; authorityIssue: string }
 export interface ReportLiability { id: string; jobId: string; jobDetailsUrl: string; type: string; classification: string; description: string; date: string | null; dateBasis: string; amountPence: number | null; responsibleParty: string; status: string; issues: string[]; photos: Array<{ url: string }>; signature: { url: string } | null; sourceRef: string }
 export interface ReportSummary {
+  expectedRoadChargeTotals?: Record<"tunnel" | "congestion", { pence: number | null; knownPence: number; unpricedEntries: number }>;
+  manualRoadChargeTotals?: Record<"tunnel" | "congestion", { knownPence: number; knownJobs: number; missingJobs: number; unavailableJobs: number }>;
   roadChargeTotals?: { congestionPence: number | null; tunnelPence: number | null; congestionUnknownJobs: number; tunnelUnknownJobs: number };
   paymentCards?: { basis: string; totalChargesPence: number | null; totalChargeUnknownJobs: number;
     driverCollectionPence: number | null; driverCollectionUnknownJobs: number;

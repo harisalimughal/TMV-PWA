@@ -1,5 +1,7 @@
+import { withArrivalDistance } from "../jobs/pickup-arrival.rules";
 import { DateTime } from "luxon";
 import type { ExportReport } from "./driver-report-export.model";
+import { manualRoadFee } from "./driver-report.model";
 
 export interface PdfTable { title: string; headers: string[]; widths: number[]; rows: string[][]; note?: string }
 export interface PdfSection { name: string; tables: PdfTable[] }
@@ -24,12 +26,12 @@ export function driverPdfSections(report: ExportReport): PdfSection[] {
   const missingManual = cards?.manualEntryUnknownJobs ?? s.pendingManualJobs;
   const manualNote = missingManual ? `${missingManual} manual ${missingManual === 1 ? "entry is" : "entries are"} missing or incomplete. Available manual amounts are shown.` : undefined;
   const feeComparisons = jobs.flatMap(job => (["congestion", "tunnel"] as const).flatMap(type => {
-    const saved = type === "congestion" ? job.finance.congestionPence : job.finance.tunnelPence;
-    const manual = job.manualDetails, entries = manual?.chargeItems?.filter(row => row.type === type);
-    if (!saved && !entries?.length && !(type === "congestion" && manual?.congestionCharge)) return [];
-    const amount = entries ? entries.some(row => row.amountPence == null || !Number.isSafeInteger(row.amountPence) || row.amountPence < 0) ? null : entries.reduce((sum, row) => sum + row.amountPence!, 0)
-      : type === "congestion" ? manual?.congestionCharge ? manual.congestionChargePence : 0 : null;
-    return [[job.jobId, type === "tunnel" ? "Tunnel" : "Congestion", money(saved), manual ? money(amount) : "Not submitted"]];
+    const rows = report.roadAlerts?.filter(row => row.jobId === job.jobId && row.type === type);
+    const amount = manualRoadFee(job.manualDetails, type);
+    if (!rows?.length && !amount && !(type === "congestion" ? job.finance.congestionPence : job.finance.tunnelPence)) return [];
+    const expected = !rows || rows.length > 0 && rows.every(row => row.estimatedPence === null) ? null
+      : rows.reduce((sum, row) => sum + (row.estimatedPence ?? 0), 0);
+    return [[job.jobId, type === "tunnel" ? "Tunnel" : "Congestion", money(expected), job.manualDetails ? money(amount) : "Not submitted"]];
   }));
   const road = (type: "tunnel" | "congestion"): PdfSection => {
     const rows = (report.roadAlerts ?? []).filter(row => row.type === type);
@@ -53,7 +55,7 @@ export function driverPdfSections(report: ExportReport): PdfSection[] {
       ["Overtime", time(s.overtimeMinutesKnown)], ["Arrival delays", time(s.arrivalDelayMinutesKnown)],
       ["Reviews sent / not sent", `${s.reviewSentJobs} / ${s.reviewNotSentJobs}`], ["Helper hours", `${s.helperHoursKnown.toFixed(1)}h`]
     ], s.workingMinutesUnknownJobs ? `Working time is unavailable for ${s.workingMinutesUnknownJobs} jobs; known durations are shown.` : undefined),
-      table("Job timings", ["Job ID", "Tracker arrival", "Proof photo", "Van loaded", "Empty van", "Customer signed"], [1.1, 1, 1, 1, 1, 1], jobs.map(job => [job.jobId, stamp(job.timings?.trackerArrivalAt), stamp(job.timings?.proofPhotoAt), stamp(job.timings?.vanLoadedAt), stamp(job.timings?.emptyVanAt), stamp(job.timings?.customerSignedAt)])),
+      table("Job timings", ["Job ID", "Tracker arrival", "Proof photo", "Van loaded", "Empty van", "Customer signed"], [1.1, 1, 1, 1, 1, 1], jobs.map(job => [job.jobId, job.timings?.trackerArrivalAt ? withArrivalDistance(stamp(job.timings.trackerArrivalAt), job.timings.trackerArrivalDistanceMeters) : stamp(null), stamp(job.timings?.proofPhotoAt), stamp(job.timings?.vanLoadedAt), stamp(job.timings?.emptyVanAt), stamp(job.timings?.customerSignedAt)])),
       table("Job performance", ["Job ID", "Working", "Moving", "Overtime", "Arrival delay", "Review", "Helper hours"], [1.2, 1, 1, 1, 1, 1, 1], jobs.map(job => [job.jobId, time(job.duration.workingMinutes),
       time(job.movement?.onJob.movingSeconds == null ? null : job.movement.onJob.movingSeconds / 60), time(job.duration.overtimeMinutes), time(job.duration.arrivalDelayMinutes), job.reviewSent ? "Sent" : "Not sent", job.manualDetails ? `${job.manualDetails.helperHours}h` : "Not submitted"]))] },
     { name: "Payments", tables: [metrics("Financial totals", [["Total Charges", money(cards?.totalChargesPence)], ["Driver Collected", money(cards?.driverCollectionPence)],
@@ -66,9 +68,9 @@ export function driverPdfSections(report: ExportReport): PdfSection[] {
       `${stamp(job.bookedStart)}\n${stamp(job.bookedFinish)}`, `${stamp(job.actualStart)}\n${stamp(job.actualFinish)}`, `${time(job.duration.bookedMinutes)} / ${time(job.duration.allocatedMinutes)}`, job.status])),
       table("Job charges", ["Job ID", "Base", "Overtime charge", "Saved congestion fee", "Saved tunnel fee", "Total Charges"], [1.1, 1, 1, 1.2, 1.2, 1.2], jobs.map(job => [job.jobId, money(job.finance.basePence), money(job.finance.overtimePence), money(job.finance.congestionPence), money(job.finance.tunnelPence), money(job.finance.systemCalculatedPence)]),
         "Saved job fees are already part of job totals; GPSLive activity is listed separately, not added again.")] },
-    { name: "Comparison", tables: [table("System and manual details", ["Job ID", "Total Charges", "Driver Collected", "Manual amount", "Working time", "Reported time", "Helper / hours"], [1.1, 1, 1, 1, 1, 1, 1.4], jobs.map(job => [job.jobId, money(job.finance.systemCalculatedPence), money(job.finance.acceptedPence), manualAmount(job), time(job.duration.workingMinutes),
+    { name: "Comparison", tables: [table("System and manual details", ["Job ID", "Driver Collected", "Manual amount", "Working time", "Reported time", "Helper / hours"], [1.1, 1, 1, 1, 1, 1.4], jobs.map(job => [job.jobId, money(job.finance.acceptedPence), manualAmount(job), time(job.duration.workingMinutes),
       job.manualDetails ? time(job.duration.manualMinutes) : "Not submitted", job.manualDetails ? `${job.manualDetails.helperName || "None"} / ${job.manualDetails.helperHours}h` : "Not submitted"]), manualNote),
-      ...(feeComparisons.length ? [table("Saved and manual charge items", ["Job ID", "Charge", "Saved fee", "Manual fee"], [1.2, 1, 1, 1], feeComparisons)] : [])] },
+      ...(feeComparisons.length ? [table("Expected and reported job charges", ["Job ID", "Charge", "Expected", "Reported"], [1.2, 1, 1, 1], feeComparisons)] : [])] },
     road("tunnel"), road("congestion")
   ];
 }

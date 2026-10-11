@@ -4,6 +4,16 @@ import { EvidenceStatus, type EvidenceRecord, type Job } from "../src/jobs/job.t
 const job = { jobId: "ONE", actualStart: "2026-10-09T09:00:00Z", actualFinish: "2026-10-09T11:00:00Z", actualStartSource: "arrival-photo", actualFinishSource: "empty-van-photo",
   pickupArrivalAt: "2026-10-09T09:00:00Z", vanLoadedAt: "2026-10-09T09:20:00Z", trackerArrivalAt: "2026-10-09T08:58:00Z", clientSignatureAt: "2026-10-09T11:05:00Z" } as Job;
 describe("Recorded job milestones", () => {
+  it("includes the same stored missing-arrival explanation used by Jobs", () => {
+    const missing = { ...job, trackerArrivalAt: undefined, trackerUnverifiedReason: "Van was 405m away" };
+    expect(jobReportTimings(missing)).toMatchObject({ trackerArrivalAt: null, trackerUnverifiedReason: "Van was 405m away from pickup point" });
+    expect(jobReportTimings({ ...missing, trackerArrivalAt: job.trackerArrivalAt }).trackerUnverifiedReason).toBeNull();
+    expect(jobReportTimings({ ...missing, trackerUnverifiedReason: undefined, pickupLocation: undefined }).trackerUnverifiedReason).toBe("Pickup address could not be geocoded");
+  });
+  it("uses the frozen arrival distance rather than the latest tracker distance", () => {
+    expect(jobReportTimings({ ...job, trackerArrivalDistanceMeters: 405, trackerDistanceMeters: 30 }).trackerArrivalDistanceMeters).toBe(405);
+    expect(jobReportTimings({ ...job, trackerDistanceMeters: 30 }).trackerArrivalDistanceMeters).toBeNull();
+  });
   it("prefers captured photo timestamps while preserving distinct GPS/signature records", () => {
     const photo = { evidenceId: "photo", jobId: "ONE", evidenceType: "Arrival", status: EvidenceStatus.COMPLETED, cloudinaryUrl: "synthetic", receivedAt: "2026-10-09T09:00:00Z", capturedAt: "2026-10-09T08:59:00Z" } as EvidenceRecord;
     const before = JSON.stringify(job);

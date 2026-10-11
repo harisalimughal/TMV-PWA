@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { SegmentedControl } from "../../../../ui";
 import { navigateAdmin } from "../utils/reportNavigation";
 import { defaultScenarioFilters, type ScenarioFilterControl } from "../hooks/useScenarioFilters";
@@ -19,12 +19,18 @@ function currentTab(): LiabilityTab {
   const section = params.get("section");
   if (TABS.includes(section as LiabilityTab)) return section as LiabilityTab;
   const tab = params.get("liabilityTab");
-  return TABS.includes(tab as LiabilityTab) ? tab as LiabilityTab : "checkin";
+  return TABS.includes(tab as LiabilityTab) ? tab as LiabilityTab : "parking";
 }
 
 export function LiabilityPage() {
   const [tab, setTab] = useState(currentTab);
   const [filters, setFilters] = useState(defaultScenarioFilters);
+  const restoreTabFocus = useRef(false);
+  useLayoutEffect(() => {
+    if (!restoreTabFocus.current) return;
+    restoreTabFocus.current = false;
+    document.querySelector<HTMLButtonElement>('[aria-label="Liability views"] [role="radio"][aria-checked="true"]')?.focus({ preventScroll: true });
+  }, [tab]);
   useEffect(() => {
     const read = () => setTab(currentTab());
     window.addEventListener("popstate", read);
@@ -32,16 +38,15 @@ export function LiabilityPage() {
   }, []);
   const selectTab = (next: LiabilityTab) => {
     if (next === tab) return;
+    restoreTabFocus.current = !!document.activeElement?.closest('[aria-label="Liability views"]');
     const url = new URL(window.location.href);
     url.searchParams.set("section", "liabilities");
     url.searchParams.set("liabilityTab", next);
     navigateAdmin(url.pathname + url.search);
   };
   const filterControl: ScenarioFilterControl = { value: filters, onChange: patch => setFilters(previous => ({ ...previous, ...patch })) };
+  const viewSwitcher = <SegmentedControl aria-label="Liability views" value={tab} onChange={selectTab} options={OPTIONS} className="liability-view-switcher" />;
   return <div className="mx-auto max-w-[1440px] space-y-5">
-    <div>
-      <SegmentedControl aria-label="Liability views" value={tab} onChange={selectTab} options={OPTIONS} className="liability-view-switcher" />
-    </div>
-    {tab === "parking" ? <ParkingLiabilityPage key={tab} filterControl={filterControl} /> : <ScenariosPage key={tab} kind={tab} filterControl={filterControl} />}
+    {tab === "parking" ? <ParkingLiabilityPage key={tab} filterControl={filterControl} viewSwitcher={viewSwitcher} /> : <ScenariosPage key={tab} kind={tab} filterControl={filterControl} viewSwitcher={viewSwitcher} />}
   </div>;
 }

@@ -22,8 +22,12 @@ import {
 
 const now = new Date("2026-10-01T10:00:00.000Z");
 const pickup = { lat: 51.501, lng: -0.1416 };
+const north = (meters: number) => ({ lat: pickup.lat + meters / 6371000 * 180 / Math.PI, lng: pickup.lng });
 
 describe("assessPickupPosition", () => {
+  it.each([[405, "inside"], [500, "inside"], [501, "outside"]])("uses an inclusive 500m pickup radius at %im", (meters, state) => {
+    expect(assessPickupPosition({ ...north(meters as number), dtTracker: "2026-10-01 09:59:30" }, pickup, now)).toMatchObject({ state, distanceMeters: meters });
+  });
   it("rejects future timestamps, invalid coordinates and an unset GPS fix", () => {
     expect(assessPickupPosition({ lat: pickup.lat, lng: pickup.lng, dtTracker: "2026-10-01 10:00:01" }, pickup, now).state).toBe("stale");
     expect(assessPickupPosition({ lat: 95, lng: 0, dtTracker: "2026-10-01 09:59:30" }, pickup, now).state).toBe("stale");
@@ -50,6 +54,40 @@ describe("sweepPickupArrivals", () => {
     vi.clearAllMocks();
     getDriverProfileByInitials.mockResolvedValue({ initials: "AB", imei: "123" });
     sendPushToDriver.mockResolvedValue({ sent: 1 });
+  });
+  it("confirms arrival beyond 300m and freezes the distance of the first report", async () => {
+    const job = { jobId: "RADIUS", driverInitials: "AB", status: JobStatus.READY, actualStart: "", onMyWayAt: "2026-10-01T09:50:00Z", pickupLocation: pickup } as Job;
+    listJobs.mockResolvedValue([job]);
+    jobsCollection.mockResolvedValue({ updateOne: vi.fn(async (_filter, update) => {
+      Object.assign(job, update.$set); for (const field of Object.keys(update.$unset ?? {})) delete (job as any)[field]; return { modifiedCount: 1 };
+    }) });
+    fetchGpsLiveDevices.mockResolvedValueOnce([{ imei: "123", ...north(405), dtTracker: "2026-10-01 09:59:30", speed: 0 }]);
+    await sweepPickupArrivals(now);
+    expect(job.trackerArrivalAt).toBeUndefined();
+    expect(job.trackerArrivalCandidateDistanceMeters).toBe(405);
+    fetchGpsLiveDevices.mockResolvedValueOnce([{ imei: "123", ...north(470), dtTracker: "2026-10-01 10:00:30", speed: 0 }]);
+    await sweepPickupArrivals(new Date("2026-10-01T10:01:00Z"));
+    expect(job.trackerArrivalAt).toBe("2026-10-01T09:59:30.000Z");
+    expect(job.trackerArrivalDistanceMeters).toBe(405);
+    expect(job.trackerDistanceMeters).toBe(470);
+    expect(job.trackerArrivalCandidateDistanceMeters).toBeUndefined();
+    fetchGpsLiveDevices.mockResolvedValueOnce([{ imei: "123", ...north(200), dtTracker: "2026-10-01 10:01:30", speed: 0 }]);
+    await sweepPickupArrivals(new Date("2026-10-01T10:02:00Z"));
+    expect(job.trackerDistanceMeters).toBe(200);
+    expect(job.trackerArrivalDistanceMeters).toBe(405);
+  });
+  it("confirms the same radius and candidate distance at proof upload", async () => {
+    vi.useFakeTimers(); vi.setSystemTime(now);
+    try {
+      const job = { jobId: "PHOTO-RADIUS", driverInitials: "AB", pickupLocation: pickup, gpsliveImei: "123", onMyWayAt: "2026-10-01T09:50:00Z",
+        trackerArrivalCandidateAt: "2026-10-01T09:59:00Z", trackerArrivalCandidateDistanceMeters: 405 } as Job;
+      jobsCollection.mockResolvedValue({ updateOne: vi.fn().mockResolvedValue({ modifiedCount: 1 }) });
+      fetchGpsLiveDevices.mockResolvedValue([{ imei: "123", ...north(500), dtTracker: "2026-10-01 09:59:30", speed: 0 }]);
+      await verifyArrivalAtPhotoUpload(job, { initials: "AB", imei: "123" });
+      expect(job.trackerArrivalAt).toBe("2026-10-01T09:59:00Z");
+      expect(job.trackerArrivalDistanceMeters).toBe(405);
+      expect(job.trackerDistanceMeters).toBe(500);
+    } finally { vi.useRealTimers(); }
   });
 
   it("requires two fresh reports at pickup, then sends only one reminder after 15 minutes", async () => {

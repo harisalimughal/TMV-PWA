@@ -1,4 +1,5 @@
 import { EvidenceStatus, type EvidenceRecord, type EvidenceType, type Job } from "../jobs/job.types";
+import { recordedArrivalDistance, trackerArrivalReason } from "../jobs/pickup-arrival.rules";
 
 const instant = (value: string | null | undefined) => value && /(?:Z|[+-]\d{2}:\d{2})$/i.test(value) && Number.isFinite(Date.parse(value)) ? new Date(value).toISOString() : null;
 /** Display milestones only; photo metadata never replaces accepted billing boundaries. */
@@ -14,6 +15,12 @@ export function jobReportTimings(job: Job, records: EvidenceRecord[] = []) {
   const proof = photo("Arrival", job.pickupArrivalAt || (job.actualStartSource === "arrival-photo" ? job.actualStart : undefined));
   const loaded = photo("VanLoaded", job.vanLoadedAt);
   const empty = photo("EmptyVan", job.actualFinishSource === "empty-van-photo" ? job.actualFinish : undefined);
-  return { trackerArrivalAt: instant(job.trackerArrivalAt), proofPhotoAt: proof.at, vanLoadedAt: loaded.at, emptyVanAt: empty.at,
+  const lastSeen = instant(job.trackerLastSeenAt);
+  const age = lastSeen ? Date.now() - Date.parse(lastSeen) : NaN;
+  const trackerStatus = proof.at || job.pickupArrivalAt || job.actualStart ? undefined : !lastSeen ? "unverified" :
+    !Number.isFinite(age) || age < 0 || age > 120000 ? "stale" : "reporting";
+  return { trackerArrivalAt: instant(job.trackerArrivalAt), trackerArrivalDistanceMeters: recordedArrivalDistance(job.trackerArrivalDistanceMeters) ?? null,
+    trackerUnverifiedReason: trackerArrivalReason(job, trackerStatus) ?? null,
+    proofPhotoAt: proof.at, vanLoadedAt: loaded.at, emptyVanAt: empty.at,
     customerSignedAt: instant(job.clientSignatureAt), proofPhotoSource: proof.source, vanLoadedSource: loaded.source, emptyVanSource: empty.source };
 }

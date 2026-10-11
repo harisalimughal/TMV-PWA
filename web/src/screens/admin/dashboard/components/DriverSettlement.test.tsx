@@ -76,22 +76,26 @@ describe("Driver Breakdown filter", () => {
     const cells = within(container.querySelector("tbody tr")!).getAllByRole("cell");
     expect(cells[2]).toHaveTextContent("653.20");
     expect(cells[3]).toHaveTextContent("376.60");
-    expect(cells[4]).toHaveTextContent("0.5h"); expect(cells[5]).toHaveTextContent("1.5h");
-    expect(screen.getAllByRole("columnheader").map(header => header.textContent)).toEqual(["Driver", "Jobs", "Total Charges (£)", "Driver Collected (£)", "Moving Hours", "Overtime Hours", "Report"]);
+    expect(cells[4]).toHaveTextContent("1 / 0"); expect(cells[5]).toHaveTextContent("1.0h"); expect(cells[6]).toHaveTextContent("1.5h");
+    expect(screen.getAllByRole("columnheader").map(header => header.textContent)).toEqual(["Driver", "Jobs", "Total Charges (£)", "Driver Collected (£)", "RW Sent / Not Sent", "Working Hours", "Overtime Hours", "Report"]);
   });
-  it("marks absent or partial GPS movement instead of substituting working duration", () => {
-    mocks.query = { ...mocks.query, data: { drivers: [{ ...driver("MA", "Man Van"), movingUnknownJobs: 1, movingKnownSeconds: 0 }, { ...driver("AB", "Alex"), movingPartialJobs: 1 }] } };
+  it("shows review counts instead of moving hours, highlighting not-sent reviews", () => {
+    mocks.query = { ...mocks.query, data: { drivers: [{ ...driver("WD", "Driver WD"), completed: 3, reviewSentCount: 1, reviewNotSentCount: 2 }] } };
     const { container } = render(<DriverSettlement />);
-    const rows = container.querySelectorAll<HTMLTableRowElement>("tbody tr");
-    expect(within(rows[0]).getAllByRole("cell")[4]).toHaveTextContent("Unavailable");
-    expect(within(rows[1]).getAllByRole("cell")[4]).toHaveTextContent("0.5h1 partial jobs");
+    const reviews = within(container.querySelector("tbody tr")!).getAllByRole("cell")[4];
+    expect(reviews).toHaveTextContent("1 / 2");
+    expect(within(reviews).getByText("2")).toHaveClass("text-red-700");
+    expect(screen.queryByRole("columnheader", { name: "Moving Hours" })).not.toBeInTheDocument();
   });
-  it("keeps known moving hours visible when two of three jobs are unavailable", () => {
-    mocks.query = { ...mocks.query, data: { drivers: [{ ...driver("WD", "Waiting Driver"), completed: 3, movingKnownSeconds: 5400, movingUnknownJobs: 2 }] } };
-    const { container } = render(<DriverSettlement />);
-    const moving = within(container.querySelector("tbody tr")!).getAllByRole("cell")[4];
-    expect(moving).toHaveTextContent("1.5h");
-    expect(moving).not.toHaveTextContent("Unavailable");
-    expect(within(moving).getByText("2 unavailable")).toHaveClass("text-red-700");
+  it("shows known working hours and flags missing timings without inventing zero hours", () => {
+    mocks.query = { ...mocks.query, data: { drivers: [{ ...driver("WD", "Driver WD"), completed: 3, totalDurationMinutes: 90, workingUnknownJobs: 2 }] } };
+    const { container, rerender } = render(<DriverSettlement />);
+    const hours = () => within(container.querySelector("tbody tr")!).getAllByRole("cell")[5];
+    expect(hours()).toHaveTextContent("1.5h");
+    expect(within(hours()).getByText("2 unavailable")).toHaveClass("text-red-700");
+    mocks.query = { ...mocks.query, data: { drivers: [{ ...driver("WD", "Driver WD"), completed: 3, totalDurationMinutes: 0, workingUnknownJobs: 3 }] } };
+    rerender(<DriverSettlement />);
+    expect(hours()).toHaveTextContent("Unavailable");
+    expect(hours()).not.toHaveTextContent("0.0h");
   });
 });

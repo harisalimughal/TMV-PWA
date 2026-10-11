@@ -6,7 +6,7 @@ const sources = {
   "settings-crew-rate": "Pricing Settings: crew", "settings-packing-rate": "Pricing Settings: packing",
   unavailable: "Unavailable"
 };
-const duration = (minutes: number) => `${Number(minutes.toFixed(2))} min`;
+const duration = (minutes: unknown) => typeof minutes === "number" && Number.isFinite(minutes) && minutes >= 0 ? `${Number(minutes.toFixed(2))} min` : "Not recorded";
 const money = (amount: number | null) => amount === null ? "Unknown" : `GBP ${(amount / 100).toFixed(2)}`;
 
 export function JobTimeBreakdown({ job }: { job: NormalizedJob }) {
@@ -25,7 +25,7 @@ export function JobTimeBreakdown({ job }: { job: NormalizedJob }) {
     ["Actual job duration", job.actualMinutes === undefined ? "Not recorded" : duration(job.actualMinutes)],
     ["Recorded extra charge", money(job.overtimeCharge)]
   ];
-  if (job.driverReportedOvertimeMinutes !== undefined) rows.push(["Driver-reported extra time", duration(job.driverReportedOvertimeMinutes)]);
+  if (job.driverReportedOvertimeMinutes != null) rows.push(["Driver-reported extra time", duration(job.driverReportedOvertimeMinutes)]);
   return (
     <section className="border-y border-admin-line py-4" aria-label="Job time breakdown">
       <h4 className="mb-3 text-[13px] font-semibold text-admin-ink">Job time breakdown</h4>

@@ -37,6 +37,7 @@ interface DriverStat {
   completedCount: number;
   cancelledCount: number;
   totalDurationMinutes: number;
+  workingUnknownJobs: number;
   durationJobsCount: number;
   totalDelayMinutes: number;
   delayJobsCount: number;
@@ -72,7 +73,7 @@ export function summarizeDrivers(drivers: DriverProfile[], jobs: NormalizedJob[]
       imei: d.imei || undefined, active: d.active,
       hasAccount: true,
       assignedCount: 0, completedCount: 0, cancelledCount: 0,
-      totalDurationMinutes: 0, durationJobsCount: 0, totalDelayMinutes: 0, delayJobsCount: 0,
+      totalDurationMinutes: 0, workingUnknownJobs: 0, durationJobsCount: 0, totalDelayMinutes: 0, delayJobsCount: 0,
       totalChargesPence: 0, calculatedChargesPence: 0, revenuePence: 0, cashCollectedPence: 0, cardCollectedPence: 0, bankCollectedPence: 0,
       invoiceCollectedPence: 0, linkCollectedPence: 0, unknownCollectionJobs: 0, congestionUnknownJobs: 0, tunnelUnknownJobs: 0, congestionChargePence: 0, tunnelChargePence: 0, overtimeMinutes: 0,
       missingEvidenceCount: 0, overtimeCount: 0, reviewSentCount: 0, reviewNotSentCount: 0
@@ -87,7 +88,7 @@ export function summarizeDrivers(drivers: DriverProfile[], jobs: NormalizedJob[]
         initials: init, fullName: j.driverName || init, email: j.driverEmail, active: true,
         hasAccount: false,
         assignedCount: 0, completedCount: 0, cancelledCount: 0,
-        totalDurationMinutes: 0, durationJobsCount: 0, totalDelayMinutes: 0, delayJobsCount: 0,
+        totalDurationMinutes: 0, workingUnknownJobs: 0, durationJobsCount: 0, totalDelayMinutes: 0, delayJobsCount: 0,
         totalChargesPence: 0, calculatedChargesPence: 0, revenuePence: 0, cashCollectedPence: 0, cardCollectedPence: 0, bankCollectedPence: 0,
         invoiceCollectedPence: 0, linkCollectedPence: 0, unknownCollectionJobs: 0, congestionUnknownJobs: 0, tunnelUnknownJobs: 0, congestionChargePence: 0, tunnelChargePence: 0, overtimeMinutes: 0,
         missingEvidenceCount: 0, overtimeCount: 0, reviewSentCount: 0, reviewNotSentCount: 0
@@ -98,6 +99,7 @@ export function summarizeDrivers(drivers: DriverProfile[], jobs: NormalizedJob[]
     stat.assignedCount++;
     if (j.status === "COMPLETED") {
       stat.completedCount++;
+      if (j.actualMinutes == null || !Number.isFinite(j.actualMinutes) || j.actualMinutes < 0) stat.workingUnknownJobs++;
       if (j.reviewEmailSent === true) stat.reviewSentCount++;
       else stat.reviewNotSentCount++;
       stat.totalChargesPence += j.totalCharges ?? j.calculatedTotalCharges ?? 0;
@@ -143,7 +145,7 @@ export function summarizeDrivers(drivers: DriverProfile[], jobs: NormalizedJob[]
       initials: s.initials, fullName: s.fullName, email: s.email, phone: s.phone,
       vanRegistration: s.vanRegistration, imei: s.imei, active: s.active, hasAccount: s.hasAccount,
       assigned: s.assignedCount, completed: s.completedCount, cancelled: s.cancelledCount, completionRate,
-      avgDurationMinutes: avgDuration, totalDurationMinutes: s.totalDurationMinutes, avgDelayMinutes: avgDelay,
+      avgDurationMinutes: avgDuration, totalDurationMinutes: s.totalDurationMinutes, workingUnknownJobs: s.workingUnknownJobs, avgDelayMinutes: avgDelay,
       totalChargesPounds: toPounds(pence(s.totalChargesPence)),
       calculatedChargesPounds: toPounds(pence(s.calculatedChargesPence)),
       revenuePounds: toPounds(pence(s.revenuePence)), revenueFormatted: formatGBP(pence(s.revenuePence)),
@@ -166,6 +168,7 @@ export function summarizeDrivers(drivers: DriverProfile[], jobs: NormalizedJob[]
 }
 
 const summaryCache = createReportReadCache<{ drivers: Array<ReturnType<typeof summarizeDrivers>[number] & Partial<DriverMovingSummary>>; meta: { fetchedAt: string } }>();
+const coreSummaryCache = createReportReadCache<{ items: ReturnType<typeof summarizeDrivers>; sourceJobs: Job[]; identities: Map<string, string>; fetchedAt: string }>(30_000, 6, value => value.sourceJobs.length < 5000);
 export function dashboardDriversSummaryRoutes(): Router {
   const router = Router();
 
@@ -175,6 +178,7 @@ export function dashboardDriversSummaryRoutes(): Router {
       const to = typeof req.query.to === "string" ? req.query.to : undefined;
       const completedOnly = req.query.completedOnly === "1";
       const response = await summaryCache.get(JSON.stringify([from, to, req.query.includeMoving === "1", completedOnly]), async () => {
+      const core = await coreSummaryCache.get(JSON.stringify([from, to, completedOnly]), async () => {
 
       // A date-scoped request (this report's normal use -- pick a week, see what each
       // driver collected) only needs jobs in that range plus their own evidence, for
@@ -211,11 +215,13 @@ export function dashboardDriversSummaryRoutes(): Router {
         jobs = jobs.filter(job => job.status === "COMPLETED");
       }
       const items = summarizeDrivers(drivers, jobs);
+      return { items, sourceJobs, identities: new Map(jobs.map(job => [job.jobId, job.driverInitials || "UNASSIGNED"])), fetchedAt };
+      });
       const movement = req.query.includeMoving === "1"
-        ? await loadDriverMovement(sourceJobs, new Map(jobs.map(job => [job.jobId, job.driverInitials || "UNASSIGNED"]))) : null;
-      const result = movement ? items.map(item => ({ ...item, ...(movement.get(item.initials) ?? { movingKnownSeconds: 0, movingUnknownJobs: item.completed, movingPartialJobs: 0 }) })) : items;
+        ? await loadDriverMovement(core.sourceJobs, core.identities) : null;
+      const result = movement ? core.items.map(item => ({ ...item, ...(movement.get(item.initials) ?? { movingKnownSeconds: 0, movingUnknownJobs: item.completed, movingPartialJobs: 0 }) })) : core.items;
 
-      return { drivers: result, meta: { fetchedAt } };
+      return { drivers: result, meta: { fetchedAt: core.fetchedAt } };
       });
       return res.status(200).json(response);
     } catch (error) {
