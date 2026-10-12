@@ -24,8 +24,9 @@ export function completionRate(completed: number, totalJobs: number): number | n
  *  the API response) instead of rendering "NaNh NaNm". */
 export function formatDuration(totalMinutes: number): string {
   const safeMinutes = Number.isFinite(totalMinutes) ? totalMinutes : 0;
-  const hrs = Math.floor(safeMinutes / 60);
-  const mins = safeMinutes % 60;
+  const hundredths = Math.round(safeMinutes * 100);
+  const hrs = Math.floor(hundredths / 6000);
+  const mins = (hundredths % 6000) / 100;
   if (hrs === 0) return `${mins}m`;
   if (mins === 0) return `${hrs}h`;
   return `${hrs}h ${mins}m`;

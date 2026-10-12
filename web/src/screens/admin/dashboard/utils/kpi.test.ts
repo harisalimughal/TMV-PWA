@@ -1,5 +1,22 @@
 import { describe, it, expect } from "vitest";
-import { completionRate } from "./kpi";
+import { completionRate, formatDuration } from "./kpi";
+
+describe("formatDuration", () => {
+  it("limits fractional minutes to two decimal places", () => {
+    expect(formatDuration(266.03433333333336)).toBe("4h 26.03m");
+    expect(formatDuration(194.07958333333346)).toBe("3h 14.08m");
+    expect(formatDuration(0.6244)).toBe("0.62m");
+  });
+
+  it("keeps whole durations concise and carries rounded minutes into hours", () => {
+    expect(formatDuration(150)).toBe("2h 30m");
+    expect(formatDuration(60)).toBe("1h");
+    expect(formatDuration(59.999)).toBe("1h");
+    expect(formatDuration(60.001)).toBe("1h");
+    expect(formatDuration(0)).toBe("0m");
+    expect(formatDuration(Number.NaN)).toBe("0m");
+  });
+});
 
 describe("completionRate", () => {
   it("computes a rounded percentage when there are jobs", () => {

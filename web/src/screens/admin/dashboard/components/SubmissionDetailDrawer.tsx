@@ -548,7 +548,7 @@ export function SubmissionDetailDrawer({ job: initialJob, isOpen, onClose, onNav
       )}
 
       <div className="bg-white rounded-module p-4 sm:p-6 shadow-sm border border-admin-line">
-         <label className="text-[13px] font-semibold text-admin-muted block mb-4">Evidence that the items have been loaded.</label>
+         <label className="text-[13px] font-semibold text-admin-muted block mb-4">{kind === "liability" || kind === "parking" ? "Photos for Evidence" : "Evidence that the items have been loaded."}</label>
          {photos.length > 0 ? (
            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
              {photos.map((p) => {
