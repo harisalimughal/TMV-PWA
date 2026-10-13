@@ -36,6 +36,27 @@ describe("London customer charge windows", () => {
 });
 
 describe("Observed obligations and reconciliation", () => {
+  it("charges verified approach crossings and congestion from On the Way before arrival", () => {
+    const approachJob = job({ onMyWayAt: "2026-10-09T09:00:00Z", actualStart: "2026-10-09T11:00:00Z", actualFinish: "2026-10-09T12:00:00Z" });
+    const tunnel = visit("approach-tunnel", "2026-10-09T10:00:00Z", true);
+    const congestion = visit("approach-congestion", "2026-10-09T10:05:00Z");
+    tunnel.association.phase = congestion.association.phase = "approach";
+    const result = assess([tunnel, congestion], { job: approachJob });
+    expect(result.comparisons.map(row => row.observedExpectedPence)).toEqual([1800, 1360]);
+    expect(result.activity.every(row => row.inJob && row.eligible)).toBe(true);
+  });
+  it("requires the entire tunnel proof to be after On the Way and before finish", () => {
+    const approachJob = job({ onMyWayAt: "2026-10-09T09:00:00Z", actualStart: "2026-10-09T11:00:00Z", actualFinish: "2026-10-09T12:00:00Z" });
+    const result = assess([
+      visit("straddles-departure", "2026-10-09T09:00:30Z", true),
+      visit("departure-entry", "2026-10-09T09:00:00Z"),
+      visit("before", "2026-10-09T08:59:59Z"),
+      visit("finish", "2026-10-09T12:00:00Z"),
+      visit("after", "2026-10-09T12:01:00Z", true)
+    ], { job: approachJob });
+    expect(result.obligations.map(row => row.type)).toEqual(["congestion"]);
+    expect(result.activity.filter(row => row.inJob).map(row => row.visitId)).toEqual(["departure-entry"]);
+  });
   it("charges congestion once per job, retaining entries and separate authority dates", () => {
     const result = assess([visit("first"), visit("repeat", "2026-10-09T11:00:00Z"), visit("next-day", "2026-10-10T12:00:00Z")]);
     expect(result.obligations).toHaveLength(1);

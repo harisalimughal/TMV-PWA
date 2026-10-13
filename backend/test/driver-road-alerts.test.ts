@@ -77,11 +77,33 @@ describe("Read-only road alert projections", () => {
     expect(project([event("1", "2026-10-10T20:00:00Z", "Dartford")])[0]).toMatchObject({ jobId: null, estimatedPence: null, feeReason: "No matching job" });
     expect(project([event("1", "2026-10-10T12:00:00Z", "Dartford")], [{ ...job, jobId: "OTHER", driverInitials: "AB" }])).toEqual([]);
   });
-  it("uses job snapshots and does not count approach activity as an in-job fee", () => {
+  it("uses job snapshots for approach activity from On the Way through finish", () => {
     const snapshot = { ...job, onMyWayAt: "2026-10-10T08:00:00Z", roadTariffSnapshot: { effectiveFrom: "2026-10-10T08:00:00Z", congestionPence: 2000, tunnelPence: 1500 } } as Job;
     const rows = project([event("1", "2026-10-10T08:30:00Z", "Dartford"), event("2", "2026-10-10T08:35:00Z", "Dartford", "zone_out"), event("3", "2026-10-10T12:00:00Z", "Dartford")], [snapshot]);
-    expect(rows.map(row => row.estimatedPence)).toEqual([null, 1500]);
-    expect(rows[0].feeReason).toBe("Outside job working time");
+    expect(rows.map(row => row.estimatedPence)).toEqual([1500, 1500]);
+    expect(rows[0]).toMatchObject({ jobId: "ONE", chargeable: true, feeReason: null });
+  });
+  it("includes On the Way but excludes entries before departure and at or after finish", () => {
+    const departure = { ...job, onMyWayAt: "2026-10-10T08:00:00Z", actualFinish: "2026-10-10T10:00:00Z" } as Job;
+    const rows = project([
+      event("before", "2026-10-10T07:59:59Z", "Dartford"),
+      event("departure", "2026-10-10T08:00:00Z", "Tunnels-Black-Silver"),
+      event("finish", "2026-10-10T10:00:00Z", "Dartford"),
+      event("after", "2026-10-10T10:01:00Z", "Tunnels-Black-Silver")
+    ], [departure]);
+    expect(rows.filter(row => row.jobId).map(row => row.estimatedPence)).toEqual([1360]);
+    expect(rows.filter(row => !row.jobId).every(row => row.estimatedPence === null)).toBe(true);
+  });
+  it("still applies charging hours and once-per-job congestion allocation during approach", () => {
+    const departure = { ...job, onMyWayAt: "2026-10-10T10:00:00Z", actualStart: "2026-10-10T13:00:00Z" } as Job;
+    const rows = project([
+      event("outside-hours", "2026-10-10T10:00:00Z", "Congestion"),
+      event("outside-exit", "2026-10-10T10:02:00Z", "Congestion", "zone_out"),
+      event("approach", "2026-10-10T11:00:00Z", "Congestion"),
+      event("approach-exit", "2026-10-10T11:02:00Z", "Congestion", "zone_out"),
+      event("working", "2026-10-10T14:00:00Z", "Congestion")
+    ], [departure]);
+    expect(rows.map(row => row.estimatedPence)).toEqual([0, 1800, 0]);
   });
   it("links unique legacy work intervals to their frozen driver identity rather than the current assignee", () => {
     const historical = { ...job, gpsliveImei: undefined, driverInitials: "OTHER", reportIdentity: { initials: "MA" } } as Job;

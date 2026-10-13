@@ -69,7 +69,7 @@ export function assessRoadCharges(input: { job: Job; visits: GpsVisit[]; coverag
   const authorityReferences: RoadObligation[] = [];
   const activity: Array<{ visitId: string; type: RoadChargeType; occurredAt: string | null; chargeable: boolean | null; eligible: boolean; inJob: boolean; ownershipVerified: boolean; physicalConfirmed: boolean; reason: string }> = [];
   const seen = new Set<string>();
-  const start = Date.parse(job.actualStart), end = Date.parse(job.actualFinish);
+  const start = Date.parse(job.onMyWayAt || job.actualStart), end = Date.parse(job.actualFinish);
   const validJob = Number.isFinite(start) && Number.isFinite(end) && end >= start && job.actualStartSource !== "completion-fallback" && !["completion-fallback", "admin-manual"].includes(job.actualFinishSource ?? "");
   const tariff = job.roadTariffSnapshot ?? null;
   for (const visit of [...input.visits].sort((a, b) => a.firstInsideAt.localeCompare(b.firstInsideAt))) {

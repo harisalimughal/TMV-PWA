@@ -84,7 +84,7 @@ export function projectRoadAlerts(events: GpsEvent[], jobs: Job[], driver: Drive
       if (candidates.length === 1) { jobId = candidates[0].jobId; linkBasis = "driver-time-match"; }
     }
     const job = jobsById.get(jobId ?? "");
-    const inJob = !!job && Date.parse(at) >= Date.parse(job.actualStart) && Date.parse(at) < Date.parse(job.actualFinish || (job.status === "COMPLETED" ? "" : now));
+    const inJob = !!job && Date.parse(at) >= Date.parse(job.onMyWayAt || job.actualStart) && Date.parse(at) < Date.parse(job.actualFinish || (job.status === "COMPLETED" ? "" : now));
     const chargeable = window.chargeable === true && inJob;
     const alreadyAllocated = type === "congestion" && !!jobId && seenCongestionJobs.has(jobId);
     if (chargeable && type === "congestion") seenCongestionJobs.add(jobId!);
