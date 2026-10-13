@@ -1,6 +1,7 @@
 import { DateTime } from "luxon";
 import { getJobForDriver } from "./jobs.service";
-import { JobStatus } from "./job.types";
+import { ExtraChargeType, JobStatus } from "./job.types";
+import { reportJobPayments } from "../reports/report-payments";
 import { ValidationError } from "../workflow/validation.engine";
 import {
   type DriverJobSummaryPaymentItem, type DriverSummaryPaymentMethod, type DriverReportedCharge,
@@ -11,7 +12,7 @@ import { invalidateDashboardDataset } from "../admin/dashboard/dataset-cache";
 import { withJobLock } from "../utils/lock";
 import { log } from "../utils/logger";
 
-const METHODS: DriverSummaryPaymentMethod[] = ["Cash", "Card", "Link", "Bank Transfer", "Invoice"];
+const METHODS = ["Cash", "Card", "Link", "Bank Transfer", "Invoice"] as const;
 const MAX_PENCE = 100_000_000;
 
 export class ManualDetailsLockedError extends ValidationError {
@@ -51,7 +52,7 @@ function flag(value: unknown, field: string): boolean {
 function payments(body: Record<string, unknown>): DriverJobSummaryPaymentItem[] {
   if (!Array.isArray(body.paymentMethods)) throw new ValidationError("Choose payment methods or No payment received.");
   const raw = body.paymentMethods;
-  if (new Set(raw).size !== raw.length || raw.some(method => !METHODS.includes(method as DriverSummaryPaymentMethod))) {
+  if (new Set(raw).size !== raw.length || raw.some(method => !(METHODS as readonly string[]).includes(method as string))) {
     throw new ValidationError("Payment methods must be unique valid selections; choose Bank Transfer or Invoice separately.");
   }
   const noPayment = flag(body.noPaymentReceived, "No payment received");
@@ -85,39 +86,59 @@ function charges(body: Record<string, unknown>): DriverReportedCharge[] {
 
 function payload(summary: DriverJobSummaryDoc | NewDriverJobSummary): string {
   return JSON.stringify([summary.jobId, summary.driverEmail, summary.driverInitials, summary.schemaVersion,
-    summary.startTime, summary.endTime, summary.helperName, summary.helperHours, summary.paymentBreakdown,
-    summary.noPaymentReceived, summary.chargeItems?.map(row => [row.type, row.amountPence, row.name ?? "", row.reference ?? ""])]);
+    summary.startTime, summary.endTime, summary.driverJobHours, summary.helperName, summary.helperHours, summary.paymentBreakdown,
+    summary.noPaymentReceived, summary.chargeItems?.map(row => [row.type, row.amountPence, row.name ?? "", row.reference ?? ""]), summary.paymentVerificationIssues]);
 }
 
 export async function submitDriverJobSummary(jobId: string, driverEmail: string, body: Record<string, unknown>) {
   return withJobLock(jobId, async () => {
     const { job, driver } = await getJobForDriver(jobId, driverEmail);
     if (job.status !== JobStatus.COMPLETED) throw new ValidationError("Complete this job before submitting Manual details.");
-    if (body.schemaVersion !== undefined && body.schemaVersion !== 2) throw new ValidationError("Unsupported Manual details version.");
-    const startTime = instant(body.startTime, "Start time");
-    const endTime = instant(body.endTime, "End time");
+    if (body.schemaVersion !== undefined && body.schemaVersion !== 2 && body.schemaVersion !== 3) throw new ValidationError("Unsupported Manual details version.");
+    const hoursOnly = body.schemaVersion === 3;
+    const selectedHours = (value: unknown, field: string, optional = false): number => {
+      if (optional && (value === undefined || value === "")) return 0;
+      if ((typeof value !== "string" && typeof value !== "number") || String(value).trim() === "") throw new ValidationError(`Select ${field}.`);
+      const hours = Number(value);
+      if (!Number.isFinite(hours) || hours < 2 || hours > 14 || !Number.isInteger(hours * 2)) throw new ValidationError(`${field} must be 2 to 14 hours in half-hour steps.`);
+      return hours;
+    };
+    const driverJobHours = hoursOnly ? selectedHours(body.driverJobHours, "driver job hours") : undefined;
+    const startTime = hoursOnly ? job.actualStart || job.bookedStart : instant(body.startTime, "Start time");
+    const endTime = hoursOnly ? job.actualFinish : instant(body.endTime, "End time");
     const hours = (Date.parse(endTime) - Date.parse(startTime)) / 3_600_000;
-    if (hours < 0 || hours > 168) throw new ValidationError("Job times must be ordered and span at most seven days.");
+    if (!hoursOnly && (hours < 0 || hours > 168)) throw new ValidationError("Job times must be ordered and span at most seven days.");
     const helperName = text(body.helperName, "Helper name", 160);
     const helperRaw = body.helperHours === undefined || body.helperHours === "" ? "0" : String(body.helperHours).trim();
     if ((typeof body.helperHours !== "string" && typeof body.helperHours !== "number" && body.helperHours !== undefined) || !/^\d+(?:\.\d{1,2})?$/.test(helperRaw)) {
       throw new ValidationError("Helper hours must be a non-negative number with at most two decimals.");
     }
-    const helperHours = Number(helperRaw);
-    if (helperHours > 168 || (helperHours > 0 && !helperName)) throw new ValidationError("Add a helper name for helper hours, or leave both blank.");
-    const paymentBreakdown = payments(body);
-    const chargeItems = charges(body);
+    const helperHours = hoursOnly ? selectedHours(body.helperHours, "helper job hours", true) : Number(helperRaw);
+    if (!hoursOnly && (helperHours > 168 || (helperHours > 0 && !helperName))) throw new ValidationError("Add a helper name for helper hours, or leave both blank.");
+    const flowPayments = reportJobPayments(job).payments;
+    let paymentBreakdown: DriverJobSummaryPaymentItem[] | undefined;
+    if (!hoursOnly) paymentBreakdown = payments(body);
+    else if (flowPayments.issues.length) paymentBreakdown = job.paymentBreakdown?.map(row => ({
+      method: row.method as DriverSummaryPaymentMethod, amountPence: money(row.amount, `${row.method} amount`)!
+    }));
+    else paymentBreakdown = METHODS.filter(method => flowPayments.byMethod[method] > 0 || job.paymentBreakdown?.some(row => row.method === method))
+      .map(method => ({ method, amountPence: flowPayments.byMethod[method] }));
+    const chargeItems: DriverReportedCharge[] = hoursOnly ? ([
+      ["congestion", ExtraChargeType.CONGESTION, job.chargeSnapshot?.congestionPence ?? job.roadTariffSnapshot?.congestionPence],
+      ["tunnel", ExtraChargeType.TUNNEL, job.chargeSnapshot?.tunnelPence ?? job.roadTariffSnapshot?.tunnelPence]
+    ] as const).filter(([, type]) => job.extraCharges.includes(type)).map(([type, , amount]) => ({ type, amountPence: amount ?? null })) : charges(body);
     const congestionCharge = chargeItems.some(row => row.type === "congestion");
-    const amountCollectedPence = paymentBreakdown.filter(row => row.method !== "Invoice").reduce((sum, row) => sum + row.amountPence, 0);
+    const amountCollectedPence = hoursOnly ? flowPayments.collectedPence ?? flowPayments.knownCollectedPence : paymentBreakdown!.filter(row => row.method !== "Invoice").reduce((sum, row) => sum + row.amountPence, 0);
     if (amountCollectedPence > MAX_PENCE) throw new ValidationError("Total collections exceed the supported limit.");
     const summary: NewDriverJobSummary = {
-      schemaVersion: 2, jobId, driverEmail: driver.email, driverInitials: driver.initials, startTime, endTime,
+      schemaVersion: hoursOnly ? 3 : 2, ...(hoursOnly ? { driverJobHours } : {}), jobId, driverEmail: driver.email, driverInitials: driver.initials, startTime, endTime,
       helperName, helperHours, congestionCharge,
       congestionChargePence: chargeItems.find(row => row.type === "congestion")?.amountPence ?? 0,
-      chargeItems, noPaymentReceived: flag(body.noPaymentReceived, "No payment received"),
-      paymentMethod: paymentBreakdown.map(row => row.method).join(", ") || "No payment received",
+      chargeItems, noPaymentReceived: hoursOnly ? flowPayments.collectedPence === 0 && flowPayments.invoicePence === 0 : flag(body.noPaymentReceived, "No payment received"),
+      paymentMethod: hoursOnly ? job.paymentMethod : paymentBreakdown!.map(row => row.method).join(", ") || "No payment received",
       paymentBreakdown, amountCollectedPence,
-      invoiceAmountPence: paymentBreakdown.find(row => row.method === "Invoice")?.amountPence ?? 0,
+      ...(hoursOnly ? { paymentVerificationIssues: flowPayments.issues } : {}),
+      invoiceAmountPence: hoursOnly ? flowPayments.invoicePence : paymentBreakdown!.find(row => row.method === "Invoice")?.amountPence ?? 0,
       submittedAt: new Date().toISOString()
     };
     const existing = await getDriverJobSummary(jobId);

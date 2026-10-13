@@ -43,6 +43,17 @@ export function reportPayments(rows: Array<{ method: string; amountPence: number
     invoiceBasis: invoiceDerived ? "derived-uncollected-bill-balance" : "recorded", issues };
 }
 export type PaymentLedger = ReturnType<typeof reportPayments>;
+export function reportJobPayments(job: { rawTitle?: string; paymentMethod: string; paymentStatus: string; paymentBreakdown?: Array<{ method: string; amount: number }>; amountCharged?: number; totalCharges: number }) {
+  const invoiceJob = /\/[^/]*\bINV\b/i.test(job.rawTitle ?? "") || job.paymentMethod?.split(",").some(method => paymentMethod(method) === "Invoice") ||
+    job.paymentBreakdown?.some(row => paymentMethod(row.method) === "Invoice") || false;
+  const bill = poundsToReportPence(job.amountCharged ?? job.totalCharges);
+  let rows = job.paymentBreakdown?.map(row => ({ method: row.method, amountPence: poundsToReportPence(row.amount) }));
+  if (invoiceJob && validPence(bill)) {
+    rows = (rows ?? []).map(row => paymentMethod(row.method) === "Invoice" && row.amountPence === null ? { ...row, amountPence: 0 } : row);
+    if (!rows.some(row => paymentMethod(row.method) === "Invoice")) rows.push({ method: "Invoice", amountPence: 0 });
+  }
+  return { invoiceJob, payments: reportPayments(rows, { method: job.paymentMethod, amountPence: bill, status: job.paymentStatus, invoiceExpectedPence: bill }) };
+}
 export function normalizedPayments(job: { paymentLedger?: PaymentLedger; paymentBreakdown?: Array<{ method?: string; amount: number }>; paymentMethod: string; amountCharged: number; paymentStatus?: string }) {
   return job.paymentLedger ?? reportPayments(job.paymentBreakdown?.map(row => ({ method: row.method || "", amountPence: row.amount })),
     { method: job.paymentMethod, amountPence: job.amountCharged, status: job.paymentStatus });

@@ -5,7 +5,7 @@
  * DEV ONLY (see fixtures.ts). `handle()` returns null for any path it doesn't own, so
  * the caller falls through to the real network.
  */
-import type { ActivityEntry, EvidenceSummary, Job, DriverJobSummaryInput } from "../api/jobs";
+import type { ActivityEntry, EvidenceSummary, Job, DriverJobSummary, DriverJobSummaryInput } from "../api/jobs";
 import { DAMAGE_CATEGORIES } from "../scenarioSpec";
 import { DEFAULT_CONFIRMATION_TEXT, makeEvidenceItem, seedStore, type MockStore } from "./fixtures";
 import { applyTrigger, type WorkflowTrigger } from "./workflow";
@@ -259,12 +259,16 @@ export function handle(method: string, path: string, bodyText?: string): MockRes
       if (!job || job.status !== "COMPLETED") return err(400, "VALIDATION_FAILED", "Complete this job first.");
       const input = parse(bodyText) as DriverJobSummaryInput;
       if (store.manualDetails[jobId]) return ok({ summary: store.manualDetails[jobId] });
-      const paymentBreakdown = input.paymentMethods.map(method => ({ method, amountPence: Math.round(Number(input.paymentAmounts[method]) * 100) }));
-      const chargeItems = (input.chargeItems ?? []).map(row => ({ type: row.type, amountPence: row.amount.trim() ? Math.round(Number(row.amount) * 100) : null, name: row.name, reference: row.reference }));
+      const hoursOnly = input.schemaVersion === 3;
+      const paymentBreakdown = hoursOnly ? (job.paymentBreakdown ?? []).map(row => ({ method: row.method, amountPence: Math.round(row.amount * 100) })) : (input.paymentMethods ?? []).map(method => ({ method, amountPence: Math.round(Number(input.paymentAmounts?.[method]) * 100) }));
+      const chargeItems = hoursOnly ? ([
+        { type: "congestion" as const, selected: job.extraCharges.includes("London Congestion charge"), amountPence: job.chargeSnapshot?.congestionPence ?? null },
+        { type: "tunnel" as const, selected: job.extraCharges.includes("Tunnel Charges"), amountPence: job.chargeSnapshot?.tunnelPence ?? null }
+      ]).filter(row => row.selected).map(({ type, amountPence }) => ({ type, amountPence })) : (input.chargeItems ?? []).map(row => ({ type: row.type, amountPence: row.amount.trim() ? Math.round(Number(row.amount) * 100) : null, name: row.name, reference: row.reference }));
       store.manualDetails[jobId] = {
-        schemaVersion: 2, jobId, driverEmail: store.driver.email, driverInitials: job.driverInitials,
-        startTime: input.startTime, endTime: input.endTime, helperName: input.helperName, helperHours: Number(input.helperHours || 0),
-        paymentBreakdown, paymentMethod: input.paymentMethods.join(", ") || "No payment received",
+        schemaVersion: hoursOnly ? 3 : 2, driverJobHours: hoursOnly ? Number(input.driverJobHours) : undefined, jobId, driverEmail: store.driver.email, driverInitials: job.driverInitials,
+        startTime: input.startTime ?? job.actualStart, endTime: input.endTime ?? job.actualFinish, helperName: input.helperName ?? "", helperHours: Number(input.helperHours || 0),
+        paymentBreakdown: paymentBreakdown as NonNullable<DriverJobSummary["paymentBreakdown"]>, paymentMethod: hoursOnly ? job.paymentMethod : input.paymentMethods?.join(", ") || "No payment received",
         amountCollectedPence: paymentBreakdown.filter(row => row.method !== "Invoice").reduce((sum, row) => sum + row.amountPence, 0),
         noPaymentReceived: input.noPaymentReceived, invoiceAmountPence: paymentBreakdown.find(row => row.method === "Invoice")?.amountPence ?? 0,
         congestionCharge: chargeItems.some(row => row.type === "congestion"), congestionChargePence: chargeItems.find(row => row.type === "congestion")?.amountPence ?? 0,

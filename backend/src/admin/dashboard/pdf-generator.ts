@@ -60,7 +60,7 @@ export function generateJobPdf(job: NormalizedJob): Promise<Buffer> {
     row("Client confirmed by", job.clientConfirmedName || job.customerName);
     row("Customer signature time", job.clientSignatureAt ? formatLondonDate(job.clientSignatureAt) : "Not recorded");
     row("Payment", `${job.paymentMethod} (${job.paymentStatus})`);
-    row("Tracker arrival", job.trackerArrivalAt ? withArrivalDistance(formatLondonDate(job.trackerArrivalAt), job.trackerArrivalDistanceMeters) : "Unverified");
+    row("Tracker Pick-up arrival", job.trackerArrivalAt ? withArrivalDistance(formatLondonDate(job.trackerArrivalAt), job.trackerArrivalDistanceMeters) : "Unverified");
     row("Reconciliation", job.reconciled ? "RECONCILED" : "UNRECONCILED");
     row("Proof of arrival time", job.pickupArrivalAt ? formatLondonDate(job.pickupArrivalAt) : "Not recorded");
     row("Review report", `RW=${job.reviewEmailStatus}`);

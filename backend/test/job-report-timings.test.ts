@@ -4,6 +4,10 @@ import { EvidenceStatus, type EvidenceRecord, type Job } from "../src/jobs/job.t
 const job = { jobId: "ONE", actualStart: "2026-10-09T09:00:00Z", actualFinish: "2026-10-09T11:00:00Z", actualStartSource: "arrival-photo", actualFinishSource: "empty-van-photo",
   pickupArrivalAt: "2026-10-09T09:00:00Z", vanLoadedAt: "2026-10-09T09:20:00Z", trackerArrivalAt: "2026-10-09T08:58:00Z", clientSignatureAt: "2026-10-09T11:05:00Z" } as Job;
 describe("Recorded job milestones", () => {
+  it("keeps tracker drop-off arrival and departure separate from recorded job finish", () => {
+    const result = jobReportTimings({ ...job, dropoffTracking: { imei: "123", arrivalAt: "2026-10-09T10:30:00Z", departureAt: "2026-10-09T11:10:00Z" } });
+    expect(result).toMatchObject({ trackerDropoffArrivalAt: "2026-10-09T10:30:00.000Z", trackerDropoffDepartureAt: "2026-10-09T11:10:00.000Z", emptyVanAt: "2026-10-09T11:00:00.000Z" });
+  });
   it("includes the recorded On the Way time without inventing it from other milestones", () => {
     expect(jobReportTimings({ ...job, onMyWayAt: "2026-10-09T09:40:00+01:00" }).onMyWayAt).toBe("2026-10-09T08:40:00.000Z");
     expect(jobReportTimings(job).onMyWayAt).toBeNull();

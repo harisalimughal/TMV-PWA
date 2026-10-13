@@ -166,7 +166,7 @@ export function PaperJobReport({ job, onClose }: Props) {
                 </span>
               </div>
               <div className="flex justify-between py-1 border-b border-admin-line/50">
-                <span className="text-[12px] text-[#8A8A8A]">Tracker arrival time</span>
+                <span className="text-[12px] text-[#8A8A8A]">Tracker Pick-up arrival</span>
                 <span className={`text-[12px] font-medium ${job.trackerArrivalAt ? "text-[#1A1A1A]" : "text-admin-status-red"}`}>{job.trackerArrivalAt ? withArrivalDistance(formatLondonDateTime(job.trackerArrivalAt), job.trackerArrivalDistanceMeters) : (job.trackerUnverifiedReason ? `Unverified (${job.trackerUnverifiedReason})` : "Unverified")}</span>
               </div>
               <div className="flex justify-between py-1 border-b border-admin-line/50">

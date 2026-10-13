@@ -1,7 +1,6 @@
 import { withArrivalDistance } from "../jobs/pickup-arrival.rules";
 import { DateTime } from "luxon";
 import type { ExportReport } from "./driver-report-export.model";
-import { manualRoadFee } from "./driver-report.model";
 
 export interface PdfTable { title: string; headers: string[]; widths: number[]; rows: string[][]; note?: string }
 export interface PdfSection { name: string; tables: PdfTable[] }
@@ -19,20 +18,7 @@ const metrics = (title: string, rows: string[][], note?: string) => table(title,
 export function driverPdfSections(report: ExportReport): PdfSection[] {
   const s = report.summary, cards = s.paymentCards;
   const jobs = report.jobs;
-  const manualAmount = (job: typeof jobs[number]) => job.manualDetails ? money(job.finance.manualPayments?.collectedPence) : "Not submitted";
-  const manualMethods: Record<string, number> = {};
-  for (const job of jobs.filter(row => row.status === "COMPLETED" && row.manualDetails && row.finance.manualPayments?.collectedPence != null && row.manualDetails.amountCollectedPence === row.finance.manualPayments.collectedPence)) for (const [method, amount] of Object.entries(job.finance.manualPayments?.byMethod ?? {})) manualMethods[method] = (manualMethods[method] ?? 0) + amount;
-  const methods = [...new Set([...Object.keys(s.systemPaymentsByMethodPence), ...Object.keys(manualMethods)])].filter(method => s.systemPaymentsByMethodPence[method] || manualMethods[method]);
-  const missingManual = cards?.manualEntryUnknownJobs ?? s.pendingManualJobs;
-  const manualNote = missingManual ? `${missingManual} manual ${missingManual === 1 ? "entry is" : "entries are"} missing or incomplete. Available manual amounts are shown.` : undefined;
-  const feeComparisons = jobs.flatMap(job => (["congestion", "tunnel"] as const).flatMap(type => {
-    const rows = report.roadAlerts?.filter(row => row.jobId === job.jobId && row.type === type);
-    const amount = manualRoadFee(job.manualDetails, type);
-    if (!rows?.length && !amount && !(type === "congestion" ? job.finance.congestionPence : job.finance.tunnelPence)) return [];
-    const expected = !rows || rows.length > 0 && rows.every(row => row.estimatedPence === null) ? null
-      : rows.reduce((sum, row) => sum + (row.estimatedPence ?? 0), 0);
-    return [[job.jobId, type === "tunnel" ? "Tunnel" : "Congestion", money(expected), job.manualDetails ? money(amount) : "Not submitted"]];
-  }));
+  const invoiceJobs = s.financialBreakdown?.invoiceJobs ?? jobs.filter(job => job.finance.invoiceJob).length;
   const road = (type: "tunnel" | "congestion"): PdfSection => {
     const rows = (report.roadAlerts ?? []).filter(row => row.type === type);
     const unknown = rows.filter(row => row.estimatedPence === null).length;
@@ -50,27 +36,31 @@ export function driverPdfSections(report: ExportReport): PdfSection[] {
   return [
     { name: "Performance & Timings", tables: [metrics("Selected range totals", [
       ["Total jobs", String(s.assignedJobs)], ["Completed / cancelled", `${s.completedJobs} / ${s.cancelledJobs}`],
-      ["Total Charges", money(cards?.totalChargesPence)], ["Driver Collected", money(cards?.driverCollectionPence)],
-      ["Working time", s.workingMinutesUnknownJobs === s.completedJobs && s.completedJobs > 0 ? "Not recorded" : time(s.workingMinutesKnown)], ["Moving time", s.movingUnknownJobs === s.completedJobs && s.completedJobs > 0 ? "Not recorded" : time(s.movingKnownSeconds / 60)],
+      ["Scheduled Hours", time(s.scheduledMinutesKnown)], ["Working Hours", s.workingMinutesUnknownJobs === s.completedJobs && s.completedJobs > 0 ? "Not recorded" : time(s.workingMinutesKnown)], ["Moving time", s.movingUnknownJobs === s.completedJobs && s.completedJobs > 0 ? "Not recorded" : time(s.movingKnownSeconds / 60)],
       ["Overtime", time(s.overtimeMinutesKnown)], ["Arrival delays", time(s.arrivalDelayMinutesKnown)],
       ["Reviews sent / not sent", `${s.reviewSentJobs} / ${s.reviewNotSentJobs}`], ["Helper hours", `${s.helperHoursKnown.toFixed(1)}h`]
     ], s.workingMinutesUnknownJobs ? `Working time is unavailable for ${s.workingMinutesUnknownJobs} jobs; known durations are shown.` : undefined),
-      table("Job timings", ["Job ID", "On the Way", "Tracker arrival", "Proof photo", "Van loaded", "Empty van", "Customer signed"], [1.1, 1, 1, 1, 1, 1, 1], jobs.map(job => [job.jobId, stamp(job.timings?.onMyWayAt), job.timings?.trackerArrivalAt ? withArrivalDistance(stamp(job.timings.trackerArrivalAt), job.timings.trackerArrivalDistanceMeters) : stamp(null), stamp(job.timings?.proofPhotoAt), stamp(job.timings?.vanLoadedAt), stamp(job.timings?.emptyVanAt), stamp(job.timings?.customerSignedAt)])),
-      table("Job performance", ["Job ID", "Working", "Moving", "Overtime", "Arrival delay", "Review", "Helper hours"], [1.2, 1, 1, 1, 1, 1, 1], jobs.map(job => [job.jobId, time(job.duration.workingMinutes),
+      table("Job timings", ["Job ID", "On the Way", "Tracker Pick-up arrival", "Proof photo", "Van loaded", "Drop-off arrival", "Empty van", "Drop-off departure", "Customer signed"], [1.1, 1, 1.4, 1, 1, 1, 1, 1, 1], jobs.map(job => [job.jobId, stamp(job.timings?.onMyWayAt), job.timings?.trackerArrivalAt ? withArrivalDistance(stamp(job.timings.trackerArrivalAt), job.timings.trackerArrivalDistanceMeters) : stamp(null), stamp(job.timings?.proofPhotoAt), stamp(job.timings?.vanLoadedAt), stamp(job.timings?.trackerDropoffArrivalAt), stamp(job.timings?.emptyVanAt), stamp(job.timings?.trackerDropoffDepartureAt), stamp(job.timings?.customerSignedAt)])),
+      table("Job performance", ["Job ID", "Scheduled Hours", "Working Hours", "Moving", "Overtime", "Arrival delay", "Review", "Helper hours"], [1.2, 1, 1, 1, 1, 1, 1, 1], jobs.map(job => [job.jobId, time(job.duration.bookedMinutes), time(job.duration.workingMinutes),
       time(job.movement?.onJob.movingSeconds == null ? null : job.movement.onJob.movingSeconds / 60), time(job.duration.overtimeMinutes), time(job.duration.arrivalDelayMinutes), job.reviewSent ? "Sent" : "Not sent", job.manualDetails ? `${job.manualDetails.helperHours}h` : "Not submitted"]))] },
-    { name: "Payments", tables: [metrics("Financial totals", [["Total Charges", money(cards?.totalChargesPence)], ["Driver Collected", money(cards?.driverCollectionPence)],
-      ["Manual Entries", money(cards?.manualEntriesKnownPence ?? cards?.manualEntriesPence)], ["Outstanding", money(cards?.outstandingPence)]],
-      ["Outstanding = Driver Collected - Manual Entries.", manualNote].filter(Boolean).join(" ")),
-      table("Payment methods", ["Method", "Job-flow amount", "Manual amount"], [1.5, 1, 1], [...methods.map(method => [method === "Invoice" ? "Invoice (uncollected)" : method, money(s.systemPaymentsByMethodPence[method] ?? 0), money(manualMethods[method] ?? 0)]),
-        ["Total payment amounts", money(Object.values(s.systemPaymentsByMethodPence).reduce((sum, amount) => sum + amount, 0)), money(Object.values(manualMethods).reduce((sum, amount) => sum + amount, 0))]], "Invoices are not collected payments."),
-      table("Job collections", ["Job ID", "Total Charges", "Driver Collected", "Manual Entries", "Adjustment reason"], [1.1, 1, 1, 1, 2], jobs.map(job => [job.jobId, money(job.finance.systemCalculatedPence), money(job.finance.acceptedPence), manualAmount(job), job.finance.adjustmentNote || "-"]))] },
+    { name: "Payments", tables: [metrics("Financial totals", [["Total Charges", money(cards?.totalChargesPence)], ["Driver Collected", money(cards?.driverCollectionPence)], ["Scheduled Hours", time(s.scheduledMinutesKnown)], ["Overtime Charges", money(s.overtimeChargesPence)]]),
+      table("Financial breakdown", ["Detail", "Recorded amount", "Basis"], [1.5, 1, 2], [
+        ["Base price", money(s.financialBreakdown?.basePence), "Booking"], ["Overtime", money(s.overtimeChargesPence), "Included in job total"],
+        ...(s.financialBreakdown?.extraCharges ?? []).map((charge, index) => [index === 0 ? "Extra Charges" : "", charge.amountPence === null ? "-" : money(charge.amountPence), charge.label === "London Congestion charge" ? "Congestion" : charge.label === "Tunnel Charges" ? "Tunnel" : charge.label]),
+        ...Object.entries(s.systemPaymentsByMethodPence).filter(([method]) => method !== "Invoice").map(([method, amount]) => [method, money(amount), "Job-flow receipt"]),
+        ["Invoice", invoiceJobs ? money(s.systemPaymentsByMethodPence.Invoice ?? 0) : "-", invoiceJobs ? "Invoice job" : "-"],
+        ["Total", money(Object.values(s.systemPaymentsByMethodPence).reduce((sum, amount) => sum + amount, 0)), "Payment methods including invoices"]]),
+      table("Job-wise payment breakdown", ["Job ID", "Cash", "Card", "Link", "Bank Transfer", "Invoice", "Total"], [1.2, 1, 1, 1, 1, 1, 1], jobs.map(job => [job.jobId,
+        ...["Cash", "Card", "Link", "Bank Transfer"].map(method => money(job.finance.systemPayments.byMethod[method as keyof typeof job.finance.systemPayments.byMethod])),
+        job.finance.invoiceJob ? `${money(job.finance.systemPayments.invoicePence)} / Invoice job` : "-", money(Object.values(job.finance.systemPayments.byMethod).reduce((sum, amount) => sum + amount, 0))]))] },
     { name: "Jobs", tables: [table("Job history", ["Job ID", "Customer", "Scheduled start / finish", "Actual start / finish", "Calendar / allocated", "Status"], [1, 1.6, 1.5, 1.5, 1.1, .8], jobs.map(job => [job.jobId, job.customer.name || "Not recorded",
       `${stamp(job.bookedStart)}\n${stamp(job.bookedFinish)}`, `${stamp(job.actualStart)}\n${stamp(job.actualFinish)}`, `${time(job.duration.bookedMinutes)} / ${time(job.duration.allocatedMinutes)}`, job.status])),
       table("Job charges", ["Job ID", "Base", "Overtime charge", "Saved congestion fee", "Saved tunnel fee", "Total Charges"], [1.1, 1, 1, 1.2, 1.2, 1.2], jobs.map(job => [job.jobId, money(job.finance.basePence), money(job.finance.overtimePence), money(job.finance.congestionPence), money(job.finance.tunnelPence), money(job.finance.systemCalculatedPence)]),
         "Saved job fees are already part of job totals; GPSLive activity is listed separately, not added again.")] },
-    { name: "Comparison", tables: [table("System and manual details", ["Job ID", "Driver Collected", "Manual amount", "Working time", "Reported time", "Helper / hours"], [1.1, 1, 1, 1, 1, 1.4], jobs.map(job => [job.jobId, money(job.finance.acceptedPence), manualAmount(job), time(job.duration.workingMinutes),
-      job.manualDetails ? time(job.duration.manualMinutes) : "Not submitted", job.manualDetails ? `${job.manualDetails.helperName || "None"} / ${job.manualDetails.helperHours}h` : "Not submitted"]), manualNote),
-      ...(feeComparisons.length ? [table("Expected and reported job charges", ["Job ID", "Charge", "Expected", "Reported"], [1.2, 1, 1, 1], feeComparisons)] : [])] },
+    { name: "Comparison", tables: [table("System and manual details", ["Job ID", "Expected amount", "Driver Collected", "Scheduled Hours", "Working Hours", "Reported Hours", "Helper hours"], [1.1, 1, 1, 1, 1, 1, 1.4], jobs.map(job => [job.jobId, money(job.finance.systemCalculatedPence), money(job.finance.acceptedPence), time(job.duration.bookedMinutes), time(job.duration.workingMinutes),
+      job.manualDetails ? time(job.duration.manualMinutes) : "Not submitted", job.manualDetails ? time(job.manualDetails.helperHours * 60) : "Not submitted"])),
+      table("Driver payment entries", ["Job ID", "Cash", "Card", "Link", "Bank Transfer", "Invoice", "Adjustment reason"], [1, 1, 1, 1, 1, 1, 2], jobs.map(job => [job.jobId, ...["Cash", "Card", "Link", "Bank Transfer", "Invoice"].map(method => money(job.finance.systemPayments.byMethod[method as keyof typeof job.finance.systemPayments.byMethod])), job.finance.adjustmentNote || "-"])),
+      ] },
     road("tunnel"), road("congestion")
   ];
 }

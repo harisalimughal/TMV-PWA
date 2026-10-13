@@ -7,6 +7,23 @@ import type { DriverJobSummaryDoc } from "../src/db/driver-job-summary.repo";
 const job = (changes: Partial<Job> = {}): Job => ({ jobId: "JOB", status: "COMPLETED", driverInitials: "AB", bookedStart: "2026-10-09T09:00:00Z", bookedFinish: "2026-10-09T10:30:00Z", actualStart: "2026-10-09T09:00:00Z", actualFinish: "2026-10-09T11:00:00Z", basePrice: 250, totalCharges: 250, calculatedTotalCharges: 250, amountCharged: 250, paymentMethod: "Cash", paymentStatus: "Paid", paymentBreakdown: [{ method: "Cash", amount: 250 }], overtimeCharge: 0, overtimeMinutes: 0, ...changes } as Job);
 const manual = (amount = 25000, changes: Partial<DriverJobSummaryDoc> = {}): DriverJobSummaryDoc => ({ jobId: "JOB", driverInitials: "AB", driverEmail: "ab@example.com", startTime: "2026-10-09T09:00:00Z", endTime: "2026-10-09T11:00:00Z", amountCollectedPence: amount, paymentMethod: "Cash", paymentBreakdown: [{ method: "Cash", amountPence: amount }], helperName: "", helperHours: 0, ...changes } as DriverJobSummaryDoc);
 describe("Split payment receipt accounting", () => {
+  it("recognizes INV bookings and derives a missing invoice balance without losing cash receipts", () => {
+    const row = buildReportJob(job({ rawTitle: "Move /INV-AB", paymentMethod: "Cash", paymentBreakdown: [{ method: "Cash", amount: 225 }] }), null);
+    expect(row.finance.invoiceJob).toBe(true);
+    expect(row.finance.systemPayments).toMatchObject({ byMethod: { Cash: 22500, Invoice: 2500 }, collectedPence: 22500, invoicePence: 2500, issues: [] });
+    const fullInvoice = buildReportJob(job({ rawTitle: "Move /INV-AB", paymentMethod: "Invoice", paymentBreakdown: [{ method: "Invoice", amount: undefined as unknown as number }] }), null);
+    expect(fullInvoice.finance.systemPayments).toMatchObject({ collectedPence: 0, invoicePence: 25000, issues: [] });
+    const summary = summarizeReportJobs([row, fullInvoice]);
+    expect(summary.financialBreakdown.invoiceJobs).toBe(2);
+    expect(summary.paymentCards.jobFlowTotalPence).toBe(50000);
+  });
+  it("reports every extra selection and does not add fee components to payment receipts twice", () => {
+    const row = buildReportJob(job({ extraCharges: ["Packing Service", "London Congestion charge", "Tunnel Charges", "Extra time / Charges"],
+      chargeSnapshot: { basePence: 20000, congestionPence: 1800, tunnelPence: 1360 }, overtimeCharge: 50,
+      totalCharges: 281.6, amountCharged: 281.6, paymentBreakdown: [{ method: "Cash", amount: 281.6 }] }), null);
+    expect(row.finance.extraCharges.map(item => item.label)).toEqual(["Packing Service", "London Congestion charge", "Tunnel Charges"]);
+    expect(summarizeReportJobs([row])).toMatchObject({ financialBreakdown: { basePence: 20000 }, paymentCards: { jobFlowTotalPence: 28160 }, overtimeChargesPence: 5000 });
+  });
   it("categorizes each split separately, including Link, excluding unpaid invoices", () => {
     expect(reportPayments([{ method: "Cash", amountPence: 10000 }, { method: "Card", amountPence: 5000 }, { method: "Link", amountPence: 2000 }, { method: "Bank Transfer", amountPence: 3000 }, { method: "Invoice", amountPence: 5000 }])).toMatchObject({ collectedPence: 20000, invoicePence: 5000, byMethod: { Cash: 10000, Card: 5000, Link: 2000, "Bank Transfer": 3000 } });
   });
@@ -28,6 +45,30 @@ describe("Split payment receipt accounting", () => {
   });
 });
 describe("Per-job reconciliation", () => {
+  it("includes every unverified payment job ID in the full-range summary", () => {
+    const missing = buildReportJob(job({ jobId: "UNVERIFIED", paymentBreakdown: undefined, paymentMethod: "", paymentStatus: "Pending" }), null);
+    const valid = buildReportJob(job({ jobId: "VERIFIED" }), null);
+    expect(summarizeReportJobs([missing, valid]).paymentCards).toMatchObject({ jobFlowUnknownJobs: 1, jobFlowUnverifiedJobIds: ["UNVERIFIED"] });
+  });
+  it.each([[120, 0], [149.9, 0], [150, 1], [180, 1], [90, 0]])("counts only reported hours at least 30 minutes above working hours: %s", (minutes, count) => {
+    const row = buildReportJob(job({ amountCharged: 100 }), manual(5000, { endTime: new Date(Date.parse("2026-10-09T09:00:00Z") + minutes * 60000).toISOString() }));
+    expect(summarizeReportJobs([row]).discrepancies).toBe(count);
+  });
+  it("totals exact calendar hours separately from allocated and working durations", () => {
+    const row = buildReportJob(job({ bookedStart: "2026-10-09T14:00:00Z", bookedFinish: "2026-10-09T16:00:00Z" }), manual());
+    expect(row.duration.bookedMinutes).toBe(120);
+    expect(summarizeReportJobs([row])).toMatchObject({ scheduledMinutesKnown: 120, scheduledMinutesUnknownJobs: 0 });
+  });
+  it("keeps unverified job-flow receipts unknown in hours-only submissions", () => {
+    const row = buildReportJob(job(), manual(0, { schemaVersion: 3, driverJobHours: 2, paymentBreakdown: undefined, paymentVerificationIssues: ["Missing recorded receipts"] }));
+    expect(row.finance.manualPayments?.collectedPence).toBeNull();
+    expect(row.finance.outstandingPence).toBeNull();
+  });
+  it("uses selected driver hours and includes helper hours without requiring a helper name", () => {
+    const row = buildReportJob(job(), manual(25000, { schemaVersion: 3, driverJobHours: 3.5, helperHours: 2.5 }));
+    expect(row.duration).toMatchObject({ workingMinutes: 120, manualMinutes: 210, differenceMinutes: -90 });
+    expect(summarizeReportJobs([row])).toMatchObject({ manualMinutesKnown: 210, helperHoursKnown: 2.5 });
+  });
   it("sums manual road charges across completed jobs without mixing missing, legacy and invalid entries with zero", () => {
     const reported = manual(25000, { chargeItems: [{ type: "tunnel", amountPence: 1360 }, { type: "tunnel", amountPence: 1360 }, { type: "congestion", amountPence: 1800 }] });
     const rows = [buildReportJob(job(), reported), buildReportJob(job({ jobId: "ZERO" }), manual(25000, { chargeItems: [] })),

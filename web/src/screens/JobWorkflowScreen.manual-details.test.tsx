@@ -35,24 +35,24 @@ describe("Automatic Manual details workflow", () => {
     const back = vi.fn();
     render(<JobWorkflowScreen jobId={job.jobId} onBack={back} />);
     await screen.findByRole("heading", { name: "Manual details" });
-    fireEvent.change(screen.getByLabelText(/Cash amount/), { target: { value: "95" } });
+    fireEvent.change(screen.getByLabelText(/Driver job hours/), { target: { value: "3.5" } });
     fireEvent.click(screen.getByRole("button", { name: "Back to jobs" }));
     expect(back).toHaveBeenCalledOnce(); expect(mocks.submit).not.toHaveBeenCalled();
-    expect(localStorage.getItem(`tmv:manual-details:v2:AB:${job.jobId}`)).not.toBeNull();
+    expect(localStorage.getItem(`tmv:manual-details:v3:AB:${job.jobId}`)).not.toBeNull();
   });
   it("preserves the edited draft and shows save failure, then releases the queue on retry success", async () => {
     const back = vi.fn();
     mocks.submit.mockRejectedValueOnce({ message: "Network interrupted" }).mockResolvedValueOnce({ summary: { jobId: job.jobId } });
     render(<JobWorkflowScreen jobId={job.jobId} onBack={back} />);
     await screen.findByRole("heading", { name: "Manual details" });
-    fireEvent.change(screen.getByLabelText(/Cash amount/), { target: { value: "95" } });
+    fireEvent.change(screen.getByLabelText(/Driver job hours/), { target: { value: "3.5" } });
     fireEvent.click(screen.getByRole("button", { name: /Submit Manual details/ }));
     expect(await screen.findByText("Network interrupted")).toBeInTheDocument();
-    expect(screen.getByLabelText(/Cash amount/)).toHaveValue("95");
+    expect(screen.getByLabelText(/Driver job hours/)).toHaveValue("3.5");
     expect(back).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole("button", { name: /Submit Manual details/ }));
     await waitFor(() => expect(back).toHaveBeenCalledOnce());
-    expect(localStorage.getItem(`tmv:manual-details:v2:AB:${job.jobId}`)).toBeNull();
+    expect(localStorage.getItem(`tmv:manual-details:v3:AB:${job.jobId}`)).toBeNull();
   });
   it("does not require a new form for a historical completion", async () => {
     mocks.detail.mockResolvedValue(response({ job: { ...job, manualDetailsRequiredAt: undefined } }));

@@ -56,6 +56,14 @@ export interface Job {
   pickup: string;
   pickupLocation?: { lat: number; lng: number };
   dropoff: string;
+  dropoffLocation?: { lat: number; lng: number };
+  dropoffGeocodeAttemptAt?: string;
+  dropoffTracking?: {
+    imei: string; lastSeenAt?: string; distanceMeters?: number; outsideObservedAt?: string;
+    arrivalCandidateAt?: string; departureCandidateAt?: string;
+    arrivalAt?: string; departureAt?: string; unverifiedReason?: string;
+    source?: "two-fresh-reports";
+  };
   /** A mid-route stop parsed from the Calendar description (e.g. "Stop by:
    *  ..."), if the booking mentions one -- "" when it doesn't. Drives the
    *  workflow's stop-by detour (see workflow/workflow.states.ts): the driver is

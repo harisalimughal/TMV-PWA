@@ -30,7 +30,9 @@ export interface DriverJobSummaryDoc {
   paymentBreakdown?: DriverJobSummaryPaymentItem[];
   submittedAt: string;
   createdAt: Date;
-  schemaVersion?: 2;
+  schemaVersion?: 2 | 3;
+  driverJobHours?: number;
+  paymentVerificationIssues?: string[];
   noPaymentReceived?: boolean;
   invoiceAmountPence?: number;
   chargeItems?: DriverReportedCharge[];

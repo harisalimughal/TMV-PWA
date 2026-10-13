@@ -1,11 +1,12 @@
 export interface ReportPage<T> { items: T[]; total: number; page: number; pageSize: number }
 export interface ReportRoadAlert { id: string; type: "tunnel" | "congestion"; scheme: string; zone: string; enteredAt: string; exitedAt: string | null; durationSeconds: number | null; jobId: string | null; linkBasis: string; inChargeableHours: boolean | null; chargeable: boolean; estimatedPence: number | null; feeReason?: string | null; rateBasis: string; alerts: Array<{ id: string; type: string; description: string; occurredAt: string | null }> }
 export interface ReportPayments { byMethod: Record<string, number>; knownCollectedPence: number; collectedPence: number | null; invoicePence: number; issues: string[] }
+export interface ReportExtraCharge { label: string; amountPence: number | null; basis: string }
 export interface ReportFlag { code: string; type: string; source: string; reason: string; evidenceIds: string[] }
 export interface ReportManual { startTime: string; endTime: string; helperName: string; helperHours: number; amountCollectedPence: number; submittedAt: string; congestionCharge?: boolean; congestionChargePence?: number; paymentBreakdown?: Array<{ method: string; amountPence: number }>; chargeItems?: Array<{ type: string; name?: string; amountPence: number | null }> }
 export interface ReportMovement { coverage: string; movingSeconds: number | null; stationarySeconds: number | null; idleSeconds: number | null; engineOffSeconds: number | null; unknownSeconds: number | null }
 export interface DriverReportJob {
-  timings?: { onMyWayAt?: string | null; trackerArrivalAt: string | null; trackerArrivalDistanceMeters?: number | null; trackerUnverifiedReason?: string | null; proofPhotoAt: string | null; vanLoadedAt: string | null; emptyVanAt: string | null; customerSignedAt: string | null;
+  timings?: { onMyWayAt?: string | null; trackerArrivalAt: string | null; trackerArrivalDistanceMeters?: number | null; trackerUnverifiedReason?: string | null; trackerDropoffArrivalAt?: string | null; trackerDropoffDepartureAt?: string | null; trackerDropoffUnverifiedReason?: string | null; proofPhotoAt: string | null; vanLoadedAt: string | null; emptyVanAt: string | null; customerSignedAt: string | null;
     proofPhotoSource?: "captured" | "recorded" | null; vanLoadedSource?: "captured" | "recorded" | null; emptyVanSource?: "captured" | "recorded" | null };
   roadAlerts?: ReportRoadAlert[];
   alertHistoryTruncated?: boolean;
@@ -13,7 +14,7 @@ export interface DriverReportJob {
   bookedStart: string; bookedFinish: string; actualStart: string | null; actualFinish: string | null; operationalDate: string | null;
   firstEntryHints?: { congestionAt: string | null; tunnelAt: string | null; coverage: "first-entry-only-incomplete"; eligibleForAutomaticCharges: false } | null;
   duration: { bookedMinutes: number | null; allocatedMinutes: number | null; workingMinutes: number | null; manualMinutes: number | null; differenceMinutes: number | null; overtimeMinutes: number | null; arrivalDelayMinutes: number | null; arrivalSource: string };
-  finance: { systemCalculatedPence: number | null; acceptedPence: number | null; expectedPence: number | null; adjustmentNote: string | null; systemPayments: ReportPayments; manualPayments: ReportPayments | null;
+  finance: { invoiceJob?: boolean; extraCharges?: ReportExtraCharge[]; systemCalculatedPence: number | null; acceptedPence: number | null; expectedPence: number | null; adjustmentNote: string | null; systemPayments: ReportPayments; manualPayments: ReportPayments | null;
     separatePrepaymentPence: number; recognizedCollectionPence: number | null; signedDifferencePence: number | null; outstandingPence: number | null; excessCollectionPence: number | null;
     systemVsManualCollectionDifferencePence: number | null; paymentMethodDifferences: string[]; prepaymentsVerified: boolean; knownCollectionDifferencePence: number | null;
     basePence: number | null; congestionPence: number | null; tunnelPence: number | null; overtimePence: number | null };
@@ -25,6 +26,8 @@ export interface ReportVisit { id: string; imei: string; scheme: string; entryAt
 export interface ReportCharge { id: string; jobId: string; type: string; scheme: string; occurredAt: string; londonDate: string; expectedPence: number | null; authorityExpectedPence: null; tunnelName: string | null; direction: string | null; visitIds: string[]; authorityIssue: string }
 export interface ReportLiability { id: string; jobId: string; jobDetailsUrl: string; type: string; classification: string; description: string; date: string | null; dateBasis: string; amountPence: number | null; responsibleParty: string; status: string; issues: string[]; photos: Array<{ url: string }>; signature: { url: string } | null; sourceRef: string }
 export interface ReportSummary {
+  scheduledMinutesKnown?: number; scheduledMinutesUnknownJobs?: number;
+  financialBreakdown?: { basePence: number | null; invoiceJobs: number; extraCharges: ReportExtraCharge[] };
   expectedRoadChargeTotals?: Record<"tunnel" | "congestion", { pence: number | null; knownPence: number; unpricedEntries: number }>;
   manualRoadChargeTotals?: Record<"tunnel" | "congestion", { knownPence: number; knownJobs: number; missingJobs: number; unavailableJobs: number }>;
   roadChargeTotals?: { congestionPence: number | null; tunnelPence: number | null; congestionUnknownJobs: number; tunnelUnknownJobs: number };
@@ -32,7 +35,7 @@ export interface ReportSummary {
     driverCollectionPence: number | null; driverCollectionUnknownJobs: number;
     manualEntriesPence: number | null; manualEntriesKnownPence?: number; manualEntryUnknownJobs: number; manualEntryMissingJobs?: number; outstandingPence: number | null;
     adjustmentReasons: Array<{ jobId: string; reason: string; calculatedPence: number | null; driverCollectionPence: number | null }>;
-    jobFlowTotalPence: number | null; jobFlowTotalKnownPence: number; jobFlowUnknownJobs: number };
+    jobFlowTotalPence: number | null; jobFlowTotalKnownPence: number; jobFlowUnknownJobs: number; jobFlowUnverifiedJobIds?: string[] };
   assignedJobs: number; completedJobs: number; cancelledJobs: number; expectedKnownPence: number; expectedUnknownJobs: number; systemKnownCollectionsPence: number; unknownSystemCollectionJobs: number;
   recognizedKnownCollectionsPence: number; outstandingKnownPence: number; outstandingCompletePence: number | null; excessCollectionKnownPence: number; outstandingUnknownJobs: number; pendingManualJobs: number;
   systemPaymentsByMethodPence: Record<string, number>; workingMinutesKnown: number; workingMinutesUnknownJobs: number; manualMinutesKnown: number; manualMinutesUnknownJobs: number;

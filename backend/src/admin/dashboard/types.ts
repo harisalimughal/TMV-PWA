@@ -81,7 +81,8 @@ export interface DriverJobSummary {
   paymentMethod: string;
   amountCollectedPence: Pence;
   paymentBreakdown?: Array<{ method: "Cash" | "Card" | "Link" | "Bank Transfer" | "Invoice" | "Invoice/Transfer"; amountPence: Pence }>;
-  schemaVersion?: 2;
+  schemaVersion?: 2 | 3;
+  driverJobHours?: number;
   noPaymentReceived?: boolean;
   invoiceAmountPence?: number;
   chargeItems?: import("../../db/driver-job-summary.repo").DriverReportedCharge[];

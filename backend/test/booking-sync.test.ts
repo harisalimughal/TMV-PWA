@@ -96,6 +96,17 @@ function existingJob(overrides: Partial<Job> = {}): Job {
 }
 
 describe("syncBookingsForDate", () => {
+  it("retains loaded time and drop-off observations on resync, resetting observations when the destination changes", async () => {
+    const tracking = { imei: "123", arrivalAt: "2026-09-24T10:00:00Z" };
+    const existing = existingJob({ actualStart: bookedStart, vanLoadedAt: "2026-09-24T09:30:00Z", dropoffLocation: { lat: 51.5, lng: -0.1 }, dropoffTracking: tracking });
+    listJobs.mockResolvedValue([existing]); getJob.mockResolvedValue(existing);
+    listCalendarEvents.mockResolvedValue([calendarEvent("Name: Client One\nPickup: Old pickup\nDelivery: Old dropoff")]);
+    await syncBookingsForDate(DateTime.fromISO("2026-09-24T12:00:00", { zone: "Europe/London" }));
+    expect(upsertJob.mock.calls.at(-1)?.[0]).toMatchObject({ vanLoadedAt: existing.vanLoadedAt, dropoffLocation: existing.dropoffLocation, dropoffTracking: tracking });
+    listCalendarEvents.mockResolvedValue([calendarEvent("Name: Client One\nPickup: Old pickup\nDelivery: New dropoff")]);
+    await syncBookingsForDate(DateTime.fromISO("2026-09-24T12:00:00", { zone: "Europe/London" }));
+    expect(upsertJob.mock.calls.at(-1)?.[0].dropoffTracking).toBeUndefined();
+  });
   beforeEach(() => {
     vi.clearAllMocks();
     getJob.mockResolvedValue(null);
@@ -170,7 +181,7 @@ describe("syncBookingsForDate", () => {
     }));
   });
 
-  it("stores pickup coordinates resolved during Calendar sync", async () => {
+  it("stores pickup and drop-off coordinates resolved during Calendar sync", async () => {
     geocodeAddress.mockResolvedValue({ lat: 51.5394, lng: -0.1027 });
     listJobs.mockResolvedValue([]);
     listCalendarEvents.mockResolvedValue([
@@ -186,10 +197,11 @@ describe("syncBookingsForDate", () => {
     await syncBookingsForDate(DateTime.fromISO("2026-09-24T12:00:00", { zone: "Europe/London" }));
 
     expect(geocodeAddress).toHaveBeenCalledWith("7 Larch Close, London N1 7DP");
+    expect(geocodeAddress).toHaveBeenCalledWith("Old dropoff");
     expect(upsertJob).toHaveBeenCalledTimes(1);
     expect(upsertJob.mock.calls[0][0]).toEqual(expect.objectContaining({
       pickup: "7 Larch Close, London N1 7DP",
-      pickupLocation: { lat: 51.5394, lng: -0.1027 }
+      pickupLocation: { lat: 51.5394, lng: -0.1027 }, dropoffLocation: { lat: 51.5394, lng: -0.1027 }
     }));
   });
 

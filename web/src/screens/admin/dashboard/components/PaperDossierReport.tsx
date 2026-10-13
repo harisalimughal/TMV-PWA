@@ -334,7 +334,7 @@ export function PaperDossierReport({ job, isPreview = false }: Props) {
                     </span>
                   </div>
                   <div className="flex items-center justify-between p-3 border-b border-[#E5E7EB] bg-white">
-                    <span className="text-label font-medium text-fg-muted">Tracker arrival time</span>
+                    <span className="text-label font-medium text-fg-muted">Tracker Pick-up arrival</span>
                     <span className={`text-[13px] font-bold ${job.trackerArrivalAt ? "text-admin-ink" : "text-admin-status-red"}`}>{job.trackerArrivalAt ? withArrivalDistance(formatLondonDateTime(job.trackerArrivalAt), job.trackerArrivalDistanceMeters) : (job.trackerUnverifiedReason ? `Unverified (${job.trackerUnverifiedReason})` : "Unverified")}</span>
                   </div>
                   <div className="flex items-center justify-between p-3 border-b border-[#E5E7EB] bg-white">

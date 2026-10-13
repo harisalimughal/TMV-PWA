@@ -9,15 +9,13 @@ describe("Concise table-only Driver Breakdown PDF", () => {
     expect(table.headers[1]).toBe("On the Way");
     expect(table.rows[0][1]).toBe("09 Oct, 08:40");
   });
-  it("compares per-job GPS charges instead of the saved tunnel fee", () => {
-    const report = driverExportSample(1), job = report.jobs[0];
-    job.finance.tunnelPence = 1360;
-    job.manualDetails!.chargeItems = [{ type: "tunnel", amountPence: 1360 }];
-    const alert = { id: "first", type: "tunnel", jobId: job.jobId, zone: "Tunnel", enteredAt: "2026-10-09T09:00:00Z", estimatedPence: 1360 };
-    report.roadAlerts = [alert, { ...alert, id: "second" }, { ...alert, id: "other", jobId: "OTHER" }] as typeof report.roadAlerts;
-    const table = driverPdfSections(report)[3].tables.find(table => table.title === "Expected and reported job charges")!;
-    expect(table.headers).toEqual(["Job ID", "Charge", "Expected", "Reported"]);
-    expect(table.rows).toContainEqual([job.jobId, "Tunnel", "GBP 27.20", "GBP 13.60"]);
+  it("omits road charge comparisons from the Comparison section", () => {
+    const report = driverExportSample(1);
+    report.jobs[0].finance.tunnelPence = 1360;
+    const comparison = driverPdfSections(report).find(section => section.name === "Comparison")!;
+    expect(comparison.tables.map(table => table.title)).not.toContain("Expected and reported job charges");
+    expect(JSON.stringify(comparison)).not.toContain("Tunnel");
+    expect(JSON.stringify(comparison)).not.toContain("Congestion");
   });
   it("matches the six report tabs and preserves all filtered jobs without technical audit fields", () => {
     const report = driverExportSample();
@@ -26,7 +24,10 @@ describe("Concise table-only Driver Breakdown PDF", () => {
     expect(sections[2].tables[0].rows).toHaveLength(105);
     expect(sections[3].tables[0].rows).toHaveLength(105);
     const comparison = JSON.stringify(sections[3]);
-    for (const label of ["Scheduled", "Allocated", "Overtime", "Total Charges"]) expect(comparison).not.toContain(label);
+    expect(comparison).toContain("Scheduled Hours");
+    expect(comparison).toContain("Working Hours");
+    expect(comparison).toContain("Reported Hours");
+    for (const label of ["Allocated", "Overtime", "Total Charges"]) expect(comparison).not.toContain(label);
     const content = JSON.stringify(sections);
     expect(content).toContain("SAMPLE-105"); expect(content).not.toContain("must-not-export");
     for (const internal of ["authorityIssue", "candidateJobIds", "readConsistency", "liabilitySummary", "signedDifferencePence"]) expect(content).not.toContain(internal);

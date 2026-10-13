@@ -34,6 +34,7 @@ import { sweepGpsHistory } from "./gps/gps.sweep";
 import { runScheduledCalendarSync } from "./jobs/jobs.service";
 import { sweepJobReminders } from "./jobs/reminder.service";
 import { sweepPickupArrivals } from "./jobs/pickup-tracker.service";
+import { sweepDropoffArrivals } from "./jobs/dropoff-tracker.service";
 import { dashboardAlertsRoutes } from "./admin/dashboard/alerts.routes";
 import { dashboardDriversSummaryRoutes } from "./admin/dashboard/drivers-summary.routes";
 import { dashboardFinanceRoutes } from "./admin/dashboard/finance.routes";
@@ -170,8 +171,10 @@ function startReminderSweep(): void {
 }
 
 function startPickupTrackerSweep(): void {
-  const run = () => sweepPickupArrivals().catch(error =>
-    log.warn("pickup tracker sweep failed", { error: String(error) }));
+  const run = async () => {
+    await sweepPickupArrivals().catch(error => log.warn("pickup tracker sweep failed", { error: String(error) }));
+    await sweepDropoffArrivals();
+  };
   run();
   setInterval(run, 60_000);
 }

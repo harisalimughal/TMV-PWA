@@ -124,7 +124,7 @@ function renderTimingsTextLines(timings: TimingsBreakdown): string[] {
   return [
     `Booked: ${timings.booked}`,
     `On my way: ${timings.onMyWay}`,
-    `Tracker arrival: ${timings.trackerArrival}`,
+    `Tracker Pick-up arrival: ${timings.trackerArrival}`,
     `Proof of arrival photo: ${timings.pickupArrival}`,
     `Van loaded photo: ${timings.vanLoaded}`,
     `Empty van photo: ${timings.emptyVan}`,
@@ -143,7 +143,7 @@ function renderTimingsHtmlRows(timings: TimingsBreakdown): string {
   return (
     row("Booked", timings.booked) +
     row("On my way", timings.onMyWay) +
-    row("Tracker arrival", timings.trackerArrival) +
+    row("Tracker Pick-up arrival", timings.trackerArrival) +
     row("Proof of arrival photo", timings.pickupArrival) +
     row("Van loaded photo", timings.vanLoaded) +
     row("Empty van photo", timings.emptyVan) +

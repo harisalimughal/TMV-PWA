@@ -16,6 +16,31 @@ const body = () => ({ schemaVersion: 2, startTime: "2026-10-09T09:00:00Z", endTi
   chargeItems: [{ type: "congestion", amount: "18" }, { type: "tunnel", amount: "13.60", name: "Tunnel", reference: "event-1" }]
 });
 describe("Locked per-job Manual details", () => {
+  it("saves hours and snapshots job-flow split payments and fees without asking for them again", async () => {
+    lookup.mockResolvedValue({ job: { status: "COMPLETED", actualStart: "2026-10-09T09:00:00Z", actualFinish: "2026-10-09T11:00:00Z",
+      amountCharged: 200, totalCharges: 200, paymentMethod: "Cash, Card, Invoice", paymentStatus: "Outstanding",
+      paymentBreakdown: [{ method: "Cash", amount: 100.10 }, { method: "Card", amount: 50.20 }, { method: "Invoice", amount: 0 }],
+      extraCharges: ["London Congestion charge", "Tunnel Charges"], chargeSnapshot: { congestionPence: 1800, tunnelPence: 1360 } },
+      driver: { email: "driver@example.com", initials: "AB" } });
+    const result = await submitDriverJobSummary("JOB", "driver@example.com", { schemaVersion: 3, driverJobHours: "3.5", helperHours: "2.5" });
+    expect(result).toMatchObject({ schemaVersion: 3, driverJobHours: 3.5, helperHours: 2.5, helperName: "", amountCollectedPence: 15030, invoiceAmountPence: 4970,
+      chargeItems: [{ type: "congestion", amountPence: 1800 }, { type: "tunnel", amountPence: 1360 }] });
+    read.mockResolvedValue(result);
+    expect(await submitDriverJobSummary("JOB", "driver@example.com", { schemaVersion: 3, driverJobHours: "3.5", helperHours: "2.5" })).toBe(result);
+    await expect(submitDriverJobSummary("JOB", "driver@example.com", { schemaVersion: 3, driverJobHours: "4", helperHours: "2.5" })).rejects.toThrow("locked");
+  });
+  it.each(["", "1.5", "14.5", "3.25", "NaN"])("rejects driver hours outside dropdown choices: %s", async hours => {
+    await expect(submitDriverJobSummary("JOB", "driver@example.com", { schemaVersion: 3, driverJobHours: hours, helperHours: "" })).rejects.toThrow();
+    expect(insert).not.toHaveBeenCalled();
+  });
+  it("accepts no helper and preserves missing job-flow receipts as unverified", async () => {
+    lookup.mockResolvedValueOnce({ job: { status: "COMPLETED", bookedStart: "2026-10-09T09:00:00Z", actualFinish: "2026-10-09T11:00:00Z",
+      paymentMethod: "Cash", paymentStatus: "Recorded", amountCharged: 100, extraCharges: [] }, driver: { email: "driver@example.com", initials: "AB" } });
+    const result = await submitDriverJobSummary("JOB", "driver@example.com", { schemaVersion: 3, driverJobHours: "2", helperHours: "" });
+    expect(result.helperHours).toBe(0);
+    expect(result.noPaymentReceived).toBe(false);
+    expect(result.paymentVerificationIssues).not.toHaveLength(0);
+  });
   beforeEach(() => {
     vi.clearAllMocks();
     lookup.mockResolvedValue({ job: { jobId: "JOB", status: "COMPLETED" }, driver: { email: "driver@example.com", initials: "AB" } });

@@ -255,7 +255,7 @@ export function JobDetailDrawer({ job: initialJob, isOpen, onClose, onUpdated }:
                 </span>
               </div>
               <div className="mt-2 border-t border-admin-line pt-2">
-                <span className="block text-[10px] font-bold uppercase tracking-wider text-admin-muted">Tracker arrival</span>
+                <span className="block text-[10px] font-bold uppercase tracking-wider text-admin-muted">Tracker Pick-up arrival</span>
                 {job.arrivalDelaySource && <span className="mt-0.5 block text-[11px] text-admin-muted">Delay source: {job.arrivalDelaySource === "gps-two-fresh-reports" ? "Verified GPS reports" : job.arrivalDelaySource === "proof-acceptance" ? "Proof acceptance" : "Unavailable"}</span>}
                 {job.trackerArrivalAt ? (
                   <span className="mt-0.5 block text-[12px] font-semibold text-admin-ink">{withArrivalDistance(formatLondonDateTime(job.trackerArrivalAt), job.trackerArrivalDistanceMeters)}</span>

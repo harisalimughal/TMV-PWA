@@ -8,6 +8,34 @@ vi.mock("../api", () => ({ fetchRoadAssessment: vi.fn().mockResolvedValue({ flag
 vi.stubGlobal("ResizeObserver", class { observe() {} unobserve() {} disconnect() {} });
 const props = { from: "2026-10-05", to: "2026-10-11", groupBy: "day" as const, onTab: vi.fn(), onDates: vi.fn(), onGroup: vi.fn(), onPage: vi.fn(), onJob: vi.fn(), onBack: vi.fn(), onRefresh: vi.fn() };
 describe("Driver report evidence and comparison UI", () => {
+  it("opens unverified jobs from the yellow warning even when the job is on another report page", async () => {
+    const report = await sampleDriverReport("DEMO", { from: props.from, to: props.to, pageSize: 1 });
+    report.summary.paymentCards = { ...report.summary.paymentCards!, jobFlowUnknownJobs: 1, jobFlowUnverifiedJobIds: ["OFF-PAGE-UNVERIFIED"] };
+    const onJob = vi.fn();
+    render(<DriverReportView {...props} onJob={onJob} report={report} tab="payments" />);
+    const warning = screen.getByText(/job payment records need verification/).closest(".rpt-warning")!;
+    fireEvent.click(within(warning as HTMLElement).getByRole("button", { name: "OFF-PAGE-UNVERIFIED" }));
+    expect(onJob).toHaveBeenCalledWith("OFF-PAGE-UNVERIFIED");
+  });
+  it("filters expandable job-wise payment and performance details without changing range totals", async () => {
+    const report = await sampleDriverReport("DEMO", { from: props.from, to: props.to, pageSize: 2 });
+    render(<DriverReportView {...props} report={report} tab="performance" />);
+    const selected = report.jobs.items[1];
+    fireEvent.change(screen.getByRole("combobox", { name: "Performance job" }), { target: { value: selected.jobId } });
+    const section = screen.getByRole("heading", { name: "Job-wise performance & timings" }).closest("section")!;
+    const jobs = section.querySelectorAll("details.rpt-job");
+    expect(jobs).toHaveLength(1);
+    expect(jobs[0]).not.toHaveAttribute("open");
+    fireEvent.click(jobs[0].querySelector("summary")!);
+    expect(jobs[0]).toHaveTextContent(selected.jobId);
+    const table = within(jobs[0] as HTMLElement).getByRole("table", { name: "Job Performance & Timings" });
+    for (const label of ["Scheduled Hours", "Working Hours", "Reported Hours", "Overtime"]) expect(table).toHaveTextContent(label);
+    expect(within(jobs[0] as HTMLElement).queryByRole("table", { name: "Job financial breakdown" })).not.toBeInTheDocument();
+    expect(within(jobs[0] as HTMLElement).queryByRole("table", { name: "Job Payments" })).not.toBeInTheDocument();
+    expect(screen.getByRole("tabpanel", { name: "Performance & Timings" })).not.toHaveTextContent("Driver Collected");
+    expect(screen.getByRole("table", { name: "Job timings" }).querySelectorAll("tbody tr")).toHaveLength(1);
+    expect(document.querySelector(".rpt-metrics")).toHaveTextContent(String(report.summary.completedJobs));
+  });
   it("shows missing tracker-arrival reasons in red in Performance & Timings and job details", async () => {
     const report = await sampleDriverReport("DEMO", { from: props.from, to: props.to, pageSize: 1 });
     const reason = "Tracker device signal was stale / offline";
@@ -114,7 +142,7 @@ describe("Driver report evidence and comparison UI", () => {
     expect(card(congestion, "Expected")).toHaveTextContent("£0.00");
     expect(tunnel.parentElement?.previousElementSibling).toHaveTextContent("Financial breakdown");
     const performance = screen.getByRole("table", { name: "Job Performance & Timings" });
-    for (const label of ["Completed Jobs", "Total Charges", "Driver Collected", "Working Hours", "Moving Hours", "Overtime", "Arrival Delays", "Reviews Sent / Not Sent", "Manual Helper Hours"]) expect(performance).toHaveTextContent(label);
+    for (const label of ["Completed Jobs", "Working Hours", "Moving Hours", "Overtime", "Arrival Delays", "Reviews Sent / Not Sent", "Manual Helper Hours"]) expect(performance).toHaveTextContent(label);
     expect(container.querySelector(".rpt-job-road")).toBeNull();
     expect(report.jobs.items).toHaveLength(1);
   });
@@ -123,7 +151,7 @@ describe("Driver report evidence and comparison UI", () => {
     const job = report.jobs.items[0];
     const withTimes = (arrival: string | null, proof: string | null) => ({ ...report, jobs: { ...report.jobs, items: [{ ...job, timings: { ...job.timings!, trackerArrivalAt: arrival, proofPhotoAt: proof } }] } });
     const { rerender } = render(<DriverReportView {...props} report={withTimes("2026-10-05T09:00:00Z", "2026-10-05T09:15:00Z")} tab="performance" />);
-    const tag = screen.getByText("Arrival to proof gap (15 min)");
+    const tag = within(screen.getByRole("table", { name: "Job timings" })).getByText("Arrival to proof gap (15 min)");
     expect(tag).toHaveClass("rpt-bad");
     expect(tag.closest("td")).toHaveAttribute("colspan", "2");
     expect(tag.closest("tr")?.firstElementChild).toHaveAttribute("colspan", "4");
@@ -132,7 +160,7 @@ describe("Driver report evidence and comparison UI", () => {
       expect(screen.queryByText(/Arrival to proof gap/)).not.toBeInTheDocument();
     }
     rerender(<DriverReportView {...props} report={withTimes("2026-10-05T23:55:00+01:00", "2026-10-06T00:15:00+01:00")} tab="performance" />);
-    expect(screen.getByText("Arrival to proof gap (20 min)")).toBeInTheDocument();
+    expect(within(screen.getByRole("table", { name: "Job timings" })).getByText("Arrival to proof gap (20 min)")).toBeInTheDocument();
   });
   it("shows full-range overtime charges and hours on Payments, not just the current job page", async () => {
     const report = await sampleDriverReport("DEMO", { from: props.from, to: props.to, pageSize: 1 });
@@ -152,24 +180,25 @@ describe("Driver report evidence and comparison UI", () => {
     expect(container.querySelector(".rpt-coverage")).toBeNull();
     expect(screen.queryByText(/Observed GPS evidence/)).not.toBeInTheDocument();
     const timings = screen.getByRole("table", { name: "Job timings" });
-    expect(within(timings).getAllByRole("columnheader").map(cell => cell.textContent)).toEqual(["Job", "Date", "Customer", "On the Way", "Tracker Arrival", "Proof Photo", "Van Loaded", "Empty Van", "Customer Signed"]);
+    expect(within(timings).getAllByRole("columnheader").map(cell => cell.textContent)).toEqual(["Job", "Date", "Customer", "On the Way", "Tracker Pick-up arrival", "Proof Photo", "Van Loaded", "Tracker Drop-off arrival", "Empty Van", "Tracker Drop-off departure", "Customer Signed"]);
     const cells = timings.querySelectorAll("tbody td");
     expect(cells[1]).toHaveTextContent("05 Oct 2026");
-    expect([...cells].slice(3).map(cell => cell.textContent)).toEqual(["09:40", "09:58 (distance not recorded)", "10:00", "10:20", "12:30", "12:35"]);
+    expect([...cells].slice(3).map(cell => cell.textContent)).toEqual(["09:40", "09:58 (distance not recorded)", "10:00", "10:20", "11:30", "12:30", "12:45", "12:35"]);
     expect(timings).not.toHaveTextContent("Captured");
     expect(container.querySelector('.rpt-metrics')?.nextElementSibling).toContainElement(timings);
     const missing = { ...report, jobs: { ...report.jobs, items: [{ ...report.jobs.items[0], timings: undefined }] } };
     rerender(<DriverReportView {...props} report={missing} tab="performance" />);
-    expect(within(screen.getByRole("table", { name: "Job timings" })).getAllByText("Not recorded")).toHaveLength(6);
+    expect(within(screen.getByRole("table", { name: "Job timings" })).getAllByText("Not recorded")).toHaveLength(8);
   });
-  it("shows three date-filtered charts without metric or grouping selectors", async () => {
+  it("shows two date-filtered performance charts without payment metrics or grouping selectors", async () => {
     const report = await sampleDriverReport("DEMO", { from: props.from, to: props.to });
     const { rerender } = render(<DriverReportView {...props} report={report} tab="performance" />);
     expect(screen.queryByRole("button", { name: "Refresh driver report" })).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Chart grouping")).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Chart metric")).not.toBeInTheDocument();
     expect(screen.queryByText("Trend values")).not.toBeInTheDocument();
-    for (const name of ["Completed Jobs", "Driver Collected", "Working Hours"]) expect(await screen.findByRole("img", { name: `${name} by date` })).toBeInTheDocument();
+    for (const name of ["Completed Jobs", "Working Hours"]) expect(await screen.findByRole("img", { name: `${name} by date` })).toBeInTheDocument();
+    expect(screen.queryByRole("img", { name: "Driver Collected by date" })).not.toBeInTheDocument();
     rerender(<DriverReportView {...props} report={report} tab="payments" />);
     expect(screen.queryByLabelText("Chart grouping")).not.toBeInTheDocument();
   });
@@ -200,7 +229,7 @@ describe("Driver report evidence and comparison UI", () => {
     expect(job).toHaveTextContent("sample@example.test");
     expect(within(job as HTMLElement).getByRole("table", { name: "Job Performance & Timings" })).toBeInTheDocument();
     expect(within(job as HTMLElement).getByRole("table", { name: "Job Payments" })).toHaveTextContent("Driver Collected - Manual Entries");
-    for (const label of ["On the Way", "Tracker Arrival", "Proof Photo", "Van Loaded", "Empty Van", "Customer Signed", "Moving Hours", "Manual Helper Hours", "Review report"]) expect(within(job as HTMLElement).getByRole("table", { name: "Job Performance & Timings" })).toHaveTextContent(label);
+    for (const label of ["On the Way", "Tracker Pick-up arrival", "Proof Photo", "Van Loaded", "Tracker Drop-off arrival", "Empty Van", "Tracker Drop-off departure", "Customer Signed", "Moving Hours", "Manual Helper Hours", "Review report"]) expect(within(job as HTMLElement).getByRole("table", { name: "Job Performance & Timings" })).toHaveTextContent(label);
     const jobTimings = within(job as HTMLElement).getByRole("table", { name: "Job Performance & Timings" });
     expect(within(jobTimings).getByRole("cell", { name: "On the Way" }).closest("tr")?.lastElementChild).toHaveTextContent("09:40");
     expect(within(jobTimings).getAllByRole("columnheader").map(cell => cell.textContent)).toEqual(["Detail", "Value", "Timing", "Time"]);
@@ -231,7 +260,7 @@ describe("Driver report evidence and comparison UI", () => {
     const { container } = render(<QueryClientProvider client={new QueryClient()}><DriverReportView {...props} report={report} tab="jobs" /></QueryClientProvider>);
     fireEvent.click(container.querySelector(".rpt-job > summary")!);
     const timings = screen.getByRole("table", { name: "Job Performance & Timings" });
-    expect(within(timings).getAllByText("Not recorded")).toHaveLength(6);
+    expect(within(timings).getAllByText("Not recorded")).toHaveLength(8);
     const payments = screen.getByRole("table", { name: "Job Payments" });
     expect(within(payments).getByRole("row", { name: /^Driver Collected/ })).toHaveTextContent("£376.00");
     expect(within(payments).getByRole("row", { name: /Adjustment reason/ })).toHaveTextContent("Agreed discount");
@@ -239,7 +268,7 @@ describe("Driver report evidence and comparison UI", () => {
     expect(within(payments).getByRole("row", { name: /^Outstanding/ })).toHaveTextContent("Unknown");
     expect(screen.getByRole("table", { name: "Job financial breakdown" }).querySelector("tfoot")).toHaveTextContent("£350.00");
   });
-  it("shows five full-range payment cards, adjustments and the requested signed balance formula", async () => {
+  it("shows payment totals and overtime cards without Manual or Outstanding cards", async () => {
     const report = await sampleDriverReport("DEMO", { from: props.from, to: props.to, pageSize: 1 });
     report.summary.paymentCards = { basis: "driver-charged-minus-manual-form-collections", totalChargesPence: 65320, totalChargeUnknownJobs: 0,
       driverCollectionPence: 37660, driverCollectionUnknownJobs: 0, manualEntriesPence: 50660, manualEntryUnknownJobs: 0,
@@ -249,41 +278,50 @@ describe("Driver report evidence and comparison UI", () => {
     const onJob = vi.fn();
     const { container } = render(<DriverReportView {...props} onJob={onJob} report={report} tab="payments" />);
     const cards = container.querySelectorAll(".rpt-metric");
-    expect(cards).toHaveLength(5);
+    expect(cards).toHaveLength(4);
     expect(cards[0]).toHaveTextContent("Total Charges(Expected)£653.20");
     expect(cards[1]).toHaveTextContent("Driver Collected£376.60");
-    expect(cards[2]).toHaveTextContent("Manual Entries(reported)£506.60");
-    expect(cards[3]).toHaveTextContent("Outstanding-£130.00");
-    expect(cards[3]).toHaveTextContent("Driver Collected - Manual Entries");
+    expect(cards[2]).toHaveTextContent("Scheduled Hours");
+    expect(cards[3]).toHaveTextContent("Overtime Charges");
+    expect([...cards].map(card => card.querySelector(".rpt-metric-label")?.textContent)).not.toContain("Manual Entries");
+    expect([...cards].map(card => card.querySelector(".rpt-metric-label")?.textContent)).not.toContain("Outstanding");
     expect(screen.getByText("Agreed discount")).toBeInTheDocument();
     fireEvent.click(screen.getByText("Adjustment reasons (1)"));
     fireEvent.click(screen.getByRole("button", { name: "OFF-PAGE" }));
     expect(onJob).toHaveBeenCalledWith("OFF-PAGE");
     expect(screen.queryByRole("heading", { name: "Job collection reconciliation" })).not.toBeInTheDocument();
-    const total = screen.getByRole("rowheader", { name: "Total" }).parentElement!;
+    const total = within(screen.getByRole("table", { name: "Financial breakdown" })).getByRole("rowheader", { name: "Total" }).parentElement!;
     expect(within(total).getByText("£600.00")).toBeInTheDocument();
   });
-  it("shows available full-range manual amounts and a red missing-entry count", async () => {
+  it("shows a recorded total even when payment records require verification and marks non-invoice jobs with a dash", async () => {
     const report = await sampleDriverReport("DEMO", { from: props.from, to: props.to, pageSize: 1 });
-    report.summary.paymentCards = { ...report.summary.paymentCards!, manualEntriesKnownPence: 18000,
-      manualEntriesPence: null, manualEntryMissingJobs: 1, manualEntryUnknownJobs: 1, outstandingPence: null };
-    const { container } = render(<DriverReportView {...props} report={report} tab="payments" />);
-    const cards = container.querySelectorAll(".rpt-metric");
-    expect(cards[2]).toHaveTextContent("£180.00"); expect(cards[2]).toHaveTextContent("1 missing entry");
-    expect(cards[2]).not.toHaveClass("rpt-metric-incomplete");
-    expect(within(cards[2] as HTMLElement).getByText("1 missing entry")).toHaveClass("rpt-unavailable-count");
-    expect(cards[3]).toHaveTextContent("Unknown");
-    expect(screen.queryByText("Recognized Manual Receipts")).not.toBeInTheDocument();
+    report.summary.systemPaymentsByMethodPence = { Cash: 22500, Card: 0, Link: 0, "Bank Transfer": 0, Invoice: 0, Unknown: 0 };
+    report.summary.financialBreakdown = { basePence: 20000, invoiceJobs: 0, extraCharges: [{ label: "Packing Service", amountPence: null, basis: "Included in overtime rate" }] };
+    report.summary.paymentCards = { ...report.summary.paymentCards!, jobFlowTotalPence: null, jobFlowUnknownJobs: 1 };
+    render(<DriverReportView {...props} report={report} tab="payments" />);
+    const table = screen.getByRole("table", { name: "Financial breakdown" });
+    expect(table.querySelector("tfoot")).toHaveTextContent("£225.00");
+    expect(within(table).getByRole("row", { name: /^Invoice/ })).toHaveTextContent("Invoice--");
+    expect(within(table).getByRole("row", { name: /^Extra Charges/ })).toHaveTextContent("Packing Service");
+    expect(table).toHaveTextContent("Overtime");
+    expect(within(table).queryByRole("row", { name: /^Congestion charges/ })).not.toBeInTheDocument();
+    expect(within(table).queryByRole("row", { name: /^Tunnel charges/ })).not.toBeInTheDocument();
+    const congestion = within(table).getByText("Congestion").closest("tr")!;
+    expect(congestion.querySelectorAll("td")[0]).toHaveTextContent(new Intl.NumberFormat("en-GB", { style: "currency", currency: "GBP" }).format(report.summary.roadChargeTotals!.congestionPence! / 100));
+    expect(congestion.querySelectorAll("td")[1]).toHaveTextContent("Congestion");
   });
-  it("shows a zero available subtotal with a warning when all manual entries are missing", async () => {
+  it("filters expandable job payment breakdowns and shows an invoice tag and correct invoice total", async () => {
     const report = await sampleDriverReport("DEMO", { from: props.from, to: props.to });
-    report.summary.paymentCards = { ...report.summary.paymentCards!, manualEntriesKnownPence: 0,
-      manualEntriesPence: null, manualEntryMissingJobs: 2, manualEntryUnknownJobs: 2, outstandingPence: null };
-    const { container } = render(<DriverReportView {...props} report={report} tab="payments" />);
-    const card = container.querySelectorAll(".rpt-metric")[2];
-    expect(card).toHaveTextContent("£0.00"); expect(card).toHaveTextContent("2 missing entries");
-    expect(card).not.toHaveClass("rpt-metric-incomplete");
-    expect(within(card as HTMLElement).getByText("2 missing entries")).toHaveClass("rpt-unavailable-count");
+    render(<DriverReportView {...props} report={report} tab="payments" />);
+    const invoice = report.jobs.items.find(job => job.finance.invoiceJob)!;
+    fireEvent.change(screen.getByRole("combobox", { name: "Payment job" }), { target: { value: invoice.jobId } });
+    const details = screen.getByRole("heading", { name: "Job-wise payment breakdown" }).closest("section")!.querySelectorAll("details.rpt-job");
+    expect(details).toHaveLength(1);
+    expect(details[0]).not.toHaveAttribute("open");
+    fireEvent.click(details[0].querySelector("summary")!);
+    const table = within(details[0] as HTMLElement).getByRole("table", { name: "Job financial breakdown" });
+    expect(table).toHaveTextContent("Invoice job");
+    expect(table.querySelector("tfoot")).toHaveTextContent(new Intl.NumberFormat("en-GB", { style: "currency", currency: "GBP" }).format(invoice.finance.systemPayments.invoicePence / 100));
   });
   it("keeps the Jobs manual subtotal neutral and colours only its missing-entry warning", async () => {
     const report = await sampleDriverReport("DEMO", { from: props.from, to: props.to, pageSize: 1 });
@@ -299,7 +337,7 @@ describe("Driver report evidence and comparison UI", () => {
   it("labels expected and reported totals and places manual entries beside driver collections", async () => {
     const report = await sampleDriverReport("DEMO", { from: props.from, to: props.to });
     const { container, rerender } = render(<DriverReportView {...props} report={report} tab="jobs" />);
-    for (const tab of ["jobs", "payments"] as const) {
+    for (const tab of ["jobs"] as const) {
       rerender(<DriverReportView {...props} report={report} tab={tab} />);
       const cards = [...container.querySelectorAll(".rpt-metric")];
       const labels = cards.map(card => card.querySelector(".rpt-metric-label")?.textContent);
@@ -326,34 +364,25 @@ describe("Driver report evidence and comparison UI", () => {
     expect(screen.queryByText("Locked submission")).not.toBeInTheDocument();
     expect(screen.queryByText("Saved system data")).not.toBeInTheDocument();
     expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
-    expect(screen.getAllByText("£225.00").length).toBeGreaterThan(0);
+    expect(manualSide).toHaveTextContent("Driver Collected");
+    expect(manualSide).toHaveTextContent("Cash");
+    expect(container.querySelectorAll(".rpt-comparison-sides > section")[0]).not.toHaveTextContent("Driver Collected");
     expect(container.querySelector(".rpt-reconciliation")).toBeNull();
     expect(screen.queryByText("Signed difference")).not.toBeInTheDocument();
     expect(screen.queryByText("Outstanding")).not.toBeInTheDocument();
     expect(screen.queryByText("Excess")).not.toBeInTheDocument();
   });
-  it("compares job-linked expected totals, not saved fees, against reported charges", async () => {
-    const report = await sampleDriverReport("DEMO", { from: props.from, to: props.to });
-    const alert = report.roadAlerts!.items[0];
-    const job = { ...sampleJobs[0], finance: { ...sampleJobs[0].finance, congestionPence: 1800, tunnelPence: 1360 },
-      manualDetails: { ...sampleJobs[0].manualDetails!, chargeItems: [{ type: "congestion", amountPence: 1800 }, { type: "tunnel", amountPence: 1360 }] },
-      roadAlerts: [{ ...alert, id: "t1", jobId: sampleJobs[0].jobId, type: "tunnel" as const, estimatedPence: 1360 },
-        { ...alert, id: "t2", jobId: sampleJobs[0].jobId, type: "tunnel" as const, estimatedPence: 1360 },
-        { ...alert, id: "c1", jobId: sampleJobs[0].jobId, type: "congestion" as const, estimatedPence: 1800 },
-        { ...alert, id: "c2", jobId: sampleJobs[0].jobId, type: "congestion" as const, estimatedPence: 0 },
-        { ...alert, id: "other", jobId: "OTHER", type: "tunnel" as const, estimatedPence: 1360 }],
-      roadCharges: undefined, issues: ["Prepayment provenance or overlap with manual collections requires verification.", "Retain other verification issues."] };
+  it.each([
+    [120, false], [150, false], [179.9, false], [180, true], [210, true], [null, false]
+  ])("highlights only reported hours at least 30 minutes above working hours: %s", (reported, discrepancy) => {
+    const source = sampleJobs[0];
+    const job = { ...source, duration: { ...source.duration, workingMinutes: 150, manualMinutes: reported },
+      finance: { ...source.finance, acceptedPence: 100, congestionPence: 1800, tunnelPence: 1360 } };
     const { container } = render(<JobComparison job={job} openJob={vi.fn()} />);
-    const sides = container.querySelectorAll(".rpt-comparison-sides > section");
-    const feeRow = (side: Element, label: string) => [...side.querySelectorAll(".rpt-comparison-row")].find(row => row.querySelector("span")?.textContent === label)!;
-    expect(feeRow(sides[0], "Congestion Charges (Expected)")).toHaveTextContent("£18.00");
-    expect(feeRow(sides[1], "Congestion Charges (reported)")).toHaveTextContent("£18.00");
-    expect(feeRow(sides[0], "Tunnel Charges (Expected)")).toHaveTextContent("£27.20");
-    expect(feeRow(sides[1], "Tunnel Charges (reported)")).toHaveTextContent("£13.60");
-    expect(feeRow(sides[1], "Tunnel Charges (reported)")).toHaveClass("rpt-difference");
-    expect(screen.queryByText(/GPS observed/)).not.toBeInTheDocument();
-    expect(screen.queryByText(/Prepayment provenance/)).not.toBeInTheDocument();
-    expect(screen.getByText("Retain other verification issues.")).toBeInTheDocument();
+    expect(screen.queryByText("Discrepancy") !== null).toBe(discrepancy);
+    expect(container.querySelectorAll(".rpt-difference")).toHaveLength(discrepancy ? 2 : 0);
+    expect(screen.queryByText(/Congestion Charges/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Tunnel Charges/)).not.toBeInTheDocument();
   });
   it("shows the requested full-range comparison totals without the old reconciliation summary", async () => {
     const report = await sampleDriverReport("DEMO", { from: props.from, to: props.to, pageSize: 1 });
@@ -362,29 +391,30 @@ describe("Driver report evidence and comparison UI", () => {
     report.summary.expectedRoadChargeTotals = { tunnel: { pence: 4080, knownPence: 4080, unpricedEntries: 0 }, congestion: { pence: 1800, knownPence: 1800, unpricedEntries: 0 } };
     report.summary.manualRoadChargeTotals = { tunnel: { knownPence: 2720, knownJobs: 2, missingJobs: 1, unavailableJobs: 0 },
       congestion: { knownPence: 1800, knownJobs: 2, missingJobs: 1, unavailableJobs: 0 } };
+    report.summary.roadChargeTotals = { tunnelPence: 2720, congestionPence: 1800, tunnelUnknownJobs: 0, congestionUnknownJobs: 0 };
     const { container } = render(<DriverReportView {...props} report={report} tab="comparison" />);
     const sides = container.querySelectorAll(".rpt-range-totals > section");
-    const labels = (side: Element) => [...side.querySelectorAll(".rpt-comparison-row > span")].map(row => row.textContent);
-    expect(labels(sides[0])).toEqual(["Expected Amount", "Driver Collected", "Working Time", "Helper Hours", "Tunnel Charges (Expected)", "Congestion Charges (Expected)"]);
-    expect(labels(sides[1])).toEqual(["Reported Amount", "Reported Time", "Helper Hours", "Tunnel Charges (reported)", "Congestion Charges (reported)"]);
+    const labels = (side: Element) => [...side.querySelectorAll(".rpt-comparison-row > span")].map(row => row.textContent).filter(Boolean);
+    expect(labels(sides[0])).toEqual(["Expected Amount", "Scheduled Hours", "Working Hours"]);
+    expect(labels(sides[1])).toEqual(["Driver Collected", "Reported Hours", "Helper Hours", ...Object.keys(report.summary.systemPaymentsByMethodPence).map(method => method === "Invoice" ? "Invoice pending" : method)]);
     expect(sides[0]).toHaveTextContent("£653.20");
-    expect(sides[0]).not.toHaveTextContent("Total Charges"); expect(sides[0]).toHaveTextContent("£376.60");
-    expect(sides[1]).toHaveTextContent("£180.00");
-    expect(sides[0]).toHaveTextContent("£40.80"); expect(sides[0]).toHaveTextContent("£18.00");
-    expect(sides[1]).toHaveTextContent("£27.20"); expect(sides[1]).toHaveTextContent("£18.00");
-    for (const warning of within(sides[1] as HTMLElement).getAllByText("1 missing entry")) expect(warning).toHaveClass("rpt-unavailable-count");
+    expect(sides[0]).not.toHaveTextContent("Total Charges"); expect(sides[0]).not.toHaveTextContent("£376.60");
+    expect(sides[1]).toHaveTextContent("£376.60");
+    expect(sides[0]).not.toHaveTextContent("Tunnel Charges");
+    expect(sides[1]).not.toHaveTextContent("Congestion Charges");
+    expect(within(sides[1] as HTMLElement).queryByText("1 missing entry")).not.toBeInTheDocument();
     expect(container.querySelector(".rpt-reconciliation")).toBeNull();
     expect(screen.queryByText("Recognized receipts (known)")).not.toBeInTheDocument();
   });
   it("marks missing summaries pending instead of a zero receipt", () => {
     render(<JobComparison job={sampleJobs[7]} openJob={vi.fn()} />);
     expect(screen.getByText("Pending submission")).toBeInTheDocument();
-    expect(screen.getByText("Manual details not submitted")).toBeInTheDocument();
+    expect(screen.getByText("Not submitted")).toBeInTheDocument();
     expect(screen.getAllByText("Unknown").length).toBeGreaterThan(0);
   });
   it("labels first-entry timestamps as incomplete evidence rather than crossing counts or charge proof", () => {
     render(<JobComparison job={{ ...sampleJobs[0], firstEntryHints: { congestionAt: "2026-10-09T09:00:00Z", tunnelAt: null, coverage: "first-entry-only-incomplete", eligibleForAutomaticCharges: false } }} openJob={vi.fn()} />);
-    expect(screen.getByText(/First-entry hints are incomplete evidence/)).toBeInTheDocument();
+    expect(screen.queryByText(/First-entry hints are incomplete evidence/)).not.toBeInTheDocument();
     expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
   });
   it("shows full-range performance numbers independently of the current jobs page", async () => {
@@ -392,18 +422,17 @@ describe("Driver report evidence and comparison UI", () => {
     render(<DriverReportView {...props} report={report} tab="performance" />);
     expect(report.jobs.items).toHaveLength(2); expect(report.summary.completedJobs).toBe(36);
     expect(screen.getByText("36")).toBeInTheDocument();
-    expect(await screen.findByRole("img", { name: "Driver Collected by date" })).toBeInTheDocument();
+    expect(await screen.findByRole("img", { name: "Working Hours by date" })).toBeInTheDocument();
   });
-  it("uses the same Total Charges and Driver Collected cards in Performance and Payments", async () => {
+  it("keeps payment cards in Payments and out of Performance", async () => {
     const report = await sampleDriverReport("DEMO", { from: props.from, to: props.to, pageSize: 1 });
     report.summary.paymentCards = { ...report.summary.paymentCards!, totalChargesPence: 65320, driverCollectionPence: 37660,
       adjustmentReasons: [{ jobId: "ADJUSTED", reason: "Agreed discount", calculatedPence: 32660, driverCollectionPence: 5000 }] };
     const { container, rerender } = render(<DriverReportView {...props} report={report} tab="performance" />);
     const findCard = (label: string) => [...container.querySelectorAll(".rpt-metric")].find(card => card.querySelector(".rpt-metric-label")?.textContent === label)!;
     expect(screen.queryByText("Billed Revenue")).not.toBeInTheDocument();
-    expect(findCard("Total Charges")).toHaveTextContent("£653.20");
-    expect(findCard("Driver Collected")).toHaveTextContent("£376.60");
-    expect(findCard("Driver Collected")).toHaveTextContent("Agreed discount");
+    expect(findCard("Total Charges")).toBeUndefined();
+    expect(findCard("Driver Collected")).toBeUndefined();
     rerender(<DriverReportView {...props} report={report} tab="payments" />);
     expect(findCard("Total Charges")).toHaveTextContent("£653.20");
     expect(findCard("Driver Collected")).toHaveTextContent("£376.60");

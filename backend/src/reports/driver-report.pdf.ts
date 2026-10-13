@@ -4,6 +4,7 @@ import path from "node:path";
 import { ReportCapacityError } from "./driver-report.repo";
 import { assertExportCellBudget, type ExportReport } from "./driver-report-export.model";
 import { driverPdfSections, pdfDateRange, type PdfTable } from "./driver-report-pdf.model";
+import { addReportMoney } from "./report-payments";
 
 export async function generateDriverReportPdf(report: ExportReport): Promise<Buffer> {
   const sections = driverPdfSections(report);
@@ -102,6 +103,16 @@ export async function generateDriverReportPdf(report: ExportReport): Promise<Buf
     for (const table of empty ? sections[index].tables.slice(0, 1) : sections[index].tables) await renderTable(table);
     if (empty) { write("No jobs or GPSLive zone-entry records for the selected dates.", left, y, 9); break; }
   }
+  const totalPaymentPence = Object.values(report.summary.systemPaymentsByMethodPence).reduce(addReportMoney, 0);
+  const totalPayment = `GBP ${(totalPaymentPence / 100).toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  sectionName = "Total Payment";
+  if (y + 104 > bottom) newPage();
+  const totalY = Math.max(y + 8, bottom - 88);
+  doc.rect(left, totalY, width, 80).fill("#e8f4ee");
+  write("TOTAL PAYMENT", left + 18, totalY + 14, 16, true);
+  doc.font("Helvetica-Bold").fontSize(28).fillColor("#176447").text(totalPayment, left + width / 2, totalY + 12, { width: width / 2 - 18, align: "right", lineBreak: false });
+  write("Recorded payment methods including invoices", left + 18, totalY + 48, 9);
+  if (report.summary.paymentCards.jobFlowUnknownJobs) write("Recorded subtotal; some payment records require verification.", left + 18, totalY + 62, 8);
   const pages = doc.bufferedPageRange();
   for (let index = 0; index < pages.count; index++) {
     doc.switchToPage(index);

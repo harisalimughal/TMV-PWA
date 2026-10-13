@@ -2,7 +2,7 @@ import { DateTime } from "luxon";
 import type { Job } from "../jobs/job.types";
 import { ExtraChargeType } from "../jobs/job.types";
 import type { DriverJobSummaryDoc } from "../db/driver-job-summary.repo";
-import { poundsToReportPence, reportPayments, validPence, addReportMoney } from "./report-payments";
+import { poundsToReportPence, reportPayments, reportJobPayments, validPence, addReportMoney } from "./report-payments";
 import { jobReportTimings } from "./job-report-timings";
 import type { EvidenceRecord } from "../jobs/job.types";
 
@@ -53,13 +53,16 @@ export function buildReportJob(job: Job, manual: DriverJobSummaryDoc | null, pre
   const adjustmentNote = job.totalAdjustmentNote?.trim() || null;
   const expectedPence = completed ? adjustmentNote ? acceptedPence : systemCalculatedPence : null;
   if (completed && !adjustmentNote && acceptedPence !== systemCalculatedPence) issues.push("Accepted price differs from system calculation without a recorded adjustment reason.");
-  const systemPayments = reportPayments(job.paymentBreakdown?.map(row => ({ method: row.method, amountPence: poundsToReportPence(row.amount) })),
-    { method: job.paymentMethod, amountPence: acceptedPence, status: job.paymentStatus, invoiceExpectedPence: acceptedPence });
+  const { invoiceJob, payments: systemPayments } = reportJobPayments(job);
   const manualPayments = manual ? reportPayments(manual.paymentBreakdown?.map(row => ({ method: row.method, amountPence: row.amountPence })),
     { method: manual.paymentMethod, amountPence: manual.amountCollectedPence, status: "Collected" }) : null;
   if (manual?.noPaymentReceived) {
     if (manualPayments!.knownCollectedPence > 0) { manualPayments!.collectedPence = null; manualPayments!.issues.push("No-payment declaration conflicts with positive recorded receipts."); }
     else { manualPayments!.collectedPence = 0; manualPayments!.knownCollectedPence = 0; manualPayments!.issues = []; }
+  }
+  if (manual?.paymentVerificationIssues?.length && manualPayments) {
+    manualPayments.collectedPence = null;
+    manualPayments.issues = [...new Set([...manualPayments.issues, ...manual.paymentVerificationIssues])];
   }
   let separatePrepaymentPence = 0, prepaymentsVerified = true;
   if (prepaymentConflict) { prepaymentsVerified = false; issues.push("Prepayment reference is used on multiple jobs; a unique approved allocation is required."); }
@@ -79,7 +82,7 @@ export function buildReportJob(job: Job, manual: DriverJobSummaryDoc | null, pre
     systemPayments.byMethod[method as keyof typeof systemPayments.byMethod] !== manualPayments.byMethod[method as keyof typeof manualPayments.byMethod]) : [];
   const verifiedBoundaries = job.actualStartSource !== "completion-fallback" && !["admin-manual", "completion-fallback"].includes(job.actualFinishSource ?? "");
   const workingMinutes = completed && verifiedBoundaries ? job.timeBilling?.actualMinutes ?? minutes(job.actualStart, job.actualFinish) : null;
-  const manualMinutes = manual ? minutes(manual.startTime, manual.endTime) : null;
+  const manualMinutes = manual ? manual.driverJobHours !== undefined ? manual.driverJobHours * 60 : minutes(manual.startTime, manual.endTime) : null;
   const bookedMinutes = job.timeBilling?.scheduledMinutes ?? minutes(bookedStart, bookedFinish);
   const arrivalAt = job.trackerArrivalSource === "two-fresh-reports" ? job.trackerArrivalAt || job.actualStart : job.actualStart;
   const delay = verifiedBoundaries && Number.isFinite(Date.parse(arrivalAt)) && Number.isFinite(Date.parse(bookedStart)) ? Math.max(0, (Date.parse(arrivalAt) - Date.parse(bookedStart)) / 60000) : null;
@@ -92,7 +95,11 @@ export function buildReportJob(job: Job, manual: DriverJobSummaryDoc | null, pre
       coverage: "first-entry-only-incomplete", eligibleForAutomaticCharges: false } : null,
     duration: { bookedMinutes, allocatedMinutes: job.timeBilling?.allocatedMinutes ?? null, workingMinutes, manualMinutes, differenceMinutes: workingMinutes !== null && manualMinutes !== null ? workingMinutes - manualMinutes : null,
       overtimeMinutes: job.timeBilling?.extraMinutes ?? job.overtimeMinutes ?? null, arrivalDelayMinutes: delay, arrivalSource: job.trackerArrivalSource === "two-fresh-reports" ? "verified-gps" : "proof-acceptance" },
-    finance: { systemCalculatedPence, acceptedPence, expectedPence, adjustmentNote, systemPayments, manualPayments, separatePrepaymentPence, recognizedCollectionPence,
+    finance: { systemCalculatedPence, acceptedPence, expectedPence, adjustmentNote, invoiceJob,
+      extraCharges: [...new Set(job.extraCharges ?? [])].filter(label => label !== ExtraChargeType.NONE && label !== ExtraChargeType.EXTRA_TIME).map(label => ({ label,
+        amountPence: label === ExtraChargeType.CONGESTION ? savedRoadFee(job, "congestion") : label === ExtraChargeType.TUNNEL ? savedRoadFee(job, "tunnel") : null,
+        basis: label === ExtraChargeType.PACKING ? "Included in overtime rate" : "Included in job total" })),
+      systemPayments, manualPayments, separatePrepaymentPence, recognizedCollectionPence,
       signedDifferencePence, outstandingPence: signedDifferencePence === null ? null : Math.max(0, signedDifferencePence), excessCollectionPence: signedDifferencePence === null ? null : Math.max(0, -signedDifferencePence), systemVsManualCollectionDifferencePence, paymentMethodDifferences,
       prepaymentsVerified, paidOnlineFlagIsReceipt: false, knownCollectionDifferencePence: completed && expectedPence !== null && manualPayments?.collectedPence !== null && manualPayments?.collectedPence !== undefined ? expectedPence - manualPayments.collectedPence - separatePrepaymentPence : null,
       basePence: job.chargeSnapshot?.basePence ?? poundsToReportPence(job.basePrice), congestionPence: savedRoadFee(job, "congestion"), tunnelPence: savedRoadFee(job, "tunnel"), overtimePence: job.timeBilling?.extraChargePence ?? poundsToReportPence(job.overtimeCharge) },
@@ -146,7 +153,8 @@ export function summarizeReportJobs(rows: ReportJob[]) {
   const driverCollectionKnownPence = sumMoney(row => row.finance.acceptedPence);
   const manualEntriesKnownPence = validManualRows.reduce((total, row) => addReportMoney(total, row.manualDetails!.amountCollectedPence), 0);
   const jobFlowTotalKnownPence = Object.values(byMethod).reduce(addReportMoney, 0);
-  const jobFlowUnknownJobs = completed.filter(row => row.finance.systemPayments.issues.length > 0).length;
+  const jobFlowUnverifiedJobIds = completed.filter(row => row.finance.systemPayments.issues.length > 0).map(row => row.jobId);
+  const jobFlowUnknownJobs = jobFlowUnverifiedJobIds.length;
   const manualRoadTotals = (type: "congestion" | "tunnel") => {
     const amounts = completed.map(row => manualRoadFee(row.manualDetails, type));
     const missingJobs = completed.filter(row => !row.manualDetails).length;
@@ -162,9 +170,15 @@ export function summarizeReportJobs(rows: ReportJob[]) {
     outstandingPence: driverCollectionUnknownJobs || manualEntryUnknownJobs ? null : driverCollectionKnownPence - manualEntriesKnownPence,
     adjustmentReasons: completed.filter(row => !!row.finance.adjustmentNote).map(row => ({ jobId: row.jobId,
       reason: row.finance.adjustmentNote!, calculatedPence: row.finance.systemCalculatedPence, driverCollectionPence: row.finance.acceptedPence })),
-    jobFlowTotalPence: jobFlowUnknownJobs ? null : jobFlowTotalKnownPence, jobFlowTotalKnownPence, jobFlowUnknownJobs
+    jobFlowTotalPence: jobFlowUnknownJobs ? null : jobFlowTotalKnownPence, jobFlowTotalKnownPence, jobFlowUnknownJobs, jobFlowUnverifiedJobIds
   };
   return { assignedJobs: rows.length, completedJobs: completed.length, cancelledJobs: rows.filter(row => row.status === "CANCELLED").length,
+    financialBreakdown: { basePence: completed.some(row => row.finance.basePence === null) ? null : sumMoney(row => row.finance.basePence),
+      invoiceJobs: completed.filter(row => row.finance.invoiceJob).length,
+      extraCharges: [...new Set(completed.flatMap(row => row.finance.extraCharges.map(charge => charge.label)))].map(label => {
+        const items = completed.flatMap(row => row.finance.extraCharges.filter(charge => charge.label === label));
+        return { label, amountPence: items.some(item => item.amountPence === null) ? null : items.reduce((total, item) => addReportMoney(total, item.amountPence!), 0), basis: items[0].basis };
+      }) },
     paymentCards,
     manualRoadChargeTotals: { tunnel: manualRoadTotals("tunnel"), congestion: manualRoadTotals("congestion") },
     roadChargeTotals: {
@@ -179,14 +193,15 @@ export function summarizeReportJobs(rows: ReportJob[]) {
     systemKnownCollectionsPence: sumMoney(row => row.finance.systemPayments.knownCollectedPence), unknownSystemCollectionJobs: completed.filter(row => row.finance.systemPayments.collectedPence === null).length,
     recognizedKnownCollectionsPence: sumMoney(row => row.finance.recognizedCollectionPence), outstandingKnownPence: sumMoney(row => row.finance.outstandingPence), excessCollectionKnownPence: sumMoney(row => row.finance.excessCollectionPence),
     outstandingUnknownJobs: completed.filter(row => row.finance.outstandingPence === null).length, pendingManualJobs: completed.filter(row => !row.manualDetails).length,
-    systemPaymentsByMethodPence: byMethod, workingMinutesKnown: sum(row => row.duration.workingMinutes), workingMinutesUnknownJobs: completed.filter(row => row.duration.workingMinutes === null).length,
+    systemPaymentsByMethodPence: byMethod, scheduledMinutesKnown: sum(row => row.duration.bookedMinutes), scheduledMinutesUnknownJobs: completed.filter(row => row.duration.bookedMinutes === null).length,
+    workingMinutesKnown: sum(row => row.duration.workingMinutes), workingMinutesUnknownJobs: completed.filter(row => row.duration.workingMinutes === null).length,
     manualMinutesKnown: sum(row => row.duration.manualMinutes), manualMinutesUnknownJobs: completed.filter(row => row.duration.manualMinutes === null).length,
     overtimeChargesPence: overtimeChargesUnknownJobs ? null : sumMoney(row => row.finance.overtimePence), overtimeChargesUnknownJobs,
     overtimeMinutesKnown: sum(row => row.duration.overtimeMinutes), overtimeMinutesUnknownJobs: completed.filter(row => row.duration.overtimeMinutes === null).length,
     arrivalDelayMinutesKnown: sum(row => row.duration.arrivalDelayMinutes),
     reviewSentJobs: completed.filter(row => row.reviewSent).length, reviewNotSentJobs: completed.filter(row => !row.reviewSent).length,
-    helpers: [...helpers.values()], helperHoursKnown: [...helpers.values()].reduce((total, helper) => total + helper.hours, 0),
-    discrepancies: completed.filter(row => row.finance.paymentMethodDifferences.length || row.finance.signedDifferencePence || row.finance.systemVsManualCollectionDifferencePence || (row.duration.differenceMinutes !== null && Math.abs(row.duration.differenceMinutes) > 0.000001)).length };
+    helpers: [...helpers.values()], helperHoursKnown: sum(row => row.manualDetails?.helperHours),
+    discrepancies: completed.filter(row => row.duration.differenceMinutes !== null && row.duration.differenceMinutes <= -30).length };
 }
 export function reportTrends(rows: ReportJob[], groupBy: "day" | "week" | "month") {
   const groups = new Map<string, ReportJob[]>();

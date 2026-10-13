@@ -301,17 +301,24 @@ async function pickupLocationFor(parsed: ParsedCalendarBooking, existing?: Job):
   if (existing?.pickup === parsed.pickup && existing.pickupLocation) return existing.pickupLocation;
   return (await geocodeAddress(parsed.pickup)) ?? undefined;
 }
+async function dropoffLocationFor(parsed: ParsedCalendarBooking, existing?: Job): Promise<Job["dropoffLocation"]> {
+  if (!parsed.dropoff) return undefined;
+  if (existing?.dropoff === parsed.dropoff && existing.dropoffLocation) return existing.dropoffLocation;
+  return (await geocodeAddress(parsed.dropoff)) ?? undefined;
+}
 
 function sameLocation(a: Job["pickupLocation"], b: Job["pickupLocation"]): boolean {
   if (!a && !b) return true;
   return a?.lat === b?.lat && a?.lng === b?.lng;
 }
 
-function toJob(parsed: ParsedCalendarBooking, existing: Job | undefined, pickupLocation: Job["pickupLocation"]): Job {
+function toJob(parsed: ParsedCalendarBooking, existing: Job | undefined, pickupLocation: Job["pickupLocation"], dropoffLocation: Job["dropoffLocation"]): Job {
   const now = new Date().toISOString();
   const sameDriver = existing?.driverInitials === parsed.driverInitials;
   const samePickup = existing?.pickup === parsed.pickup && sameLocation(existing?.pickupLocation, pickupLocation);
   const retainTrackerArrival = sameDriver && samePickup && (Boolean(existing?.actualStart) || existing?.bookedStart === parsed.bookedStart);
+  const sameDropoff = existing?.dropoff === parsed.dropoff && sameLocation(existing?.dropoffLocation, dropoffLocation);
+  const retainDropoffTracking = sameDriver && sameDropoff && (Boolean(existing?.actualStart) || existing?.bookedStart === parsed.bookedStart);
 
   /*
    * Commercial terms freeze the moment work begins.
@@ -344,6 +351,9 @@ function toJob(parsed: ParsedCalendarBooking, existing: Job | undefined, pickupL
     pickup: parsed.pickup,
     pickupLocation,
     dropoff: parsed.dropoff,
+    dropoffLocation,
+    dropoffGeocodeAttemptAt: sameDropoff ? existing?.dropoffGeocodeAttemptAt : undefined,
+    dropoffTracking: retainDropoffTracking ? existing?.dropoffTracking : undefined,
     stopBy: parsed.stopBy,
     floorFrom: parsed.floorFrom,
     floorTo: parsed.floorTo,
@@ -394,6 +404,8 @@ function toJob(parsed: ParsedCalendarBooking, existing: Job | undefined, pickupL
     // driver again for its real new time instead of staying silent forever.
     reminderSentAt: existing?.bookedStart === bookedStart ? existing?.reminderSentAt : undefined,
     onMyWayAt: existing?.onMyWayAt,
+    pickupArrivalAt: existing?.pickupArrivalAt,
+    vanLoadedAt: existing?.vanLoadedAt,
     gpsliveImei: sameDriver ? existing?.gpsliveImei : undefined,
     gpsDeviceHistory: existing?.gpsDeviceHistory,
     trackerArrivalAt: retainTrackerArrival ? existing?.trackerArrivalAt : undefined,
@@ -432,7 +444,7 @@ function isUnchanged(next: Job, existing?: Job): boolean {
     "rawTitle", "rawDescription"
   ];
   return keys.every(key => String(next[key] ?? "") === String(existing[key] ?? "")) &&
-    sameLocation(next.pickupLocation, existing.pickupLocation);
+    sameLocation(next.pickupLocation, existing.pickupLocation) && sameLocation(next.dropoffLocation, existing.dropoffLocation);
 }
 
 export async function syncBookingsForDate(date = DateTime.now().setZone(env.timezone)): Promise<Job[]> {
@@ -475,7 +487,7 @@ export async function syncBookingsForDate(date = DateTime.now().setZone(env.time
     const parsed = parseCalendarEvent(event);
     if (!parsed) continue;
     const existing = existingByEvent.get(parsed.calendarEventId);
-    const job = toJob(parsed, existing, await pickupLocationFor(parsed, existing));
+    const job = toJob(parsed, existing, await pickupLocationFor(parsed, existing), await dropoffLocationFor(parsed, existing));
     parsedByJob.set(job.jobId, parsed);
     synced.push(job);
 
@@ -513,7 +525,8 @@ export async function syncBookingsForDate(date = DateTime.now().setZone(env.time
     const latest = await getJob(job.jobId);
     const parsed = parsedByJob.get(job.jobId);
     if (parsed) {
-      await upsertJob(toJob(parsed, latest ?? existingByEvent.get(parsed.calendarEventId), job.pickupLocation));
+      const dropoffLocation = latest?.dropoff === parsed.dropoff && latest.dropoffLocation ? latest.dropoffLocation : job.dropoffLocation;
+      await upsertJob(toJob(parsed, latest ?? existingByEvent.get(parsed.calendarEventId), job.pickupLocation, dropoffLocation));
     } else if (latest) {
       if (latest.actualStart || latest.status === JobStatus.COMPLETED) return;
       await upsertJob({ ...latest, status: job.status, currentState: job.currentState, updatedAt: job.updatedAt });

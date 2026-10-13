@@ -3,13 +3,11 @@ import React, { lazy, Suspense, useEffect, useState } from "react";
 import { XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from "recharts";
 import { ArrowLeft, ArrowUpRight, CheckCircle2, AlertTriangle, Clock, Banknote, Route, Users, ChevronLeft, ChevronRight, ChevronDown, FileDown, Loader2, RefreshCw } from "lucide-react";
 import { DateTime } from "luxon";
-import type { DriverReport, DriverReportJob, ReportPage } from "../driverReport.types";
+import type { DriverReport, DriverReportJob, ReportPage, ReportExtraCharge } from "../driverReport.types";
 import { DateRangePicker } from "./DateRangePicker";
 import "./driverReport.css";
 import { DriverRoadAlerts } from "./DriverRoadAlerts";
 import { JobRoadChargeSummaries } from "./JobRoadChargeSummaries";
-import { manualRoadFee } from "./ManualRoadChargeCard";
-import { expectedJobRoadCharge, jobRoadChargeSummary } from "../utils/jobRoadChargeSummary";
 const DriverPerformanceCharts = lazy(() => import("./DriverPerformanceCharts").then(module => ({ default: module.DriverPerformanceCharts })));
 
 export const REPORT_TABS = ["jobs", "performance", "payments", "comparison", "tunnels", "congestion"] as const;
@@ -51,37 +49,72 @@ function Empty({ children }: { children: React.ReactNode }) { return <div classN
 function JobRowIdentity({ job }: { job: DriverReportJob }) {
   return <div className="rpt-job-identity"><strong>{job.customer.name}</strong><small className="rpt-job-reference"><time>{jobDate(job.operationalDate)}</time><span aria-hidden="true">|</span><span>{job.jobId}</span></small></div>;
 }
-function JobPerformanceDetails({ job, gpsLoading = false, gpsUnavailable = false }: { job: DriverReportJob; gpsLoading?: boolean; gpsUnavailable?: boolean }) {
+function FinancialBreakdown({ methods, base, overtime, congestion, tunnel, extras = [], invoiceJobs, total, issues = [], name, scheduledMinutes, issueJobs = [], onJob }: {
+  methods: Record<string, number>; base: number | null | undefined; overtime: number | null | undefined;
+  congestion: number | null | undefined; tunnel: number | null | undefined; extras?: ReportExtraCharge[];
+  invoiceJobs: number; total: number; issues?: string[]; name: string; scheduledMinutes?: number | null; issueJobs?: string[]; onJob?: (id: string) => void;
+}) {
+  const chargeItems = [...extras];
+  for (const [label, amountPence] of [["London Congestion charge", congestion], ["Tunnel Charges", tunnel]] as const) {
+    if (amountPence && !chargeItems.some(charge => charge.label === label)) chargeItems.push({ label, amountPence, basis: "Included in job total" });
+  }
+  const chargeName = (label: string) => label === "London Congestion charge" ? "Congestion" : label === "Tunnel Charges" ? "Tunnel" : label;
+  return <><div className="rpt-table-scroll"><table className="rpt-job-detail-table" aria-label={name}>
+    <thead><tr><th scope="col">Detail</th><th scope="col">Recorded amount</th><th scope="col">Basis</th></tr></thead>
+    <tbody>
+      {scheduledMinutes !== undefined && <tr><th scope="row">Scheduled Hours</th><td>{reportTime(scheduledMinutes)}</td><td>Calendar duration</td></tr>}
+      <tr><th scope="row">Base price</th><td>{reportMoney(base)}</td><td>Booking</td></tr>
+      <tr><th scope="row">Overtime</th><td>{reportMoney(overtime)}</td><td>Included in job total</td></tr>
+      {chargeItems.length ? chargeItems.map((charge, index) => <tr key={charge.label}>
+        {index === 0 && <th scope="rowgroup" rowSpan={chargeItems.length}>Extra Charges</th>}
+        <td title={charge.amountPence === null ? charge.basis : undefined}>{charge.amountPence === null ? "-" : reportMoney(charge.amountPence)}</td>
+        <td>{chargeName(charge.label)}</td>
+      </tr>) : <tr><th scope="row">Extra Charges</th><td>-</td><td>-</td></tr>}
+      {Object.entries(methods).filter(([method]) => method !== "Invoice" && method !== "Unknown").map(([method, amount]) => <tr key={method}><th scope="row">{method}</th><td>{reportMoney(amount)}</td><td>Job-flow receipt</td></tr>)}
+      <tr><th scope="row">Invoice</th><td>{invoiceJobs ? reportMoney(methods.Invoice ?? 0) : "-"}</td><td>{invoiceJobs ? <Badge tone="warning">{invoiceJobs > 1 ? `Invoice jobs (${invoiceJobs})` : "Invoice job"}</Badge> : "-"}</td></tr>
+    </tbody>
+    <tfoot><tr><th scope="row">Total</th><td>{reportMoney(total)}</td><td>Payment methods including invoices</td></tr></tfoot>
+  </table></div>{methods.Unknown > 0 && <p className="rpt-warning" role="status">Unclassified payment: {reportMoney(methods.Unknown)}. Payment method requires verification.</p>}{issues.length > 0 && <div className="rpt-warning" role="status"><span>{issues.join(" ")}</span>{onJob && issueJobs.map(id => <JobLink key={id} id={id} open={onJob} />)}</div>}</>;
+}
+function JobFinancialBreakdown({ job }: { job: DriverReportJob }) {
+  const finance = job.finance;
+  return <FinancialBreakdown name="Job financial breakdown" methods={finance.systemPayments.byMethod} base={finance.basePence}
+    overtime={finance.overtimePence} congestion={finance.congestionPence} tunnel={finance.tunnelPence} extras={finance.extraCharges} scheduledMinutes={job.duration.bookedMinutes}
+    invoiceJobs={finance.invoiceJob || finance.systemPayments.invoicePence > 0 ? 1 : 0}
+    total={Object.values(finance.systemPayments.byMethod).reduce((sum, amount) => sum + amount, 0)} issues={finance.systemPayments.issues} />;
+}
+function JobPerformanceDetails({ job, gpsLoading = false, gpsUnavailable = false, showRoadCharges = true, showPayments = true }: { job: DriverReportJob; gpsLoading?: boolean; gpsUnavailable?: boolean; showRoadCharges?: boolean; showPayments?: boolean }) {
   const { finance, duration, timings, manualDetails: manual } = job;
   const manualAmount = manual ? finance.manualPayments?.collectedPence ?? null : null;
   const outstanding = finance.acceptedPence !== null && manualAmount !== null ? finance.acceptedPence - manualAmount : null;
   const performance: Array<[string, React.ReactNode, React.ReactNode?]> = [
     ["Date", jobDate(job.operationalDate)],
     ["Completed Jobs", job.status === "COMPLETED" ? 1 : 0],
-    ["Total Charges", reportMoney(finance.systemCalculatedPence)],
-    ["Driver Collected", reportMoney(finance.acceptedPence), finance.adjustmentNote || ""],
-    ["Calendar duration", reportTime(duration.bookedMinutes)],
+    ["Scheduled Hours", reportTime(duration.bookedMinutes)],
     ["Allocated time", reportTime(duration.allocatedMinutes)],
     ["Working Hours", reportTime(duration.workingMinutes)],
     ["Moving Hours", gpsLoading ? "Loading..." : reportTime(job.movement?.onJob.movingSeconds == null ? null : job.movement.onJob.movingSeconds / 60), gpsLoading ? undefined : job.movement?.onJob.coverage || "Unavailable"],
-    ["Overtime", reportTime(duration.overtimeMinutes), reportMoney(finance.overtimePence)],
+    ["Overtime", reportTime(duration.overtimeMinutes)],
     ["Arrival Delays", reportTime(duration.arrivalDelayMinutes), duration.arrivalSource],
     ["Review report", job.reviewSent ? "Sent" : "Not sent"],
     ["Reviews Sent / Not Sent", `${job.status === "COMPLETED" && job.reviewSent ? 1 : 0} / ${job.status === "COMPLETED" && !job.reviewSent ? 1 : 0}`],
     ["Helper", manual ? manual.helperName || "None reported" : "Not submitted"],
     ["Manual Helper Hours", manual ? `${manual.helperHours}h` : "Not submitted"],
-    ["Reported Time", manual ? reportTime(duration.manualMinutes) : "Not submitted"],
+    ["Reported Hours", manual ? reportTime(duration.manualMinutes) : "Not submitted"],
   ];
   const gap = arrivalProofGap(job);
   const milestones = [
     ["On the Way", timingTime(timings?.onMyWayAt)],
-    ["Tracker Arrival", timings?.trackerArrivalAt ? withArrivalDistance(timingTime(timings.trackerArrivalAt), timings.trackerArrivalDistanceMeters) : "Not recorded"],
+    ["Tracker Pick-up arrival", timings?.trackerArrivalAt ? withArrivalDistance(timingTime(timings.trackerArrivalAt), timings.trackerArrivalDistanceMeters) : "Not recorded"],
     ["Proof Photo", timingTime(timings?.proofPhotoAt)],
     ["Van Loaded", timingTime(timings?.vanLoadedAt)],
+    ["Tracker Drop-off arrival", timingTime(timings?.trackerDropoffArrivalAt)],
     ["Empty Van", timingTime(timings?.emptyVanAt)],
+    ["Tracker Drop-off departure", timingTime(timings?.trackerDropoffDepartureAt)],
     ["Customer Signed", timingTime(timings?.customerSignedAt)],
   ];
   const payments: Array<[string, React.ReactNode, string?]> = [
+    ["Scheduled Hours", reportTime(duration.bookedMinutes)],
     ["Total Charges", reportMoney(finance.systemCalculatedPence)],
     ["Driver Collected", reportMoney(finance.acceptedPence)],
     ["Adjustment reason", finance.adjustmentNote || "No recorded adjustments"],
@@ -92,77 +125,56 @@ function JobPerformanceDetails({ job, gpsLoading = false, gpsUnavailable = false
     ["Saved congestion fee", reportMoney(finance.congestionPence)],
     ["Saved tunnel fee", reportMoney(finance.tunnelPence)],
   ];
-  const methodTotal = finance.systemPayments.issues.length ? null : Object.values(finance.systemPayments.byMethod).reduce((total, amount) => total + amount, 0);
   return <>
     <section className="rpt-section rpt-job-section rpt-job-section-blue">
       <h3>Performance &amp; Timings</h3><div className="rpt-table-scroll"><table className="rpt-job-detail-table rpt-performance-table" aria-label="Job Performance & Timings">
         <thead><tr><th scope="col">Detail</th><th scope="col">Value</th><th scope="col">Timing</th><th scope="col">Time</th></tr></thead>
         <tbody>{performance.map(([label, value, detail], index) => <tr key={label}>
           <th scope="row">{label}</th><td>{value}{detail && <small className="rpt-block">{detail}</small>}</td>
-          <td>{milestones[index]?.[0]}{milestones[index]?.[0] === "Proof Photo" && gap !== null && <small className="rpt-block"><Badge tone="bad">Arrival to proof gap ({gap} min)</Badge></small>}</td><td>{milestones[index]?.[1]}{milestones[index]?.[0] === "Tracker Arrival" && !timings?.trackerArrivalAt && <small className="rpt-block rpt-unavailable-count">{timings?.trackerUnverifiedReason || "Tracker arrival was not recorded."}</small>}</td>
+          <td>{milestones[index]?.[0]}{milestones[index]?.[0] === "Proof Photo" && gap !== null && <small className="rpt-block"><Badge tone="bad">Arrival to proof gap ({gap} min)</Badge></small>}</td><td>{milestones[index]?.[1]}{milestones[index]?.[0] === "Tracker Pick-up arrival" && !timings?.trackerArrivalAt && <small className="rpt-block rpt-unavailable-count">{timings?.trackerUnverifiedReason || "Tracker arrival was not recorded."}</small>}</td>
         </tr>)}</tbody>
       </table></div>
     </section>
-    <section className="rpt-section rpt-job-section rpt-job-section-white">
+    {showPayments && <><section className="rpt-section rpt-job-section rpt-job-section-white">
       <h3>Payments</h3><div className="rpt-table-scroll"><table className="rpt-job-detail-table" aria-label="Job Payments">
         <thead><tr><th scope="col">Detail</th><th scope="col">Value</th></tr></thead>
         <tbody>{payments.map(([label, value, detail]) => <tr key={label}><th scope="row">{label}</th><td>{value}{detail && <small className="rpt-block">{detail}</small>}</td></tr>)}</tbody>
       </table></div>
     </section>
-    <section className="rpt-section rpt-job-section rpt-job-section-blue"><h3>Financial breakdown</h3><div className="rpt-table-scroll"><table className="rpt-job-detail-table" aria-label="Job financial breakdown">
-      <thead><tr><th scope="col">Method</th><th scope="col">Recorded amount</th><th scope="col">Basis</th></tr></thead>
-      <tbody>{Object.entries(finance.systemPayments.byMethod).filter(([method]) => method !== "Unknown").map(([method, amount]) => <tr key={method}><th scope="row">{method}</th><td>{reportMoney(amount)}</td><td>{method === "Invoice" ? "Uncollected" : method === "Unknown" ? "Unverified" : "Job-flow receipt"}</td></tr>)}</tbody>
-      <tfoot><tr><th scope="row">Total</th><td>{reportMoney(methodTotal)}</td><td>{finance.systemPayments.issues.length ? "Unverified job-flow entries" : "Job flow, including invoices"}</td></tr></tfoot>
-    </table></div>{finance.systemPayments.byMethod.Unknown > 0 && <p className="rpt-warning" role="status">Unclassified payment: {reportMoney(finance.systemPayments.byMethod.Unknown)}. Payment method requires verification.</p>}</section>
-    {gpsLoading ? <section className="rpt-section" role="status"><Loader2 className="animate-spin inline-block mr-2" size={18} />Loading job road activity...</section>
-      : gpsUnavailable ? <section className="rpt-section">Job road activity unavailable.</section> : <JobRoadChargeSummaries job={job} />}
+    <section className="rpt-section rpt-job-section rpt-job-section-blue"><h3>Financial breakdown</h3><JobFinancialBreakdown job={job} /></section></>}
+    {showRoadCharges && (gpsLoading ? <section className="rpt-section" role="status"><Loader2 className="animate-spin inline-block mr-2" size={18} />Loading job road activity...</section>
+      : gpsUnavailable ? <section className="rpt-section">Job road activity unavailable.</section> : <JobRoadChargeSummaries job={job} />)}
   </>;
 }
-function SideRow({ name, value, warning }: { name: string; value: React.ReactNode; warning?: boolean }) { return <div className={`rpt-comparison-row ${warning ? "rpt-difference" : ""}`}><span>{name}</span><strong>{value}</strong></div>; }
+function SideRow({ name, value, warning }: { name: string; value: React.ReactNode; warning?: boolean }) { return <div aria-hidden={!name || undefined} className={`rpt-comparison-row ${!name ? "rpt-comparison-placeholder" : ""} ${warning ? "rpt-difference" : ""}`}><span>{name}</span><strong>{value}</strong></div>; }
+function hasHoursDiscrepancy(job: DriverReportJob): boolean {
+  const { workingMinutes, manualMinutes } = job.duration;
+  return !!job.manualDetails && workingMinutes !== null && manualMinutes !== null && manualMinutes - workingMinutes >= 30;
+}
 
 export function JobComparison({ job, openJob, gpsLoading = false, gpsUnavailable = false }: { job: DriverReportJob; openJob: (id: string) => void; gpsLoading?: boolean; gpsUnavailable?: boolean }) {
   const finance = job.finance, manual = job.manualDetails;
-  const hoursDiffer = job.duration.differenceMinutes !== null && Math.abs(job.duration.differenceMinutes) > 0.01;
-  const startDiff = !!manual && !!job.actualStart && Date.parse(job.actualStart) !== Date.parse(manual.startTime);
-  const finishDiff = !!manual && !!job.actualFinish && Date.parse(job.actualFinish) !== Date.parse(manual.endTime);
-  const manualAmount = finance.manualPayments?.collectedPence ?? null;
-  const amountDiffers = finance.acceptedPence !== null && manualAmount !== null && finance.acceptedPence !== manualAmount;
-  const pendingInvoice = !!manual && finance.acceptedPence !== null && manualAmount !== null && finance.acceptedPence > manualAmount && finance.acceptedPence - manualAmount === finance.manualPayments?.invoicePence;
-  const congestion = manualRoadFee(manual, "congestion"), tunnel = manualRoadFee(manual, "tunnel");
-  const expectedCongestion = gpsLoading || gpsUnavailable ? null : expectedJobRoadCharge(job, "congestion");
-  const expectedTunnel = gpsLoading || gpsUnavailable ? null : expectedJobRoadCharge(job, "tunnel");
-  const unverified = finance.systemPayments.collectedPence === null || finance.acceptedPence === null || !!manual && manualAmount === null ||
-    expectedCongestion === null || expectedTunnel === null || !!job.alertHistoryTruncated ||
-    (["tunnel", "congestion"] as const).some(type => !!jobRoadChargeSummary(job, type)?.unpricedEntries);
-  const congestionDiffers = congestion !== null && expectedCongestion !== null && congestion !== expectedCongestion;
-  const tunnelDiffers = tunnel !== null && expectedTunnel !== null && tunnel !== expectedTunnel;
-  const expectedValue = (amount: number | null) => gpsLoading ? "Loading..." : amount === null ? "Unavailable" : reportMoney(amount);
-  const difference = amountDiffers || congestionDiffers || tunnelDiffers || finance.paymentMethodDifferences.length > 0 || hoursDiffer || startDiff || finishDiff;
+  const hoursDiffer = hasHoursDiscrepancy(job);
+  const driverAmount = finance.acceptedPence;
+  const pendingInvoice = finance.systemPayments.invoicePence > 0;
+  const unverified = job.duration.workingMinutes === null || job.duration.manualMinutes === null;
   const visibleIssues = job.issues.filter(issue => issue !== "Prepayment provenance or overlap with manual collections requires verification." &&
     issue !== "Manual details are missing; outstanding and manual hours are unknown.");
   const fields: Array<{ systemName: string; manualName?: string; system: React.ReactNode; driver: React.ReactNode; warning?: boolean }> = [
-    { systemName: "Start", system: date(job.actualStart), driver: date(manual?.startTime), warning: startDiff },
-    { systemName: "Finish", system: date(job.actualFinish), driver: date(manual?.endTime), warning: finishDiff },
-    { systemName: "Working Time", manualName: "Reported Time", system: reportTime(job.duration.workingMinutes), driver: reportTime(job.duration.manualMinutes), warning: hoursDiffer },
-    { systemName: "Driver Collected", manualName: "Total Amount", system: reportMoney(finance.acceptedPence), driver: reportMoney(manualAmount), warning: amountDiffers },
-    { systemName: "Congestion Charges (Expected)", manualName: "Congestion Charges (reported)", system: expectedValue(expectedCongestion), driver: reportMoney(congestion), warning: congestionDiffers },
-    { systemName: "Tunnel Charges (Expected)", manualName: "Tunnel Charges (reported)", system: expectedValue(expectedTunnel), driver: reportMoney(tunnel), warning: tunnelDiffers },
-    { systemName: "Recorded receipts", manualName: "Collected", system: reportMoney(finance.systemPayments.collectedPence), driver: reportMoney(finance.manualPayments?.collectedPence), warning: !!finance.systemVsManualCollectionDifferencePence },
-    { systemName: "Helper", system: "Not recorded", driver: manual?.helperName || "None reported" },
-    { systemName: "Helper Hours", system: "Not recorded", driver: manual ? `${manual.helperHours}h` : "Unknown" },
-    ...Object.keys(finance.systemPayments.byMethod).map(method => ({ systemName: method === "Invoice" ? "Invoice pending" : method,
-      system: reportMoney(finance.systemPayments.byMethod[method]), driver: reportMoney(finance.manualPayments?.byMethod[method]),
-      warning: finance.paymentMethodDifferences.includes(method) || method === "Invoice" && !!finance.manualPayments && finance.systemPayments.invoicePence !== finance.manualPayments.invoicePence })),
-    { systemName: "Submission", system: "System record", driver: date(manual?.submittedAt) }
+    { systemName: "Expected Amount", manualName: "Driver Collected", system: reportMoney(finance.systemCalculatedPence), driver: <>{reportMoney(driverAmount)}{finance.adjustmentNote && <details className="rpt-chart-data"><summary>Adjustment reason</summary><p>{finance.adjustmentNote}</p></details>}</> },
+    { systemName: "Scheduled Hours", manualName: "", system: reportTime(job.duration.bookedMinutes), driver: null },
+    { systemName: "Working Hours", manualName: "Reported Hours", system: reportTime(job.duration.workingMinutes), driver: reportTime(job.duration.manualMinutes), warning: hoursDiffer },
+    { systemName: "", manualName: "Helper Hours", system: null, driver: manual ? reportTime(manual.helperHours * 60) : "Not submitted" },
+    ...Object.keys(finance.systemPayments.byMethod).filter(method => method !== "Unknown" || finance.systemPayments.byMethod.Unknown > 0).map(method => ({ systemName: "", manualName: method === "Invoice" ? "Invoice pending" : method,
+      system: null, driver: reportMoney(finance.systemPayments.byMethod[method]) })),
+    { systemName: "", manualName: "Submission", system: null, driver: date(manual?.submittedAt) }
   ];
   return <article className="rpt-comparison-job"><header><div><JobLink id={job.jobId} open={openJob} /><span className="rpt-muted">{job.customer.name}</span></div>
-    <Badge tone={!manual || unverified || pendingInvoice ? "warning" : difference ? "bad" : "good"}>{!manual ? "Pending submission" : unverified ? "Needs verification" : pendingInvoice ? "Invoice pending" : difference ? "Discrepancy" : "Financial match"}</Badge></header>
+    <Badge tone={!manual ? "warning" : hoursDiffer ? "bad" : unverified || pendingInvoice ? "warning" : "good"}>{!manual ? "Pending submission" : hoursDiffer ? "Discrepancy" : unverified ? "Needs verification" : pendingInvoice ? "Invoice pending" : "Hours match"}</Badge></header>
     <div className="rpt-comparison-sides" style={{ gridTemplateRows: `repeat(${fields.length + 1}, auto)` }}>
       <section style={{ gridRow: `span ${fields.length + 1}` }}><h3>System calculation</h3>{fields.map((field, index) => <SideRow key={index} name={field.systemName} value={field.system} warning={field.warning} />)}</section>
-      <section style={{ gridRow: `span ${fields.length + 1}` }}><h3>Driver manual details</h3>{manual ? fields.map((field, index) => <SideRow key={index} name={field.manualName || field.systemName} value={field.driver} warning={field.warning} />) : <Empty>Manual details not submitted</Empty>}</section>
+      <section style={{ gridRow: `span ${fields.length + 1}` }}><h3>Driver manual details</h3>{fields.map((field, index) => <SideRow key={index} name={field.manualName ?? field.systemName} value={field.driver} warning={field.warning} />)}</section>
     </div>
-    {finance.adjustmentNote && <p className="rpt-note">Adjustment: {finance.adjustmentNote}</p>}
-    {job.firstEntryHints && <p className="rpt-note">First-entry hints are incomplete evidence, not confirmed crossing counts or automatic charge proof. Congestion: {date(job.firstEntryHints.congestionAt)}; tunnel: {date(job.firstEntryHints.tunnelAt)}.</p>}
     {visibleIssues.length > 0 && <ul className="rpt-issues">{visibleIssues.map((issue, index) => <li key={index}>{issue}</li>)}</ul>}
   </article>;
 }
@@ -177,6 +189,8 @@ interface Props {
 }
 export function DriverReportView({ report, tab, from, to, onTab, onDates, onPage, onJob, onBack, onExport, exporting, exportError, driverFilter, gpsLoading = false, gpsError, onRetryGps }: Props) {
   const s = report.summary;
+  const scheduledValue = s.scheduledMinutesUnknownJobs === s.completedJobs && s.completedJobs > 0 ? "Unavailable" : reportTime(s.scheduledMinutesKnown);
+  const scheduledHoursCard = <Metric label="Scheduled Hours" value={scheduledValue} detail={s.scheduledMinutesUnknownJobs ? `${s.scheduledMinutesUnknownJobs} unavailable calendar durations` : undefined} icon={Clock} />;
   const movingValue = gpsLoading ? "Loading..." : s.movingKnownSeconds == null || s.movingKnownSeconds === 0 && s.completedJobs > 0 && s.movingUnknownJobs >= s.completedJobs ? "Unavailable" : reportTime(s.movingKnownSeconds / 60);
   const movingDetail = gpsLoading ? undefined : <>{s.movingUnknownJobs > 0 && <span className="rpt-unavailable-count">{s.movingUnknownJobs} unavailable</span>}{s.movingUnknownJobs > 0 && s.movingPartialJobs > 0 && " · "}{s.movingPartialJobs > 0 && `${s.movingPartialJobs} partial`}</>;
   const roadTotals = s.roadChargeTotals;
@@ -192,10 +206,7 @@ export function DriverReportView({ report, tab, from, to, onTab, onDates, onPage
   const compared = currentJobs.filter(job => {
     if (comparisonScope === "all") return true;
     if (comparisonScope === "pending") return !job.manualDetails;
-    const manualAmount = job.finance.manualPayments?.collectedPence;
-    return job.finance.acceptedPence !== null && manualAmount != null && job.finance.acceptedPence !== manualAmount ||
-      job.finance.paymentMethodDifferences.length > 0 || job.duration.differenceMinutes !== null && Math.abs(job.duration.differenceMinutes) > 0.01 ||
-      (!gpsLoading && !gpsError && report.meta.gpsIncluded !== false && (["tunnel", "congestion"] as const).some(type => { const expected = expectedJobRoadCharge(job, type), reported = manualRoadFee(job.manualDetails, type); return expected !== null && reported !== null && expected !== reported; }));
+    return hasHoursDiscrepancy(job);
   });
   const paymentPlot = Object.entries(s.systemPaymentsByMethodPence).filter(([method, amount]) => method !== "Invoice" && method !== "Unknown" && amount > 0).map(([name, amount]) => ({ name, amount: amount / 100 }));
   const colors = ["#1678b5", "#23956b", "#d9a327", "#b85d62"];
@@ -205,16 +216,6 @@ export function DriverReportView({ report, tab, from, to, onTab, onDates, onPage
     {paymentCards?.adjustmentReasons.length ? <details className="rpt-adjustment-reasons"><summary>Adjustment reasons ({paymentCards.adjustmentReasons.length})</summary><ul>{paymentCards.adjustmentReasons.map(row => <li key={row.jobId}><JobLink id={row.jobId} open={onJob} /><span>{row.reason}</span><small>{reportMoney(row.calculatedPence)} → {reportMoney(row.driverCollectionPence)}</small></li>)}</ul></details> : <small>No recorded adjustments</small>}
   </Metric>;
   const manualEntriesCard = <Metric label="Manual Entries" caption="(reported)" value={reportMoney(paymentCards?.manualEntriesKnownPence ?? paymentCards?.manualEntriesPence)} detail={manualEntryWarning ? <span className="rpt-unavailable-count">{manualEntryWarning}</span> : undefined} />;
-  const rangeRoadValue = (type: "tunnel" | "congestion", reported: boolean) => {
-    if (reported) {
-      const totals = s.manualRoadChargeTotals?.[type];
-      const value = totals?.knownJobs ? reportMoney(totals.knownPence) : totals?.missingJobs && !totals.unavailableJobs ? "Not submitted" : "Unavailable";
-      return <>{value}{!!totals?.missingJobs && <small className="rpt-block rpt-unavailable-count">{totals.missingJobs} missing {totals.missingJobs === 1 ? "entry" : "entries"}</small>}{!!totals?.unavailableJobs && <small className="rpt-block rpt-unavailable-count">{totals.unavailableJobs} unavailable job charges</small>}</>;
-    }
-    const totals = s.expectedRoadChargeTotals?.[type];
-    const value = gpsLoading ? "Loading..." : gpsError || report.meta.gpsIncluded === false || totals?.pence == null ? "Unavailable" : reportMoney(totals.pence);
-    return <>{value}{!gpsLoading && !gpsError && !!totals?.unpricedEntries && <small className="rpt-block rpt-unavailable-count">{totals.unpricedEntries} unavailable charge entries</small>}</>;
-  };
   return <div className="rpt-page">
     <header className="rpt-header"><div className="rpt-title"><button title="Back to driver summary" aria-label="Back to driver summary" onClick={onBack}><ArrowLeft size={20} /></button><img src="/tmv-logo.png" alt="The Man Van" /><div><p>Driver Reports &amp; Performance</p><h1>{report.driver.name}</h1><div className="rpt-identity"><span>{report.driver.initials}</span><span>{report.driver.email || "Historical driver"}</span><Badge>{report.driver.hasCurrentAccount ? "Registered driver" : "Archived identity"}</Badge></div></div></div>
       <div className="rpt-export-actions">{driverFilter}{onExport && <button title="Download complete PDF report" aria-label="Download complete PDF report" disabled={!!exporting} onClick={() => onExport("pdf")}>{exporting === "pdf" ? <Loader2 size={18} className="animate-spin" /> : <FileDown size={18} />}<span>PDF</span></button>}
@@ -231,25 +232,51 @@ export function DriverReportView({ report, tab, from, to, onTab, onDates, onPage
     <div role="tabpanel" id={`report-panel-${tab}`} aria-labelledby={`report-tab-${tab}`}>
     {s.completedJobs === 0 ? <Empty>No finished job data</Empty> : <>
     {tab === "performance" && <>
-      <div className="rpt-metrics"><Metric label="Completed Jobs" value={s.completedJobs} detail={`${s.assignedJobs} assigned · ${s.cancelledJobs} cancelled`} icon={CheckCircle2} />{totalChargesCard}{driverCollectionCard}
-        <Metric label="Working Hours" value={reportTime(s.workingMinutesKnown)} detail={s.workingMinutesUnknownJobs ? `${s.workingMinutesUnknownJobs} unknown durations` : "Recorded job boundaries"} icon={Clock} /><Metric label="Moving Hours" value={movingValue} detail={movingDetail} icon={Route} />
+      <div className="rpt-metrics"><Metric label="Completed Jobs" value={s.completedJobs} detail={`${s.assignedJobs} assigned · ${s.cancelledJobs} cancelled`} icon={CheckCircle2} />
+        {scheduledHoursCard}<Metric label="Working Hours" value={reportTime(s.workingMinutesKnown)} detail={s.workingMinutesUnknownJobs ? `${s.workingMinutesUnknownJobs} unknown durations` : "Recorded job boundaries"} icon={Clock} /><Metric label="Moving Hours" value={movingValue} detail={movingDetail} icon={Route} />
         <Metric label="Overtime" value={reportTime(s.overtimeMinutesKnown)} icon={Clock} /><Metric label="Arrival Delays" value={reportTime(s.arrivalDelayMinutesKnown)} icon={Clock} /><Metric label="Reviews Sent / Not Sent" value={`${s.reviewSentJobs} / ${s.reviewNotSentJobs}`} icon={CheckCircle2} /><Metric label="Manual Helper Hours" value={`${s.helperHoursKnown.toFixed(1)}h`} detail={`${s.helpers.length} reported helper names`} icon={Users} /></div>
-      <section className="rpt-section"><h2>Job timings</h2><div className="rpt-table-scroll"><table className="rpt-timings-table" aria-label="Job timings"><thead><tr>{["Job", "Date", "Customer", "On the Way", "Tracker Arrival", "Proof Photo", "Van Loaded", "Empty Van", "Customer Signed"].map(label => <th key={label}>{label}</th>)}</tr></thead><tbody>{currentJobs.map(job => { const gap = arrivalProofGap(job); return <React.Fragment key={job.jobId}><tr className={gap !== null ? "rpt-timing-has-gap" : undefined}><td><JobLink id={job.jobId} open={onJob} /></td><td>{jobDate(job.operationalDate)}</td><td>{job.customer.name}</td>{[job.timings?.onMyWayAt, job.timings?.trackerArrivalAt, job.timings?.proofPhotoAt, job.timings?.vanLoadedAt, job.timings?.emptyVanAt, job.timings?.customerSignedAt].map((at, index) => <td key={index}>{index === 1 && at ? withArrivalDistance(timingTime(at), job.timings?.trackerArrivalDistanceMeters) : timingTime(at)}{index === 1 && !at && <small className="rpt-block rpt-unavailable-count">{job.timings?.trackerUnverifiedReason || "Tracker arrival was not recorded."}</small>}</td>)}</tr>{gap !== null && <tr className="rpt-timing-gap-row"><td colSpan={4} /><td colSpan={2}><Badge tone="bad">Arrival to proof gap ({gap} min)</Badge></td><td colSpan={3} /></tr>}</React.Fragment>; })}</tbody></table></div>{!currentJobs.length && <Empty>No jobs for the selected dates.</Empty>}{pageControls}</section>
+      <section className="rpt-section"><h2>Job timings</h2><div className="rpt-table-scroll"><table className="rpt-timings-table" aria-label="Job timings"><thead><tr>{["Job", "Date", "Customer", "On the Way", "Tracker Pick-up arrival", "Proof Photo", "Van Loaded", "Tracker Drop-off arrival", "Empty Van", "Tracker Drop-off departure", "Customer Signed"].map(label => <th key={label}>{label}</th>)}</tr></thead><tbody>{currentJobs.map(job => { const gap = arrivalProofGap(job); return <React.Fragment key={job.jobId}><tr className={gap !== null ? "rpt-timing-has-gap" : undefined}><td><JobLink id={job.jobId} open={onJob} /></td><td>{jobDate(job.operationalDate)}</td><td>{job.customer.name}</td>{[job.timings?.onMyWayAt, job.timings?.trackerArrivalAt, job.timings?.proofPhotoAt, job.timings?.vanLoadedAt, job.timings?.trackerDropoffArrivalAt, job.timings?.emptyVanAt, job.timings?.trackerDropoffDepartureAt, job.timings?.customerSignedAt].map((at, index) => <td key={index}>{index === 1 && at ? withArrivalDistance(timingTime(at), job.timings?.trackerArrivalDistanceMeters) : timingTime(at)}{index === 1 && !at && <small className="rpt-block rpt-unavailable-count">{job.timings?.trackerUnverifiedReason || "Tracker arrival was not recorded."}</small>}</td>)}</tr>{gap !== null && <tr className="rpt-timing-gap-row"><td colSpan={4} /><td colSpan={2}><Badge tone="bad">Arrival to proof gap ({gap} min)</Badge></td><td colSpan={5} /></tr>}</React.Fragment>; })}</tbody></table></div>{!currentJobs.length && <Empty>No jobs for the selected dates.</Empty>}{pageControls}</section>
+      <section className="rpt-section"><div className="rpt-section-heading"><h2>Job-wise performance &amp; timings</h2><label>Job<select aria-label="Performance job" value={selectedJob} onChange={event => setSelectedJob(event.target.value)}><option value="">All jobs on this page</option>{report.jobs.items.map(job => <option key={job.jobId} value={job.jobId}>{job.jobId} - {job.customer.name}</option>)}</select></label></div>
+        {currentJobs.map(job => <details className="rpt-job" key={job.jobId}><summary><ChevronDown size={16} aria-hidden="true" /><JobRowIdentity job={job} /><span>{reportTime(job.duration.workingMinutes)}</span></summary><div className="rpt-job-body"><JobPerformanceDetails job={job} gpsLoading={gpsLoading} showRoadCharges={false} showPayments={false} /></div></details>)}
+        {!currentJobs.length && <Empty>No jobs for the selected dates.</Empty>}{pageControls}
+      </section>
       <Suspense fallback={<section className="rpt-section" aria-label="Selected range performance charts"><h2>Daily performance</h2><div role="status" className="rpt-chart flex items-center justify-center gap-2"><Loader2 className="animate-spin" size={20} />Loading charts...</div></section>}><DriverPerformanceCharts trends={report.trends} /></Suspense>
       <section className="rpt-section"><h2>Manual helper hours</h2>{s.helpers.length ? <div className="rpt-table-scroll"><table><thead><tr><th>Helper</th><th>Reported hours</th><th>Jobs</th></tr></thead><tbody>{s.helpers.map(helper => <tr key={helper.name}><td>{helper.name}</td><td>{helper.hours.toFixed(1)}h</td><td>{helper.jobs}</td></tr>)}</tbody></table></div> : <Empty>No helper entries for this range.</Empty>}</section>
     </>}
     {tab === "payments" && <>
-      <div className="rpt-metrics rpt-payment-metrics">{totalChargesCard}{driverCollectionCard}{manualEntriesCard}
-        <Metric label="Outstanding" value={reportMoney(paymentCards?.outstandingPence)} detail={`Driver Collected - Manual Entries${paymentCards?.manualEntryUnknownJobs ? " · Entries incomplete" : ""}`} />
+      <div className="rpt-metrics rpt-payment-metrics">{totalChargesCard}{driverCollectionCard}{scheduledHoursCard}
         <Metric label="Overtime Charges" value={reportMoney(s.overtimeChargesPence)} icon={Clock} incomplete={!!s.overtimeChargesUnknownJobs || !!s.overtimeMinutesUnknownJobs}
           detail={`${s.completedJobs > 0 && s.overtimeMinutesUnknownJobs === s.completedJobs ? "Hours unavailable" : `${reportTime(s.overtimeMinutesKnown)} overtime`}${s.overtimeMinutesUnknownJobs ? ` · ${s.overtimeMinutesUnknownJobs} missing durations` : ""}${s.overtimeChargesUnknownJobs ? ` · ${s.overtimeChargesUnknownJobs} missing charges` : ""}`} /></div>
       <div className="rpt-chart-pair"><section className="rpt-section"><h2>Received payment methods</h2>{paymentPlot.length ? <div className="rpt-chart" role="img" aria-label="Payment method distribution"><ResponsiveContainer><PieChart><Pie data={paymentPlot} dataKey="amount" nameKey="name" innerRadius={65} outerRadius={100} paddingAngle={3} isAnimationActive={false}>{paymentPlot.map((item, index) => <Cell key={item.name} fill={colors[index % colors.length]} />)}</Pie><Tooltip formatter={(value: number) => reportMoney(value * 100)} /></PieChart></ResponsiveContainer></div> : <Empty>No recorded receipts.</Empty>}</section>
-        <section className="rpt-section"><h2>Financial breakdown</h2><div className="rpt-table-scroll"><table><thead><tr><th>Method</th><th>Recorded amount</th><th>Basis</th></tr></thead><tbody>{Object.entries(s.systemPaymentsByMethodPence).filter(([method]) => method !== "Unknown").map(([method, amount]) => <tr key={method}><td>{method}</td><td>{reportMoney(amount)}</td><td>{method === "Invoice" ? <Badge tone="warning">Uncollected</Badge> : method === "Unknown" ? <Badge tone="warning">Unverified</Badge> : "Job-flow receipt"}</td></tr>)}</tbody><tfoot><tr><th scope="row">Total</th><td>{reportMoney(paymentCards?.jobFlowTotalPence)}</td><td>{paymentCards?.jobFlowUnknownJobs ? `${paymentCards.jobFlowUnknownJobs} unverified job-flow entries` : "Job flow, including invoices"}</td></tr></tfoot></table></div>{s.systemPaymentsByMethodPence.Unknown > 0 && <p className="rpt-warning" role="status">Unclassified payment: {reportMoney(s.systemPaymentsByMethodPence.Unknown)}. Payment method requires verification.</p>}</section></div>
+        <section className="rpt-section"><h2>Financial breakdown</h2><FinancialBreakdown name="Financial breakdown" methods={s.systemPaymentsByMethodPence}
+          base={s.financialBreakdown?.basePence} overtime={s.overtimeChargesPence} congestion={roadTotals?.congestionPence} tunnel={roadTotals?.tunnelPence}
+          extras={s.financialBreakdown?.extraCharges} invoiceJobs={s.financialBreakdown?.invoiceJobs ?? (s.systemPaymentsByMethodPence.Invoice > 0 ? 1 : 0)}
+          total={Object.values(s.systemPaymentsByMethodPence).reduce((sum, amount) => sum + amount, 0)}
+          issueJobs={paymentCards?.jobFlowUnverifiedJobIds ?? report.jobs.items.filter(job => job.finance.systemPayments.issues.length > 0).map(job => job.jobId)} onJob={onJob}
+          issues={paymentCards?.jobFlowUnknownJobs ? [`${paymentCards.jobFlowUnknownJobs} job payment records need verification. Total shows recorded amounts.`] : []} /></section></div>
+      <section className="rpt-section"><div className="rpt-section-heading"><h2>Job-wise payment breakdown</h2><label>Job<select aria-label="Payment job" value={selectedJob} onChange={event => setSelectedJob(event.target.value)}><option value="">All jobs on this page</option>{report.jobs.items.map(job => <option key={job.jobId} value={job.jobId}>{job.jobId} - {job.customer.name}</option>)}</select></label></div>
+        {currentJobs.map(job => <details className="rpt-job" key={job.jobId}><summary><ChevronDown size={16} aria-hidden="true" /><JobRowIdentity job={job} /><span>{reportMoney(Object.values(job.finance.systemPayments.byMethod).reduce((sum, amount) => sum + amount, 0))}</span></summary><div className="rpt-job-body"><JobFinancialBreakdown job={job} />{job.finance.adjustmentNote && <details className="rpt-chart-data"><summary>Adjustment reason</summary><p>{job.finance.adjustmentNote}</p></details>}</div></details>)}
+        {!currentJobs.length && <Empty>No jobs for the selected dates.</Empty>}{pageControls}
+      </section>
     </>}
-    {tab === "comparison" && <section className="rpt-section"><div className="rpt-comparison-sides rpt-range-totals"><section><h3>System totals · selected range</h3><SideRow name="Expected Amount" value={reportMoney(paymentCards?.totalChargesPence)} /><SideRow name="Driver Collected" value={reportMoney(paymentCards?.driverCollectionPence)} /><SideRow name="Working Time" value={reportTime(s.workingMinutesKnown)} /><SideRow name="Helper Hours" value="Not recorded" /><SideRow name="Tunnel Charges (Expected)" value={rangeRoadValue("tunnel", false)} /><SideRow name="Congestion Charges (Expected)" value={rangeRoadValue("congestion", false)} /></section><section><h3>Manual totals · selected range</h3><SideRow name="Reported Amount" value={reportMoney(paymentCards?.manualEntriesKnownPence ?? paymentCards?.manualEntriesPence)} /><SideRow name="Reported Time" value={reportTime(s.manualMinutesKnown)} /><SideRow name="Helper Hours" value={`${s.helperHoursKnown.toFixed(1)}h`} /><SideRow name="Tunnel Charges (reported)" value={rangeRoadValue("tunnel", true)} /><SideRow name="Congestion Charges (reported)" value={rangeRoadValue("congestion", true)} /></section></div>
+    {tab === "comparison" && <section className="rpt-section"><div className="rpt-comparison-sides rpt-range-totals" style={{ gridTemplateRows: `repeat(${5 + Object.keys(s.systemPaymentsByMethodPence).length}, auto)` }}>
+      <section style={{ gridRow: `span ${5 + Object.keys(s.systemPaymentsByMethodPence).length}` }}><h3>System totals · selected range</h3>
+        <SideRow name="Expected Amount" value={reportMoney(paymentCards?.totalChargesPence)} />
+        <SideRow name="Scheduled Hours" value={scheduledValue} />
+        <SideRow name="Working Hours" value={reportTime(s.workingMinutesKnown)} />
+        <SideRow name="" value={null} />
+        {Object.keys(s.systemPaymentsByMethodPence).map(method => <SideRow key={method} name="" value={null} />)}
+      </section>
+      <section style={{ gridRow: `span ${5 + Object.keys(s.systemPaymentsByMethodPence).length}` }}><h3>Manual totals · selected range</h3>
+        <SideRow name="Driver Collected" value={<>{reportMoney(paymentCards?.driverCollectionPence)}{!!paymentCards?.adjustmentReasons.length && <details className="rpt-chart-data"><summary>Adjustment reasons ({paymentCards.adjustmentReasons.length})</summary>{paymentCards.adjustmentReasons.map(row => <p key={row.jobId}><JobLink id={row.jobId} open={onJob} />: {row.reason}</p>)}</details>}</>} />
+        <SideRow name="" value={null} />
+        <SideRow name="Reported Hours" value={reportTime(s.manualMinutesKnown)} />
+        <SideRow name="Helper Hours" value={reportTime(s.helperHoursKnown * 60)} />
+        {Object.entries(s.systemPaymentsByMethodPence).map(([method, amount]) => <SideRow key={method} name={method === "Invoice" ? "Invoice pending" : method} value={reportMoney(amount)} />)}
+      </section></div>
       <div className="rpt-section-heading rpt-comparison-heading"><h2>System / Manual comparison</h2><div className="rpt-filter-row"><label>Jobs<select aria-label="Comparison jobs" value={selectedJob} onChange={event => setSelectedJob(event.target.value)}><option value="">All jobs on this page</option>{report.jobs.items.map(job => <option key={job.jobId} value={job.jobId}>{job.jobId}</option>)}</select></label><label>Status<select aria-label="Comparison status" value={comparisonScope} onChange={event => setComparisonScope(event.target.value)}><option value="all">All statuses</option><option value="differences">Discrepancies</option><option value="pending">Pending submissions</option></select></label></div></div>
       {compared.length ? compared.map((job, index) => <details className="rpt-job" key={job.jobId} open={index === 0}><summary><ChevronDown size={16} className="rpt-expand-indicator" aria-hidden="true" /><JobRowIdentity job={job} /><div><Badge tone={!job.manualDetails ? "warning" : "neutral"}>{job.manualDetails ? "Submitted" : "Pending"}</Badge><span>{reportMoney(job.finance.acceptedPence)} / {reportMoney(job.finance.manualPayments?.collectedPence)}</span></div></summary><JobComparison job={job} openJob={onJob} gpsLoading={gpsLoading} gpsUnavailable={!!gpsError || report.meta.gpsIncluded === false && !gpsLoading} /></details>) : <Empty>No matching comparisons on this page.</Empty>}{pageControls}</section>}
-    {tab === "jobs" && <section className="rpt-section"><h2>Selected range totals</h2><div className="rpt-metrics"><Metric label="Total Jobs" value={s.assignedJobs} detail={`${s.completedJobs} completed · ${s.cancelledJobs} cancelled`} icon={CheckCircle2} />{totalChargesCard}{driverCollectionCard}{manualEntriesCard}<Metric label="Tunnel Charges" value={reportMoney(roadTotals?.tunnelPence)} detail={roadTotals?.tunnelUnknownJobs ? <span className="rpt-unavailable-count">{roadTotals.tunnelUnknownJobs} unavailable job charges</span> : "Saved completed-job charges"} /><Metric label="Congestion Charges" value={reportMoney(roadTotals?.congestionPence)} detail={roadTotals?.congestionUnknownJobs ? <span className="rpt-unavailable-count">{roadTotals.congestionUnknownJobs} unavailable job charges</span> : "Saved completed-job charges"} /><Metric label="Working Time" value={reportTime(s.workingMinutesKnown)} detail={s.workingMinutesUnknownJobs ? `${s.workingMinutesUnknownJobs} unavailable durations` : undefined} icon={Clock} /><Metric label="Moving Time" value={movingValue} detail={movingDetail} icon={Route} /><Metric label="Overtime" value={reportTime(s.overtimeMinutesKnown)} icon={Clock} /><Metric label="Reviews Sent / Not Sent" value={`${s.reviewSentJobs} / ${s.reviewNotSentJobs}`} icon={CheckCircle2} /></div><h2>Job history</h2>{currentJobs.length ? currentJobs.map(job => <details className="rpt-job" key={job.jobId}><summary><ChevronDown size={16} className="rpt-expand-indicator" aria-hidden="true" /><JobRowIdentity job={job} /><div><Badge tone={job.status === "COMPLETED" ? "good" : "neutral"}>{job.status}</Badge><strong>{reportMoney(job.finance.expectedPence)}</strong></div></summary><div className="rpt-job-body"><div className="rpt-job-heading"><span>{job.pickup} → {job.dropoff}</span><JobLink id={job.jobId} open={onJob} /></div>
+    {tab === "jobs" && <section className="rpt-section"><h2>Selected range totals</h2><div className="rpt-metrics"><Metric label="Total Jobs" value={s.assignedJobs} detail={`${s.completedJobs} completed · ${s.cancelledJobs} cancelled`} icon={CheckCircle2} />{totalChargesCard}{driverCollectionCard}{manualEntriesCard}<Metric label="Tunnel Charges" value={reportMoney(roadTotals?.tunnelPence)} detail={roadTotals?.tunnelUnknownJobs ? <span className="rpt-unavailable-count">{roadTotals.tunnelUnknownJobs} unavailable job charges</span> : "Saved completed-job charges"} /><Metric label="Congestion Charges" value={reportMoney(roadTotals?.congestionPence)} detail={roadTotals?.congestionUnknownJobs ? <span className="rpt-unavailable-count">{roadTotals.congestionUnknownJobs} unavailable job charges</span> : "Saved completed-job charges"} />{scheduledHoursCard}<Metric label="Working Hours" value={reportTime(s.workingMinutesKnown)} detail={s.workingMinutesUnknownJobs ? `${s.workingMinutesUnknownJobs} unavailable durations` : undefined} icon={Clock} /><Metric label="Moving Time" value={movingValue} detail={movingDetail} icon={Route} /><Metric label="Overtime" value={reportTime(s.overtimeMinutesKnown)} icon={Clock} /><Metric label="Reviews Sent / Not Sent" value={`${s.reviewSentJobs} / ${s.reviewNotSentJobs}`} icon={CheckCircle2} /></div><h2>Job history</h2>{currentJobs.length ? currentJobs.map(job => <details className="rpt-job" key={job.jobId}><summary><ChevronDown size={16} className="rpt-expand-indicator" aria-hidden="true" /><JobRowIdentity job={job} /><div><Badge tone={job.status === "COMPLETED" ? "good" : "neutral"}>{job.status}</Badge><strong>{reportMoney(job.finance.expectedPence)}</strong></div></summary><div className="rpt-job-body"><div className="rpt-job-heading"><span>{job.pickup} → {job.dropoff}</span><JobLink id={job.jobId} open={onJob} /></div>
       <section className="rpt-section rpt-job-section rpt-job-section-white"><h3>Customer &amp; schedule</h3><div className="rpt-job-facts"><SideRow name="Customer" value={job.customer.name} /><SideRow name="Phone" value={job.customer.phone || "Not recorded"} /><SideRow name="Email" value={job.customer.email || "Not recorded"} /></div>
         <div className="rpt-table-scroll"><table className="rpt-job-detail-table rpt-schedule-table" aria-label="Scheduled and actual timings"><thead><tr><th scope="col">Timing</th><th scope="col">Scheduled</th><th scope="col">Actual</th></tr></thead><tbody><tr><th scope="row">Start</th><td>{date(job.bookedStart)}</td><td>{date(job.actualStart)}</td></tr><tr><th scope="row">Finish</th><td>{date(job.bookedFinish)}</td><td>{date(job.actualFinish)}</td></tr></tbody></table></div>
       </section>

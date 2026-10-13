@@ -356,6 +356,7 @@ export async function normalizeMongoDataset(dataset: MongoDataset): Promise<Norm
     const driverJobSummaryDoc = driverJobSummaryByJob.get(jobId);
     const driverJobSummary = driverJobSummaryDoc ? {
       schemaVersion: driverJobSummaryDoc.schemaVersion,
+      driverJobHours: driverJobSummaryDoc.driverJobHours,
       noPaymentReceived: driverJobSummaryDoc.noPaymentReceived,
       invoiceAmountPence: driverJobSummaryDoc.invoiceAmountPence,
       chargeItems: driverJobSummaryDoc.chargeItems,

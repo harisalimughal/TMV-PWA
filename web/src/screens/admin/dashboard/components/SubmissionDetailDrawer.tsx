@@ -452,7 +452,7 @@ export function SubmissionDetailDrawer({ job: initialJob, isOpen, onClose, onNav
               value={normalizedJob.onMyWayAt ? formatLondonDateTime(normalizedJob.onMyWayAt) : "Not recorded"}
             />
             <DetailRow
-              label="Tracker arrival time"
+              label="Tracker Pick-up arrival"
               value={
                 normalizedJob.trackerArrivalAt ? (
                   withArrivalDistance(formatLondonDateTime(normalizedJob.trackerArrivalAt), normalizedJob.trackerArrivalDistanceMeters)

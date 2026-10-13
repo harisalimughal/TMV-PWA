@@ -74,7 +74,8 @@ export interface DriverJobSummary {
   paymentMethod: string;
   amountCollectedPence: number;
   paymentBreakdown?: Array<{ method: "Cash" | "Card" | "Link" | "Bank Transfer" | "Invoice" | "Invoice/Transfer"; amountPence: number }>;
-  schemaVersion?: 2;
+  schemaVersion?: 2 | 3;
+  driverJobHours?: number;
   noPaymentReceived?: boolean;
   invoiceAmountPence?: number;
   chargeItems?: Array<{ type: "congestion" | "tunnel"; amountPence: number | null; name?: string; reference?: string }>;

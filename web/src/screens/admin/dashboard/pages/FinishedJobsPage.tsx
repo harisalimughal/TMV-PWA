@@ -555,7 +555,7 @@ export function FinishedJobsPage({
                             <span className="block text-[11px] text-admin-muted/70 mt-0.5">On my way: {onMyWayTime}</span>
                           )}
                           <span className={`block text-[11px] mt-0.5 ${trackerArrivalTime ? "text-admin-muted/70" : "text-admin-status-red"}`}>
-                            Tracker arrival: {trackerArrivalTime || (job.trackerUnverifiedReason ? `Unverified (${job.trackerUnverifiedReason})` : "Unverified")}
+                            Tracker Pick-up arrival: {trackerArrivalTime || (job.trackerUnverifiedReason ? `Unverified (${job.trackerUnverifiedReason})` : "Unverified")}
                           </span>
                           {pickupArrivalTime && <span className="block text-[11px] text-admin-muted/70 mt-0.5">Proof photo: {pickupArrivalTime}</span>}
                           {vanLoadedTime && (

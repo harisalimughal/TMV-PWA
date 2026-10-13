@@ -15,7 +15,7 @@ export function exportLabel(value: string): string {
 }
 
 export const exportNotes = [
-  "Payment cards: Total Charges is the original calculation; Driver Collected is the final driver-charged amount; Manual Entries shows the available valid manual-form collection subtotal with missing/invalid entry counts. Card Outstanding = Driver Collected - Manual Entries, signed and without adding prepayments; the complete balance stays unknown until required entries are available. This entry comparison is separate from verified debt/prepayment reconciliation.",
+  "Payment totals include recorded payment methods and invoice balances. Base price, overtime and extra charges are components of the job total, not additional receipts. Invoice bookings are identified by the INV title tag or recorded Invoice selection. Invoice balances are uncollected, and missing receipt records remain unverified.",
   "Currency: GBP. Money is calculated in integer pence; exported currency cells are pounds. Durations retain their stated units.",
   "Unknown values are not zero. Summary amounts labelled Known are subtotals; unknown-job counts indicate incomplete totals.",
   "Jobs use recorded operational start, otherwise booking. GPS uses occurrence time; liabilities use their labelled incident/submission basis. Range end is exclusive.",
@@ -90,7 +90,7 @@ export function exportSections(report: ExportReport): ExportSection[] {
     { name: "Performance", tables: [records("Trend data", report.trends, ["period", "completedJobs", "expectedKnownPence"]), records("Helper totals", report.summary.helpers, ["name", "hours", "jobs"])] },
     { name: "Payments", tables: [records("Payment method records", payments.map(({ byMethod, ...row }) => ({ ...row, byMethodPence: byMethod }))), records("Confirmed prepayment source records", report.jobs.flatMap(job => job.confirmedPrepayments.map(row => ({ jobId: job.jobId, ...row }))))] },
     { name: "Jobs", tables: [records("Complete job records", report.jobs.map(({ manualDetails, roadCharges, ...job }) => ({ ...job,
-      manual: manualDetails ? { startTime: manualDetails.startTime, endTime: manualDetails.endTime, helperName: manualDetails.helperName, helperHours: manualDetails.helperHours,
+      manual: manualDetails ? { driverJobHours: manualDetails.driverJobHours, startTime: manualDetails.startTime, endTime: manualDetails.endTime, helperName: manualDetails.helperName, helperHours: manualDetails.helperHours,
         submittedAt: manualDetails.submittedAt, chargeItems: manualDetails.chargeItems, paymentBreakdown: manualDetails.paymentBreakdown, noPaymentReceived: manualDetails.noPaymentReceived } : null }))) ] },
     { name: "Comparison", tables: [records("System vs driver manual details", comparison)] },
     { name: "Tunnels", tables: road("tunnel") }, { name: "Congestion", tables: road("congestion") },

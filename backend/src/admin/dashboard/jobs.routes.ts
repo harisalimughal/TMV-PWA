@@ -9,6 +9,7 @@
 import { Router } from "express";
 import { DateTime } from "luxon";
 import { env } from "../../config/env";
+import { geocodeAddress } from "../../integrations/geocode";
 import { getDriverProfileByInitials, listDriverProfiles } from "../../auth/driver-account.service";
 import { createCalendarEvent, deleteCalendarEvent, getCalendarEvent, updateCalendarEvent } from "../../google/calendar";
 import { parseCalendarEvent, syncBookingsForDate, withReassignedInitials } from "../../jobs/booking.service";
@@ -762,7 +763,7 @@ async function mirrorNewJob(calendarEventId: string, fields: NewJobFields): Prom
     jobId, calendarEventId,
     driverInitials: fields.driverInitials, customerName: fields.customerName,
     customerEmail: fields.customerEmail, customerPhone: fields.customerPhone,
-    pickup: fields.pickup, dropoff: fields.dropoff, stopBy: "", floorFrom: "", floorTo: "", crewSize: fields.crewSize,
+    pickup: fields.pickup, dropoff: fields.dropoff, dropoffLocation: (await geocodeAddress(fields.dropoff)) ?? undefined, stopBy: "", floorFrom: "", floorTo: "", crewSize: fields.crewSize,
     vanSize: "", hireDurationText: "", extraRequest: "", inventory: "", extraChargeText: "",
     basePrice: fields.price, paidOnline: fields.paidOnline,
     bookedStart: fields.bookedStart, bookedFinish: fields.bookedFinish,

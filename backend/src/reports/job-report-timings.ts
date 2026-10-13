@@ -21,6 +21,8 @@ export function jobReportTimings(job: Job, records: EvidenceRecord[] = []) {
     !Number.isFinite(age) || age < 0 || age > 120000 ? "stale" : "reporting";
   return { onMyWayAt: instant(job.onMyWayAt), trackerArrivalAt: instant(job.trackerArrivalAt), trackerArrivalDistanceMeters: recordedArrivalDistance(job.trackerArrivalDistanceMeters) ?? null,
     trackerUnverifiedReason: trackerArrivalReason(job, trackerStatus) ?? null,
+    trackerDropoffArrivalAt: instant(job.dropoffTracking?.arrivalAt), trackerDropoffDepartureAt: instant(job.dropoffTracking?.departureAt),
+    trackerDropoffUnverifiedReason: job.dropoffTracking?.unverifiedReason ?? (!job.dropoffLocation ? "Drop-off address has no verified coordinates." : !job.vanLoadedAt ? "Van-loaded time was not recorded." : null),
     proofPhotoAt: proof.at, vanLoadedAt: loaded.at, emptyVanAt: empty.at,
     customerSignedAt: instant(job.clientSignatureAt), proofPhotoSource: proof.source, vanLoadedSource: loaded.source, emptyVanSource: empty.source };
 }

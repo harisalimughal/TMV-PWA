@@ -27,6 +27,8 @@ export interface Job {
   pickup: string;
   pickupLocation?: { lat: number; lng: number };
   dropoff: string;
+  dropoffLocation?: { lat: number; lng: number };
+  dropoffTracking?: { arrivalAt?: string; departureAt?: string; unverifiedReason?: string };
   /** Optional mid-route stop ("stop by" / waypoint), parsed from the Calendar
    *  description (see backend's booking.service.ts) if the booking mentions one.
    *  The driver workflow no longer asks for or collects stop-by evidence; this remains
@@ -117,7 +119,8 @@ export interface DriverJobSummary {
   paymentMethod: string;
   amountCollectedPence: number;
   paymentBreakdown?: Array<{ method: DriverJobSummaryPaymentMethod | "Invoice/Transfer"; amountPence: number }>;
-  schemaVersion?: 2;
+  schemaVersion?: 2 | 3;
+  driverJobHours?: number;
   noPaymentReceived?: boolean;
   invoiceAmountPence?: number;
   chargeItems?: Array<{ type: "congestion" | "tunnel"; amountPence: number | null; name?: string; reference?: string }>;
@@ -125,17 +128,18 @@ export interface DriverJobSummary {
 }
 
 export interface DriverJobSummaryInput {
-  startTime: string;
-  endTime: string;
-  schemaVersion?: 2;
+  startTime?: string;
+  endTime?: string;
+  schemaVersion?: 2 | 3;
+  driverJobHours?: string;
   noPaymentReceived?: boolean;
   chargeItems?: Array<{ type: "congestion" | "tunnel"; amount: string; name?: string; reference?: string }>;
   congestionCharge?: boolean;
   congestionChargeAmount?: string;
-  helperName: string;
+  helperName?: string;
   helperHours: string;
-  paymentMethods: DriverJobSummaryPaymentMethod[];
-  paymentAmounts: Record<DriverJobSummaryPaymentMethod, string>;
+  paymentMethods?: DriverJobSummaryPaymentMethod[];
+  paymentAmounts?: Record<DriverJobSummaryPaymentMethod, string>;
 }
 
 export interface ActivityEntry {
