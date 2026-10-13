@@ -8,6 +8,23 @@ vi.mock("../api", () => ({ fetchRoadAssessment: vi.fn().mockResolvedValue({ flag
 vi.stubGlobal("ResizeObserver", class { observe() {} unobserve() {} disconnect() {} });
 const props = { from: "2026-10-05", to: "2026-10-11", groupBy: "day" as const, onTab: vi.fn(), onDates: vi.fn(), onGroup: vi.fn(), onPage: vi.fn(), onJob: vi.fn(), onBack: vi.fn(), onRefresh: vi.fn() };
 describe("Driver report evidence and comparison UI", () => {
+  it.each([
+    ["payments", "Payment job"],
+    ["performance", "Performance job"],
+    ["comparison", "Comparison jobs"],
+  ] as const)("labels %s job options with customer and London scheduled date/time", async (tab, label) => {
+    const report = await sampleDriverReport("DEMO", { from: props.from, to: props.to, pageSize: 2 });
+    const job = report.jobs.items[0];
+    job.customer.name = "Test Customer";
+    job.bookedStart = "2026-10-05T13:30:00Z";
+    render(<DriverReportView {...props} report={report} tab={tab} />);
+    const select = screen.getByRole("combobox", { name: label });
+    const option = within(select).getByRole("option", { name: "Test Customer - 05 Oct 2026, 14:30" });
+    expect(option).toHaveValue(job.jobId);
+    expect(option).not.toHaveTextContent(job.jobId);
+    fireEvent.change(select, { target: { value: job.jobId } });
+    expect(select).toHaveValue(job.jobId);
+  });
   it("opens unverified jobs from the yellow warning even when the job is on another report page", async () => {
     const report = await sampleDriverReport("DEMO", { from: props.from, to: props.to, pageSize: 1 });
     report.summary.paymentCards = { ...report.summary.paymentCards!, jobFlowUnknownJobs: 1, jobFlowUnverifiedJobIds: ["OFF-PAGE-UNVERIFIED"] };
@@ -17,24 +34,25 @@ describe("Driver report evidence and comparison UI", () => {
     fireEvent.click(within(warning as HTMLElement).getByRole("button", { name: "OFF-PAGE-UNVERIFIED" }));
     expect(onJob).toHaveBeenCalledWith("OFF-PAGE-UNVERIFIED");
   });
-  it("filters expandable job-wise payment and performance details without changing range totals", async () => {
+  it("filters the single upper timings table and restores all jobs without changing range totals", async () => {
     const report = await sampleDriverReport("DEMO", { from: props.from, to: props.to, pageSize: 2 });
     render(<DriverReportView {...props} report={report} tab="performance" />);
     const selected = report.jobs.items[1];
-    fireEvent.change(screen.getByRole("combobox", { name: "Performance job" }), { target: { value: selected.jobId } });
-    const section = screen.getByRole("heading", { name: "Job-wise performance & timings" }).closest("section")!;
-    const jobs = section.querySelectorAll("details.rpt-job");
-    expect(jobs).toHaveLength(1);
-    expect(jobs[0]).not.toHaveAttribute("open");
-    fireEvent.click(jobs[0].querySelector("summary")!);
-    expect(jobs[0]).toHaveTextContent(selected.jobId);
-    const table = within(jobs[0] as HTMLElement).getByRole("table", { name: "Job Performance & Timings" });
-    for (const label of ["Scheduled Hours", "Working Hours", "Reported Hours", "Overtime"]) expect(table).toHaveTextContent(label);
-    expect(within(jobs[0] as HTMLElement).queryByRole("table", { name: "Job financial breakdown" })).not.toBeInTheDocument();
-    expect(within(jobs[0] as HTMLElement).queryByRole("table", { name: "Job Payments" })).not.toBeInTheDocument();
+    const section = screen.getByRole("heading", { name: "Job timings" }).closest("section")!;
+    const select = within(section).getByRole("combobox", { name: "Performance job" });
+    const table = screen.getByRole("table", { name: "Job timings" });
+    expect(table.querySelectorAll("tbody tr")).toHaveLength(2);
+    expect(screen.queryByRole("heading", { name: "Job-wise performance & timings" })).not.toBeInTheDocument();
+    expect(document.querySelector("details.rpt-job")).toBeNull();
+    expect(screen.getAllByRole("button", { name: "Next jobs page" })).toHaveLength(1);
+    fireEvent.change(select, { target: { value: selected.jobId } });
+    expect(table.querySelectorAll("tbody tr")).toHaveLength(1);
+    expect(table).toHaveTextContent(selected.jobId);
+    expect(table).not.toHaveTextContent(report.jobs.items[0].jobId);
     expect(screen.getByRole("tabpanel", { name: "Performance & Timings" })).not.toHaveTextContent("Driver Collected");
-    expect(screen.getByRole("table", { name: "Job timings" }).querySelectorAll("tbody tr")).toHaveLength(1);
     expect(document.querySelector(".rpt-metrics")).toHaveTextContent(String(report.summary.completedJobs));
+    fireEvent.change(select, { target: { value: "" } });
+    expect(table.querySelectorAll("tbody tr")).toHaveLength(2);
   });
   it("shows missing tracker-arrival reasons in red in Performance & Timings and job details", async () => {
     const report = await sampleDriverReport("DEMO", { from: props.from, to: props.to, pageSize: 1 });
