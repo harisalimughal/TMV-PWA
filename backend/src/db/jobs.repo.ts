@@ -1,4 +1,4 @@
-import { jobsCollection } from "./mongo";
+import { getClient, jobsCollection } from "./mongo";
 import { Job } from "../jobs/job.types";
 import { DateTime } from "luxon";
 import { invalidateReportReads } from "../reports/report-read-cache";
@@ -13,6 +13,23 @@ export async function upsertJob(job: Job): Promise<void> {
   const col = await jobsCollection();
   await col.replaceOne({ _id: job.jobId } as any, { _id: job.jobId, ...job } as any, { upsert: true });
   invalidateReportReads();
+}
+
+/** Preserve the completed attempt and publish its clean replacement atomically. */
+export async function saveRescheduledAttempt(previous: Job, next: Job): Promise<void> {
+  const client = await getClient();
+  const col = await jobsCollection();
+  const session = client.startSession();
+  try {
+    await session.withTransaction(async () => {
+      const result = await col.updateOne({ _id: previous.jobId, status: "COMPLETED", updatedAt: previous.updatedAt,
+        rescheduledToJobId: { $exists: false } } as any,
+      { $set: { rescheduledToJobId: next.jobId, rescheduleNotice: next.rescheduleNotice, updatedAt: next.createdAt } }, { session });
+      if (result.modifiedCount !== 1) throw new Error("Completed booking changed while rescheduling; retry sync.");
+      await col.insertOne({ _id: next.jobId, ...next } as any, { session });
+    });
+    invalidateReportReads();
+  } finally { await session.endSession(); }
 }
 
 export async function getJob(jobId: string): Promise<Job | null> {

@@ -15,6 +15,18 @@ vi.mock("../src/db/settings.repo", () => ({
 import { normalizeMongoDataset } from "../src/admin/dashboard/normalize";
 
 describe("normalizeMongoDataset", () => {
+  it("exposes reassignment warnings and links while resolving the real Calendar event", async () => {
+    const notice = { kind: "admin-completed", detectedAt: "2026-10-16T08:00:00Z", previousStart: "2026-10-13T08:00:00Z",
+      previousFinish: "2026-10-13T10:00:00Z", previousDriverInitials: "TI", scheduledStart: "2026-10-16T12:00:00Z",
+      scheduledFinish: "2026-10-16T14:00:00Z", driverInitials: "MK" };
+    const [normalized] = await normalizeMongoDataset({
+      jobs: [{ jobId: "NEW", calendarEventId: "reschedule:NEW", sourceCalendarEventId: "calendar-event",
+        rescheduledFromJobId: "OLD", rescheduleNotice: notice, status: JobStatus.READY, driverInitials: "MK",
+        bookedStart: notice.scheduledStart, bookedFinish: notice.scheduledFinish, totalCharges: 115, extraCharges: [] } as any],
+      evidence: [], activity: [], exceptions: [], scenarioSubmissions: [], fetchedAt: notice.detectedAt, durationMs: 0
+    });
+    expect(normalized).toMatchObject({ calendarEventId: "calendar-event", rescheduledFromJobId: "OLD", rescheduleNotice: notice });
+  });
   it("uses verified GPS for arrival delay while keeping proof time and billing boundaries separate", async () => {
     const [normalized] = await normalizeMongoDataset({
       jobs: [{ jobId: "GPS-ARRIVAL", status: JobStatus.COMPLETED, driverInitials: "AB",

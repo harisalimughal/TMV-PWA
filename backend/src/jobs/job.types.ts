@@ -49,6 +49,16 @@ export interface DriverProfile {
 export interface Job {
   jobId: string;
   calendarEventId: string;
+  /** Live event ID for a replacement attempt; its indexed calendarEventId is attempt-specific. */
+  sourceCalendarEventId?: string;
+  rescheduledFromJobId?: string;
+  rescheduledToJobId?: string;
+  rescheduleNotice?: {
+    kind: "driver-completed" | "admin-completed";
+    detectedAt: string;
+    previousStart: string; previousFinish: string; previousDriverInitials: string;
+    scheduledStart: string; scheduledFinish: string; driverInitials: string;
+  };
   driverInitials: string;
   customerName: string;
   customerEmail: string;

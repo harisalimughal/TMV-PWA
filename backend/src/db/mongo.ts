@@ -108,7 +108,7 @@ export interface PushSubscriptionDoc {
 
 let clientPromise: Promise<MongoClient> | null = null;
 
-async function getClient(): Promise<MongoClient> {
+export async function getClient(): Promise<MongoClient> {
   if (!clientPromise) {
     const client = new MongoClient(env.mongoUri, { minPoolSize: 2 });
     // TEMPORARY diagnostic instrumentation (remove once the ~10s dashboard-read stalls

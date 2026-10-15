@@ -64,6 +64,25 @@ describe("driver job lists are scoped to that driver's own initials", () => {
     vi.useRealTimers();
   });
 
+  it("shows a fresh admin-rescheduled attempt but never the completed attempts", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-10-16T07:00:00Z"));
+    const notice = { kind: "admin-completed", scheduledStart: "2026-10-16T12:00:00Z" };
+    listJobs.mockResolvedValue([
+      { jobId: "PREVIOUS", driverInitials: "HE", status: JobStatus.COMPLETED, bookedStart: "2026-10-13T08:00:00Z",
+        manualDetailsRequiredAt: "2026-10-13T09:00:00Z", rescheduledToJobId: "FRESH" },
+      { jobId: "FRESH", driverInitials: "HE", status: JobStatus.READY, currentState: WorkflowState.READY,
+        bookedStart: "2026-10-16T12:00:00Z", rescheduledFromJobId: "PREVIOUS", rescheduleNotice: notice },
+      { jobId: "DRIVER-DONE", driverInitials: "HE", status: JobStatus.COMPLETED, bookedStart: "2026-10-16T10:00:00Z",
+        rescheduleNotice: { ...notice, kind: "driver-completed" } }
+    ]);
+    const grouped = await getJobsGroupedForDriver("helena@example.com");
+    expect(grouped.today.map(job => job.jobId)).toEqual(["FRESH"]);
+    expect(grouped.past).toEqual([]);
+    expect((await getNextJobForDriver("helena@example.com")).job?.jobId).toBe("FRESH");
+    expect(await getPendingSubmissionsForDriver("helena@example.com")).toEqual([]);
+  });
+
   it("getJobsGroupedForDriver (the 'Jobs' tab) queries only this driver's jobs", async () => {
     await getJobsGroupedForDriver("helena@example.com");
     expect(listJobs).toHaveBeenCalledTimes(1);

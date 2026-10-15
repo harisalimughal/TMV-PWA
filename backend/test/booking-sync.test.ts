@@ -9,6 +9,9 @@ const listCalendarEvents = vi.fn();
 const listJobs = vi.fn();
 const getJob = vi.fn();
 const upsertJob = vi.fn().mockResolvedValue(undefined);
+const saveRescheduledAttempt = vi.fn().mockResolvedValue(undefined);
+const listActivityForJob = vi.fn().mockResolvedValue([]);
+const appendActivity = vi.fn().mockResolvedValue(undefined);
 const notifyDriverJobAssigned = vi.fn().mockResolvedValue(undefined);
 const geocodeAddress = vi.fn();
 
@@ -18,7 +21,12 @@ vi.mock("../src/google/calendar", () => ({
 vi.mock("../src/db/jobs.repo", () => ({
   getJob: (...args: any[]) => getJob(...args),
   listJobs: (...args: any[]) => listJobs(...args),
-  upsertJob: (...args: any[]) => upsertJob(...args)
+  upsertJob: (...args: any[]) => upsertJob(...args),
+  saveRescheduledAttempt: (...args: any[]) => saveRescheduledAttempt(...args)
+}));
+vi.mock("../src/db/activity.repo", () => ({
+  listActivityForJob: (...args: any[]) => listActivityForJob(...args),
+  appendActivity: (...args: any[]) => appendActivity(...args)
 }));
 vi.mock("../src/jobs/driver-notify", () => ({
   notifyDriverJobAssigned: (...args: any[]) => notifyDriverJobAssigned(...args)
@@ -111,6 +119,106 @@ describe("syncBookingsForDate", () => {
     vi.clearAllMocks();
     getJob.mockResolvedValue(null);
     geocodeAddress.mockResolvedValue(null);
+    listActivityForJob.mockResolvedValue([]);
+  });
+
+  it("keeps a driver-completed job closed and flags the changed schedule in red metadata", async () => {
+    const previous = existingJob({ status: JobStatus.COMPLETED, currentState: WorkflowState.COMPLETED,
+      actualStart: bookedStart, actualFinish: bookedFinish, actualFinishSource: "empty-van-photo", amountCharged: 175 });
+    const event = calendarEvent("Name: Client One");
+    event.start.dateTime = "2026-09-25T14:00:00+01:00";
+    event.end.dateTime = "2026-09-25T16:00:00+01:00";
+    event.summary = "2 men 175/Y-MK";
+    listJobs.mockResolvedValue([previous]); getJob.mockResolvedValue(previous); listCalendarEvents.mockResolvedValue([event]);
+    await syncBookingsForDate(DateTime.fromISO("2026-09-25", { zone: "Europe/London" }));
+    const saved = upsertJob.mock.calls[0][0];
+    expect(saved).toMatchObject({ status: JobStatus.COMPLETED, bookedStart, bookedFinish, amountCharged: 175,
+      rescheduleNotice: { kind: "driver-completed", scheduledStart: event.start.dateTime, driverInitials: "MK" } });
+    expect(saveRescheduledAttempt).not.toHaveBeenCalled();
+    expect(notifyDriverJobAssigned).not.toHaveBeenCalled();
+    listJobs.mockResolvedValue([saved]); getJob.mockResolvedValue(saved); upsertJob.mockClear();
+    await syncBookingsForDate(DateTime.fromISO("2026-09-25", { zone: "Europe/London" }));
+    expect(upsertJob).not.toHaveBeenCalled();
+  });
+
+  it("publishes a clean rescheduled attempt for admin-completed work and retains the original history", async () => {
+    const previous = existingJob({ status: JobStatus.COMPLETED, currentState: WorkflowState.COMPLETED,
+      actualStart: bookedStart, actualFinish: bookedFinish, actualFinishSource: "admin-manual",
+      reportIdentity: { initials: "TI", email: null, name: null, vehicleImei: null, source: "admin-completion-assignment" },
+      manualDetailsRequiredAt: bookedFinish, signatureUrl: "old-signature", paymentBreakdown: [{ method: "Cash", amount: 175 }],
+      chargeSnapshot: { basePence: 17500, congestionPence: 0, tunnelPence: 0 }, reviewEmailSent: true, amountCharged: 175 });
+    const event = calendarEvent("Name: Client One");
+    event.start.dateTime = "2026-09-25T14:00:00+01:00";
+    event.end.dateTime = "2026-09-25T16:00:00+01:00";
+    event.summary = "2 men 175/Y-MK";
+    listJobs.mockResolvedValue([previous]); getJob.mockResolvedValue(previous); listCalendarEvents.mockResolvedValue([event]);
+    const [fresh] = await syncBookingsForDate(DateTime.fromISO("2026-09-25", { zone: "Europe/London" }));
+    expect(saveRescheduledAttempt).toHaveBeenCalledWith(previous, fresh);
+    expect(fresh).toMatchObject({ status: JobStatus.READY, currentState: WorkflowState.READY,
+      driverInitials: "MK", bookedStart: event.start.dateTime, bookedFinish: event.end.dateTime,
+      actualStart: "", actualFinish: "", signatureUrl: "", amountCharged: 0, rescheduledFromJobId: previous.jobId,
+      sourceCalendarEventId: event.id, rescheduleNotice: { kind: "admin-completed" } });
+    expect(fresh.jobId).not.toBe(previous.jobId);
+    expect(fresh.calendarEventId).not.toBe(previous.calendarEventId);
+    for (const key of ["onMyWayAt", "vanLoadedAt", "pickupArrivalAt", "dropoffTracking", "reportIdentity", "timeBilling", "chargeSnapshot", "paymentBreakdown", "manualDetailsRequiredAt", "reviewEmailSent"] as const) expect(fresh[key]).toBeUndefined();
+    expect(notifyDriverJobAssigned).toHaveBeenCalledWith(fresh, "MK");
+    expect(upsertJob).not.toHaveBeenCalled();
+    expect(previous.status).toBe(JobStatus.COMPLETED);
+    expect(previous.paymentBreakdown).toEqual([{ method: "Cash", amount: 175 }]);
+
+    // Later syncs keep the clean attempt, not the historical completion.
+    const historical = { ...previous, rescheduledToJobId: fresh.jobId };
+    listJobs.mockResolvedValue([fresh, historical]); getJob.mockResolvedValue(fresh);
+    saveRescheduledAttempt.mockClear(); notifyDriverJobAssigned.mockClear();
+    const [again] = await syncBookingsForDate(DateTime.fromISO("2026-09-25", { zone: "Europe/London" }));
+    expect(again.jobId).toBe(fresh.jobId);
+    expect(again.sourceCalendarEventId).toBe(event.id);
+    expect(again.rescheduleNotice).toEqual(fresh.rescheduleNotice);
+    expect(saveRescheduledAttempt).not.toHaveBeenCalled();
+    expect(notifyDriverJobAssigned).not.toHaveBeenCalled();
+    event.start.dateTime = "2026-09-26T14:00:00+01:00";
+    event.end.dateTime = "2026-09-26T16:00:00+01:00";
+    await syncBookingsForDate(DateTime.fromISO("2026-09-26", { zone: "Europe/London" }));
+    expect(upsertJob.mock.calls.at(-1)?.[0]).toMatchObject({ jobId: fresh.jobId, status: JobStatus.READY,
+      bookedStart: event.start.dateTime, rescheduleNotice: { kind: "admin-completed", scheduledStart: event.start.dateTime } });
+    expect(saveRescheduledAttempt).not.toHaveBeenCalled();
+  });
+
+  it("uses the admin audit action even if an empty-van time was already recorded", async () => {
+    const previous = existingJob({ status: JobStatus.COMPLETED, currentState: WorkflowState.COMPLETED,
+      actualStart: bookedStart, actualFinish: bookedFinish, actualFinishSource: "empty-van-photo" });
+    const event = calendarEvent("Name: Client One");
+    event.start.dateTime = "2026-09-25T14:00:00+01:00";
+    event.end.dateTime = "2026-09-25T16:00:00+01:00";
+    listJobs.mockResolvedValue([previous]); getJob.mockResolvedValue(previous); listCalendarEvents.mockResolvedValue([event]);
+    listActivityForJob.mockResolvedValue([{ action: "ADMIN_MARKED_COMPLETED" }]);
+    await syncBookingsForDate(DateTime.fromISO("2026-09-25", { zone: "Europe/London" }));
+    expect(saveRescheduledAttempt).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not reopen completed jobs for driver-only edits or equivalent timezone representations", async () => {
+    const previous = existingJob({ status: JobStatus.COMPLETED, currentState: WorkflowState.COMPLETED,
+      actualFinishSource: "admin-manual", actualStart: bookedStart, actualFinish: bookedFinish });
+    const event = calendarEvent("Name: Client One");
+    event.summary = "2 men 175/Y-MK";
+    event.start.dateTime = "2026-09-24T08:00:00Z";
+    event.end.dateTime = "2026-09-24T11:00:00Z";
+    listJobs.mockResolvedValue([previous]); getJob.mockResolvedValue(previous); listCalendarEvents.mockResolvedValue([event]);
+    await syncBookingsForDate(DateTime.fromISO("2026-09-24", { zone: "Europe/London" }));
+    expect(saveRescheduledAttempt).not.toHaveBeenCalled();
+    expect(upsertJob.mock.calls[0][0].status).toBe(JobStatus.COMPLETED);
+    expect(upsertJob.mock.calls[0][0].rescheduleNotice).toBeUndefined();
+  });
+
+  it("reschedules unstarted work normally without a completed-job warning", async () => {
+    const previous = existingJob({ onMyWayAt: undefined });
+    const event = calendarEvent("Name: Client One");
+    event.start.dateTime = "2026-09-25T14:00:00+01:00";
+    event.end.dateTime = "2026-09-25T16:00:00+01:00";
+    listJobs.mockResolvedValue([previous]); getJob.mockResolvedValue(previous); listCalendarEvents.mockResolvedValue([event]);
+    await syncBookingsForDate(DateTime.fromISO("2026-09-25", { zone: "Europe/London" }));
+    expect(upsertJob.mock.calls[0][0]).toMatchObject({ status: JobStatus.READY, bookedStart: event.start.dateTime });
+    expect(upsertJob.mock.calls[0][0].rescheduleNotice).toBeUndefined();
   });
 
   it("preserves onMyWayAt when a Calendar resync updates an already-notified job", async () => {

@@ -121,6 +121,13 @@ export interface JobScenarioSubmission {
 export interface NormalizedJob {
   jobId: string;
   calendarEventId: string;
+  rescheduleNotice?: {
+    kind: "driver-completed" | "admin-completed"; detectedAt: string;
+    previousStart: string; previousFinish: string; previousDriverInitials: string;
+    scheduledStart: string; scheduledFinish: string; driverInitials: string;
+  };
+  rescheduledFromJobId?: string;
+  rescheduledToJobId?: string;
   bookedStart: string;
   bookedFinish: string;
   actualStart?: string;

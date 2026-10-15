@@ -3,7 +3,8 @@ import { calendar_v3 } from "googleapis";
 import { DateTime } from "luxon";
 import { env } from "../config/env";
 import { listCalendarEvents } from "../google/calendar";
-import { getJob, listJobs, upsertJob } from "../db/jobs.repo";
+import { getJob, listJobs, upsertJob, saveRescheduledAttempt } from "../db/jobs.repo";
+import { listActivityForJob, appendActivity } from "../db/activity.repo";
 import { recordException } from "../db/exceptions.repo";
 import { notifyDriverJobAssigned } from "./driver-notify";
 import { Job, JobStatus, ParsedCalendarBooking } from "./job.types";
@@ -340,11 +341,30 @@ function toJob(parsed: ParsedCalendarBooking, existing: Job | undefined, pickupL
       ? existing.calculatedTotalCharges
       : existing?.totalCharges ?? basePrice;
   const reviveCancelled = existing?.status === JobStatus.CANCELLED && !existing.actualStart;
+  const rescheduled = existing?.status === JobStatus.COMPLETED && (
+    Date.parse(existing.bookedStart) !== Date.parse(parsed.bookedStart) || Date.parse(existing.bookedFinish) !== Date.parse(parsed.bookedFinish));
+  const priorNotice = existing?.rescheduleNotice;
+  const sameNotice = priorNotice && Date.parse(priorNotice.scheduledStart) === Date.parse(parsed.bookedStart) &&
+    Date.parse(priorNotice.scheduledFinish) === Date.parse(parsed.bookedFinish) && priorNotice.driverInitials === parsed.driverInitials;
+  const rescheduleNotice: Job["rescheduleNotice"] = rescheduled ? {
+    kind: existing.actualFinishSource === "admin-manual" || existing.reportIdentity?.source === "admin-completion-assignment" ? "admin-completed" : "driver-completed",
+    detectedAt: sameNotice ? priorNotice.detectedAt : now,
+    previousStart: existing.bookedStart, previousFinish: existing.bookedFinish,
+    previousDriverInitials: priorNotice?.previousDriverInitials || existing.reportIdentity?.initials || existing.timeBilling?.driverInitials || existing.driverInitials,
+    scheduledStart: parsed.bookedStart, scheduledFinish: parsed.bookedFinish, driverInitials: parsed.driverInitials
+  } : priorNotice?.kind === "admin-completed" && existing?.status !== JobStatus.COMPLETED ? {
+    ...priorNotice, detectedAt: sameNotice ? priorNotice.detectedAt : now,
+    scheduledStart: parsed.bookedStart, scheduledFinish: parsed.bookedFinish, driverInitials: parsed.driverInitials
+  } : existing?.status === JobStatus.COMPLETED && priorNotice?.kind === "driver-completed" ? undefined : priorNotice;
 
   return {
-    jobId: jobIdForEvent(parsed.calendarEventId),
-    calendarEventId: parsed.calendarEventId,
-    driverInitials: parsed.driverInitials,
+    jobId: existing?.jobId ?? jobIdForEvent(parsed.calendarEventId),
+    calendarEventId: existing?.calendarEventId ?? parsed.calendarEventId,
+    sourceCalendarEventId: existing?.sourceCalendarEventId,
+    rescheduledFromJobId: existing?.rescheduledFromJobId,
+    rescheduledToJobId: existing?.rescheduledToJobId,
+    rescheduleNotice,
+    driverInitials: rescheduled ? existing.driverInitials : parsed.driverInitials,
     customerName: parsed.customerName,
     customerEmail: parsed.customerEmail,
     customerPhone: parsed.customerPhone,
@@ -444,6 +464,7 @@ function isUnchanged(next: Job, existing?: Job): boolean {
     "rawTitle", "rawDescription"
   ];
   return keys.every(key => String(next[key] ?? "") === String(existing[key] ?? "")) &&
+    JSON.stringify(next.rescheduleNotice) === JSON.stringify(existing.rescheduleNotice) &&
     sameLocation(next.pickupLocation, existing.pickupLocation) && sameLocation(next.dropoffLocation, existing.dropoffLocation);
 }
 
@@ -456,7 +477,8 @@ export async function syncBookingsForDate(date = DateTime.now().setZone(env.time
     listCalendarEvents(start.toUTC().toISO()!, end.toUTC().toISO()!, { showDeleted: true }),
     listJobs()
   ]);
-  const existingByEvent = new Map(existingJobs.map(j => [j.calendarEventId, j]));
+  const eventIdFor = (job: Job) => job.sourceCalendarEventId || job.calendarEventId;
+  const existingByEvent = new Map(existingJobs.filter(j => !j.rescheduledToJobId).map(j => [eventIdFor(j), j]));
   const synced: Job[] = [];
   const writes: Job[] = [];
   const parsedByJob = new Map<string, ParsedCalendarBooking>();
@@ -492,9 +514,6 @@ export async function syncBookingsForDate(date = DateTime.now().setZone(env.time
     synced.push(job);
 
     if (!isUnchanged(job, existing)) writes.push(job);
-    if (job.driverInitials && job.driverInitials !== existing?.driverInitials) {
-      newlyAssigned.push(job);
-    }
   }
 
   // A booking that was on this date and is no longer returned has been moved or
@@ -513,7 +532,7 @@ export async function syncBookingsForDate(date = DateTime.now().setZone(env.time
   // never actually gone. Bug found live: a real job assigned to a driver got silently
   // cancelled the moment a sync ran.
   for (const existing of existingJobs) {
-    if (seenEventIds.has(existing.calendarEventId)) continue;
+    if (existing.rescheduledToJobId || seenEventIds.has(eventIdFor(existing))) continue;
     const existingDay = DateTime.fromISO(existing.bookedStart, { setZone: true }).setZone(env.timezone);
     if (!existingDay.isValid || !existingDay.hasSame(date, "day")) continue;
     if (existing.status === JobStatus.COMPLETED || existing.status === JobStatus.CANCELLED) continue;
@@ -525,8 +544,36 @@ export async function syncBookingsForDate(date = DateTime.now().setZone(env.time
     const latest = await getJob(job.jobId);
     const parsed = parsedByJob.get(job.jobId);
     if (parsed) {
-      const dropoffLocation = latest?.dropoff === parsed.dropoff && latest.dropoffLocation ? latest.dropoffLocation : job.dropoffLocation;
-      await upsertJob(toJob(parsed, latest ?? existingByEvent.get(parsed.calendarEventId), job.pickupLocation, dropoffLocation));
+      const current = latest ?? existingByEvent.get(parsed.calendarEventId);
+      if (current?.rescheduledToJobId) return;
+      const dropoffLocation = current?.dropoff === parsed.dropoff && current.dropoffLocation ? current.dropoffLocation : job.dropoffLocation;
+      const updated = toJob(parsed, current, job.pickupLocation, dropoffLocation);
+      if (current?.status === JobStatus.COMPLETED && updated.rescheduleNotice &&
+          (Date.parse(current.bookedStart) !== Date.parse(parsed.bookedStart) || Date.parse(current.bookedFinish) !== Date.parse(parsed.bookedFinish))) {
+        // The audit action also covers admins finishing a job after its empty-van photo.
+        const activity = await listActivityForJob(current.jobId);
+        const adminCompleted = updated.rescheduleNotice.kind === "admin-completed" || activity.some(entry => entry.action === "ADMIN_MARKED_COMPLETED");
+        if (adminCompleted) {
+          const fresh = toJob(parsed, undefined, job.pickupLocation, dropoffLocation);
+          fresh.jobId = jobIdForEvent(`${current.jobId}:${parsed.bookedStart}:${parsed.bookedFinish}`);
+          fresh.calendarEventId = `reschedule:${fresh.jobId}`;
+          fresh.sourceCalendarEventId = parsed.calendarEventId;
+          fresh.rescheduledFromJobId = current.jobId;
+          fresh.rescheduleNotice = { ...updated.rescheduleNotice, kind: "admin-completed" };
+          await saveRescheduledAttempt(current, fresh);
+          await appendActivity({ jobId: fresh.jobId, driver: "calendar sync", action: "ADMIN_COMPLETED_JOB_REASSIGNED",
+            fromState: WorkflowState.COMPLETED, toState: WorkflowState.READY, detail: `Fresh attempt for ${current.jobId}; scheduled ${parsed.bookedStart}; driver ${parsed.driverInitials}.` })
+            .catch(error => log.warn("rescheduled job audit failed", { job_id: fresh.jobId, error: String(error) }));
+          const index = synced.findIndex(item => item.jobId === job.jobId);
+          if (index >= 0) synced[index] = fresh;
+          if (fresh.driverInitials) newlyAssigned.push(fresh);
+          return;
+        }
+      }
+      await upsertJob(updated);
+      if (updated.status !== JobStatus.COMPLETED && updated.driverInitials && updated.driverInitials !== current?.driverInitials) {
+        newlyAssigned.push(updated);
+      }
     } else if (latest) {
       if (latest.actualStart || latest.status === JobStatus.COMPLETED) return;
       await upsertJob({ ...latest, status: job.status, currentState: job.currentState, updatedAt: job.updatedAt });

@@ -288,7 +288,11 @@ export function dashboardJobsRoutes(): Router {
       if (!existing) {
         return res.status(404).json({ error: { code: "JOB_NOT_FOUND", message: `Job ${jobId} not found.` } });
       }
-      if (!existing.calendarEventId) {
+      if (existing.rescheduledToJobId) {
+        return res.status(409).json({ error: { code: "SUPERSEDED_JOB", message: `This is a historical completion. Reassign ${existing.rescheduledToJobId} instead.` } });
+      }
+      const calendarEventId = existing.sourceCalendarEventId || existing.calendarEventId;
+      if (!calendarEventId) {
         return res.status(409).json({
           error: { code: "NO_CALENDAR_EVENT", message: "This job has no linked Calendar event, so it can't be reassigned." }
         });
@@ -301,7 +305,7 @@ export function dashboardJobsRoutes(): Router {
       // updated *first*: fetch the live title (not the possibly-stale rawTitle already
       // in Mongo), rewrite just its initials segment, and only touch Mongo once that
       // write has actually landed.
-      const event = await getCalendarEvent(existing.calendarEventId).catch(() => null);
+      const event = await getCalendarEvent(calendarEventId).catch(() => null);
       const currentTitle = event?.summary || existing.rawTitle;
       const newTitle = currentTitle ? withReassignedInitials(currentTitle, driverInitials) : null;
 
@@ -315,7 +319,7 @@ export function dashboardJobsRoutes(): Router {
       }
 
       try {
-        await updateCalendarEvent(existing.calendarEventId, { summary: newTitle });
+        await updateCalendarEvent(calendarEventId, { summary: newTitle });
       } catch (calendarError) {
         log.error("reassign: failed to write driver initials back to Calendar", calendarError, { job_id: jobId });
         const status = statusOf(calendarError);
@@ -399,9 +403,13 @@ export function dashboardJobsRoutes(): Router {
         return res.status(404).json({ error: { code: "JOB_NOT_FOUND", message: `Job ${jobId} not found.` } });
       }
 
-      if (existing.calendarEventId) {
+      if (existing.rescheduledToJobId) {
+        return res.status(409).json({ error: { code: "SUPERSEDED_JOB", message: `This is a historical completion linked to ${existing.rescheduledToJobId}. It cannot delete the active booking.` } });
+      }
+      const calendarEventId = existing.sourceCalendarEventId || existing.calendarEventId;
+      if (calendarEventId) {
         try {
-          await deleteCalendarEvent(existing.calendarEventId);
+          await deleteCalendarEvent(calendarEventId);
         } catch (calendarError) {
           log.error("delete job: failed to delete Calendar event", calendarError, { job_id: jobId });
           const status = statusOf(calendarError);

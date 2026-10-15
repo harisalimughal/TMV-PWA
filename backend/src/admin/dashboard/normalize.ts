@@ -400,7 +400,10 @@ export async function normalizeMongoDataset(dataset: MongoDataset): Promise<Norm
 
     normalizedJobs.push({
       jobId,
-      calendarEventId: job.calendarEventId || "",
+      calendarEventId: job.sourceCalendarEventId || job.calendarEventId || "",
+      rescheduleNotice: job.rescheduleNotice,
+      rescheduledFromJobId: job.rescheduledFromJobId,
+      rescheduledToJobId: job.rescheduledToJobId,
       bookedStart, bookedFinish, actualStart, actualFinish, ...arrivalProofTiming, onMyWayAt, driverViewedAt,
       bookedMinutes, actualMinutes, delayMinutes, delayBand, timingTrustworthy,
       arrivalDelaySource,

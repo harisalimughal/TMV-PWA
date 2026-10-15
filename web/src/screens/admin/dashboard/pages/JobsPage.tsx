@@ -542,7 +542,7 @@ export function JobsPage({ initialStatus = "All" }: JobsPageProps = {}) {
                         </td>
 
                         <td className="px-4 whitespace-nowrap">
-                          <JobStatusBadge status={job.status} activity={job.activity} />
+                          <JobStatusBadge status={job.status} activity={job.activity} rescheduleNotice={job.rescheduleNotice} />
                         </td>
 
                         <td className="px-4 text-center">
@@ -808,7 +808,7 @@ function JobCardList({
                         {formatLondonDateTime(job.bookedStart) || "Not scheduled"}
                       </span>
                     </span>
-                    <JobStatusBadge status={job.status} activity={job.activity} />
+                    <JobStatusBadge status={job.status} activity={job.activity} rescheduleNotice={job.rescheduleNotice} />
                   </div>
                   <div className="mt-4 flex items-start justify-between gap-3">
                     <p className="text-card text-fg font-bold truncate">

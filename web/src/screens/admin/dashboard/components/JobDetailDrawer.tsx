@@ -184,7 +184,7 @@ export function JobDetailDrawer({ job: initialJob, isOpen, onClose, onUpdated }:
         <div className="px-6 py-5 bg-white border-b border-admin-line shadow-[0_4px_20px_rgb(0,0,0,0.03)] z-10 flex flex-col gap-4">
           <ReportReturnButton compact />
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
+            <div className="flex min-w-0 flex-wrap items-center gap-3">
               <h3 className="text-title text-fg leading-tight">{job.jobId}</h3>
               <button
                 onClick={handleCopyJobId}
@@ -193,7 +193,7 @@ export function JobDetailDrawer({ job: initialJob, isOpen, onClose, onUpdated }:
               >
                 {copiedId ? <Check className="w-4 h-4 text-admin-status-green" /> : <Copy className="w-4 h-4" />}
               </button>
-              <JobStatusBadge status={job.status} activity={job.activity} />
+              <JobStatusBadge status={job.status} activity={job.activity} rescheduleNotice={job.rescheduleNotice} />
             </div>
             <button
               onClick={onClose}
@@ -204,6 +204,7 @@ export function JobDetailDrawer({ job: initialJob, isOpen, onClose, onUpdated }:
             </button>
           </div>
           
+          {(job.rescheduledFromJobId || job.rescheduledToJobId) && <p className="break-words text-[13px] text-admin-muted">{job.rescheduledFromJobId ? `Previous completion: ${job.rescheduledFromJobId}` : `Rescheduled job: ${job.rescheduledToJobId}`}</p>}
           <div className="flex items-center gap-3">
             <div 
               className="w-8 h-8 rounded-full bg-admin-surface text-admin-muted border border-admin-line font-bold text-[11px] flex items-center justify-center shadow-sm"

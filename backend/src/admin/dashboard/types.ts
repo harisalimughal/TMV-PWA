@@ -122,6 +122,9 @@ export interface JobScenarioSubmission {
 export interface NormalizedJob {
   jobId: string;
   calendarEventId: string;
+  rescheduleNotice?: Job["rescheduleNotice"];
+  rescheduledFromJobId?: string;
+  rescheduledToJobId?: string;
 
   bookedStart: string; // ISO UTC
   bookedFinish: string; // ISO UTC
