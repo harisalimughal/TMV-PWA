@@ -93,6 +93,26 @@ function completedJob(overrides: Partial<NormalizedJob> = {}): NormalizedJob {
 }
 
 describe("FinishedJobsPage review status", () => {
+  it.each(["admin-completed", "driver-completed"] as const)("keeps the %s warning below the job details, outside the header", async kind => {
+    fetchJobs.mockResolvedValue({ items: [completedJob({ rescheduleNotice: {
+      kind, detectedAt: "2026-10-16T09:00:00Z", previousStart: "2026-10-02T09:00:00Z",
+      previousFinish: "2026-10-02T12:00:00Z", previousDriverInitials: "TI",
+      scheduledStart: "2026-10-16T12:00:00Z", scheduledFinish: "2026-10-16T14:00:00Z", driverInitials: "HE"
+    } })], pagination: { page: 1, pageSize: 25, total: 1, hasMore: false } });
+    render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+      <FinishedJobsPage />
+    </QueryClientProvider>);
+    const text = kind === "admin-completed" ? "Admin completed job reassigned" : "Completed job reassigned";
+    const warning = (await screen.findByText(text)).parentElement!;
+    const card = warning.closest("article")!;
+    const header = card.querySelector(".flex.items-start.gap-2")!;
+    expect(header).not.toContainElement(warning);
+    expect(warning).toHaveClass("w-full", "whitespace-normal");
+    expect(warning.previousElementSibling).toHaveTextContent("1 Pickup Road, London");
+    expect(warning.nextElementSibling).toHaveTextContent("TMV-REVIEW-YES");
+    expect(header).toHaveTextContent("Tiago");
+    expect(header).toHaveTextContent("Completed");
+  });
   it("keeps the card's RW Yes badge with its right-aligned completion status", async () => {
     fetchJobs.mockResolvedValue({
       items: [completedJob()],

@@ -1,6 +1,6 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import { JobStatusBadge } from "./StatusBadge";
+import { JobStatusBadge, JobRescheduleWarning } from "./StatusBadge";
 
 describe("Job status badge", () => {
   const notice = {
@@ -10,7 +10,7 @@ describe("Job status badge", () => {
   };
 
   it("shows a red completed-job reassignment warning without changing the completion label", () => {
-    render(<JobStatusBadge status="COMPLETED" rescheduleNotice={notice} />);
+    render(<><JobStatusBadge status="COMPLETED" /><JobRescheduleWarning notice={notice} /></>);
     expect(screen.getByText("Completed")).toBeInTheDocument();
     const warning = screen.getByText("Completed job reassigned").parentElement!;
     expect(warning).toHaveClass("bg-admin-status-red-bg");
@@ -18,7 +18,7 @@ describe("Job status badge", () => {
   });
 
   it("shows a yellow admin-completion warning on the fresh scheduled attempt", () => {
-    render(<JobStatusBadge status="READY" rescheduleNotice={{ ...notice, kind: "admin-completed" }} />);
+    render(<><JobStatusBadge status="READY" /><JobRescheduleWarning notice={{ ...notice, kind: "admin-completed" }} /></>);
     expect(screen.getByText("Scheduled")).toBeInTheDocument();
     expect(screen.getByText("Admin completed job reassigned").parentElement).toHaveClass("bg-admin-status-amber-bg");
     expect(screen.queryByText("Admin Completed")).not.toBeInTheDocument();

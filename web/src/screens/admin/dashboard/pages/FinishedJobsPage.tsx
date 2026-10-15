@@ -27,7 +27,7 @@ import { NormalizedJob, formatGBP, toPounds } from "../types";
 import { DateRangePicker, defaultDashboardDateRange } from "../components/DateRangePicker";
 import { ApiErrorState } from "../components/ApiErrorState";
 import { formatLondonDateTime } from "../utils/date";
-import { DelayBandBadge, JobStatusBadge } from "../components/StatusBadge";
+import { DelayBandBadge, JobStatusBadge, JobRescheduleWarning } from "../components/StatusBadge";
 const isTestOrIncomplete = (job: any) => { return job.customerName === "hh" || String(job.pickup).includes("test") || String(job.dropoff).includes("test"); };
 import { resolveDriver, formatVanReg } from "../utils/drivers";
 import { useDriverOptions } from "../hooks/useDriverOptions";
@@ -372,7 +372,7 @@ export function FinishedJobsPage({
                           <span className="mt-1 block text-[12px] font-semibold text-admin-muted tabular-nums">{emptyVanPhotoTime}</span>
                         </span>
                         <span className="flex shrink-0 flex-col items-end gap-1">
-                          <JobStatusBadge status={job.status} activity={job.activity} rescheduleNotice={job.rescheduleNotice} />
+                          <JobStatusBadge status={job.status} activity={job.activity} />
                           <span className={`inline-flex rounded-control px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-[0.03em] ${job.reviewEmailStatus === "Yes" ? "bg-admin-status-green-bg text-admin-status-green" : "bg-admin-surface text-admin-muted"}`}>
                             RW: {job.reviewEmailStatus ?? "No"}
                           </span>
@@ -387,6 +387,7 @@ export function FinishedJobsPage({
                       <p className="text-[13px] text-admin-muted mt-1 truncate">
                         {job.pickup || "—"} <span className="text-admin-line-strong">→</span> {job.dropoff || "—"}
                       </p>
+                      <JobRescheduleWarning notice={job.rescheduleNotice} />
                       <div className="mt-4 flex items-center justify-between gap-3 border-t border-admin-line pt-3">
                         <span className="text-[11px] font-medium text-admin-muted truncate">{job.jobId}</span>
                         <span className="shrink-0 font-mono text-[13px] font-bold tabular-nums text-admin-ink">Total {formatGBP(total)}</span>

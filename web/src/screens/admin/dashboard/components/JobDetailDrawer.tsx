@@ -22,7 +22,7 @@ import { RawBookingText } from "../../../../components/driver/RawBookingText";
 import { JobScenarioSection } from "./JobScenarioSection";
 import { JobTimeBreakdown } from "./JobTimeBreakdown";
 import { fetchDrivers as fetchDriverRoster, type AdminDriver } from "../../../../api/admin";
-import { JobStatusBadge } from "./StatusBadge";
+import { JobStatusBadge, JobRescheduleWarning } from "./StatusBadge";
 import { PdfPreviewModal } from "./PdfPreviewModal";
 import { waitForPrintImages } from "../utils/printReady";
 import { PhotoModal } from "./PhotoModal";
@@ -193,7 +193,7 @@ export function JobDetailDrawer({ job: initialJob, isOpen, onClose, onUpdated }:
               >
                 {copiedId ? <Check className="w-4 h-4 text-admin-status-green" /> : <Copy className="w-4 h-4" />}
               </button>
-              <JobStatusBadge status={job.status} activity={job.activity} rescheduleNotice={job.rescheduleNotice} />
+              <JobStatusBadge status={job.status} activity={job.activity} />
             </div>
             <button
               onClick={onClose}
@@ -204,6 +204,7 @@ export function JobDetailDrawer({ job: initialJob, isOpen, onClose, onUpdated }:
             </button>
           </div>
           
+          <JobRescheduleWarning notice={job.rescheduleNotice} />
           {(job.rescheduledFromJobId || job.rescheduledToJobId) && <p className="break-words text-[13px] text-admin-muted">{job.rescheduledFromJobId ? `Previous completion: ${job.rescheduledFromJobId}` : `Rescheduled job: ${job.rescheduledToJobId}`}</p>}
           <div className="flex items-center gap-3">
             <div 

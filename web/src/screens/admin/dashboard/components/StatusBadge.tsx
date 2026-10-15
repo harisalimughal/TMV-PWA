@@ -4,21 +4,18 @@ import { CheckCircle2, Clock, Calendar, XCircle, AlertTriangle } from "lucide-re
 import { DelayBand, JobStatus, NormalizedJob } from "../types";
 import { DateTime } from "luxon";
 
-export function JobStatusBadge({ rescheduleNotice, ...props }: { status: JobStatus | string; activity?: ReadonlyArray<{ action: string }>; rescheduleNotice?: NormalizedJob["rescheduleNotice"] }) {
-  if (!rescheduleNotice) return <BaseJobStatusBadge {...props} />;
+export function JobRescheduleWarning({ notice: rescheduleNotice }: { notice?: NormalizedJob["rescheduleNotice"] }) {
+  if (!rescheduleNotice) return null;
   const admin = rescheduleNotice.kind === "admin-completed";
   const scheduled = DateTime.fromISO(rescheduleNotice.scheduledStart).setZone("Europe/London").toFormat("dd LLL yyyy, HH:mm");
-  return <span className="inline-flex max-w-[220px] flex-col items-start gap-1">
-    <BaseJobStatusBadge {...props} />
-    <span className={`inline-flex items-start gap-1 rounded-control border px-2 py-1 text-[12px] font-medium whitespace-normal ${admin ? "bg-admin-status-amber-bg text-admin-status-amber border-admin-status-amber/20" : "bg-admin-status-red-bg text-admin-status-red border-admin-status-red/20"}`}
+  return <span className={`mt-3 flex w-full min-w-0 items-start gap-1.5 rounded-control border px-2 py-1.5 text-left text-[12px] font-medium whitespace-normal ${admin ? "bg-admin-status-amber-bg text-admin-status-amber border-admin-status-amber/20" : "bg-admin-status-red-bg text-admin-status-red border-admin-status-red/20"}`}
       title={`Calendar schedule: ${scheduled}; driver: ${rescheduleNotice.driverInitials || "Unassigned"}`}>
       <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" aria-hidden="true" />
-      <span>{admin ? "Admin completed job reassigned" : "Completed job reassigned"}</span>
-    </span>
+      <span className="min-w-0 break-words">{admin ? "Admin completed job reassigned" : "Completed job reassigned"}</span>
   </span>;
 }
 
-function BaseJobStatusBadge({ status, activity = [] }: { status: JobStatus | string; activity?: ReadonlyArray<{ action: string }> }) {
+export function JobStatusBadge({ status, activity = [] }: { status: JobStatus | string; activity?: ReadonlyArray<{ action: string }> }) {
   switch (status) {
     case "READY":
       return (

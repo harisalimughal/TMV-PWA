@@ -4,7 +4,7 @@ import { useQuery, keepPreviousData } from "@tanstack/react-query";
 import { fetchDrivers, fetchJobs, fetchJobDetail, markJobFinishedManually, reassignJob } from "../api";
 import { NormalizedJob } from "../types";
 import { JobDetailDrawer } from "../components/JobDetailDrawer";
-import { JobStatusBadge } from "../components/StatusBadge";
+import { JobStatusBadge, JobRescheduleWarning } from "../components/StatusBadge";
 import { DateRangePicker, defaultDashboardDateRange } from "../components/DateRangePicker";
 import { ApiErrorState } from "../components/ApiErrorState";
 import { BulkDeleteModal } from "../components/BulkDeleteModal";
@@ -542,7 +542,8 @@ export function JobsPage({ initialStatus = "All" }: JobsPageProps = {}) {
                         </td>
 
                         <td className="px-4 whitespace-nowrap">
-                          <JobStatusBadge status={job.status} activity={job.activity} rescheduleNotice={job.rescheduleNotice} />
+                          <JobStatusBadge status={job.status} activity={job.activity} />
+                          <JobRescheduleWarning notice={job.rescheduleNotice} />
                         </td>
 
                         <td className="px-4 text-center">
@@ -808,7 +809,7 @@ function JobCardList({
                         {formatLondonDateTime(job.bookedStart) || "Not scheduled"}
                       </span>
                     </span>
-                    <JobStatusBadge status={job.status} activity={job.activity} rescheduleNotice={job.rescheduleNotice} />
+                    <JobStatusBadge status={job.status} activity={job.activity} />
                   </div>
                   <div className="mt-4 flex items-start justify-between gap-3">
                     <p className="text-card text-fg font-bold truncate">
@@ -821,6 +822,7 @@ function JobCardList({
                   <p className="text-[13px] text-admin-muted mt-1 truncate">
                     {job.rawTitle || "—"}
                   </p>
+                  <JobRescheduleWarning notice={job.rescheduleNotice} />
                   <div className="mt-4 flex items-center justify-between gap-3 border-t border-admin-line pt-3">
                     <span className="text-[11px] font-medium text-admin-muted truncate">{job.jobId}</span>
                     <span className="shrink-0 font-mono text-[13px] font-bold tabular-nums text-admin-ink">
