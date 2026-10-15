@@ -23,7 +23,7 @@ export async function saveRescheduledAttempt(previous: Job, next: Job): Promise<
   try {
     await session.withTransaction(async () => {
       const result = await col.updateOne({ _id: previous.jobId, status: "COMPLETED", updatedAt: previous.updatedAt,
-        rescheduledToJobId: { $exists: false } } as any,
+        rescheduledToJobId: null } as any,
       { $set: { rescheduledToJobId: next.jobId, rescheduleNotice: next.rescheduleNotice, updatedAt: next.createdAt } }, { session });
       if (result.modifiedCount !== 1) throw new Error("Completed booking changed while rescheduling; retry sync.");
       await col.insertOne({ _id: next.jobId, ...next } as any, { session });

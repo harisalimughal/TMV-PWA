@@ -25,7 +25,7 @@ describe("rescheduled attempt persistence", () => {
   it("links the historical completion and inserts the clean attempt in one transaction", async () => {
     await saveRescheduledAttempt(previous, next);
     expect(mocks.updateOne).toHaveBeenCalledWith({ _id: "OLD", status: "COMPLETED", updatedAt: previous.updatedAt,
-      rescheduledToJobId: { $exists: false } }, { $set: { rescheduledToJobId: "NEW", rescheduleNotice: next.rescheduleNotice,
+      rescheduledToJobId: null }, { $set: { rescheduledToJobId: "NEW", rescheduleNotice: next.rescheduleNotice,
       updatedAt: next.createdAt } }, { session });
     expect(mocks.insertOne).toHaveBeenCalledWith({ _id: "NEW", ...next }, { session });
     expect(previous.amountCharged).toBe(175);
