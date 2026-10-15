@@ -125,9 +125,9 @@ export async function listJobsPage(filter: JobsPageFilter): Promise<{ items: Job
 
   if (filter.driverInitials) {
     if (filter.allowedDriverInitials && !filter.allowedDriverInitials.map(a => a.toUpperCase()).includes(filter.driverInitials.toUpperCase())) {
-      andClauses.push({ driverInitials: "__NONE__" });
+      andClauses.push({ __displayDriverInitials: "__NONE__" });
     } else {
-      andClauses.push({ driverInitials: filter.driverInitials });
+      andClauses.push({ __displayDriverInitials: filter.driverInitials.trim().toUpperCase() });
     }
   } else if (filter.allowedDriverInitials && filter.allowedDriverInitials.length > 0) {
     const allowed = filter.allowedDriverInitials;
@@ -137,16 +137,22 @@ export async function listJobsPage(filter: JobsPageFilter): Promise<{ items: Job
     ]));
     andClauses.push({
       $or: [
-        { driverInitials: { $in: allowedBothCases } },
-        { driverInitials: "" },
-        { driverInitials: null },
-        { driverInitials: "UNASSIGNED" },
-        { driverInitials: { $exists: false } }
+        { __displayDriverInitials: { $in: allowedBothCases } },
+        { __displayDriverInitials: "" },
+        { __displayDriverInitials: "UNASSIGNED" }
       ]
     });
   }
 
   const pipeline: any[] = [];
+  // Match the identity precedence used by dashboard normalization, including legacy summaries.
+  pipeline.push({ $lookup: { from: "driver_job_summaries", localField: "jobId", foreignField: "jobId", as: "__driverSummary" } });
+  const firstNonempty = (fields: Array<string | Record<string, unknown>>): any => fields.reduceRight((fallback: any, field) => ({
+    $cond: [{ $ne: [{ $ifNull: [field, ""] }, ""] }, field, fallback]
+  }), "");
+  pipeline.push({ $addFields: { __displayDriverInitials: { $toUpper: { $trim: { input: firstNonempty([
+    "$reportIdentity.initials", "$timeBilling.driverInitials", { $arrayElemAt: ["$__driverSummary.driverInitials", 0] }, "$driverInitials"
+  ]) } } } } });
   if (filter.from || filter.to) {
     // Mirrors the old in-memory filter's semantics: prefer actualStart (when the job
     // has genuinely started) over bookedStart, so a job that ran late/early is filtered
@@ -162,9 +168,9 @@ export async function listJobsPage(filter: JobsPageFilter): Promise<{ items: Job
     const regex = { $regex: escapeRegex(filter.q.trim()), $options: "i" };
     const orClauses: Record<string, any>[] = [
       { jobId: regex }, { customerName: regex }, { customerPhone: regex },
-      { customerEmail: regex }, { pickup: regex }, { dropoff: regex }, { driverInitials: regex }
+      { customerEmail: regex }, { pickup: regex }, { dropoff: regex }, { __displayDriverInitials: regex }
     ];
-    if (filter.qMatchedInitials?.length) orClauses.push({ driverInitials: { $in: filter.qMatchedInitials } });
+    if (filter.qMatchedInitials?.length) orClauses.push({ __displayDriverInitials: { $in: filter.qMatchedInitials.map(value => value.trim().toUpperCase()) } });
     andClauses.push({ $or: orClauses });
   }
 
@@ -174,10 +180,10 @@ export async function listJobsPage(filter: JobsPageFilter): Promise<{ items: Job
 
   const sortField = filter.sort && SORTABLE_FIELDS.has(filter.sort) ? filter.sort : "bookedStart";
   const sortDir = filter.dir === "asc" ? 1 : -1;
-  pipeline.push({ $sort: { [sortField]: sortDir } });
+  pipeline.push({ $sort: { [sortField === "driverInitials" ? "__displayDriverInitials" : sortField]: sortDir } });
 
   const countPipeline = [...pipeline, { $count: "total" }];
-  pipeline.push({ $skip: (filter.page - 1) * filter.pageSize }, { $limit: filter.pageSize }, { $project: { _id: 0 } });
+  pipeline.push({ $skip: (filter.page - 1) * filter.pageSize }, { $limit: filter.pageSize }, { $project: { _id: 0, __driverSummary: 0, __displayDriverInitials: 0 } });
 
   const [items, countResult] = await Promise.all([
     col.aggregate<Job>(pipeline).toArray(),
