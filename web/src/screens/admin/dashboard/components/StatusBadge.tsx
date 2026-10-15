@@ -3,7 +3,7 @@ import React from "react";
 import { CheckCircle2, Clock, Calendar, XCircle, AlertTriangle } from "lucide-react";
 import { DelayBand, JobStatus } from "../types";
 
-export function JobStatusBadge({ status }: { status: JobStatus | string }) {
+export function JobStatusBadge({ status, activity = [] }: { status: JobStatus | string; activity?: ReadonlyArray<{ action: string }> }) {
   switch (status) {
     case "READY":
       return (
@@ -23,7 +23,7 @@ export function JobStatusBadge({ status }: { status: JobStatus | string }) {
       return (
         <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-pill text-[12px] font-medium bg-admin-status-green-bg text-admin-status-green border border-admin-status-green/20">
           <CheckCircle2 className="w-3 h-3" />
-          Completed
+          {activity.some(entry => entry.action === "ADMIN_MARKED_COMPLETED") ? "Admin Completed" : "Completed"}
         </span>
       );
     case "CANCELLED":

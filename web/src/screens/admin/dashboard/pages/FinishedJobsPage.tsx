@@ -372,7 +372,7 @@ export function FinishedJobsPage({
                           <span className="mt-1 block text-[12px] font-semibold text-admin-muted tabular-nums">{emptyVanPhotoTime}</span>
                         </span>
                         <span className="flex shrink-0 flex-col items-end gap-1">
-                          <JobStatusBadge status={job.status} />
+                          <JobStatusBadge status={job.status} activity={job.activity} />
                           <span className={`inline-flex rounded-control px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-[0.03em] ${job.reviewEmailStatus === "Yes" ? "bg-admin-status-green-bg text-admin-status-green" : "bg-admin-surface text-admin-muted"}`}>
                             RW: {job.reviewEmailStatus ?? "No"}
                           </span>

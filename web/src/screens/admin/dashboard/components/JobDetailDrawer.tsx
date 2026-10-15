@@ -193,7 +193,7 @@ export function JobDetailDrawer({ job: initialJob, isOpen, onClose, onUpdated }:
               >
                 {copiedId ? <Check className="w-4 h-4 text-admin-status-green" /> : <Copy className="w-4 h-4" />}
               </button>
-              <JobStatusBadge status={job.status} />
+              <JobStatusBadge status={job.status} activity={job.activity} />
             </div>
             <button
               onClick={onClose}
