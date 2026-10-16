@@ -4,7 +4,7 @@ import { deleteEvidence, getEvidence, readEvidenceSummary } from "../db/evidence
 import { destroyEvidenceImage } from "../storage/cloudinary";
 import { appendActivity } from "../db/activity.repo";
 import { getSetting } from "../db/settings.repo";
-import { DriverProfile, EvidenceType, ExtraChargeType, Job, PaymentMethod } from "../jobs/job.types";
+import { EvidenceType, ExtraChargeType, Job, PaymentMethod } from "../jobs/job.types";
 import { uploadEvidence } from "../jobs/evidence.service";
 import { completeJob, getJobForDriver, getNextJobForDriver, saveJob, startJob } from "../jobs/jobs.service";
 import { WorkflowState, nextAfterPhoto, PHOTO_STATES } from "./workflow.states";
@@ -15,12 +15,7 @@ import {
 } from "./validation.engine";
 import { log, setContext } from "../utils/logger";
 import { formatPounds } from "../utils/money";
-import {
-  sendOpsCustomerSignedEmail,
-  sendOpsVanLoadedEmail,
-  sendOpsVanUnloadedEmail,
-  sendReviewRequestEmail
-} from "../google/gmail";
+import { sendReviewRequestEmail } from "../google/gmail";
 import { REVIEW_REQUEST_EMAIL_TEMPLATE } from "../notifications/message";
 import { isMessageEnabled } from "../notifications/message-catalog";
 import { sendPushToAdmins } from "../push/push.service";
@@ -177,8 +172,6 @@ async function handleLockedPhotoStep(jobId: string, identifier: string, photos: 
   }
 
   const saved = await saveJob(job, driver, `PHOTO_${evidenceType.toUpperCase()}_RECEIVED`, from, `${photos.length} file(s)`);
-  if (evidenceType === "VanLoaded") notifyOpsVanLoaded(saved, driver, from);
-  if (evidenceType === "EmptyVan") notifyOpsVanUnloaded(saved, driver, from);
   return saved;
 }
 
@@ -224,81 +217,6 @@ function notifyAdminsOfCompletion(job: Job, jobId: string): void {
     body: `${job.driverInitials || "A driver"} completed the job for ${job.customerName}.`,
     url: "/?section=finished"
   }).catch(err => log.warn("job completion admin push failed (non-fatal)", { job_id: jobId, error: String(err) }));
-}
-
-function notifyOpsVanLoaded(
-  job: Job,
-  driver: Pick<DriverProfile, "email" | "chatUserName" | "fullName" | "initials" | "vanRegistration">,
-  from: string
-): void {
-  const actor = driver.email || driver.chatUserName || job.driverInitials;
-  Promise.resolve(sendOpsVanLoadedEmail(job, driver))
-    .then(() => appendActivity({
-      jobId: job.jobId,
-      driver: actor,
-      action: "OPS_VAN_LOADED_EMAIL_SENT",
-      fromState: from,
-      toState: job.currentState,
-      detail: "info@themanvan.co.uk"
-    }))
-    .catch(error => appendActivity({
-      jobId: job.jobId,
-      driver: actor,
-      action: "OPS_VAN_LOADED_EMAIL_FAILED",
-      fromState: from,
-      toState: job.currentState,
-      detail: error instanceof Error ? error.message : String(error)
-    }).catch(err => log.warn("van-loaded ops email audit failed", { job_id: job.jobId, error: String(err) })));
-}
-
-function notifyOpsVanUnloaded(
-  job: Job,
-  driver: Pick<DriverProfile, "email" | "chatUserName" | "fullName" | "initials" | "vanRegistration">,
-  from: string
-): void {
-  const actor = driver.email || driver.chatUserName || job.driverInitials;
-  Promise.resolve(sendOpsVanUnloadedEmail(job, driver))
-    .then(() => appendActivity({
-      jobId: job.jobId,
-      driver: actor,
-      action: "OPS_VAN_UNLOADED_EMAIL_SENT",
-      fromState: from,
-      toState: job.currentState,
-      detail: "info@themanvan.co.uk"
-    }))
-    .catch(error => appendActivity({
-      jobId: job.jobId,
-      driver: actor,
-      action: "OPS_VAN_UNLOADED_EMAIL_FAILED",
-      fromState: from,
-      toState: job.currentState,
-      detail: error instanceof Error ? error.message : String(error)
-    }).catch(err => log.warn("van-unloaded ops email audit failed", { job_id: job.jobId, error: String(err) })));
-}
-
-function notifyOpsCustomerSigned(
-  job: Job,
-  driver: Pick<DriverProfile, "email" | "chatUserName" | "fullName" | "initials" | "vanRegistration">,
-  from: string
-): void {
-  const actor = driver.email || driver.chatUserName || job.driverInitials;
-  Promise.resolve(sendOpsCustomerSignedEmail(job, driver))
-    .then(() => appendActivity({
-      jobId: job.jobId,
-      driver: actor,
-      action: "OPS_CUSTOMER_SIGNED_EMAIL_SENT",
-      fromState: from,
-      toState: job.currentState,
-      detail: "info@themanvan.co.uk"
-    }))
-    .catch(error => appendActivity({
-      jobId: job.jobId,
-      driver: actor,
-      action: "OPS_CUSTOMER_SIGNED_EMAIL_FAILED",
-      fromState: from,
-      toState: job.currentState,
-      detail: error instanceof Error ? error.message : String(error)
-    }).catch(err => log.warn("customer-signed ops email audit failed", { job_id: job.jobId, error: String(err) })));
 }
 
 async function sendReviewRequestIfAny(job: Job, jobId: string, actor: string, from: string): Promise<boolean> {
@@ -586,7 +504,6 @@ async function submitLockedSignature(jobId: string, identifier: string, customer
   job.currentState = WorkflowState.WAITING_EXTRA_CHARGES;
 
   const saved = await saveJob(job, driver, "SUBMIT_CLIENT_CONFIRMATION", from, name);
-  notifyOpsCustomerSigned(saved, driver, from);
   return saved;
 }
 

@@ -36,7 +36,7 @@ function sendManualCompletionEmailIfAny(job: Job): void {
       return undefined;
     })
   ])
-    .then(([driver, evidence]) => sendOpsJobCompletionEmail(job, driver || fallbackDriver, evidence))
+    .then(([driver, evidence]) => sendOpsJobCompletionEmail(job, driver || fallbackDriver, evidence, "admin"))
     .then(() => appendActivity({
       jobId: job.jobId,
       driver: "admin dashboard",

@@ -11,6 +11,8 @@ const readEvidenceSummary = vi.fn();
 const uploadEvidence = vi.fn().mockResolvedValue(undefined);
 const sendPushToAdmins = vi.fn().mockResolvedValue(undefined);
 const sendOpsVanLoadedEmail = vi.fn().mockResolvedValue(undefined);
+const sendOpsVanUnloadedEmail = vi.fn().mockResolvedValue(undefined);
+const sendOpsCustomerSignedEmail = vi.fn().mockResolvedValue(undefined);
 const sendReviewRequestEmail = vi.fn().mockResolvedValue(undefined);
 
 vi.mock("../src/db/jobs.repo", () => ({
@@ -39,8 +41,8 @@ vi.mock("../src/google/gmail", () => ({
   sendJobStartedEmail: vi.fn(),
   sendOpsJobCompletionEmail: vi.fn(),
   sendOpsVanLoadedEmail: (...args: any[]) => sendOpsVanLoadedEmail(...args),
-  sendOpsVanUnloadedEmail: vi.fn().mockResolvedValue(undefined),
-  sendOpsCustomerSignedEmail: vi.fn().mockResolvedValue(undefined)
+  sendOpsVanUnloadedEmail: (...args: any[]) => sendOpsVanUnloadedEmail(...args),
+  sendOpsCustomerSignedEmail: (...args: any[]) => sendOpsCustomerSignedEmail(...args)
 }));
 vi.mock("../src/push/push.service", () => ({
   sendPushToAdmins: (...args: any[]) => sendPushToAdmins(...args)
@@ -144,7 +146,7 @@ describe("checkout flow order", () => {
     expect(updated.currentState).toBe(WorkflowState.WAITING_EMPTY_VAN_PHOTO);
   });
 
-  it("sends a best-effort ops email after van loaded photos are accepted", async () => {
+  it("does not send an ops email after van loaded photos are accepted", async () => {
     getJob.mockResolvedValue(job({
       currentState: WorkflowState.WAITING_LOADED_PHOTO,
       customerName: "Mary Major"
@@ -154,15 +156,17 @@ describe("checkout flow order", () => {
       { buffer: Buffer.from("image"), contentType: "image/jpeg", fileName: "loaded.jpg" }
     ]);
 
-    await vi.waitFor(() => expect(sendOpsVanLoadedEmail).toHaveBeenCalledWith(
-      expect.objectContaining({ jobId: "TMV-FLOW", customerName: "Mary Major" }),
-      expect.objectContaining({ fullName: "Abi Driver", email: "abi@example.com" })
-    ));
-    await vi.waitFor(() => expect(appendActivity).toHaveBeenCalledWith(expect.objectContaining({
-      jobId: "TMV-FLOW",
-      action: "OPS_VAN_LOADED_EMAIL_SENT",
-      detail: "info@themanvan.co.uk"
-    })));
+    expect(sendOpsVanLoadedEmail).not.toHaveBeenCalled();
+    expect(appendActivity).not.toHaveBeenCalledWith(expect.objectContaining({ action: "OPS_VAN_LOADED_EMAIL_SENT" }));
+  });
+
+  it("does not send an ops email when the empty-van photo is accepted", async () => {
+    getJob.mockResolvedValue(job({ currentState: WorkflowState.WAITING_EMPTY_VAN_PHOTO }));
+    await handlePhotoStep("TMV-FLOW", "abi@example.com", [
+      { buffer: Buffer.from("image"), contentType: "image/jpeg", fileName: "empty.jpg" }
+    ]);
+    expect(sendOpsVanUnloadedEmail).not.toHaveBeenCalled();
+    expect(appendActivity).not.toHaveBeenCalledWith(expect.objectContaining({ action: "OPS_VAN_UNLOADED_EMAIL_SENT" }));
   });
 
   it("does not send the van-loaded ops email for other photo steps", async () => {
@@ -189,6 +193,8 @@ describe("checkout flow order", () => {
     const updated = await submitDrawnSignature("TMV-FLOW", "abi@example.com", "Client", "https://example.com/sig.png");
 
     expect(updated.currentState).toBe(WorkflowState.WAITING_EXTRA_CHARGES);
+    expect(sendOpsCustomerSignedEmail).not.toHaveBeenCalled();
+    expect(appendActivity).not.toHaveBeenCalledWith(expect.objectContaining({ action: "OPS_CUSTOMER_SIGNED_EMAIL_SENT" }));
   });
 
   it("records when the customer final signature is captured", async () => {

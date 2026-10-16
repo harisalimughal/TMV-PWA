@@ -153,21 +153,23 @@ function renderTimingsHtmlRows(timings: TimingsBreakdown): string {
 
 export function opsJobCompletionSubject(
   job: Pick<Job, "customerName">,
-  driver: Pick<DriverProfile, "fullName" | "initials" | "email">
+  driver: Pick<DriverProfile, "fullName" | "initials" | "email">,
+  completedBy: "driver" | "admin" = "driver"
 ): string {
   const driverName = driver.fullName || driver.initials || driver.email || "Driver";
-  return `${driverName} completed the job of ${job.customerName || "Customer"}`;
+  return `${completedBy === "admin" ? "Admin" : driverName} completed the job of ${job.customerName || "Customer"}`;
 }
 
 export function renderOpsJobCompletionEmail(
   job: Job,
   driver: Pick<DriverProfile, "fullName" | "initials" | "email" | "vanRegistration">,
-  evidence?: EvidenceProgress
+  evidence?: EvidenceProgress,
+  completedBy: "driver" | "admin" = "driver"
 ): EmailContent {
   const viewUrl = dashboardJobUrl(job.jobId, "finished");
   const driverLabel = `${driver.fullName || "Unknown driver"} (${driver.initials || job.driverInitials || "—"})`;
   const total = job.amountCharged ?? job.totalCharges ?? job.calculatedTotalCharges ?? job.basePrice;
-  const subjectText = opsJobCompletionSubject(job, driver);
+  const subjectText = opsJobCompletionSubject(job, driver, completedBy);
   const timings = getTimingsBreakdown(job);
   const lines = [
     subjectText,
@@ -204,7 +206,7 @@ export function renderOpsJobCompletionEmail(
     `<!doctype html><html><body style="margin:0;background:#f6f7f9;font-family:Arial,sans-serif;color:#101828;">` +
     `<div style="max-width:640px;margin:0 auto;padding:24px;">` +
     `<div style="background:#ffffff;border:1px solid #eaecf0;border-radius:12px;padding:22px;">` +
-    `<p style="margin:0 0 6px;color:#12B76A;font-size:12px;font-weight:700;text-transform:uppercase;">Job completed</p>` +
+    `<p style="margin:0 0 6px;color:#12B76A;font-size:12px;font-weight:700;text-transform:uppercase;">${completedBy === "admin" ? "Admin completed" : "Job completed"}</p>` +
     `<h1 style="margin:0 0 16px;font-size:22px;line-height:1.25;">${escapeHtml(subjectText)}</h1>` +
     `<table style="width:100%;border-collapse:collapse;margin-bottom:18px;">` +
     row("Customer", job.customerName) +
@@ -429,31 +431,11 @@ export async function sendReviewRequestEmail(job: Job, template: string, htmlTem
 export async function sendOpsJobCompletionEmail(
   job: Job,
   driver: Pick<DriverProfile, "fullName" | "initials" | "email" | "vanRegistration">,
-  evidence?: EvidenceProgress
+  evidence?: EvidenceProgress,
+  completedBy: "driver" | "admin" = "driver"
 ): Promise<void> {
-  const subject = opsJobCompletionSubject(job, driver);
-  await sendEmail("info@themanvan.co.uk", subject, renderOpsJobCompletionEmail(job, driver, evidence));
-}
-
-export async function sendOpsVanLoadedEmail(
-  job: Job,
-  driver: Pick<DriverProfile, "fullName" | "initials" | "email" | "vanRegistration">
-): Promise<void> {
-  await sendEmail("info@themanvan.co.uk", opsVanLoadedSubject(job), renderOpsVanLoadedEmail(job, driver));
-}
-
-export async function sendOpsVanUnloadedEmail(
-  job: Job,
-  driver: Pick<DriverProfile, "fullName" | "initials" | "email" | "vanRegistration">
-): Promise<void> {
-  await sendEmail("info@themanvan.co.uk", opsVanUnloadedSubject(job), renderOpsVanUnloadedEmail(job, driver));
-}
-
-export async function sendOpsCustomerSignedEmail(
-  job: Job,
-  driver: Pick<DriverProfile, "fullName" | "initials" | "email" | "vanRegistration">
-): Promise<void> {
-  await sendEmail("info@themanvan.co.uk", opsCustomerSignedSubject(job), renderOpsCustomerSignedEmail(job, driver));
+  const subject = opsJobCompletionSubject(job, driver, completedBy);
+  await sendEmail("info@themanvan.co.uk", subject, renderOpsJobCompletionEmail(job, driver, evidence, completedBy));
 }
 
 /** Gated behind notifications/message-catalog.ts's DRIVER_JOB_ASSIGNMENT_EMAIL --

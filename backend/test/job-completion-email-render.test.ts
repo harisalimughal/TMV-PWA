@@ -68,6 +68,16 @@ function job(): Job {
 }
 
 describe("renderOpsJobCompletionEmail", () => {
+  it("attributes manual completion to Admin in both subject and body, retaining the driver details", () => {
+    const driver = { initials: "HA", fullName: "Haris Ali", email: "driver@example.com", vanRegistration: "AB12 CDE" };
+    const email = renderOpsJobCompletionEmail(job(), driver, undefined, "admin");
+    expect(opsJobCompletionSubject(job(), driver, "admin")).toBe("Admin completed the job of Mary Major");
+    expect(email.text).toContain("Admin completed the job of Mary Major");
+    expect(email.html).toContain("Admin completed the job of Mary Major");
+    expect(email.text).not.toContain("Haris Ali completed the job");
+    expect(email.text).toContain("Driver: Haris Ali (HA)");
+    expect(email.text).toContain("Payment method: Bank Transfer");
+  });
   it("includes the summary, submitted details, timings, and dashboard View More link", () => {
     const email = renderOpsJobCompletionEmail(
       job(),

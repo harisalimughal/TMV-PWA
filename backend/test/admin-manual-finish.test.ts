@@ -127,6 +127,9 @@ describe("markJobFinishedManually", () => {
       toState: WorkflowState.COMPLETED,
       detail: "Driver completed this manually."
     }));
+    await vi.waitFor(() => expect(sendOpsJobCompletionEmail).toHaveBeenCalledWith(
+      expect.objectContaining({ jobId: "TMV-MANUAL" }), expect.any(Object), expect.any(Object), "admin"
+    ));
   });
 
   it("does not rewrite an already completed job", async () => {
