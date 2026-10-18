@@ -9,17 +9,22 @@ import type { ActivityEntry, EvidenceSummary, Job, DriverJobSummary, DriverJobSu
 import { DAMAGE_CATEGORIES } from "../scenarioSpec";
 import { DEFAULT_CONFIRMATION_TEXT, makeEvidenceItem, seedStore, type MockStore } from "./fixtures";
 import { applyTrigger, type WorkflowTrigger } from "./workflow";
+import { handleDriverActivity } from "./activity";
+import { handleDriverRecords, recordMockScenario, resetDriverRecords } from "./driverRecords";
 
 let store: MockStore = seedStore();
 
 /** Exposed for the HMR hook in install.ts. */
 export function resetStore(): void {
   store = seedStore();
+  resetDriverRecords();
 }
 
 export interface MockResponse {
   status: number;
   body: unknown;
+  /** A file response (CSV export): sent as-is with this type instead of as JSON. */
+  file?: { contentType: string; filename: string };
 }
 
 const ok = (body: unknown): MockResponse => ({ status: 200, body });
@@ -162,9 +167,14 @@ function parseCategories(raw: string | undefined): string[] {
  * @param method  upper-case HTTP method
  * @param path    pathname only, e.g. "/api/jobs/10231" (no origin, no query)
  * @param bodyText JSON request body as a string, when present
+ * @param search  the URL's query string, e.g. "?page=2&q=van", when present
  */
-export function handle(method: string, path: string, bodyText?: string): MockResponse | null {
+export function handle(method: string, path: string, bodyText?: string, search = ""): MockResponse | null {
   if (!path.startsWith("/api/")) return null;
+
+  // Before the /api/jobs/:id matcher below, which would swallow pending-submissions.
+  const driverRes = handleDriverRecords(method, path, new URLSearchParams(search));
+  if (driverRes) return driverRes;
 
   // ---- auth --------------------------------------------------------------------
   if (path === "/api/auth/me" && method === "GET") {
@@ -220,6 +230,10 @@ export function handle(method: string, path: string, bodyText?: string): MockRes
     store.settings.LIABILITY_DAMAGE_CATEGORIES = String(value ?? "");
     return ok({ ok: true });
   }
+
+  // Driver activity and messages (before the /api/jobs/:id matcher below, which would swallow them).
+  const driverActivity = handleDriverActivity(method, path, search, bodyText, Object.values(store.jobs), store.driver);
+  if (driverActivity) return driverActivity;
 
   // ---- jobs ------------------------------------------------------------------
   if (path === "/api/jobs/list" && method === "GET") {
@@ -293,6 +307,7 @@ export function handle(method: string, path: string, bodyText?: string): MockRes
       return transition(jobId, action as WorkflowTrigger, input);
     }
     if (sub.startsWith("/scenarios/") && method === "POST") {
+      recordMockScenario(jobId, decodeURIComponent(sub.slice("/scenarios/".length)));
       if (job && job.currentState.endsWith("ISSUES_CHOICE")) transition(jobId, "scenario");
       return ok({ ok: true });
     }

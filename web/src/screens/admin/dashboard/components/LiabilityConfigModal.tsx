@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { Loader2, Plus, Trash2, X } from "lucide-react";
-import { Button, IconButton } from "../../../../ui";
+import { Loader2, Plus, Trash2 } from "lucide-react";
+import { Button, Modal } from "../../../../ui";
 import { DAMAGE_CATEGORIES } from "../../../../scenarioSpec";
 import { fetchSettings, saveSetting } from "../api";
 
@@ -106,74 +106,20 @@ export function LiabilityConfigModal({ isOpen, onClose }: Props) {
     }
   }
 
+  // The shared Modal portals to <body>, traps focus, closes on Escape and restores focus
+  // (CLAUDE.md rule 2). It was a hand-rolled inline overlay with a fixed #FAFAFA body,
+  // which also stayed bright white in Midnight.
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm">
-      <div className="flex max-h-[90vh] w-full max-w-[560px] flex-col overflow-hidden rounded-module bg-white shadow-2xl">
-        <div className="flex shrink-0 items-center justify-between border-b border-admin-line bg-white px-6 py-4">
-          <div>
-            <h2 className="text-heading text-fg">Manage Damage Categories</h2>
-            <p className="mt-1 text-helper text-fg-muted">Changes update the driver Liability Report picker.</p>
-          </div>
-          <IconButton aria-label="Close" icon={<X />} onClick={onClose} className="-mr-2" />
-        </div>
-
-        <div className="flex-1 overflow-y-auto bg-[#FAFAFA] p-6">
-          {loading ? (
-            <div className="flex min-h-40 items-center justify-center text-admin-muted">
-              <Loader2 className="mr-2 size-5 animate-spin" aria-hidden />
-              Loading categories...
-            </div>
-          ) : (
-            <div className="space-y-4">
-              {error && (
-                <div className="rounded-card border border-admin-status-red/30 bg-admin-status-red-bg px-3 py-2 text-[13px] font-medium text-admin-status-red">
-                  {error}
-                </div>
-              )}
-
-              <div className="flex flex-col gap-2 border-b border-admin-line pb-4 sm:flex-row">
-                <input
-                  type="text"
-                  value={newCategory}
-                  onChange={event => setNewCategory(event.target.value)}
-                  onKeyDown={event => {
-                    if (event.key === "Enter") addCategory();
-                  }}
-                  className="h-11 min-w-0 flex-1 rounded-control border border-admin-line bg-white px-3 text-[14px] text-admin-ink shadow-sm outline-none transition focus:border-admin-brand"
-                  placeholder="New category"
-                />
-                <Button variant="secondary" onClick={addCategory} iconLeft={<Plus />} className="shrink-0">
-                  Add category
-                </Button>
-              </div>
-
-              <div className="space-y-2">
-                {categories.map((category, index) => (
-                  <div key={index} className="flex items-center gap-2">
-                    <input
-                      type="text"
-                      value={category}
-                      onChange={event => updateCategory(index, event.target.value)}
-                      className="h-11 min-w-0 flex-1 rounded-control border border-admin-line bg-white px-3 text-[14px] text-admin-ink shadow-sm outline-none transition focus:border-admin-brand"
-                      placeholder="Category name"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => deleteCategory(index)}
-                      className="grid size-11 shrink-0 place-items-center rounded-card text-admin-muted transition hover:bg-admin-status-red-bg hover:text-admin-status-red"
-                      aria-label={`Delete ${category || "category"}`}
-                    >
-                      <Trash2 className="size-4" aria-hidden />
-                    </button>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-
-        <div className="flex shrink-0 items-center justify-end gap-3 border-t border-line bg-surface px-6 py-4">
-          <Button variant="ghost" onClick={onClose}>
+    <Modal
+      open={isOpen}
+      onClose={onClose}
+      title="Manage damage categories"
+      size="lg"
+      placement="center"
+      dismissible={!saving}
+      footer={
+        <div className="flex items-center justify-end gap-3">
+          <Button variant="ghost" onClick={onClose} disabled={saving}>
             Cancel
           </Button>
           <Button
@@ -184,7 +130,63 @@ export function LiabilityConfigModal({ isOpen, onClose }: Props) {
             Save changes
           </Button>
         </div>
-      </div>
-    </div>
+      }
+    >
+      <p className="mb-4 text-helper text-fg-muted">Changes update the driver Liability Report picker.</p>
+      {loading ? (
+        <div role="status" className="flex min-h-40 items-center justify-center text-admin-muted">
+          <Loader2 className="mr-2 size-5 animate-spin" aria-hidden />
+          Loading categories...
+        </div>
+      ) : (
+        <div className="space-y-4">
+          {error && (
+            <div role="alert" className="rounded-card border border-admin-status-red/30 bg-admin-status-red-bg px-3 py-2 text-[13px] font-medium text-admin-status-red">
+              {error}
+            </div>
+          )}
+
+          <div className="flex flex-col gap-2 border-b border-admin-line pb-4 sm:flex-row">
+            <input
+              type="text"
+              value={newCategory}
+              onChange={event => setNewCategory(event.target.value)}
+              onKeyDown={event => {
+                if (event.key === "Enter") addCategory();
+              }}
+              aria-label="New category"
+              className="h-11 min-w-0 flex-1 rounded-control border border-admin-line bg-surface px-3 text-[14px] text-admin-ink shadow-sm outline-none transition focus:border-admin-brand"
+              placeholder="New category"
+            />
+            <Button variant="secondary" onClick={addCategory} iconLeft={<Plus />} className="shrink-0">
+              Add category
+            </Button>
+          </div>
+
+          <div className="space-y-2">
+            {categories.map((category, index) => (
+              <div key={index} className="flex items-center gap-2">
+                <input
+                  type="text"
+                  value={category}
+                  onChange={event => updateCategory(index, event.target.value)}
+                  aria-label={`Category ${index + 1}`}
+                  className="h-11 min-w-0 flex-1 rounded-control border border-admin-line bg-surface px-3 text-[14px] text-admin-ink shadow-sm outline-none transition focus:border-admin-brand"
+                  placeholder="Category name"
+                />
+                <button
+                  type="button"
+                  onClick={() => deleteCategory(index)}
+                  className="grid size-11 shrink-0 place-items-center rounded-card text-admin-muted transition hover:bg-admin-status-red-bg hover:text-admin-status-red"
+                  aria-label={`Delete ${category || "category"}`}
+                >
+                  <Trash2 className="size-4" aria-hidden />
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </Modal>
   );
 }

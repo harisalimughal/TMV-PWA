@@ -71,7 +71,7 @@ const VARIANTS: Record<ButtonVariant, string> = {
     "border-transparent bg-transparent text-fg-muted hover:bg-surface-sunken hover:text-fg active:bg-line",
   // Serious, not loud — semantic danger fill, no shout.
   danger:
-    "border-transparent bg-danger-signal text-white shadow-xs hover:brightness-[0.97] active:brightness-95",
+    "border-transparent bg-[rgb(var(--danger-solid,var(--danger-signal)))] text-white shadow-xs hover:brightness-[0.97] active:brightness-95",
   // Confirmation-only, where the action genuinely is a positive completion.
   success:
     "border-transparent bg-success-signal text-white shadow-xs hover:brightness-[0.97] active:brightness-95"

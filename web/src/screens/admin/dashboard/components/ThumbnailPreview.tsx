@@ -89,7 +89,7 @@ export function ThumbnailPreview({ src, alt, category, state, onClick, size = "m
       />
 
       {loadStatus === "loaded" && onClick && (
-        <div className="absolute inset-0 bg-admin-ink/20 opacity-0 group-hover:opacity-100 flex items-center justify-center transition">
+        <div className="absolute inset-0 tmv-scrim opacity-0 group-hover:opacity-100 flex items-center justify-center transition">
           <ZoomIn className="w-3 h-3 text-white" />
         </div>
       )}

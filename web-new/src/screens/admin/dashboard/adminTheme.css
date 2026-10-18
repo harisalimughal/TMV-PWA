@@ -1,0 +1,640 @@
+/*
+ * TMV Aurora -- admin dashboard theme.
+ *
+ * Scoped to html.tmv-admin (set by AdminApp while it is mounted), so the driver app
+ * keeps its own tokens. Two independently tuned themes share one set of semantic
+ * variables that the admin-* Tailwind colours resolve to:
+ *
+ *   Aurora Light      html.tmv-admin                      (default)
+ *   Midnight Aurora   html.tmv-admin[data-admin-theme="dark"]   (true black, neutral greys)
+ *
+ * `data-admin-theme` is written by useAdminTheme (preference: light | dark | system,
+ * persisted). Colour channels are space-separated RGB triplets so Tailwind opacity
+ * modifiers keep working.
+ *
+ * Contrast (WCAG AA, measured on the surfaces they sit on):
+ *   Light  ink #14172F 16.4:1 · slate #4D5878 7.0:1 · muted #5D6788 5.6:1 · brand #5B43E6 6.0:1
+ *          warning text #8F5200 5.9:1 · success text #0F7A4B 5.5:1 · danger text #BE1F4A 5.9:1
+ *   Dark   true black. ink #F5F5F5 16.4:1 · slate #A3A3A3 7.1:1 · muted #8A8A8A 5.2:1 · brand #A78BFA 6.6:1
+ *          (worst case, on the #171717 hover surface)
+ * Chart hues are used for marks (>= 3:1) and never for body text.
+ */
+
+/* Printable documents (job dossier, scenario reports, the print portal) are paper: they
+ * always use the light palette, so a report previewed or printed while Midnight is on
+ * still comes out as dark text on white. Every variable the dark block overrides is
+ * declared here, so re-declaring this block on those subtrees restores all of them. */
+html.tmv-admin,
+html.tmv-admin .report-document,
+html.tmv-admin #tmv-print-portal {
+  color-scheme: light;
+
+  /* Dispatch-board figures in IBM Plex Mono (the driver app uses Hanken Grotesk). */
+  --font-mono: "IBM Plex Mono", ui-monospace, "SF Mono", "SFMono-Regular", "Roboto Mono", Menlo,
+    Consolas, monospace;
+
+  /* ---- surfaces ----
+   * Neutral off-white canvas and white surfaces (the canvas was lavender #F6F7FF). The
+   * light neutrals may carry a hint of cool grey, never a visible tint: adminTheme.test.ts
+   * caps the channel spread at 8 (the old lavender canvas was 9 to 17). */
+  --bg: 248 249 251;             /* #F8F9FB canvas */
+  --bg-2: 243 244 247;
+  --surface: 255 255 255;        /* cards, sidebar, header */
+  --surface-sunken: 245 246 248; /* #F5F6F8 insets, chips */
+  --surface-raised: 236 238 242; /* #ECEEF2 selected, active */
+  --line: 231 233 238;           /* #E7E9EE */
+  --line-strong: 220 223 228;    /* #DCDFE4 (the suggested #DDE1E7 reads blue) */
+
+  /* ---- text ---- */
+  --fg: 23 25 29;                /* #17191D */
+  --fg-muted: 95 102 114;        /* #5F6672 */
+  --fg-subtle: 101 108 120;      /* #656C78 (#7E8591 is 3.7:1 on white) */
+
+  /* ---- brand: one violet family in both themes ---- */
+  --brand: 109 40 217;           /* #6D28D9 text and icon grade (7.1:1) */
+  --brand-solid: 124 58 237;     /* #7C3AED fills with white text (5.7:1) */
+  --brand-hover: 109 40 217;
+  --brand-active: 91 33 182;     /* #5B21B6 */
+  --brand-fg: 255 255 255;
+  --brand-subtle: 243 238 255;   /* #F3EEFF */
+  --brand-subtle-fg: 91 33 182;
+  --brand-line: 221 214 254;     /* #DDD6FE */
+
+  --success-fg: 15 122 75;
+  --success-signal: 15 122 75;
+  --success-subtle: 231 246 238;
+  --success-line: 179 226 203;
+  --warning-fg: 143 82 0;
+  --warning-signal: 182 106 8;
+  --warning-subtle: 255 246 230;
+  --warning-line: 245 221 168;
+  --danger-fg: 190 31 74;
+  --danger-solid: 205 45 88;
+  --danger-signal: 229 80 106;
+  --danger-solid: 196 30 58;     /* #C41E3A filled danger buttons, white text 5.9:1 */
+  --danger-subtle: 255 241 244;
+  --danger-line: 252 202 216;
+  /* Vehicle compliance accent (Vehicles page). White on --orange-solid is 5.2:1. */
+  --orange-fg: 194 65 12;        /* #C2410C */
+  --orange-solid: 194 65 12;
+  --orange-subtle: 255 241 230;  /* #FFF1E6 */
+  --orange-ring: #EA580C;
+
+  /* ---- chart marks (data series keep their hues) ---- */
+  --chart-violet: #7C3AED;
+  --chart-blue: #2F7BF0;
+  --chart-cyan: #0891B2;
+  --chart-teal: #0D9488;
+  --chart-amber: #C77B0A;
+  --chart-coral: #E5506A;
+  --chart-orange: #EA7A3C;
+  --chart-slate: #9AA1AC;
+  --chart-grid: #EEF0F3;
+  --chart-axis: #5F6672;
+  --chart-surface: #FFFFFF;
+  --chart-on-mark: #FFFFFF;
+
+  /* accent gradients: violet only, no blue (text on them is white, >= 5.7:1) */
+  --grad-brand: linear-gradient(135deg, #7C3AED 0%, #6D28D9 100%);
+  --grad-violet: linear-gradient(135deg, #8B5CF6 0%, #7C3AED 100%);
+  --grad-blue: linear-gradient(135deg, #3F8CFF 0%, #27C4F5 100%);
+  --grad-teal: linear-gradient(135deg, #1CCFB0 0%, #27C4F5 100%);
+  --grad-coral: linear-gradient(135deg, #FF9966 0%, #FF6D7D 100%);
+
+  /* ---- elevation: hairlines first, shadows only where they mean "raised" ---- */
+  --glass-bg: rgb(255, 255, 255);
+  --glass-border: rgb(231, 233, 238);
+  --glass-edge: rgba(16, 24, 40, 0.04);
+  --admin-shadow-sm: 0 1px 2px rgba(16, 24, 40, 0.04);
+  --admin-shadow: 0 1px 2px rgba(16, 24, 40, 0.04), 0 1px 3px rgba(16, 24, 40, 0.03);
+  --admin-shadow-lg: 0 1px 2px rgba(16, 24, 40, 0.05), 0 16px 32px -16px rgba(16, 24, 40, 0.14);
+  --ambient-1: rgba(124, 58, 237, 0.035);
+  --ambient-2: rgba(0, 0, 0, 0);
+  --ambient-3: rgba(0, 0, 0, 0);
+  --sidebar-from: #FFFFFF;
+  --sidebar-to: #FFFFFF;
+  --dot-grid: rgba(23, 25, 29, 0.03);
+  --scrim: rgba(23, 25, 29, 0.32);   /* behind drawers and the search palette */
+
+  /* Sidebar and nav: white panel, violet selection. */
+  --sidebar-bg: #FFFFFF;
+  --sidebar-edge: #E7E9EE;
+  --sidebar-fg: 23 25 29;
+  --sidebar-fg-muted: 101 108 120;
+  --sidebar-icon: 95 102 114;
+  --nav-fg: rgb(75, 82, 94);
+  --nav-hover-bg: #F2F3F6;
+  --nav-active-bg: #F3EEFF;
+  --nav-active-fg: #5B21B6;
+  --nav-active-shadow: inset 2px 0 0 #7C3AED;
+  --nav-icon-bg: transparent;
+  --nav-icon-active-bg: rgba(124, 58, 237, 0.12);
+  --nav-icon-active-fg: #6D28D9;
+  --nav-label: #656C78;
+  --nav-tooltip-bg: #17191D;
+  --side-card-bg: #F8F9FB;
+  --logo-shadow: 0 0 0 1px rgba(16, 24, 40, 0.08);
+
+  /* Headline cards and primary buttons. */
+  --gloss-wash: 0.08;
+  --gloss-glow: 0.10;
+  --ring-glow: 0.22;
+  --gloss-border: rgb(var(--line));
+  --gloss-edge: rgba(255, 255, 255, 0.9);
+  --tile-glow: 0.35;
+  --btn-glow: 0 1px 2px rgba(16, 24, 40, 0.10), inset 0 1px 0 rgba(255, 255, 255, 0.16);
+  --btn-glow-hover: 0 4px 12px -4px rgba(124, 58, 237, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.2);
+  --hero-text: linear-gradient(100deg, rgb(var(--fg)) 0%, rgb(var(--fg)) 35%, rgb(var(--brand)) 100%);
+}
+
+html.tmv-admin[data-admin-theme="dark"] {
+  color-scheme: dark;
+
+  /* True black. Every neutral below has R = G = B (no navy or slate tint); the
+   * guard in adminTheme.test.ts fails the build if one drifts. Depth comes from
+   * small neutral steps plus hairline borders, not from colour. */
+  --bg: 0 0 0;                   /* #000000 canvas, sidebar, header */
+  --bg-2: 5 5 5;                 /* #050505 */
+  --surface: 10 10 10;           /* #0A0A0A cards, panels, inputs */
+  --surface-sunken: 17 17 17;    /* #111111 insets, chips, menus */
+  --surface-raised: 23 23 23;    /* #171717 hover, selected, active */
+  --line: 36 36 36;              /* #242424 */
+  --line-strong: 51 51 51;       /* #333333 */
+
+  --fg: 245 245 245;             /* #F5F5F5 */
+  --fg-muted: 163 163 163;       /* #A3A3A3 */
+  --fg-subtle: 138 138 138;      /* #8A8A8A (#737373 is under 4.5:1 on #111) */
+
+  --brand: 167 139 250;          /* #A78BFA text and icon grade */
+  --brand-solid: 124 58 237;     /* #7C3AED fills with white text (5.7:1) */
+  --brand-hover: 109 40 217;     /* #6D28D9 (7.1:1) */
+  --brand-active: 196 181 253;   /* #C4B5FD */
+  --brand-fg: 255 255 255;
+  --brand-subtle: 28 20 48;      /* violet wash on black */
+  --brand-subtle-fg: 196 181 253;
+  --brand-line: 76 52 140;
+
+  --success-fg: 52 211 153;      /* #34D399 */
+  --success-signal: 52 211 153;
+  --success-subtle: 6 34 25;
+  --success-line: 18 84 62;
+  --warning-fg: 251 191 36;      /* #FBBF24 */
+  --warning-signal: 245 158 11;
+  --warning-subtle: 38 27 5;
+  --warning-line: 104 72 12;
+  --danger-fg: 248 113 113;      /* #F87171 */
+  --danger-solid: 220 38 38;     /* #DC2626 (white 4.8:1) */
+  --danger-signal: 239 68 68;
+  --danger-solid: 220 38 38;     /* #DC2626 filled danger buttons, white text 4.8:1 */
+  --danger-subtle: 42 12 14;
+  --danger-line: 110 30 36;
+  --orange-fg: 251 146 60;       /* #FB923C */
+  --orange-solid: 194 65 12;     /* white text 5.2:1 */
+  --orange-subtle: 42 22 8;
+  --orange-ring: #FB923C;
+
+  /* Marks on #0A0A0A, all >= 3:1. Blue and cyan stay as data series only. */
+  --chart-violet: #A78BFA;
+  --chart-blue: #60A5FA;
+  --chart-cyan: #22D3EE;
+  --chart-teal: #34D399;
+  --chart-amber: #FBBF24;
+  --chart-coral: #F87171;
+  --chart-orange: #FB923C;
+  --chart-slate: #737373;
+  --chart-grid: #1F1F1F;
+  --chart-axis: #A3A3A3;
+  --chart-surface: #0A0A0A;
+  --chart-on-mark: #000000;
+
+  --grad-brand: linear-gradient(135deg, #7C3AED 0%, #6D28D9 100%);
+  --grad-violet: linear-gradient(135deg, #7C3AED 0%, #6D28D9 100%);
+
+  --glass-bg: rgb(10, 10, 10);
+  --glass-border: rgba(255, 255, 255, 0.06);
+  --glass-edge: rgba(255, 255, 255, 0.04);
+  --admin-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.6);
+  --admin-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03), 0 1px 2px rgba(0, 0, 0, 0.6);
+  --admin-shadow-lg: inset 0 1px 0 rgba(255, 255, 255, 0.04), 0 24px 48px -24px rgba(0, 0, 0, 0.9);
+  --ambient-1: rgba(139, 92, 246, 0.06);
+  --ambient-2: rgba(0, 0, 0, 0);
+  --ambient-3: rgba(0, 0, 0, 0);
+  --dot-grid: rgba(255, 255, 255, 0.03);
+  --scrim: rgba(0, 0, 0, 0.72);     /* ink-based scrims turned white on black */
+
+  --sidebar-bg: #000000;
+  --sidebar-edge: #1A1A1A;
+  --sidebar-fg: 245 245 245;
+  --sidebar-fg-muted: 138 138 138;
+  --sidebar-icon: 163 163 163;
+  --nav-fg: rgb(163, 163, 163);
+  --nav-hover-bg: #111111;
+  --nav-active-bg: #171717;
+  --nav-active-shadow: inset 2px 0 0 #8B5CF6, inset 0 0 0 1px #242424;
+  --nav-icon-bg: transparent;
+  --nav-icon-active-bg: rgba(139, 92, 246, 0.16);
+  --nav-icon-active-fg: #C4B5FD;
+  --nav-label: #808080;          /* 5.3:1 on #000 (was 3.9:1 at 9pt) */
+  --nav-tooltip-bg: #111111;
+  --nav-active-fg: #FFFFFF;
+  --side-card-bg: #0A0A0A;
+  --logo-shadow: none;
+
+  --gloss-wash: 0.10;
+  --gloss-glow: 0.14;
+  --ring-glow: 0.38;
+  --gloss-border: rgb(36 36 36);
+  --gloss-edge: rgba(255, 255, 255, 0.05);
+  --tile-glow: 0.25;
+  --btn-glow: 0 1px 2px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.16);
+  --btn-glow-hover: 0 0 0 1px rgba(167, 139, 250, 0.35), 0 8px 24px -10px rgba(124, 58, 237, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.2);
+  --hero-text: linear-gradient(100deg, rgb(var(--fg)) 0%, rgb(var(--fg)) 35%, rgb(var(--brand)) 100%);
+}
+
+/* ------------------------------------------------------------- atmosphere ---- */
+
+html.tmv-admin body {
+  background: rgb(var(--bg));
+  color: rgb(var(--fg));
+  font-weight: 400; /* the driver app's body weight is 450 (index.css) */
+}
+
+/* Large blurred colour fields behind the workspace. One fixed layer, no filters,
+ * so it costs a single paint rather than a per-card blur. */
+.tmv-ambient {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(900px 560px at 8% -8%, var(--ambient-1), transparent 62%),
+    radial-gradient(760px 520px at 96% 4%, var(--ambient-2), transparent 60%),
+    radial-gradient(900px 640px at 70% 108%, var(--ambient-3), transparent 62%);
+}
+.tmv-ambient::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  opacity: 0.5;
+  background-image: radial-gradient(var(--dot-grid) 1px, transparent 1px);
+  background-size: 22px 22px;
+  mask-image: linear-gradient(180deg, #000 0%, transparent 55%);
+  -webkit-mask-image: linear-gradient(180deg, #000 0%, transparent 55%);
+}
+
+/* ------------------------------------------------------------------ cards ---- */
+
+/* Quiet data panel: frosted surface, hairline edge, soft depth. */
+.tmv-panel {
+  background: var(--glass-bg);
+  border: 1px solid rgb(var(--line));
+  border-radius: 20px;
+  box-shadow: var(--admin-shadow);
+  -webkit-backdrop-filter: blur(10px) saturate(140%);
+  backdrop-filter: blur(10px) saturate(140%);
+}
+
+/*
+ * Gloss: headline surfaces (KPI cards, hero, featured analytics). Each card sets
+ * --accent (an "r g b" triplet). Layers sit behind the content: a corner light, a
+ * faint accent wash and a reflective top edge. No transparency behind text.
+ */
+.tmv-gloss {
+  --accent: 91 67 230;
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  background:
+    radial-gradient(120% 90% at 100% 0%, rgb(var(--accent) / var(--gloss-wash)) 0%, rgb(var(--accent) / 0) 58%),
+    linear-gradient(160deg, rgb(var(--surface)) 0%, rgb(var(--surface-sunken)) 100%);
+  border: 1px solid var(--gloss-border);
+  border-radius: 22px;
+  box-shadow: var(--admin-shadow-lg);
+}
+.tmv-gloss::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  pointer-events: none;
+  box-shadow: inset 0 1px 0 var(--gloss-edge), inset 0 -1px 0 rgb(var(--accent) / 0.06);
+}
+.tmv-gloss::after {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  right: -18%;
+  bottom: -46%;
+  width: 70%;
+  height: 90%;
+  pointer-events: none;
+  background: radial-gradient(closest-side, rgb(var(--accent) / var(--gloss-glow)), rgb(var(--accent) / 0));
+}
+
+.tmv-accent-violet { --accent: 114 92 255; }
+.tmv-accent-blue { --accent: 47 123 240; }
+.tmv-accent-teal { --accent: 13 148 136; }
+.tmv-accent-coral { --accent: 229 80 106; }
+.tmv-accent-amber { --accent: 199 123 10; }
+html.tmv-admin[data-admin-theme="dark"] .tmv-accent-violet { --accent: 167 139 250; }
+html.tmv-admin[data-admin-theme="dark"] .tmv-accent-blue { --accent: 96 165 250; }
+html.tmv-admin[data-admin-theme="dark"] .tmv-accent-teal { --accent: 52 211 153; }
+html.tmv-admin[data-admin-theme="dark"] .tmv-accent-coral { --accent: 248 113 113; }
+html.tmv-admin[data-admin-theme="dark"] .tmv-accent-amber { --accent: 251 191 36; }
+
+/* Interactive cards lift slightly. */
+.tmv-lift { transition: transform 200ms cubic-bezier(.2,.7,.2,1), box-shadow 200ms ease, border-color 200ms ease; }
+.tmv-lift:hover { transform: translateY(-2px); box-shadow: var(--admin-shadow-lg); border-color: rgb(var(--accent) / 0.4); }
+
+/* Primary action: brand gradient, white text (>= 5:1 across the gradient). */
+.tmv-btn-primary {
+  background-image: var(--grad-brand);
+  color: #fff;
+  border-color: transparent;
+  box-shadow: var(--btn-glow);
+  transition: filter 160ms ease, transform 160ms ease, box-shadow 160ms ease;
+}
+.tmv-btn-primary:hover { filter: brightness(1.08) saturate(1.05); box-shadow: var(--btn-glow-hover); }
+.tmv-btn-primary:active { transform: translateY(1px); }
+
+/* Fills that carry white text keep a solid, AA-safe brand in both themes. */
+html.tmv-admin .bg-admin-brand { background-color: rgb(var(--brand-solid)); }
+html.tmv-admin .hover\:bg-admin-brand-dark:hover { background-color: rgb(var(--brand-hover)); }
+html.tmv-admin .bg-admin-status-red { background-color: rgb(var(--danger-solid)); }
+/* The shared app <Button> and <Badge> (src/ui) fill with bg-brand, which in the admin
+ * palette is the text-grade violet: white on it was 2.7:1 in Midnight (the sign-in button,
+ * the categories dialog). Map it to the solid fill, like bg-admin-brand above. */
+html.tmv-admin .bg-brand { background-color: rgb(var(--brand-solid)); }
+html.tmv-admin .hover\:bg-brand-hover:hover { background-color: rgb(var(--brand-hover)); }
+html.tmv-admin .active\:bg-brand-active:active { background-color: rgb(var(--brand-hover)); }
+
+/* Gradient text for the hero title only. */
+.tmv-gradient-text {
+  background-image: var(--hero-text);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* ---------------------------------------------------------------- sidebar ---- */
+
+.tmv-sidebar {
+  background: var(--sidebar-bg);
+  color: rgb(var(--sidebar-fg));
+  border-right: 1px solid var(--sidebar-edge);
+}
+.tmv-side-muted { color: rgb(var(--sidebar-fg-muted)); }
+.tmv-side-icon { color: rgb(var(--sidebar-icon)); }
+.tmv-side-tooltip { background: var(--nav-tooltip-bg); }
+.tmv-side-strong { color: rgb(var(--sidebar-fg)); }
+.tmv-side-btn:hover { background: var(--nav-hover-bg); color: rgb(var(--sidebar-fg)); }
+.tmv-side-divider { background: var(--sidebar-edge); }
+.tmv-side-card { border: 1px solid var(--sidebar-edge); background: var(--side-card-bg); }
+.tmv-side-kbd { border: 1px solid var(--sidebar-edge); background: var(--nav-hover-bg); }
+.tmv-logo-tile { box-shadow: var(--logo-shadow); }
+.tmv-nav-item { color: var(--nav-fg); }
+.tmv-nav-item:hover { background: var(--nav-hover-bg); color: rgb(var(--sidebar-fg)); }
+.tmv-nav-item[aria-current="page"] {
+  color: var(--nav-active-fg);
+  background: var(--nav-active-bg);
+  box-shadow: var(--nav-active-shadow);
+}
+.tmv-nav-item .tmv-nav-icon { background: var(--nav-icon-bg); }
+/* Selected option of the drawer's Appearance control: the same treatment as the active nav item. */
+.tmv-theme-option-on { color: var(--nav-active-fg); background: var(--nav-active-bg); box-shadow: var(--nav-active-shadow); }
+.tmv-nav-item[aria-current="page"] .tmv-nav-icon { background: var(--nav-icon-active-bg); color: var(--nav-icon-active-fg); }
+.tmv-nav-label { color: var(--nav-label); }
+
+/* Header bar. */
+.tmv-header {
+  background: color-mix(in srgb, rgb(var(--bg)) 78%, transparent);
+  -webkit-backdrop-filter: blur(14px) saturate(150%);
+  backdrop-filter: blur(14px) saturate(150%);
+  border-bottom: 1px solid rgb(var(--line) / 0.8);
+}
+
+/* ------------------------------------------------------------------ motion --- */
+
+@keyframes tmv-rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+@keyframes tmv-live { 0% { box-shadow: 0 0 0 0 rgb(var(--success-signal) / 0.55); } 70% { box-shadow: 0 0 0 7px rgb(var(--success-signal) / 0); } 100% { box-shadow: 0 0 0 0 rgb(var(--success-signal) / 0); } }
+.tmv-rise { animation: tmv-rise 420ms cubic-bezier(.2,.7,.2,1) both; }
+.tmv-live-dot { animation: tmv-live 2.2s ease-out infinite; }
+.tmv-ring-arc { transition: stroke-dasharray 700ms cubic-bezier(.2,.7,.2,1), stroke-dashoffset 700ms cubic-bezier(.2,.7,.2,1), opacity 160ms ease; }
+.tmv-shimmer { background: linear-gradient(90deg, rgb(var(--surface-sunken)) 0%, rgb(var(--surface-raised) / 0.7) 50%, rgb(var(--surface-sunken)) 100%); background-size: 200% 100%; animation: tmv-shimmer 1.4s linear infinite; }
+@keyframes tmv-shimmer { from { background-position: 200% 0; } to { background-position: -200% 0; } }
+
+@media (prefers-reduced-motion: reduce) {
+  html.tmv-admin *, html.tmv-admin *::before, html.tmv-admin *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+  .tmv-lift:hover { transform: none; }
+  .tmv-live-dot { animation: none; }
+}
+
+/* ------------------------------------------------------- dark: legacy ink ---- */
+
+/* Components written before the theme used literal white / black utilities.
+ * Map them onto the surface tokens so every page follows the active theme. */
+html.tmv-admin[data-admin-theme="dark"] [class~="bg-white"],
+html.tmv-admin[data-admin-theme="dark"] [class*="bg-white/"] { background-color: rgb(var(--surface)); }
+html.tmv-admin[data-admin-theme="dark"] .bg-slate-100,
+html.tmv-admin[data-admin-theme="dark"] .bg-gray-100 { background-color: rgb(var(--surface-raised)); }
+html.tmv-admin[data-admin-theme="dark"] .text-slate-400 { color: rgb(var(--fg-subtle)); }
+html.tmv-admin[data-admin-theme="dark"] input,
+html.tmv-admin[data-admin-theme="dark"] select,
+html.tmv-admin[data-admin-theme="dark"] textarea { color-scheme: dark; }
+html.tmv-admin[data-admin-theme="dark"] ::placeholder { color: rgb(var(--fg-subtle)); }
+html.tmv-admin[data-admin-theme="dark"] img.tmv-logo-mark { filter: none; }
+
+/* Dialogs on a black page: a hairline edge and a deeper scrim keep the panel distinct
+ * (shadows alone do not read on #000). The scrim is the shared Modal's bg-black/40. */
+html.tmv-admin[data-admin-theme="dark"] [role="dialog"][aria-modal="true"]:not(.fixed) { box-shadow: 0 0 0 1px rgb(var(--line-strong)), 0 32px 64px -24px rgba(0, 0, 0, 0.9); }
+html.tmv-admin[data-admin-theme="dark"] .bg-black\/40 { background-color: rgba(0, 0, 0, 0.72); }
+
+.tmv-scrim { background-color: var(--scrim); }
+
+/* Map canvas behind the tiles (Leaflet's default is light grey #ddd), so Midnight shows no
+ * light flash before tiles arrive or where they fail. The OSM tiles themselves stay as
+ * served: no CSS filter, so map colours and markers are not distorted. */
+html.tmv-admin[data-admin-theme="dark"] .leaflet-container { background: rgb(var(--surface-sunken)); }
+
+/* Recharts: recessive axes and readable ticks. */
+html.tmv-admin .recharts-cartesian-axis-tick-value { fill: var(--chart-axis); font-size: 12px; }
+html.tmv-admin .recharts-cartesian-grid line { stroke: var(--chart-grid); }
+html.tmv-admin .recharts-surface:focus { outline: none; }
+html.tmv-admin .recharts-tooltip-cursor { fill: rgb(var(--brand) / 0.08); }
+
+/* =========================================================== motion & depth === */
+
+/* Slow aurora drift: two large colour fields move behind the workspace (GPU
+ * transforms only, no filters). */
+.tmv-blob { position: fixed; z-index: 0; pointer-events: none; border-radius: 9999px; will-change: transform; }
+.tmv-blob-a { width: 620px; height: 620px; left: -160px; top: -200px; background: radial-gradient(closest-side, var(--ambient-1), transparent); animation: tmv-drift-a 26s ease-in-out infinite alternate; }
+.tmv-blob-b { width: 560px; height: 560px; right: -140px; top: 10vh; background: radial-gradient(closest-side, var(--ambient-2), transparent); animation: tmv-drift-b 32s ease-in-out infinite alternate; }
+@keyframes tmv-drift-a { from { transform: translate3d(0, 0, 0) scale(1); } to { transform: translate3d(140px, 90px, 0) scale(1.18); } }
+@keyframes tmv-drift-b { from { transform: translate3d(0, 0, 0) scale(1.1); } to { transform: translate3d(-120px, 120px, 0) scale(0.92); } }
+
+/* Pointer spotlight: a soft light follows the cursor across cards (set by Layout). */
+.tmv-panel { position: relative; isolation: isolate; }
+.tmv-panel::before, .tmv-gloss::before { background-image: radial-gradient(380px circle at var(--mx, 50%) var(--my, 0%), rgb(255 255 255 / var(--spot, 0)), transparent 62%); transition: --spot 200ms ease; }
+.tmv-panel::before { content: ""; position: absolute; inset: 0; z-index: -1; border-radius: inherit; pointer-events: none; }
+.tmv-panel:hover, .tmv-gloss:hover { --spot: 0.55; }
+html.tmv-admin[data-admin-theme="dark"] .tmv-panel:hover, html.tmv-admin[data-admin-theme="dark"] .tmv-gloss:hover { --spot: 0.07; }
+@property --spot { syntax: "<number>"; inherits: true; initial-value: 0; }
+
+/* Staggered entrance for grids of cards. */
+.tmv-stagger > * { animation: tmv-rise 520ms cubic-bezier(.2,.7,.2,1) both; }
+.tmv-stagger > *:nth-child(1) { animation-delay: 0ms; }
+.tmv-stagger > *:nth-child(2) { animation-delay: 70ms; }
+.tmv-stagger > *:nth-child(3) { animation-delay: 140ms; }
+.tmv-stagger > *:nth-child(4) { animation-delay: 210ms; }
+.tmv-stagger > *:nth-child(5) { animation-delay: 280ms; }
+.tmv-stagger > *:nth-child(n+6) { animation-delay: 340ms; }
+.tmv-route { animation: tmv-rise 380ms cubic-bezier(.2,.7,.2,1) both; }
+
+/* Realistic icon tiles: lit from above, with a contact shadow. */
+.tmv-tile { position: relative; box-shadow: 0 10px 18px -8px rgb(var(--accent) / var(--tile-glow)), inset 0 1px 0 rgba(255,255,255,0.45), inset 0 -6px 10px rgba(0,0,0,0.12); transition: transform 240ms cubic-bezier(.2,.7,.2,1); }
+.tmv-tile::after { content: ""; position: absolute; inset: 0; border-radius: inherit; background: linear-gradient(160deg, rgba(255,255,255,0.35), transparent 45%); pointer-events: none; }
+.tmv-lift:hover .tmv-tile, .tmv-gloss:hover .tmv-tile { transform: translateY(-2px) rotate(-4deg) scale(1.06); }
+/* Tiles are a quiet tint of the card's accent (both themes), not a lit gradient block:
+ * colour marks the metric without a different glowing square on every card. */
+html.tmv-admin .tmv-tile {
+  background-image: none;
+  background-color: rgb(var(--accent) / 0.12);
+  color: rgb(var(--accent));
+  box-shadow: inset 0 0 0 1px rgb(var(--accent) / 0.22);
+}
+html.tmv-admin .tmv-tile::after { content: none; }
+
+/* Primary button sheen sweep. */
+.tmv-btn-primary { position: relative; overflow: hidden; }
+.tmv-btn-primary::after { content: ""; position: absolute; inset: 0; background: linear-gradient(110deg, transparent 30%, rgba(255,255,255,0.35) 50%, transparent 70%); transform: translateX(-120%); transition: transform 600ms ease; pointer-events: none; }
+.tmv-btn-primary:hover::after { transform: translateX(120%); }
+
+/* Sidebar items glide. */
+.tmv-nav-item { transition: background-color 180ms ease, color 180ms ease, transform 180ms ease, box-shadow 220ms ease; }
+.tmv-nav-item:hover { transform: translateX(3px); }
+.tmv-nav-item:hover .tmv-nav-icon { transform: scale(1.1); }
+.tmv-nav-icon { transition: transform 200ms cubic-bezier(.2,.7,.2,1), background-color 180ms ease; }
+
+/* Gentle breathing glow on the live indicator tile and critical badges. */
+@keyframes tmv-breathe { 0%, 100% { box-shadow: 0 0 0 0 rgb(var(--danger-signal) / 0.35); } 50% { box-shadow: 0 0 0 6px rgb(var(--danger-signal) / 0); } }
+.tmv-breathe { animation: tmv-breathe 2.4s ease-in-out infinite; }
+
+/* Chart marks fade/scale in; sparkline draws. */
+@keyframes tmv-draw { from { stroke-dashoffset: var(--len, 400); } to { stroke-dashoffset: 0; } }
+.tmv-spark-line { stroke-dasharray: var(--len, 400); animation: tmv-draw 1100ms cubic-bezier(.3,.7,.2,1) both; }
+@keyframes tmv-pop { from { opacity: 0; transform: scale(0.6); } to { opacity: 1; transform: none; } }
+.tmv-pop { animation: tmv-pop 500ms 700ms cubic-bezier(.2,.9,.3,1.4) both; transform-box: fill-box; transform-origin: center; }
+.tmv-heat-cell { animation: tmv-pop 380ms cubic-bezier(.2,.8,.3,1.2) both; animation-delay: calc(var(--i, 0) * 9ms); }
+
+@media (prefers-reduced-motion: reduce) {
+  .tmv-blob, .tmv-spark-line, .tmv-pop, .tmv-heat-cell, .tmv-stagger > *, .tmv-route, .tmv-breathe { animation: none !important; }
+  .tmv-nav-item:hover, .tmv-lift:hover .tmv-tile, .tmv-gloss:hover .tmv-tile { transform: none; }
+}
+
+/* ------------------------------------------------------------- segmented ---- */
+/* Pill groups (scenario tabs, date presets, status chips). On phones they stay on one
+ * line and scroll sideways, so all options keep their order and none drops to a
+ * second row; from 640px they wrap as before. */
+@media (max-width: 639px) {
+  .tmv-segmented {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    overflow-y: hidden;
+    overscroll-behavior-x: contain;
+    scrollbar-width: none;
+    scroll-snap-type: x proximity;
+  }
+  .tmv-segmented::-webkit-scrollbar { display: none; }
+  .tmv-segmented > * { flex-shrink: 0; scroll-snap-align: start; }
+}
+
+/* Driver initials avatar: brand-tinted, readable in both themes. */
+.tmv-avatar { background: rgb(var(--brand) / 0.12); color: rgb(var(--brand)); box-shadow: inset 0 0 0 1px rgb(var(--brand) / 0.22); }
+
+/* Restrained glow on the ring charts inside headline cards: a soft halo in the card's
+ * accent behind the ring only, never behind text. Stronger in Midnight, where it reads. */
+.tmv-gloss [role="img"] > svg { filter: drop-shadow(0 3px 10px rgb(var(--accent) / var(--ring-glow))); }
+@media (forced-colors: active) { .tmv-gloss [role="img"] > svg { filter: none; } }
+
+/* Paper is light. useAdminTheme writes color-scheme inline on <html> (Midnight: dark),
+ * and Chromium paints the printed page margins from it, so every report printed under
+ * Midnight came out with black margins when background graphics were on. */
+@media print { html.tmv-admin { color-scheme: light !important; } }
+
+/* ----------------------------------------------------------- shared cards ---- */
+/* One card surface: a complete 1px border on all four sides, no side strips. Status is
+ * carried by a dot, icon or badge with its own text label, never by a coloured edge. */
+.tmv-card {
+  position: relative;
+  background: rgb(var(--surface));
+  border: 1px solid rgb(var(--line));
+  border-radius: 16px;
+  box-shadow: var(--admin-shadow-sm), inset 0 1px 0 var(--gloss-edge);
+  transition: box-shadow 180ms ease, border-color 180ms ease;
+}
+.tmv-card-interactive:hover { border-color: rgb(var(--brand) / 0.35); box-shadow: var(--admin-shadow); }
+.tmv-card-interactive:focus-within { border-color: rgb(var(--brand) / 0.5); }
+@media (prefers-reduced-motion: reduce) { .tmv-card { transition: none; } }
+
+/* ------------------------------------------------------------- job cards ---- */
+/* Neutral card with a faint wash of the status colour at the top. Colour carries status
+ * only; the badge text says it too. There is no coloured side edge. */
+.tmv-job-card {
+  --accent: 140 140 140;
+  background:
+    linear-gradient(180deg, rgb(var(--accent) / 0.055) 0%, rgb(var(--accent) / 0) 96px),
+    rgb(var(--surface));
+  border: 1px solid rgb(var(--line));
+  border-radius: 18px;
+  box-shadow: var(--admin-shadow-sm), inset 0 1px 0 var(--gloss-edge);
+  overflow: hidden;
+  transition: transform 180ms cubic-bezier(.2,.7,.2,1), box-shadow 180ms ease, border-color 180ms ease;
+}
+.tmv-job-card:hover { transform: translateY(-1px); box-shadow: var(--admin-shadow-lg); border-color: rgb(var(--accent) / 0.45); }
+.tmv-job-card:focus-within { border-color: rgb(var(--brand) / 0.5); }
+.tmv-job-selected, .tmv-job-selected:hover { border-color: rgb(var(--brand) / 0.65); box-shadow: 0 0 0 3px rgb(var(--brand) / 0.16), var(--admin-shadow-sm); }
+.tmv-job-neutral { --accent: 140 140 140; }
+.tmv-job-violet { --accent: 124 58 237; }
+.tmv-job-teal { --accent: 13 148 136; }
+.tmv-job-coral { --accent: 220 38 38; }
+.tmv-job-amber { --accent: 217 119 6; }
+html.tmv-admin[data-admin-theme="dark"] .tmv-job-neutral { --accent: 120 120 120; }
+html.tmv-admin[data-admin-theme="dark"] .tmv-job-violet { --accent: 167 139 250; }
+html.tmv-admin[data-admin-theme="dark"] .tmv-job-teal { --accent: 52 211 153; }
+html.tmv-admin[data-admin-theme="dark"] .tmv-job-coral { --accent: 248 113 113; }
+html.tmv-admin[data-admin-theme="dark"] .tmv-job-amber { --accent: 251 191 36; }
+html.tmv-admin[data-admin-theme="dark"] .tmv-job-card { background: linear-gradient(180deg, rgb(var(--accent) / 0.08) 0%, rgb(var(--accent) / 0) 96px), rgb(var(--surface)); }
+/* Route: the two stops joined by a dashed line between their markers. */
+.tmv-job-route > li + li::before {
+  content: "";
+  position: absolute;
+  left: 4.5px;
+  top: -16px;
+  height: 20px;
+  border-left: 2px dashed rgb(var(--brand) / 0.35);
+}
+/* Bulk selection bar floats over the list bottom while scrolling. */
+.tmv-bulkbar { box-shadow: var(--admin-shadow-lg), 0 0 0 1px rgb(var(--brand) / 0.25); }
+@media (prefers-reduced-motion: reduce) { .tmv-job-card, .tmv-job-card:hover { transition: none; transform: none; } }
+
+/* ------------------------------------------------------- forced colours ---- */
+/* High-contrast modes drop backgrounds and shadows, which is how selected chips,
+ * tabs, the active nav item and selected cards are drawn. Give each a system-colour
+ * outline so the selection is still visible. */
+@media (forced-colors: active) {
+  html.tmv-admin [aria-checked="true"], html.tmv-admin [aria-pressed="true"],
+  html.tmv-admin [aria-selected="true"], html.tmv-admin [aria-current="page"] { outline: 2px solid Highlight; outline-offset: -2px; }
+  html.tmv-admin .tmv-job-selected { outline: 3px solid Highlight; outline-offset: 2px; }
+  html.tmv-admin .tmv-gloss, html.tmv-admin .tmv-job-card, html.tmv-admin .tmv-panel { border: 1px solid CanvasText; }
+}
+
+/* Job drawer backdrop: a soft veil with a light blur so the list stays legible behind it. */
+.tmv-drawer-scrim { background-color: rgb(16 18 24 / 0.28); backdrop-filter: blur(2px); }
+html.tmv-admin[data-admin-theme="dark"] .tmv-drawer-scrim { background-color: rgb(0 0 0 / 0.62); }
+@media (prefers-reduced-motion: reduce) { .tmv-drawer-scrim { backdrop-filter: none; } }

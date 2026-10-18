@@ -1,343 +1,162 @@
-import React, { useState, useEffect } from "react";
+/**
+ * Add / edit driver. Grouped as identity (name, unique code, sign-in email), vehicle
+ * (registration and GPS tracker), and app access (status, password) -- audit p.17.
+ * Validation is inline; nothing the admin typed is cleared when a save fails.
+ * There is no invite / password-reset endpoint, so the password is still set here.
+ */
+import React, { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { X, AlertTriangle, CheckCircle2 } from "lucide-react";
 import { fetchDrivers, fetchLiveFleet, saveDriver } from "../api";
-import { DriverSummaryItem } from "../types";
-import { Button, IconButton } from "../../../../ui";
 import { DRIVER_OPTIONS_QUERY_KEY } from "../hooks/useDriverOptions";
+import { Modal } from "../../../../ui/Modal";
+import { Action, Notice, controlBase } from "./ds";
+import { cx } from "../../../../ui/cx";
 
-interface Props {
-  isOpen: boolean;
-  onClose: () => void;
-  driverToEdit?: DriverSummaryItem | null;
+export interface DriverEditTarget {
+  initials: string;
+  fullName: string;
+  email: string;
+  phone?: string;
+  vanRegistration?: string;
+  imei?: string;
+  active: boolean;
 }
+
+interface Props { isOpen: boolean; onClose: () => void; driverToEdit?: DriverEditTarget | null }
+
+type Field = "name" | "code" | "email" | "password";
+const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export function AddDriverModal({ isOpen, onClose, driverToEdit }: Props) {
   const queryClient = useQueryClient();
+  const editing = !!driverToEdit;
   const [name, setName] = useState("");
   const [code, setCode] = useState("");
-  const [vehicleReg, setVehicleReg] = useState("");
-  const [imei, setImei] = useState("");
+  const [codeTouchedByUser, setCodeTouchedByUser] = useState(false);
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
+  const [vehicleReg, setVehicleReg] = useState("");
+  const [imei, setImei] = useState("");
   const [active, setActive] = useState(true);
-  const [pwaPassword, setPwaPassword] = useState("");
-  const [isSaving, setIsSaving] = useState(false);
+  const [password, setPassword] = useState("");
+  const [touched, setTouched] = useState<Set<Field>>(new Set());
+  const [submitted, setSubmitted] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
   const [saveWarning, setSaveWarning] = useState("");
 
-  // Driver summary includes account-backed roster rows plus job-only initials rows.
-  // Only a real account can own/block a code; job-only rows are allowed to be folded
-  // into the newly-created driver account with the same initials.
-  const { data: driversData } = useQuery({ queryKey: ["drivers_summary"], queryFn: () => fetchDrivers() });
-  const roster = driversData?.drivers ?? [];
+  // Summary rows carry each driver's tracker IMEI and which codes belong to a real
+  // account (job-only codes must not block creating that account).
+  const summary = useQuery({ queryKey: ["drivers_summary"], queryFn: () => fetchDrivers(), enabled: isOpen });
+  const fleet = useQuery({ queryKey: ["fleet_live"], queryFn: fetchLiveFleet, enabled: isOpen });
+  const devices = fleet.data?.vehicles ?? [];
+  const existingImei = useMemo(() => driverToEdit?.imei ?? summary.data?.drivers.find(row => row.hasAccount && row.initials === driverToEdit?.initials)?.imei ?? "", [driverToEdit, summary.data]);
 
-  // A picker rather than a free-text box: a wrong digit in a 15-digit IMEI is silent
-  // and effectively unrecoverable (the whole point of using IMEI over a plate is to
-  // avoid exactly that kind of typo), so this only ever offers real, currently-known
-  // GPSLive devices. Only fetched while the modal is open.
-  const { data: fleetData } = useQuery({
-    queryKey: ["fleet_live"],
-    queryFn: fetchLiveFleet,
-    enabled: isOpen
-  });
-  const devices = fleetData?.vehicles ?? [];
-
-  // Sync state with driverToEdit when modal opens or driver changes
   useEffect(() => {
-    if (driverToEdit) {
-      setName(driverToEdit.fullName);
-      setCode(driverToEdit.initials);
-      setVehicleReg(driverToEdit.vanRegistration || "");
-      setImei(driverToEdit.imei || "");
-      setEmail(driverToEdit.email || "");
-      setPhone(driverToEdit.phone || "");
-      setActive(driverToEdit.active !== false);
-    } else {
-      setName("");
-      setCode("");
-      setVehicleReg("");
-      setImei("");
-      setEmail("");
-      setPhone("");
-      setActive(true);
-    }
-    setPwaPassword("");
-    setSaveError("");
-    setSaveWarning("");
+    if (!isOpen) return;
+    setName(driverToEdit?.fullName ?? ""); setCode(driverToEdit?.initials ?? ""); setCodeTouchedByUser(!!driverToEdit);
+    setEmail(driverToEdit?.email ?? ""); setPhone(driverToEdit?.phone ?? ""); setVehicleReg(driverToEdit?.vanRegistration ?? "");
+    setActive(driverToEdit ? driverToEdit.active !== false : true); setPassword("");
+    setTouched(new Set()); setSubmitted(false); setSaveError(""); setSaveWarning("");
   }, [driverToEdit, isOpen]);
+  // The tracker comes from a separate request; fill it once known without
+  // overwriting a choice the admin has already made.
+  useEffect(() => { if (isOpen && existingImei && !imei) setImei(existingImei); }, [existingImei, isOpen]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!isOpen) return null;
 
-  const handleNameChange = (val: string) => {
-    setName(val);
-    if (!driverToEdit && (!code || code.length < 2)) {
-      setCode(val.substring(0, 2).toUpperCase());
-    }
+  const upperCode = code.trim().toUpperCase();
+  const codeTaken = (summary.data?.drivers ?? []).some(row => row.hasAccount && row.initials === upperCode && driverToEdit?.initials !== upperCode);
+  const errors: Partial<Record<Field, string>> = {
+    name: !name.trim() ? "Enter the driver's full name." : undefined,
+    code: !upperCode ? "Enter a driver code." : upperCode !== driverToEdit?.initials && !/^[A-Z0-9]{2}$/.test(upperCode) ? "Use exactly 2 letters or numbers." : codeTaken ? "This code already belongs to another driver." : undefined,
+    email: !email.trim() ? "Enter the email the driver signs in with." : !EMAIL.test(email.trim()) ? "Enter a valid email address." : undefined,
+    password: password && password.length < 8 ? "Use at least 8 characters." : undefined
   };
+  const show = (field: Field) => (submitted || touched.has(field)) && errors[field];
+  const touch = (field: Field) => setTouched(previous => new Set(previous).add(field));
 
-  // Initials are taken if a real driver account owns them AND we aren't editing that
-  // same driver. Job-only summary rows must not block creating the account.
-  const isCodeTaken = roster.some(d =>
-    d.hasAccount && d.initials === code.toUpperCase() && (!driverToEdit || driverToEdit.initials !== code.toUpperCase())
-  );
-  const passwordTooShort = pwaPassword.length > 0 && pwaPassword.length < 8;
-
-  const handleSubmit = async () => {
-    setSaveError("");
-    setSaveWarning("");
-    setIsSaving(true);
+  const submit = async () => {
+    setSubmitted(true);
+    if (Object.values(errors).some(Boolean)) return;
+    setSaving(true); setSaveError(""); setSaveWarning("");
     try {
-      const initials = code.toUpperCase();
-      const result = await saveDriver({
-        initials,
-        fullName: name,
-        email,
-        active,
-        phone,
-        vanRegistration: vehicleReg,
-        imei,
-        // Omitted (not sent empty) when blank, so editing a driver without touching
-        // this field never resets/clears their existing app password.
-        ...(pwaPassword ? { password: pwaPassword } : {})
-      });
-
-      // The save itself is fast -- it only touches driver_accounts. What's slow is
-      // /api/admin/drivers/summary's own refetch, since it also recomputes every
-      // driver's job stats from the full dataset (jobs/evidence/activity/...), which
-      // can take several seconds regardless of what actually changed here. Patch the
-      // fields we just saved into the cache directly so the roster reflects the edit
-      // immediately instead of the UI sitting on stale data until that slow refetch
-      // lands -- invalidateQueries below still runs in the background to pick up
-      // anything the optimistic patch can't know (e.g. a brand-new driver's real
-      // job stats), it just no longer blocks what the admin sees right now.
-      // setQueriesData (not setQueryData) -- DriversPage.tsx's own query key is
-      // ["drivers_summary", from, to] (it has its own date-range filter), not the bare
-      // ["drivers_summary"] every other caller here uses. A single-key setQueryData
-      // would miss it entirely, patching everywhere except the one page an admin is
-      // actually looking at while editing.
-      queryClient.setQueriesData<{ drivers: DriverSummaryItem[] } | undefined>({ queryKey: ["drivers_summary"] }, old => {
-        if (!old?.drivers) return old;
-        const patch: Partial<DriverSummaryItem> = {
-          initials, fullName: name, email, phone, vanRegistration: vehicleReg, imei, active, hasAccount: true
-        };
-        const idx = old.drivers.findIndex(d => d.hasAccount && d.initials === initials);
-        if (idx >= 0) {
-          const drivers = [...old.drivers];
-          drivers[idx] = { ...drivers[idx], ...patch };
-          return { ...old, drivers };
-        }
-        // Brand-new driver: seed zeroed stats so it shows up right away; the
-        // background refetch fills in real numbers once it lands.
-        return {
-          ...old,
-          drivers: [
-            ...old.drivers,
-            {
-              ...patch,
-              assigned: 0, completed: 0, cancelled: 0, completionRate: 0,
-              avgDurationMinutes: 0, avgDelayMinutes: 0, revenuePounds: 0, revenueFormatted: "£0.00",
-              cashCollectedPounds: 0, missingEvidenceCount: 0, overtimeCount: 0
-            } as DriverSummaryItem
-          ]
-        };
-      });
-      queryClient.invalidateQueries({ queryKey: ["drivers_summary"] });
-      queryClient.invalidateQueries({ queryKey: DRIVER_OPTIONS_QUERY_KEY });
-      if (result.warning) {
-        // Stay open so the warning is actually seen -- the Sheets save did succeed,
-        // this isn't a failure, but silently closing would hide that the password
-        // part didn't take.
-        setSaveWarning(result.warning);
-      } else {
-        onClose();
-      }
-    } catch (err: any) {
-      setSaveError(err?.message || "Failed to save driver.");
-    } finally {
-      setIsSaving(false);
-    }
+      const result = await saveDriver({ initials: upperCode, fullName: name.trim(), email: email.trim(), active, phone: phone.trim(), vanRegistration: vehicleReg.trim(), imei, ...(password ? { password } : {}) });
+      void queryClient.invalidateQueries({ queryKey: ["drivers_summary"] });
+      void queryClient.invalidateQueries({ queryKey: DRIVER_OPTIONS_QUERY_KEY });
+      if (result.warning) setSaveWarning(result.warning); else onClose();
+    } catch (err) {
+      setSaveError((err as Error)?.message || "The driver could not be saved. Your entries are kept — try again.");
+    } finally { setSaving(false); }
   };
+
+  const label = (text: string, required = false) => <span className="text-[13px] font-medium text-admin-ink">{text}{required && <span className="text-admin-status-red"> *</span>}{required && <span className="sr-only"> (required)</span>}</span>;
+  const error = (field: Field) => show(field) ? <span id={`driver-${field}-error`} className="mt-1 block text-[12.5px] text-admin-status-red">{errors[field]}</span> : null;
+  const input = (field: Field) => cx(controlBase, "mt-1 w-full", show(field) && "border-admin-status-red focus:border-admin-status-red focus:ring-admin-status-red/20");
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-      <div className="bg-white rounded-module shadow-2xl w-full max-w-[500px] max-h-[90vh] flex flex-col overflow-hidden">
-        <div className="px-6 py-5 border-b border-admin-line flex items-center justify-between shrink-0">
-          <h2 className="text-title text-fg">{driverToEdit ? "Edit Driver" : "Add New Driver"}</h2>
-          <IconButton aria-label="Close" icon={<X />} onClick={onClose} className="-mr-2" />
-        </div>
+    <Modal open onClose={onClose} title={editing ? `Edit ${driverToEdit!.fullName}` : "Add driver"} size="lg" placement="center" dismissible={!saving}
+      footer={saveWarning ? <div className="flex justify-end"><Action variant="primary" onClick={onClose}>Done</Action></div> : (
+        <div className="flex justify-end gap-2"><Action variant="ghost" onClick={onClose} disabled={saving}>Cancel</Action><Action variant="primary" loading={saving} onClick={() => void submit()}>{editing ? "Save changes" : "Add driver"}</Action></div>
+      )}>
+      <form noValidate onSubmit={event => { event.preventDefault(); void submit(); }} className="space-y-5">
+        {saveError && <Notice tone="danger">{saveError}</Notice>}
+        {saveWarning && <Notice tone="warning" title="Saved with a warning">{saveWarning}</Notice>}
+        <fieldset className="space-y-3">
+          <legend className="text-[15px] font-semibold text-admin-ink">Driver</legend>
+          <label className="block">{label("Full name", true)}
+            <input value={name} autoComplete="off" onBlur={() => touch("name")} aria-invalid={!!show("name")} aria-describedby={show("name") ? "driver-name-error" : undefined}
+              onChange={event => { setName(event.target.value); if (!editing && !codeTouchedByUser) setCode(event.target.value.replace(/[^A-Za-z]/g, "").slice(0, 2).toUpperCase()); }} className={input("name")} />
+            {error("name")}
+          </label>
+          <div className="grid gap-3 sm:grid-cols-[140px_1fr]">
+            <label className="block">{label("Driver code", true)}
+              <input value={code} maxLength={2} onBlur={() => touch("code")} aria-invalid={!!show("code")} aria-describedby="driver-code-help"
+                onChange={event => { setCode(event.target.value.toUpperCase()); setCodeTouchedByUser(true); }} className={cx(input("code"), "uppercase")} />
+              <span id="driver-code-help" className="mt-1 block text-[12.5px] text-admin-ink-2">2 characters, unique</span>
+              {error("code")}
+            </label>
+            <label className="block">{label("Sign-in email", true)}
+              <input type="email" value={email} onBlur={() => touch("email")} aria-invalid={!!show("email")} aria-describedby={show("email") ? "driver-email-error" : undefined}
+                onChange={event => setEmail(event.target.value)} className={input("email")} />
+              {error("email")}
+            </label>
+          </div>
+          <label className="block">{label("Phone")}<input type="tel" value={phone} onChange={event => setPhone(event.target.value)} className={cx(controlBase, "mt-1 w-full")} /></label>
+        </fieldset>
 
-        <div className="p-6 space-y-5 overflow-y-auto custom-scrollbar">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="col-span-2">
-              <label className="block text-eyebrow text-fg-subtle tracking-wider mb-1.5">Full Name <span className="text-admin-status-red">*</span></label>
-              <input 
-                type="text" 
-                value={name}
-                onChange={e => handleNameChange(e.target.value)}
-                className="w-full h-11 px-3 rounded-card border border-admin-line bg-admin-surface text-[14px] text-admin-ink outline-none focus:border-admin-brand focus:bg-white transition"
-                placeholder="e.g. John Doe"
-              />
-            </div>
-            
-            <div>
-              <label className="block text-eyebrow text-fg-subtle tracking-wider mb-1.5">Driver Code (2-letter) <span className="text-admin-status-red">*</span></label>
-              <input 
-                type="text" 
-                maxLength={2}
-                value={code}
-                onChange={e => setCode(e.target.value.toUpperCase())}
-                className={`w-full h-11 px-3 rounded-card border ${isCodeTaken ? 'border-admin-status-red focus:border-admin-status-red' : 'border-admin-line focus:border-admin-brand'} bg-admin-surface text-[14px] text-admin-ink outline-none focus:bg-white transition uppercase`}
-                placeholder="e.g. JD"
-              />
-              {isCodeTaken && <span className="text-[11px] text-admin-status-red mt-1 block">This code is already in use.</span>}
-            </div>
-
-            <div>
-              <label className="block text-eyebrow text-fg-subtle tracking-wider mb-1.5">Vehicle Registration</label>
-              <input
-                type="text"
-                value={vehicleReg}
-                onChange={e => setVehicleReg(e.target.value.toUpperCase())}
-                className="w-full h-11 px-3 rounded-card border border-admin-line bg-admin-surface text-[14px] font-mono text-admin-ink outline-none focus:border-admin-brand focus:bg-white transition uppercase"
-                placeholder="e.g. AB12 CDE"
-              />
-            </div>
-
-            <div className="col-span-2">
-              <label className="block text-eyebrow text-fg-subtle tracking-wider mb-1.5">GPSLive Device</label>
-              <select
-                value={imei}
-                onChange={e => setImei(e.target.value)}
-                className="w-full h-11 px-3 rounded-card border border-admin-line bg-admin-surface text-[14px] text-admin-ink outline-none focus:border-admin-brand focus:bg-white transition"
-              >
-                <option value="">— Not assigned —</option>
-                {/* If the currently-assigned imei isn't in today's live device list
-                    (offline, or GPSLive briefly unreachable), keep it selectable so
-                    saving the form without touching this field doesn't silently
-                    clear a real assignment. */}
-                {imei && !devices.some(d => d.imei === imei) && (
-                  <option value={imei}>{imei} (not currently reporting)</option>
-                )}
-                {devices.map(d => (
-                  <option key={d.imei} value={d.imei}>
-                    {d.plateNumber || d.name} {d.plateNumber && d.name !== d.plateNumber ? `(${d.name})` : ""}
-                  </option>
-                ))}
+        <fieldset className="space-y-3 border-t border-admin-line pt-4">
+          <legend className="text-[15px] font-semibold text-admin-ink">Vehicle</legend>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <label className="block">{label("Vehicle registration")}
+              <input value={vehicleReg} onChange={event => setVehicleReg(event.target.value.toUpperCase())} className={cx(controlBase, "mt-1 w-full font-mono uppercase")} placeholder="AB12 CDE" />
+            </label>
+            <label className="block">{label("GPS tracker")}
+              <select value={imei} onChange={event => setImei(event.target.value)} className={cx(controlBase, "mt-1 w-full")}>
+                <option value="">{fleet.isLoading ? "Loading trackers…" : "Not assigned"}</option>
+                {imei && !devices.some(device => device.imei === imei) && <option value={imei}>{imei} (not reporting now)</option>}
+                {devices.map(device => <option key={device.imei} value={device.imei}>{device.plateNumber || device.name}{device.plateNumber && device.name !== device.plateNumber ? ` (${device.name})` : ""}</option>)}
               </select>
-              <span className="text-[11px] text-admin-muted mt-1 block">
-                Which live GPSLive tracker is this driver's usual van -- picked from the fleet, not typed, so it can't be mistyped.
-              </span>
-            </div>
-
-            <div className="col-span-2">
-              <label className="block text-eyebrow text-fg-subtle tracking-wider mb-1.5">
-                Email Address <span className="text-admin-status-red">*</span>
-              </label>
-              <input
-                type="email"
-                value={email}
-                onChange={e => setEmail(e.target.value)}
-                className="w-full h-11 px-3 rounded-card border border-admin-line bg-admin-surface text-[14px] text-admin-ink outline-none focus:border-admin-brand focus:bg-white transition"
-                placeholder="driver@example.com"
-              />
-              <span className="text-[11px] text-admin-muted mt-1 block">Used to sign the driver into the app, and as the unique key for this record.</span>
-            </div>
-
-            <div className="col-span-2">
-              <label className="block text-eyebrow text-fg-subtle tracking-wider mb-1.5">Phone Number</label>
-              <input
-                type="tel"
-                value={phone}
-                onChange={e => setPhone(e.target.value)}
-                className="w-full h-11 px-3 rounded-card border border-admin-line bg-admin-surface text-[14px] text-admin-ink outline-none focus:border-admin-brand focus:bg-white transition"
-                placeholder="07..."
-              />
-            </div>
-
-            <div className="col-span-2">
-              <label className="block text-eyebrow text-fg-subtle tracking-wider mb-1.5">
-                Driver App Password
-              </label>
-              <input
-                type="password"
-                value={pwaPassword}
-                onChange={e => setPwaPassword(e.target.value)}
-                className={`w-full h-11 px-3 rounded-card border ${passwordTooShort ? 'border-admin-status-red focus:border-admin-status-red' : 'border-admin-line focus:border-admin-brand'} bg-admin-surface text-[14px] text-admin-ink outline-none focus:bg-white transition`}
-                placeholder={driverToEdit ? "Leave blank to keep current password" : "Set a password (min 8 characters)"}
-                autoComplete="new-password"
-              />
-              {passwordTooShort ? (
-                <span className="text-[11px] text-admin-status-red mt-1 block">Must be at least 8 characters.</span>
-              ) : (
-                <span className="text-[11px] text-admin-muted mt-1 block">
-                  Login for the driver mobile app.
-                  {driverToEdit ? " Leave blank to keep their current password unchanged." : ""}
-                </span>
-              )}
-            </div>
-
-            <div className="col-span-2 mt-4 pt-4 border-t border-admin-line">
-              <label className="block text-eyebrow text-fg-subtle tracking-wider mb-3">System Access & Status</label>
-              <div className={`p-4 rounded-card border transition-colors ${active ? 'bg-admin-status-green-bg border-admin-status-green/20' : 'bg-[#FEF2F2] border-[#FECACA]'}`}>
-                 <label className="flex items-start gap-3 cursor-pointer">
-                   <div className="pt-0.5">
-                     <input 
-                       type="checkbox" 
-                       checked={active}
-                       onChange={(e) => setActive(e.target.checked)}
-                       className="w-5 h-5 text-admin-brand rounded focus:ring-admin-brand"
-                     />
-                   </div>
-                   <div>
-                     <span className={`text-[14px] font-bold block ${active ? 'text-admin-status-green' : 'text-admin-status-red'}`}>
-                       {active ? 'Active (App Access Enabled)' : 'Deactivated (Access Revoked)'}
-                     </span>
-                     <p className={`text-[13px] mt-1 ${active ? 'text-admin-status-green/80' : 'text-admin-status-red/80'}`}>
-                       {active
-                         ? 'Driver can log in, view assignments, and complete jobs.'
-                         : 'Driver is immediately blocked from the app. Future assignments are stopped.'}
-                     </p>
-                   </div>
-                 </label>
-              </div>
-            </div>
+              {fleet.isError && <span className="mt-1 block text-[12.5px] text-admin-status-amber">Tracker list unavailable; the current assignment is kept.</span>}
+            </label>
           </div>
-        </div>
+        </fieldset>
 
-        <div className="px-6 py-4 border-t border-admin-line bg-admin-surface shrink-0">
-          {saveError && (
-            <p className="text-[12px] text-admin-status-red font-medium mb-3 flex items-center gap-1.5">
-              <AlertTriangle className="w-3.5 h-3.5 shrink-0" /> {saveError}
-            </p>
-          )}
-          {saveWarning && (
-            <p className="text-[12px] text-amber-700 font-medium mb-3 flex items-center gap-1.5">
-              <AlertTriangle className="w-3.5 h-3.5 shrink-0" /> {saveWarning}
-            </p>
-          )}
-          <div className="flex items-center justify-end gap-3">
-            {saveWarning ? (
-              <Button onClick={onClose} iconLeft={<CheckCircle2 />}>
-                Done
-              </Button>
-            ) : (
-              <>
-                <Button variant="ghost" onClick={onClose} disabled={isSaving}>
-                  Cancel
-                </Button>
-                <Button
-                  onClick={handleSubmit}
-                  loading={isSaving}
-                  disabled={isCodeTaken || passwordTooShort || !name || !code || !email}
-                >
-                  {isSaving ? "Saving…" : driverToEdit ? "Save changes" : "Add driver"}
-                </Button>
-              </>
-            )}
-          </div>
-        </div>
-      </div>
-    </div>
+        <fieldset className="space-y-3 border-t border-admin-line pt-4">
+          <legend className="text-[15px] font-semibold text-admin-ink">App access</legend>
+          <label className="flex items-start gap-3">
+            <input type="checkbox" checked={active} onChange={event => setActive(event.target.checked)} className="mt-0.5 h-5 w-5 accent-admin-brand" />
+            <span><span className="block text-[14px] font-medium">Account active</span><span className="block text-[13px] text-admin-ink-2">{active ? "The driver can sign in and see assigned jobs." : "The driver is blocked from signing in."}</span></span>
+          </label>
+          <label className="block">{label(editing ? "New app password" : "App password")}
+            <input type="password" value={password} autoComplete="new-password" onBlur={() => touch("password")} aria-invalid={!!show("password")} aria-describedby="driver-password-help"
+              onChange={event => setPassword(event.target.value)} className={input("password")} />
+            <span id="driver-password-help" className="mt-1 block text-[12.5px] text-admin-ink-2">{editing ? "Leave blank to keep the current password." : "At least 8 characters. Without one the driver can't sign in until it is set."}</span>
+            {error("password")}
+          </label>
+        </fieldset>
+        <button type="submit" hidden aria-hidden tabIndex={-1} />
+      </form>
+    </Modal>
   );
 }

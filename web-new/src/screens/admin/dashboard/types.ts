@@ -1,0 +1,451 @@
+/** Ported verbatim from TMV-Chat-bot's dashboard/web/src/types/index.ts. */
+
+export type JobStatus = "READY" | "IN_PROGRESS" | "COMPLETED" | "CANCELLED";
+
+export type DelayBand = "EARLY" | "ON_TIME" | "LATE_5_15" | "LATE_15_30" | "LATE_OVER_30";
+
+export type EvidenceCategory = "Arrival" | "VanLoaded" | "StopBy" | "EmptyVan" | "Organized" | "Signature" | "Documents";
+
+export type EvidenceState = "MISSING" | "PROCESSING" | "COMPLETED" | "FAILED";
+
+export interface NormalizedEvidenceItem {
+  id: string;
+  category: EvidenceCategory;
+  state: EvidenceState;
+  fileId?: string;
+  driveUrl?: string;
+  thumbProxyUrl?: string;
+  fileName?: string;
+  contentType?: string;
+  receivedAt?: string;
+  completedAt?: string;
+  error?: string;
+  provenance: "recorded" | "derived";
+  /** Where/when the driver's device recorded taking this photo — absent for older
+   *  evidence, or where GPS was denied/unavailable at capture time. */
+  capturedAt?: string;
+  location?: { lat: number; lng: number; accuracy: number };
+  /** A short place name for `location`, reverse-geocoded once server-side at upload
+   *  time — absent when there was no location, or the lookup failed; show the raw
+   *  coordinates in that case (see ../../../lib/geo.ts's formatLocationLabel). */
+  locationName?: string;
+}
+
+export interface ActivityEntry {
+  timestamp: string;
+  driver: string;
+  action: string;
+  fromState?: string;
+  toState?: string;
+  detail?: string;
+}
+
+export interface JobException {
+  type: string;
+  detail: string;
+  timestamp: string;
+}
+
+export interface BookingDetails {
+  vanSize?: string;
+  notes?: string;
+  inventory?: string;
+  hireDuration?: string;
+  extraChargeText?: string;
+}
+
+export interface MoneyBreakdownItem {
+  method?: string;
+  label?: string;
+  amount: number;
+  minutes?: number;
+}
+
+export interface DriverJobSummary {
+  jobId: string;
+  driverInitials: string;
+  driverEmail: string;
+  startTime: string;
+  endTime: string;
+  congestionCharge: boolean;
+  congestionChargePence: number;
+  helperName: string;
+  helperHours: number;
+  paymentMethod: string;
+  amountCollectedPence: number;
+  paymentBreakdown?: Array<{ method: "Cash" | "Card" | "Link" | "Bank Transfer" | "Invoice" | "Invoice/Transfer"; amountPence: number }>;
+  schemaVersion?: 2 | 3;
+  driverJobHours?: number;
+  noPaymentReceived?: boolean;
+  invoiceAmountPence?: number;
+  chargeItems?: Array<{ type: "congestion" | "tunnel"; amountPence: number | null; name?: string; reference?: string }>;
+  submittedAt: string;
+}
+
+export type ScenarioKind = "checkin" | "checkout" | "parking" | "liability";
+
+/** A Check In/Check Out/Parking Liability/Liability Report submission filed
+ *  against this specific job -- see backend/src/admin/dashboard/types.ts's
+ *  matching interface. */
+export interface JobScenarioSubmission {
+  id: string;
+  kind: ScenarioKind;
+  timestamp: string;
+  driver: string;
+  clientName: string;
+  clientPhone: string;
+  clientEmail: string;
+  containerNumber: string;
+  address: string;
+  damageCategories: string;
+  clientPresent: string;
+  reportedAt?: string;
+  reportedAtPoint?: string;
+  rawRecord: Record<string, string>;
+  photos: Array<{
+    fileId: string;
+    thumbUrl: string;
+    capturedAt?: string;
+    location?: { lat: number; lng: number; accuracy: number };
+    locationName?: string;
+  }>;
+  signature: {
+    fileId: string;
+    thumbUrl: string;
+    capturedAt?: string;
+    location?: { lat: number; lng: number; accuracy: number };
+    locationName?: string;
+  } | null;
+}
+
+export interface NormalizedJob {
+  jobId: string;
+  calendarEventId: string;
+  bookedStart: string;
+  bookedFinish: string;
+  actualStart?: string;
+  actualFinish?: string;
+  pickupArrivalAt?: string;
+  vanLoadedAt?: string;
+  trackerArrivalAt?: string;
+  trackerArrivalDistanceMeters?: number;
+  trackerLastSeenAt?: string;
+  trackerStatus?: "reporting" | "stale" | "unverified";
+  trackerDistanceMeters?: number;
+  trackerLocationName?: string;
+  trackerUnverifiedReason?: string;
+  /** Tracker evidence at the drop-off, when the backend includes it. Absent means "not
+   *  supplied", which the preview shows as Not recorded; it is never guessed. */
+  dropoffTracking?: { arrivalAt?: string; departureAt?: string; unverifiedReason?: string };
+  arrivalProofDelayMinutes?: number;
+  arrivalProofLate?: boolean;
+  arrivalProofOverdue?: boolean;
+  /** When the driver's "I'm on the Way" tap sent the customer SMS/email -- distinct
+   *  from actualStart (the Arrival photo's timestamp). */
+  onMyWayAt?: string;
+  /** First intentional driver interaction with this job. */
+  driverViewedAt?: string;
+  bookedMinutes: number;
+  actualMinutes?: number;
+  allocatedMinutes?: number;
+  timeBilling?: import("../../../api/jobs").JobTimeBilling;
+  timeBillingStatus?: "verified" | "needs-verification" | "legacy";
+  timeBillingIssue?: string;
+  driverReportedOvertimeMinutes?: number;
+  delayMinutes: number;
+  arrivalDelaySource?: "gps-two-fresh-reports" | "proof-acceptance" | "unavailable";
+  delayBand: DelayBand;
+  timingTrustworthy: boolean;
+  customerName: string;
+  customerEmail?: string;
+  customerPhone?: string;
+  pickup: string;
+  dropoff: string;
+  floorFrom?: string;
+  floorTo?: string;
+  crewSize: number;
+  driverInitials: string;
+  driverName: string;
+  driverEmail?: string;
+  status: JobStatus;
+  currentState: string;
+  workflowCompletionPct: number;
+  basePrice: number;
+  extraChargeSelections: string[];
+  extraCharges: number;
+  congestionCharge: number;
+  tunnelCharge: number;
+  overtimeMinutes: number;
+  overtimeCharge: number;
+  calculatedTotalCharges: number;
+  totalCharges: number;
+  amountCharged: number;
+  totalAdjustmentNote?: string;
+  reconciled: boolean;
+  paymentMethod: string;
+  paymentBreakdown?: MoneyBreakdownItem[];
+  extraChargeBreakdown?: MoneyBreakdownItem[];
+  paymentStatus: string;
+  driverJobSummary?: DriverJobSummary;
+  reviewEmailStatus?: "Yes" | "No";
+  managerReviewStatus?: "Pending" | "Approved" | "Flagged";
+  managerReviewNote?: string;
+  managerReviewedAt?: string;
+  paidOnline: boolean;
+  evidenceCompleteness: {
+    arrival: EvidenceState;
+    vanLoaded: EvidenceState;
+    stopBy: EvidenceState;
+    emptyVan: EvidenceState;
+    organized: EvidenceState;
+    signature: EvidenceState;
+  };
+  evidenceItems: NormalizedEvidenceItem[];
+  /** Check In/Check Out/Parking Liability/Liability Report submissions filed
+   *  against this job specifically -- oldest first. Empty for the common case
+   *  of a job with none. */
+  scenarios: JobScenarioSubmission[];
+  /** Verbatim Calendar event title this job was synced from. */
+  rawTitle: string;
+  /** Verbatim Calendar event description -- same source the driver app's
+   *  JobDetailsPanel shows, useful as a fallback when a parsed field didn't extract
+   *  cleanly (e.g. pickup/dropoff address). */
+  rawDescription: string;
+  bookingDetails: BookingDetails;
+  clientConfirmedName?: string;
+  clientSignatureAt?: string;
+  signatureUrl?: string;
+  driveFolderId?: string;
+  driveFolderUrl?: string;
+  activity: ActivityEntry[];
+  exceptions: JobException[];
+  created: string;
+  updated: string;
+}
+
+export interface SummaryKPIs {
+  totalJobs: number;
+  scheduled: number;
+  inProgress: number;
+  completed: number;
+  cancelled: number;
+  late: number;
+  incomplete: number;
+  revenuePounds: number;
+  revenueFormatted: string;
+  cashCollectedPounds: number;
+  cardBankPounds: number;
+  extraChargesPounds: number;
+  overtimePounds: number;
+  photosMissing: number;
+  photosProcessing: number;
+  photosFailed: number;
+  missingSignatures: number;
+  driversWorkingCount: number;
+  avgDurationMinutes: number;
+  avgDelayMinutes: number;
+}
+
+export interface SummaryCharts {
+  statusBreakdown: Array<{ label: string; value: number; color: string }>;
+  revenueOverTime: Array<{ date: string; revenuePounds: number; jobsCount: number }>;
+  paymentMethodSplit: Array<{ method: string; totalPounds: number; count: number }>;
+  jobsByDriver: Array<{ driverName: string; initials: string; completed: number; active: number }>;
+}
+
+export interface SummaryResponse {
+  kpis: SummaryKPIs;
+  charts: SummaryCharts;
+  meta: { fetchedAt: string; durationMs: number };
+}
+
+export interface DriverSummaryItem {
+  initials: string;
+  fullName: string;
+  email?: string;
+  phone?: string;
+  vanRegistration?: string;
+  /** GPSLive device IMEI assigned to this driver's usual van -- see the backend
+   *  DriverAccountDoc's own comment for why this exists. */
+  imei?: string;
+  active: boolean;
+  /** False when this entry only exists because a job's driverInitials matches this
+   *  code -- nobody has actually added this driver via Add Driver. No account backs
+   *  it, so it can't be edited/deactivated/deleted and shouldn't be offered as a
+   *  reassignment target. */
+  hasAccount: boolean;
+  assigned: number;
+  completed: number;
+  cancelled: number;
+  completionRate: number;
+  avgDurationMinutes: number;
+  totalDurationMinutes: number;
+  workingUnknownJobs?: number;
+  movingKnownSeconds?: number;
+  movingUnknownJobs?: number;
+  movingPartialJobs?: number;
+  avgDelayMinutes: number;
+  totalChargesPounds: number;
+  calculatedChargesPounds?: number;
+  revenuePounds: number;
+  revenueFormatted: string;
+  cashCollectedPounds: number;
+  cardCollectedPounds: number;
+  bankCollectedPounds: number;
+  invoiceCollectedPounds: number;
+  linkCollectedPounds?: number;
+  invoiceUncollectedPounds?: number;
+  totalCollectionsPounds?: number;
+  unknownCollectionJobs?: number;
+  congestionUnknownJobs?: number;
+  tunnelUnknownJobs?: number;
+  congestionChargePounds: number;
+  tunnelChargePounds: number;
+  overtimeMinutes: number;
+  missingEvidenceCount: number;
+  overtimeCount: number;
+  reviewSentCount: number;
+  reviewNotSentCount: number;
+}
+
+export interface FinanceSummaryResponse {
+  summary: {
+    totalRevenuePounds: number;
+    totalRevenueFormatted: string;
+    basePricePounds: number;
+    extraChargesPounds: number;
+    overtimePounds: number;
+    cashPounds: number;
+    cardPounds: number;
+    bankPounds: number;
+    invoicePounds: number;
+  };
+  unreconciledJobs: Array<{
+    jobId: string;
+    customerName: string;
+    basePrice: number;
+    extraCharges: number;
+    overtimeCharge: number;
+    totalCharges: number;
+    differencePence: number;
+  }>;
+  timeline: Array<{ period: string; base: number; extras: number; overtime: number; total: number; count: number }>;
+}
+
+export type VanRecordType = "MILEAGE" | "FUEL" | "SERVICE";
+
+export interface VanRecordItem {
+  id: string;
+  type: VanRecordType;
+  submittedAt: string;
+  driverName: string;
+  driverEmail: string;
+  driverInitials: string;
+  vanRegistration: string;
+  mileage?: number | null;
+  odometerReading?: number | null;
+  fuelCost?: number | null;
+  serviceMileage?: number | null;
+  serviceType?: string;
+  serviceDate?: string;
+  photoUrl: string;
+  thumbUrl: string;
+}
+
+export interface VanComplianceItem {
+  vanRegistration: string;
+  roadTaxRenewalDate?: string;
+  motExpiryDate?: string;
+  insuranceExpiryDate?: string;
+  notes?: string;
+  updatedAt?: string;
+  /** Admin-configured distance between services (e.g. 8000) -- null until an admin
+   *  sets one for this van. */
+  serviceIntervalMiles?: number | null;
+  /** Admin override for the mileage baseline, in place of the driver's most recent
+   *  Service log -- almost always null (the normal case is automatic). */
+  lastServiceMileageOverride?: number | null;
+  /** The mileage baseline the gauge actually counts from -- the override above when
+   *  set, otherwise computed server-side from the most recent Service log. Read-only. */
+  lastServiceMileage?: number | null;
+  /** Latest known odometer reading for this van, reconciled server-side across
+   *  whichever record type -- Mileage, Fuel or Service -- most recently carried one.
+   *  Read-only. */
+  currentMileage?: number | null;
+}
+
+export interface VanDriverRecordItem {
+  id: string;
+  driverName: string;
+  driverEmail: string;
+  driverInitials: string;
+  vanRegistration: string;
+  latestSubmittedAt: string;
+  latestMileage: VanRecordItem | null;
+  latestFuel: VanRecordItem | null;
+  latestService: VanRecordItem | null;
+  compliance: VanComplianceItem | null;
+  records: VanRecordItem[];
+}
+
+export interface ExceptionItem {
+  id: string;
+  jobId: string;
+  type: string;
+  severity: "CRITICAL" | "WARNING" | "INFO";
+  detail: string;
+  timestamp: string;
+  customerName: string;
+  driverName: string;
+  linkUrl: string;
+}
+
+export interface ScenarioItem {
+  id: string;
+  Timestamp?: string;
+  "Job ID"?: string;
+  Driver?: string;
+  "Container Number"?: string;
+  "Client Name"?: string;
+  "Client Full Name"?: string;
+  "Client Phone"?: string;
+  "Client Email"?: string;
+  "Client Present"?: string;
+  "Client Present At Dropoff"?: string;
+  Address?: string;
+  "Damage Categories"?: string;
+  Date?: string;
+  reportedAt?: string;
+  reportedAtPoint?: string;
+  reported_at?: string;
+  "Reported At"?: string;
+  rawRecord?: Record<string, string>;
+  photos: Array<{
+    fileId: string;
+    thumbUrl: string;
+    /** Where/when the driver's device recorded taking this photo — absent for
+     *  submissions made before this existed. */
+    capturedAt?: string;
+    location?: { lat: number; lng: number; accuracy: number };
+    /** A short place name for `location`, reverse-geocoded once server-side — absent
+     *  when there was no location, or the lookup failed. */
+    locationName?: string;
+  }>;
+  signature: {
+    fileId: string;
+    thumbUrl: string;
+    /** Where/when the customer's signature was actually captured — absent for
+     *  submissions made before this existed. */
+    capturedAt?: string;
+    location?: { lat: number; lng: number; accuracy: number };
+    locationName?: string;
+  } | null;
+}
+
+export function toPounds(pence: number): number {
+  return (pence || 0) / 100;
+}
+
+export function formatGBP(pence: number): string {
+  return new Intl.NumberFormat("en-GB", { style: "currency", currency: "GBP" }).format(toPounds(pence));
+}

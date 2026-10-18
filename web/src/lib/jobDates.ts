@@ -2,7 +2,7 @@
  * Calendar-day helpers for the Jobs screen's date filters.
  *
  * All comparisons run on "YYYY-MM-DD" keys computed in Europe/London — the app's
- * date convention (see api/jobs.ts, components/driver/JobTime.tsx). Keys are compared
+ * date convention (see api/jobs.ts, lib/jobFormat.ts). Keys are compared
  * as strings; because they're zero-padded, lexicographic order is chronological order.
  * No `+24h` arithmetic and no matching of formatted labels, so there are no
  * timezone / DST off-by-one-day bugs.

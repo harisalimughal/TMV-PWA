@@ -16,7 +16,7 @@ function Field({ label, value, span2 = false }: { label: string; value: string; 
   if (!value) return null;
   return (
     <div className={span2 ? "col-span-2" : undefined}>
-      <span className="block text-[10px] font-bold uppercase tracking-wider text-admin-muted">{label}</span>
+      <span className="block text-[12px] font-bold uppercase tracking-wider text-admin-muted">{label}</span>
       <span className="mt-0.5 block text-[13px] font-medium text-admin-ink break-words">{value}</span>
     </div>
   );
@@ -35,7 +35,7 @@ function EvidenceMeta({
 }) {
   if (!capturedAt && !location) return null;
   return (
-    <div className={`mt-1 text-[10px] leading-tight text-admin-muted space-y-0.5 ${center ? "text-center" : ""}`}>
+    <div className={`mt-1 text-[12px] leading-tight text-admin-muted space-y-0.5 ${center ? "text-center" : ""}`}>
       {capturedAt && <div>{formatLondonDateTime(capturedAt)}</div>}
       {location ? (
         <a
@@ -67,13 +67,13 @@ function ScenarioCard({ item }: { item: JobScenarioSubmission }) {
           {scenarioPoint && (
             <span
               title={scenarioPoint.full}
-              className="rounded-control border border-admin-brand/20 bg-admin-brand-soft px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.03em] text-admin-brand"
+              className="rounded-control border border-admin-brand/20 bg-admin-brand-soft px-2 py-0.5 text-[12px] font-bold uppercase tracking-[0.03em] text-admin-brand"
             >
               {scenarioPoint.point}
             </span>
           )}
         </div>
-        <span className="text-[11px] text-admin-muted">
+        <span className="text-[12px] text-admin-muted">
           {formatLondonDateTime(item.timestamp)} &bull; {item.driver}
         </span>
       </div>
@@ -110,7 +110,7 @@ function ScenarioCard({ item }: { item: JobScenarioSubmission }) {
 
       {item.signature && (
         <div className="mt-3">
-          <span className="block text-[10px] font-bold uppercase tracking-wider text-admin-muted mb-1">Signature</span>
+          <span className="block text-[12px] font-bold uppercase tracking-wider text-admin-muted mb-1">Signature</span>
           <div className="inline-block bg-white border border-admin-line rounded-card p-2">
             <img src={item.signature.thumbUrl} className="h-10 object-contain mix-blend-multiply" alt="Client signature" />
           </div>

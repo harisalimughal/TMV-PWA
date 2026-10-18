@@ -1,9 +1,18 @@
+/**
+ * Printable scenario record (Check In, Check Out, Parking Liability, Liability Report).
+ *
+ * Paginated explicitly, like the job dossier: page 1 carries the record details, the
+ * parking notice where it applies and the client signature; the photos follow as rows
+ * of two, two rows per page. The old layout gave every photo its own page and let page 1
+ * overflow, which printed a footer-only blank page.
+ */
 import React, { useState } from "react";
-import { formatLondonDateTime } from "../utils/date";
 import { resolveDriver } from "../utils/drivers";
 import { formatLocationLabel, type CapturedLocation } from "../../../../lib/geo";
-import { scenarioPointFromRecord } from "../utils/scenarioPoint";
+import { scenarioAddressFromRecord, scenarioPointFromRecord } from "../utils/scenarioPoint";
+import { documentDateTime } from "./PaperDossierReport";
 import { ReportDocumentHeader, ReportDocumentFooter, ReportRecordMeta } from "./ReportDocumentHeader";
+import { conditionalNoticeApplies, storedDeclaration, templateFor, wordingProvenance } from "../reports/documentTemplates";
 
 interface Props {
   item: any;
@@ -11,229 +20,154 @@ interface Props {
   isPreview?: boolean;
 }
 
-interface PhotoSectionProps {
-  title: string;
-  src: string | null;
-  /** Where/when this photo was actually taken -- absent on submissions made before
-   *  this was captured. Printed as a caption under the photo since this is the
-   *  evidence that protects the company on a damage/parking claim. */
-  capturedAt?: string;
-  location?: CapturedLocation;
-  locationName?: string;
+interface ScenarioPhoto { fileId?: string; thumbUrl?: string; fileUrl?: string; capturedAt?: string; location?: CapturedLocation; locationName?: string }
+
+export const SCENARIO_TITLES: Record<string, string> = {
+  checkin: "Storage Check-in",
+  checkout: "Storage Check-out",
+  parking: "Parking Liability Notice",
+  liability: "Liability Report"
+};
+/** Two rows of two photos fit one A4 page under the header. */
+export const PHOTOS_PER_PAGE = 4;
+
+export function scenarioPhotoPages<T>(photos: T[]): T[][] {
+  const pages: T[][] = [];
+  for (let index = 0; index < photos.length; index += PHOTOS_PER_PAGE) pages.push(photos.slice(index, index + PHOTOS_PER_PAGE));
+  return pages;
 }
 
-function PhotoSection({ title, src, capturedAt, location, locationName }: PhotoSectionProps) {
+function Photo({ title, photo }: { title: string; photo: ScenarioPhoto }) {
   const [failed, setFailed] = useState(false);
-
+  const src = photo.thumbUrl || photo.fileUrl || "";
   return (
-    <div className="report-media-section flex-1 flex flex-col mb-8 min-h-0">
-      <h2 className="text-[14px] font-semibold text-[#1F2937] mb-3">{title}</h2>
-      <div className="report-media-frame flex-1 w-full bg-[#F3F4F6] rounded-card border border-[#E5E7EB] shadow-sm overflow-hidden flex items-center justify-center p-2">
-        {src && !failed ? (
-          <img
-            src={src}
-            alt={title}
-            className="max-w-full max-h-full rounded-control object-contain shadow-[0_2px_8px_rgba(0,0,0,0.08)] bg-white"
-            onError={() => setFailed(true)}
-          />
-        ) : (
-          <div className="text-admin-muted text-[14px] font-semibold italic">
-            {src && failed ? "Photo failed to load" : "Not captured"}
-          </div>
-        )}
+    <figure className="report-photo">
+      <figcaption className="report-photo-title">{title}</figcaption>
+      <div className="report-photo-frame">
+        {src && !failed ? <img src={src} alt={title} onError={() => setFailed(true)} />
+          : <span className="report-photo-missing">{src ? "Photo failed to load" : "Not captured"}</span>}
       </div>
-      {src && !failed && (capturedAt || location) && (
-        <div className="mt-1.5 text-[10px] text-[#6B7280] text-center">
-          {capturedAt && formatLondonDateTime(capturedAt)}
-          {capturedAt && location && " — "}
-          {location && formatLocationLabel(location, locationName)}
-        </div>
-      )}
-    </div>
+      <p className="report-photo-caption">
+        {photo.capturedAt ? documentDateTime(photo.capturedAt) : "Time not recorded"}
+        {" · "}
+        {photo.location ? formatLocationLabel(photo.location, photo.locationName) : "Location not recorded"}
+      </p>
+    </figure>
   );
 }
 
-export function PaperScenarioReport({ item, kind, isPreview = false }: Props) {
+export function PaperScenarioReport({ item, kind, isPreview = false, generatedAt = new Date().toISOString() }: Props & { generatedAt?: string }) {
   const raw = item.rawRecord || item;
   const scenarioPoint = scenarioPointFromRecord(item);
+  const text = (...values: unknown[]) => { const found = values.find(value => typeof value === "string" && value.trim()); return found ? String(found).trim() : "Not recorded"; };
 
-  const clientName = item.clientName || raw["Client Name"] || raw["Client Full Name"] || "Not recorded";
-  const driverResolved = resolveDriver(item.driver || raw["Driver"]);
-  const driverInitials = driverResolved.code;
-  const driverName = raw["Driver Name"] || driverResolved.name;
-  const timestampStr = item.timestamp || raw["Timestamp"] || raw["Date"] || "";
-  const formattedTime = formatLondonDateTime(timestampStr);
-  const containerNum = item.containerNumber || raw["Container Number"] || "-";
-  const clientPhone = item.clientPhone || raw["Client Phone"] || "-";
-  const clientEmail = item.clientEmail || raw["Client Email"] || "-";
-  const address = item.address || raw["Address"] || "Not recorded";
+  const clientName = text(item.clientName, raw["Client Name"], raw["Client Full Name"]);
+  const driverResolved = resolveDriver(item.driver || raw["Driver"] || item.driverInitials, item.driverInitials);
+  const driverName = text(item.driverName, raw["Driver Name"], driverResolved.name);
+  const driverInitials = item.driverInitials || driverResolved.code;
+  const formattedTime = documentDateTime(item.timestamp || raw["Timestamp"] || raw["Date"] || "");
   const signatureUrl: string | undefined = item.signature?.url || item.signature?.thumbUrl || raw["Signature"];
-  // Falls back to the record's overall timestamp/location-less state on a submission
-  // made before signature capture existed -- never blocks rendering the signature itself.
-  const signatureCapturedAt: string | undefined = item.signature?.capturedAt;
-  const signatureLocation: CapturedLocation | undefined = item.signature?.location;
-  const signatureLocationName: string | undefined = item.signature?.locationName;
-  const photos: Array<{
-    fileId: string;
-    thumbUrl: string;
-    capturedAt?: string;
-    location?: CapturedLocation;
-    locationName?: string;
-  }> = item.photos || [];
-  const photoPages = photos.length > 0 ? photos : [{ fileId: "missing", thumbUrl: "" }];
-  const totalPages = Math.max(photoPages.length, 1);
+  const photos: ScenarioPhoto[] = item.photos || [];
+  const photoPages = scenarioPhotoPages(photos);
+  const totalPages = 1 + photoPages.length;
+  const template = templateFor(kind);
+  const snapshot = storedDeclaration(item);
+  const title = template?.title || SCENARIO_TITLES[kind] || "Report";
+  const damageCategories: string | undefined = item.damageCategories || raw["Damage Categories"];
+  const showWaiver = !!template && conditionalNoticeApplies(template, damageCategories);
+  const reference: string = item.id || item.jobId || title;
 
-  const titleMap: Record<string, string> = {
-    checkin: "Storage Check-in",
-    checkout: "Storage Check-out",
-    parking: "Parking Liability Notice",
-    liability: "Liability Report"
-  };
-  const title = titleMap[kind] || "Report";
-  const refId: string | null = item.id || item.jobId || null;
-  const ParkingNotice = () => (
-    <div className="report-notice bg-[#FFFBEB] border border-[#FDE68A] p-3 rounded-card mb-3 shadow-sm shrink-0">
-      <h3 className="text-[12px] font-bold text-amber-600 mb-1">Penalty Charge Liability Notice</h3>
-      <p className="text-[11px] text-amber-900 leading-relaxed">
-        In the event a fine is received, you will cover the cost directly, ensuring the company and drivers are not held liable. Penalty Charge Notice fines typically start at GBP 60 and can go up to GBP 180, depending on the severity of the offence. If paid within 14 days, most fines are reduced by 50%.
-      </p>
-    </div>
-  );
-
-  const DetailsAndSignature = () => (
-    <div className="mb-3 grid grid-cols-1 gap-3 shrink-0">
-      <div className="report-fact-list border border-[#E5E7EB] rounded-card overflow-hidden">
-        {scenarioPoint && (
-          <div className="flex items-center justify-between gap-4 p-3 border-b border-[#E5E7EB] bg-white">
-            <span className="text-label font-medium text-fg-muted">Reported At</span>
-            <span className="text-[13px] font-bold text-admin-ink text-right max-w-[360px]">{scenarioPoint.full}</span>
-          </div>
-        )}
-
-        <div className="flex items-center justify-between gap-4 p-3 border-b border-[#E5E7EB] bg-white">
-          <span className="text-label font-medium text-fg-muted">Client Name</span>
-          <span className="text-[13px] font-bold text-admin-ink text-right">{clientName}</span>
-        </div>
-
-        {kind !== "parking" && (
-          <>
-            <div className="flex items-center justify-between gap-4 p-3 border-b border-[#E5E7EB] bg-white">
-              <span className="text-label font-medium text-fg-muted">Phone</span>
-              <span className="text-[13px] font-bold text-admin-ink text-right">{clientPhone}</span>
-            </div>
-            <div className="flex items-center justify-between gap-4 p-3 border-b border-[#E5E7EB] bg-white">
-              <span className="text-label font-medium text-fg-muted">Email</span>
-              <span className="text-[13px] font-bold text-admin-ink text-right break-all">{clientEmail}</span>
-            </div>
-          </>
-        )}
-
-        {(kind === "checkin" || kind === "checkout") && (
-          <div className="flex items-center justify-between gap-4 p-3 border-b border-[#E5E7EB] bg-white">
-            <span className="text-label font-medium text-fg-muted">Container Number</span>
-            <span className="text-[13px] font-bold text-admin-brand text-right">{containerNum}</span>
-          </div>
-        )}
-
-        {kind === "parking" && (
-          <div className="flex items-center justify-between gap-4 p-3 border-b border-[#E5E7EB] bg-white">
-            <span className="text-label font-medium text-fg-muted">Address on Booking</span>
-            <span className="text-[13px] font-bold text-admin-ink text-right max-w-[360px]">{address}</span>
-          </div>
-        )}
-
-        {kind === "liability" && (
-          <div className="flex items-center justify-between gap-4 p-3 bg-white">
-            <span className="text-label font-medium text-fg-muted">Damage Categories</span>
-            <span className="text-[13px] font-bold text-admin-ink text-right max-w-[360px]">
-              {item.damageCategories || raw["Damage Categories"] || "-"}
-            </span>
-          </div>
-        )}
-      </div>
-
-      <div className="mb-3 shrink-0">
-        <h2 className="text-label font-medium text-fg-muted mb-1.5">Client Signature:</h2>
-        <div className="report-signature border border-[#E5E7EB] rounded-card p-4 bg-[#F8F9FA] flex flex-col items-center justify-center min-h-[100px]">
-          {signatureUrl ? (
-            <img src={signatureUrl} alt="Client Signature" className="max-h-[70px] object-contain mix-blend-multiply" />
-          ) : (
-            <span className="text-[13px] font-semibold text-admin-muted italic">Not captured</span>
-          )}
-          <span className="text-[10px] font-medium text-admin-muted mt-2">
-            Signed: {signatureCapturedAt ? formatLondonDateTime(signatureCapturedAt) : formattedTime}
-          </span>
-          {signatureLocation && (
-            <span className="text-[10px] font-medium text-admin-muted">
-              {formatLocationLabel(signatureLocation, signatureLocationName)}
-            </span>
-          )}
-        </div>
-      </div>
-    </div>
-  );
+  const facts: Array<[string, string]> = [
+    ["Client name", clientName],
+    ...(kind !== "parking" ? [["Client phone", text(item.clientPhone, raw["Client Phone"])], ["Client email", text(item.clientEmail, raw["Client Email"])]] as Array<[string, string]> : []),
+    ...(item.clientPresent || raw["Client Present"] ? [["Client present", text(item.clientPresent, raw["Client Present"])]] as Array<[string, string]> : []),
+    ...(kind === "checkin" || kind === "checkout" ? [["Container number", text(item.containerNumber, raw["Container Number"])]] as Array<[string, string]> : []),
+    ...(kind === "parking" ? [["Address on booking", text(scenarioAddressFromRecord(item))]] as Array<[string, string]> : []),
+    ...(kind === "liability" ? [["Damage categories", text(item.damageCategories, raw["Damage Categories"])]] as Array<[string, string]> : []),
+    // The meta block already shows a job ID that differs from the record reference.
+    ...(item.jobId && item.jobId !== item.id ? [] : [["Job ID", text(item.jobId, raw["Job ID"])]] as Array<[string, string]>),
+    ["Photos attached", String(photos.length)]
+  ];
 
   const Page = ({ page, children }: { page: number; children: React.ReactNode }) => (
-    <div
-      className={`bg-white text-admin-ink mx-auto ${isPreview ? "report-preview-page w-full" : "scenario-print-page"}`}
-      style={{
-        boxSizing: "border-box",
-        pageBreakAfter: page < totalPages ? "always" : "auto",
-        breakAfter: page < totalPages ? "page" : "auto"
-      }}
-    >
+    <div className={`bg-white text-admin-ink mx-auto ${isPreview ? "report-preview-page w-full" : "scenario-print-page"}`}
+      style={{ boxSizing: "border-box", pageBreakAfter: page < totalPages ? "always" : "auto", breakAfter: page < totalPages ? "page" : "auto" }}>
       <div className="report-page-content">
-        <ReportDocumentHeader title={title} reference={refId || item.jobId || title} page={page} />
-        {page === 1 && <ReportRecordMeta name={driverName} initials={driverInitials} timestamp={formattedTime} reference={refId || "Not recorded"} jobId={item.jobId} point={scenarioPoint?.full} />}
-        {children}
-        <ReportDocumentFooter reference={refId || item.jobId || title} page={page} total={totalPages} />
+        <ReportDocumentHeader title={title} reference={reference} page={page} />
+        <div className="report-page-body">{children}</div>
+        <ReportDocumentFooter reference={reference} page={page} total={totalPages} />
       </div>
     </div>
   );
 
   return (
-    <div className={`report-document paper-document font-sans ${isPreview ? "report-document-preview w-full" : "block"}`}>
+    <div className={`report-document report-dossier paper-document ${isPreview ? "report-document-preview w-full" : "block"}`}>
       <style>{`
-        @page {
-          size: 210mm 297mm;
-          size: A4 portrait;
-          margin: 0;
-        }
+        @page { size: A4 portrait; margin: 0; }
         @media print {
-          .scenario-print-page {
-            width: 210mm !important;
-            min-height: 297mm !important;
-            padding: 14mm !important;
-            margin: 0 !important;
-            box-sizing: border-box !important;
-            background-color: white !important;
-            overflow: visible !important;
-          }
-          .scenario-print-page:not(:last-child) {
-            page-break-after: always !important;
-            break-after: page !important;
-          }
+          .scenario-print-page { width: 210mm !important; min-height: 297mm !important; padding: 14mm !important; margin: 0 !important; box-sizing: border-box !important; background-color: white !important; overflow: visible !important; }
+          .scenario-print-page:not(:last-child) { page-break-after: always !important; break-after: page !important; }
         }
       `}</style>
 
-      {photoPages.map((photo, index) => {
-        const page = index + 1;
-        const src = photo.thumbUrl || null;
+      <Page page={1}>
+        <ReportRecordMeta name={driverName} initials={driverInitials} timestamp={formattedTime} reference={item.id || "Not recorded"} jobId={item.jobId} point={scenarioPoint?.full} />
+        {template?.notice && (
+          <section className="report-block report-legal" data-template-text="notice">
+            <h2 className="report-section-title">{template.notice.title}</h2>
+            <p className="report-legal-text">{template.notice.text}</p>
+          </section>
+        )}
+        <section className="report-block">
+          <h2 className="report-section-title">Record details</h2>
+          <div className="report-fact-list">
+            {facts.map(([label, value]) => <div key={label}><span>{label}</span><span>{value}</span></div>)}
+          </div>
+        </section>
+        {showWaiver && template?.conditionalNotice && (
+          <section className="report-block report-legal" data-template-text="conditional">
+            <h2 className="report-section-title">{template.conditionalNotice.title}</h2>
+            <p className="report-legal-text">{template.conditionalNotice.text}</p>
+          </section>
+        )}
+        {(snapshot?.text || template?.declaration) && (
+          <section className="report-block report-legal" data-template-text="declaration" data-wording-source={snapshot ? "record" : "template"}>
+            <h2 className="report-section-title">Client declaration</h2>
+            <p className="report-legal-text">{snapshot?.text ?? template?.declaration}</p>
+          </section>
+        )}
+        <section className="report-block">
+          <h2 className="report-section-title">Client signature</h2>
+          <div className="report-signature">
+            <div className="report-signature-image">
+              {signatureUrl ? <img src={signatureUrl} alt="Client Signature" /> : <span className="report-photo-missing">Not signed</span>}
+            </div>
+            <div className="report-signature-lines">
+              <p className="report-signature-heading">{clientName}</p>
+              <p>Signed: {item.signature?.capturedAt ? documentDateTime(item.signature.capturedAt) : "Time not recorded"}</p>
+              <p>{item.signature?.location ? formatLocationLabel(item.signature.location, item.signature.locationName) : "Location not recorded"}</p>
+            </div>
+          </div>
+        </section>
+        {photos.length === 0 && <p className="report-note">Photo evidence: no photos attached to this record.</p>}
+        <p className="report-template-meta">
+          Printed {documentDateTime(generatedAt)}, London time, from the stored record. {wordingProvenance(template, kind, snapshot)}
+        </p>
+      </Page>
 
-        return (
-          <Page key={photo.fileId || index} page={page}>
-            {kind === "parking" && page === 1 && <ParkingNotice />}
-            <PhotoSection
-              title={photos.length > 0 ? `${title} Evidence${photos.length > 1 ? ` ${page}` : ""}` : "Photo Evidence"}
-              src={src}
-              capturedAt={photo.capturedAt}
-              location={photo.location}
-              locationName={photo.locationName}
-            />
-            {page === 1 && <DetailsAndSignature />}
-          </Page>
-        );
-      })}
+      {photoPages.map((group, pageIndex) => (
+        <Page key={pageIndex} page={pageIndex + 2}>
+          <h2 className="report-section-title">Photo evidence{pageIndex > 0 && <span>(continued)</span>}</h2>
+          {[group.slice(0, 2), group.slice(2, 4)].filter(row => row.length).map((row, rowIndex) => (
+            <div key={rowIndex} className="report-photo-row">
+              {row.map((photo, index) => {
+                const number = pageIndex * PHOTOS_PER_PAGE + rowIndex * 2 + index + 1;
+                return <Photo key={photo.fileId || number} title={`${title} Evidence ${number}`} photo={photo} />;
+              })}
+            </div>
+          ))}
+        </Page>
+      ))}
     </div>
   );
 }

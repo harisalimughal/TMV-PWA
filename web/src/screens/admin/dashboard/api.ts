@@ -11,6 +11,7 @@ import {
   DriverSummaryItem, FinanceSummaryResponse, NormalizedJob, ScenarioItem, SummaryResponse, VanComplianceItem, VanDriverRecordItem, VanRecordItem
 } from "./types";
 import { SERVER_ERROR_MESSAGE } from "../../../lib/apiErrors";
+import { adminFetch } from "../../../lib/adminTransport";
 import type { DriverReport } from "./driverReport.types";
 
 /**
@@ -24,15 +25,8 @@ import type { DriverReport } from "./driverReport.types";
  * A 4xx keeps whatever specific reason the backend gave, via apiError() below, since
  * that IS something the admin can act on.
  */
-async function apiFetch(path: string, init?: RequestInit): Promise<Response> {
-  let res: Response;
-  try {
-    res = await fetch(path, { credentials: "same-origin", ...init });
-  } catch {
-    throw new Error(SERVER_ERROR_MESSAGE);
-  }
-  if (res.status >= 500) throw new Error(SERVER_ERROR_MESSAGE);
-  return res;
+async function apiFetch(path: string, init?: RequestInit, timeoutMs?: number): Promise<Response> {
+  return adminFetch(path, init, timeoutMs);
 }
 
 /** Builds the Error for a non-ok apiFetch response -- always a 4xx by the time this
@@ -84,12 +78,12 @@ export async function fetchSummary(from?: string, to?: string): Promise<SummaryR
   return res.json();
 }
 
-export async function fetchJobs(query: Record<string, any> = {}): Promise<JobsResponse> {
+export async function fetchJobs(query: Record<string, any> = {}, signal?: AbortSignal): Promise<JobsResponse> {
   const params = new URLSearchParams();
   for (const [k, v] of Object.entries(query)) {
     if (v !== undefined && v !== null && v !== "") params.set(k, String(v));
   }
-  const res = await apiFetch(`/api/admin/jobs?${params.toString()}`);
+  const res = await apiFetch(`/api/admin/jobs?${params.toString()}`, signal ? { signal } : undefined);
   if (!res.ok) throw await apiError(res, "Failed to load jobs");
   return res.json();
 }
@@ -173,13 +167,14 @@ export async function fetchScenarios(
   page = 1,
   driver?: string,
   from?: string,
-  to?: string
+  to?: string,
+  signal?: AbortSignal
 ): Promise<{ kind: string; items: ScenarioItem[]; pagination: PaginationMeta }> {
   const params = new URLSearchParams({ page: String(page) });
   if (driver) params.set("driver", driver);
   if (from) params.set("from", from);
   if (to) params.set("to", to);
-  const res = await apiFetch(`/api/admin/scenarios/${encodeURIComponent(kind)}?${params.toString()}`);
+  const res = await apiFetch(`/api/admin/scenarios/${encodeURIComponent(kind)}?${params.toString()}`, signal ? { signal } : undefined);
   if (!res.ok) throw await apiError(res, `Failed to load scenario ${kind}`);
   return res.json();
 }
@@ -194,12 +189,12 @@ export async function fetchVanRecords(query: Record<string, any> = {}): Promise<
   return res.json();
 }
 
-export async function fetchVanDriverRecords(query: Record<string, any> = {}): Promise<{ items: VanDriverRecordItem[]; pagination: PaginationMeta }> {
+export async function fetchVanDriverRecords(query: Record<string, any> = {}, signal?: AbortSignal): Promise<{ items: VanDriverRecordItem[]; pagination: PaginationMeta }> {
   const params = new URLSearchParams();
   for (const [k, v] of Object.entries(query)) {
     if (v !== undefined && v !== null && v !== "") params.set(k, String(v));
   }
-  const res = await apiFetch(`/api/admin/van/drivers?${params.toString()}`);
+  const res = await apiFetch(`/api/admin/van/drivers?${params.toString()}`, signal ? { signal } : undefined);
   if (!res.ok) throw await apiError(res, "Failed to load van driver records");
   return res.json();
 }
@@ -488,11 +483,13 @@ export interface FactoryResetSummary {
  *  records/compliance, exceptions, push subscriptions) and their Cloudinary photos --
  *  jobs, driver accounts and settings are untouched. See maintenance.routes.ts. */
 export async function factoryReset(): Promise<{ ok: true; deleted: FactoryResetSummary }> {
+  // Deleting every Cloudinary photo can take minutes, far beyond the normal 30 s admin
+  // timeout. Cutting it short would report a failure while the server keeps deleting.
   const res = await apiFetch("/api/admin/maintenance/factory-reset", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ confirm: "RESET" })
-  });
+  }, 10 * 60_000);
   if (!res.ok) throw await apiError(res, "Factory reset failed");
   return res.json();
 }

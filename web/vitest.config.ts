@@ -19,9 +19,11 @@ export default defineConfig({
     },
   },
   test: {
+    maxWorkers: 4,
     environment: "jsdom",
     setupFiles: ["./src/test/setup.ts"],
-    include: ["src/**/*.{test,spec}.{ts,tsx}"],
-    css: false
+    include: ["src/**/*.{test,spec}.{ts,tsx}", "scripts/**/*.{test,spec}.ts"],
+    // CSS is stubbed in tests, except the admin theme, which adminTheme.test.ts reads as text.
+    css: { include: [/adminTheme\.css/, /bookingTheme\.css/] }
   }
 });

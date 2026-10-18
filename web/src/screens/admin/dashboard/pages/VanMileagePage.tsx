@@ -1,3 +1,4 @@
+import { scopedAdminUrl } from "../../../../lib/adminDriverScope";
 import { AdminFilterBar } from "../components/AdminFilterBar";
 import React, { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
@@ -111,7 +112,7 @@ export function VanMileagePage() {
           />
         </div>
         <button
-          onClick={() => { window.location.href = "/api/admin/van/records/export.csv"; }}
+          onClick={() => { window.location.href = scopedAdminUrl("/api/admin/van/records/export.csv"); }}
           className="h-10 px-3 rounded-card border border-admin-line bg-white text-[13px] font-medium text-admin-ink hover:bg-admin-surface transition flex items-center gap-2"
         >
           <Download className="w-4 h-4 text-admin-muted" /> Export CSV
@@ -240,7 +241,7 @@ function VanDriverModal({
   }
 
   return (
-    <div className="fixed inset-0 z-[100] overflow-hidden bg-admin-ink/70 backdrop-blur-sm flex items-center justify-center p-3 sm:p-6">
+    <div className="fixed inset-0 z-[100] overflow-hidden tmv-scrim backdrop-blur-sm flex items-center justify-center p-3 sm:p-6">
       <div className="absolute inset-0 cursor-pointer" onClick={onClose} />
       <div className="relative z-10 w-full max-w-5xl max-h-[94vh] overflow-hidden rounded-module border border-white/10 bg-[#F5F5F5] shadow-2xl animate-in zoom-in-95 fade-in duration-200 flex flex-col">
         <div className="px-6 py-5 bg-white border-b border-admin-line flex items-center justify-between gap-4">

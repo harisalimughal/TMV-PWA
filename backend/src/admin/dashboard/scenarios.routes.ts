@@ -4,6 +4,7 @@ import { DateTime } from "luxon";
 import { listAllScenarioSubmissions, listScenarioSubmissionsByKind, ScenarioSubmissionDoc } from "../../db/scenario.repo";
 import { toThumbnailUrl } from "../../storage/cloudinary";
 import { listDriverProfiles } from "../../auth/driver-account.service";
+import { driverVisible } from "../driver-scope";
 
 const VALID_KINDS = new Set(["checkin", "checkout", "parking", "liability"]);
 
@@ -64,7 +65,8 @@ export function dashboardScenariosRoutes(): Router {
       }
 
       const all = await listAllScenarioSubmissions();
-      const rows = all.filter(r => r.scenario === kind);
+      const resolveDriver = await buildDriverResolver();
+      const rows = all.filter(r => r.scenario === kind && driverVisible(r.driverSnapshot?.initials || resolveDriver(r.driver).initials));
 
       const fieldNames = [...new Set(rows.flatMap(r => Object.keys(r.fields)))];
       const columns = [
@@ -119,7 +121,7 @@ export function dashboardScenariosRoutes(): Router {
       // enough that this isn't a real cost.
       const { items: allForKind } = await listScenarioSubmissionsByKind(kind, 1, 1_000_000);
       const resolveDriver = await buildDriverResolver();
-      let rows = [...allForKind].reverse(); // oldest first, matching the source
+      let rows = [...allForKind].reverse().filter(r => driverVisible(r.driverSnapshot?.initials || resolveDriver(r.driver).initials));
       if (driverFilter) {
         rows = rows.filter(r => resolveDriver(r.driver).initials === driverFilter);
       }

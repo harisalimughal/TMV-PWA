@@ -54,7 +54,7 @@ export function RequirementChecklist({
 
   return (
     <div className={cx("rounded-card border border-line bg-surface px-4 py-3.5", className)}>
-      <p className="mb-2.5 text-[11px] font-semibold uppercase tracking-[0.06em] text-fg-subtle">{title}</p>
+      <p className="mb-2.5 text-[12px] font-semibold text-fg-subtle">{title}</p>
       <ul className="flex flex-col gap-2" aria-live="polite">
         {items.map(item => (
           <li key={item.id} className="flex items-center gap-2.5 text-[13.5px]">

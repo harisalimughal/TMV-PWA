@@ -1,3 +1,4 @@
+import { scopedAdminUrl } from "../../../../lib/adminDriverScope";
 import { AdminFilterBar } from "../components/AdminFilterBar";
 import React, { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
@@ -157,7 +158,7 @@ export function ScenariosPage({ kind, filterControl, viewSwitcher }: Props) {
           <button onClick={() => refetch()} className="shrink-0 w-10 h-10 rounded-card flex items-center justify-center bg-admin-surface border border-admin-line/50 hover:bg-admin-line/40 text-admin-muted hover:text-admin-ink transition" title="Refresh" aria-label="Refresh">
             <RefreshCw className={`w-4 h-4 ${isLoading ? "animate-spin" : ""}`} />
           </button>
-          <button onClick={() => { window.location.href = `/api/admin/scenarios/${kind}/export.csv`; }} className="shrink-0 w-10 h-10 rounded-card flex items-center justify-center bg-admin-surface border border-admin-line/50 hover:bg-admin-line/40 text-admin-muted hover:text-admin-ink transition" title="Export CSV" aria-label="Export CSV"><Download className="w-4 h-4" /></button>
+          <button onClick={() => { window.location.href = scopedAdminUrl(`/api/admin/scenarios/${kind}/export.csv`); }} className="shrink-0 w-10 h-10 rounded-card flex items-center justify-center bg-admin-surface border border-admin-line/50 hover:bg-admin-line/40 text-admin-muted hover:text-admin-ink transition" title="Export CSV" aria-label="Export CSV"><Download className="w-4 h-4" /></button>
           {kind === "liability" && <button onClick={() => setIsConfigOpen(true)} className="shrink-0 w-10 h-10 rounded-card flex items-center justify-center bg-admin-surface border border-admin-line/50 hover:bg-admin-line/40 text-admin-muted hover:text-admin-ink transition" title="Manage categories" aria-label="Manage categories"><Settings2 className="w-4 h-4" /></button>}
       </AdminFilterBar>
 

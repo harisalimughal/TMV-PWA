@@ -7,6 +7,7 @@ import { listSettings, setSetting } from "../db/settings.repo";
 import { deleteDriverAccount, listDriverProfiles, setDriverPassword, upsertDriverProfile } from "./driver-account.service";
 import { clearAdminSessionCookie, setAdminSessionCookie } from "./admin-session";
 import { requireAdminAuth } from "./require-admin-auth";
+import { driverVisible } from "../admin/driver-scope";
 
 interface RateLimitRecord {
   count: number;
@@ -80,7 +81,7 @@ export function adminRoutes(): Router {
 
   router.get("/drivers", requireAdminAuth, async (_req: Request, res: Response) => {
     const drivers = await listDriverProfiles();
-    res.status(200).json({ drivers });
+    res.status(200).json({ drivers: drivers.filter(driver => driverVisible(driver.initials)) });
   });
 
   // Upserts on email, same as the old TMV-Chat-bot Add/Edit Driver form -- resubmitting

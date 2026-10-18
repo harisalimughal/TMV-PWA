@@ -1,3 +1,5 @@
+import { driverScopeKey } from "../admin/driver-scope";
+
 const invalidators = new Set<() => void>();
 export function invalidateReportReads() { for (const clear of invalidators) clear(); }
 
@@ -11,6 +13,7 @@ export function createReportReadCache<T>(ttlMs = 10_000, maxEntries = 12, retain
   return {
     clear,
     async get(key: string, read: () => Promise<T>): Promise<T> {
+      key = `${driverScopeKey()}:${key}`;
       const now = Date.now();
       for (const [oldKey, entry] of entries) if (entry.expires <= now) entries.delete(oldKey);
       const cached = entries.get(key);

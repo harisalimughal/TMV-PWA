@@ -1,4 +1,5 @@
 import { SERVER_ERROR_MESSAGE } from "../lib/apiErrors";
+import { adminReadHeaders } from "../lib/adminDriverScope";
 
 export interface ApiError {
   code: string;
@@ -56,7 +57,8 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     res = await fetch(path, {
       credentials: "same-origin",
       headers: init?.body ? { "Content-Type": "application/json" } : undefined,
-      ...init
+      ...init,
+      ...(!init?.method || ["GET", "HEAD"].includes(init.method.toUpperCase()) ? { headers: adminReadHeaders(init?.headers) } : {})
     });
   } catch {
     throw { code: "SERVER_UNREACHABLE", message: SERVER_ERROR_MESSAGE } satisfies ApiError;

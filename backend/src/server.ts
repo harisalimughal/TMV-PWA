@@ -46,6 +46,9 @@ import { dashboardNotificationsRoutes } from "./admin/dashboard/notifications.ro
 import { dashboardScenariosRoutes } from "./admin/dashboard/scenarios.routes";
 import { dashboardSummaryRoutes } from "./admin/dashboard/summary.routes";
 import { dashboardVanRoutes } from "./admin/dashboard/van.routes";
+import { dashboardActivityRoutes } from "./admin/dashboard/activity.routes";
+import { dashboardBookingRoutes } from "./booking/routes";
+import { adminDriverScope } from "./admin/driver-scope";
 
 const app = express();
 app.use(express.json({ limit: "2mb" }));
@@ -54,7 +57,9 @@ app.use(cookieParser());
 app.get("/healthz", (_req, res) => res.status(200).json({ ok: true }));
 
 app.use("/api/auth", authRoutes());
+app.use("/api/admin", adminDriverScope);
 app.use("/api/admin", adminRoutes());
+app.use("/api/admin", requireAdminAuth, dashboardActivityRoutes(), dashboardBookingRoutes());
 app.use("/api/jobs", jobsRoutes());
 app.use("/api/storage", storageRoutes());
 app.use("/api/van", vanRoutes());

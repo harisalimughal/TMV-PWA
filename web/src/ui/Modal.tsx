@@ -1,12 +1,12 @@
-import React, { useEffect, useId, useRef } from "react";
+import React, { useId, useRef } from "react";
+import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 import { cx } from "./cx";
 import { IconButton } from "./IconButton";
+import { useDialogFocus } from "./useDialogFocus";
 
-const FOCUSABLE =
-  'a[href],button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])';
 
-export type ModalSize = "sm" | "md" | "lg" | "fullscreen";
+export type ModalSize = "sm" | "md" | "lg" | "xl" | "2xl" | "3xl" | "fullscreen";
 
 export interface ModalProps {
   open: boolean;
@@ -28,6 +28,9 @@ const SIZES: Record<ModalSize, string> = {
   sm: "max-w-sm",
   md: "max-w-md",
   lg: "max-w-lg",
+  xl: "max-w-4xl",
+  "2xl": "max-w-5xl",
+  "3xl": "max-w-6xl",
   fullscreen: "max-w-none w-full h-full rounded-none sm:rounded-none"
 };
 
@@ -48,48 +51,14 @@ export function Modal({
   children
 }: ModalProps) {
   const panelRef = useRef<HTMLDivElement>(null);
-  const restoreRef = useRef<HTMLElement | null>(null);
+
   const titleId = useId();
 
-  useEffect(() => {
-    if (!open) return;
-    restoreRef.current = document.activeElement as HTMLElement;
-    const prevOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-
-    function onKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape" && dismissible) {
-        event.stopPropagation();
-        onClose();
-        return;
-      }
-      if (event.key !== "Tab") return;
-      const nodes = panelRef.current?.querySelectorAll<HTMLElement>(FOCUSABLE);
-      if (!nodes || nodes.length === 0) return;
-      const first = nodes[0];
-      const last = nodes[nodes.length - 1];
-      if (event.shiftKey && document.activeElement === first) {
-        event.preventDefault();
-        last.focus();
-      } else if (!event.shiftKey && document.activeElement === last) {
-        event.preventDefault();
-        first.focus();
-      }
-    }
-
-    document.addEventListener("keydown", onKeyDown, true);
-    panelRef.current?.focus();
-
-    return () => {
-      document.removeEventListener("keydown", onKeyDown, true);
-      document.body.style.overflow = prevOverflow;
-      restoreRef.current?.focus?.();
-    };
-  }, [open, onClose, dismissible]);
+  useDialogFocus(open, panelRef, onClose, dismissible);
 
   if (!open) return null;
 
-  return (
+  return createPortal(
     <div
       className={cx(
         "fixed inset-0 z-[100] flex",
@@ -114,12 +83,12 @@ export function Modal({
           placement !== "left" && SIZES[size]
         )}
       >
-        <header className={cx("flex items-center justify-between gap-3 border-b border-line px-4 py-3", placement === "left" && "pt-[calc(env(safe-area-inset-top)+12px)]")}>
+        <div className={cx("flex items-center justify-between gap-3 border-b border-line px-4 py-3", placement === "left" && "pt-[calc(env(safe-area-inset-top)+12px)]")}>
           <h2 id={titleId} className={cx("text-heading font-semibold text-fg truncate", hideTitle && "sr-only")}>
             {title}
           </h2>
           {dismissible && <IconButton aria-label="Close" icon={<X />} size="sm" onClick={onClose} />}
-        </header>
+        </div>
 
         <div className="min-h-0 flex-1 overflow-y-auto scroll-touch px-4 py-4">{children}</div>
 
@@ -136,6 +105,6 @@ export function Modal({
           </div>
         )}
       </div>
-    </div>
+    </div>, document.body
   );
 }

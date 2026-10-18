@@ -82,7 +82,13 @@ export function usePushNotifications(): PushNotificationsState {
       if (!publicKey) throw new Error("No public key returned");
 
       // 3. Subscribe with PushManager
-      const reg = await navigator.serviceWorker.ready;
+      // Vite development mode or a failed registration may never resolve `ready`.
+      // Keep the Enable button retryable rather than leaving it loading forever.
+      let readyTimer: ReturnType<typeof setTimeout> | undefined;
+      const reg = await Promise.race([
+        navigator.serviceWorker.ready,
+        new Promise<never>((_, reject) => { readyTimer = setTimeout(() => reject(new Error("Push service worker is not ready. Reload the app and retry.")), 10_000); })
+      ]).finally(() => clearTimeout(readyTimer));
       let sub = await reg.pushManager.getSubscription();
 
       if (!sub) {

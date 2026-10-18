@@ -1,254 +1,247 @@
-import React, { useState } from "react";
-import { driverReportHref, navigateAdmin, retainRangeInUrl } from "../utils/reportNavigation";
+/**
+ * Drivers has two tabs: Drivers (manage and inspect individual drivers, as cards or as a
+ * table) and Performance (compare drivers over a period). A driver's full report, with
+ * its six tabs, stays one click away.
+ *
+ * URL: `view=drivers|performance` and `mode=cards|table`. The old three-tab values still
+ * work: `view=cards` opens Drivers as cards, `view=directory` opens Drivers as a table.
+ *
+ * The table is the account roster and is never date-filtered; the date range applies to
+ * the cards and the performance tab.
+ * "Account active" means app sign-in is enabled. It does not mean online, driving,
+ * available or assigned; current work is shown separately from today's jobs.
+ */
+import React, { useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { deleteDriver, fetchDrivers, saveDriver } from "../api";
-import {
-  Plus,
-  ShieldCheck,
-  Mail,
-  Phone,
-  Truck,
-  Edit3,
-  Trash2,
-  UserX
-} from "lucide-react";
-import { getAvatarColor, formatVanReg } from "../utils/drivers";
-import { AddDriverModal } from "../components/AddDriverModal";
-import { ApiErrorState } from "../components/ApiErrorState";
-import { DateRangePicker, defaultDashboardDateRange } from "../components/DateRangePicker";
-import { AdminFilterBar } from "../components/AdminFilterBar";
-import { DriverSummaryItem } from "../types";
-import { Button } from "../../../../ui";
-import { formatDuration } from "../utils/kpi";
+import { FileText, LayoutGrid, List, MoreHorizontal, Plus, UserCheck, UserX, Trash2, Pencil } from "lucide-react";
+import { fetchDrivers as fetchDriverRoster, type AdminDriver } from "../../../../api/admin";
+import { deleteDriver, saveDriver } from "../api";
+import type { NormalizedJob } from "../types";
+import { AddDriverModal, type DriverEditTarget } from "../components/AddDriverModal";
+import { GenerateReportModal } from "../reports/GenerateReportModal";
+import { DriverPerformanceSummary } from "../components/DriverPerformanceSummary";
+import { DriverCards } from "../components/DriverCards";
+import { DateRangePicker } from "../components/DateRangePicker";
 import { DRIVER_OPTIONS_QUERY_KEY } from "../hooks/useDriverOptions";
+import { useUrlState } from "../hooks/useUrlState";
+import { useTodayJobs } from "../hooks/useAttention";
+import { openJob } from "../navigation";
+import { dateRangeForPreset } from "../components/DateRangePicker";
+import { driverReportHref, navigateAdmin } from "../utils/reportNavigation";
+import { formatDateTime, formatTime, plural } from "../utils/format";
+import { formatVanReg } from "../utils/drivers";
+import { Menu } from "../../../../ui/Menu";
+import { Modal } from "../../../../ui/Modal";
+import {
+  Action, Badge, CellStack, DataTable, Drawer, focusRing, EmptyState, ErrorState, Facts, LoadingState, Missing, Notice, PageHeader, SearchField, Tabs, Toolbar, controlBase, panel, type Column
+} from "../components/ds";
+import { cx } from "../../../../ui/cx";
+
+type View = "drivers" | "performance";
+type Mode = "cards" | "table";
+
+/** Maps the URL (current and legacy values) onto the two tabs and the two modes. */
+export function driversLocation(view: string, mode: string): { view: View; mode: Mode } {
+  if (view === "performance") return { view: "performance", mode: mode === "table" ? "table" : "cards" };
+  return { view: "drivers", mode: mode === "table" || view === "directory" ? "table" : "cards" };
+}
+
+/** What a driver is doing today, from today's jobs only. */
+export function currentWork(initials: string, jobs: NormalizedJob[]): string {
+  const mine = jobs.filter(job => job.driverInitials === initials);
+  const active = mine.find(job => job.status === "IN_PROGRESS");
+  if (active) return `On job · ${active.customerName || active.jobId}`;
+  const next = mine.filter(job => job.status === "READY").sort((a, b) => a.bookedStart.localeCompare(b.bookedStart))[0];
+  if (next) return `Next · ${formatTime(next.bookedStart)} ${next.customerName || next.jobId}`;
+  const done = mine.filter(job => job.status === "COMPLETED").length;
+  return done ? `${done} completed today` : "No jobs today";
+}
+
+/** The job to show for a driver today: the one in progress, else the next scheduled. */
+export function currentJobFor(initials: string, jobs: NormalizedJob[]): NormalizedJob | null {
+  const mine = jobs.filter(job => job.driverInitials === initials);
+  return mine.find(job => job.status === "IN_PROGRESS") ?? mine.filter(job => job.status === "READY").sort((a, b) => a.bookedStart.localeCompare(b.bookedStart))[0] ?? null;
+}
 
 export function DriversPage() {
+  const week = dateRangeForPreset("7d");
+  const [state, setState] = useUrlState({ view: "drivers", mode: "", q: "", from: week.from!, to: week.to!, driver: "", profile: "" });
+  const { view, mode } = driversLocation(state.view, state.mode);
+  const roster = useQuery({ queryKey: DRIVER_OPTIONS_QUERY_KEY, queryFn: fetchDriverRoster, staleTime: 5 * 60_000 });
+  const today = useTodayJobs();
+  const [editing, setEditing] = useState<DriverEditTarget | null | "new">(null);
+
+  const drivers = useMemo(() => (roster.data ?? []).filter(driver => driver.initials && driver.initials !== "UNASSIGNED")
+    .sort((a, b) => Number(b.active) - Number(a.active) || a.fullName.localeCompare(b.fullName)), [roster.data]);
+  const needle = state.q.trim().toLowerCase();
+  const visible = drivers.filter(driver => !needle || [driver.fullName, driver.initials, driver.vanRegistration, driver.email, driver.phone].some(value => (value || "").toLowerCase().includes(needle)));
+  const profile = drivers.find(driver => driver.initials === state.profile) ?? null;
+  const activeCount = drivers.filter(driver => driver.active).length;
+
+  const columns: Column<AdminDriver>[] = [
+    { id: "name", header: "Driver", cell: driver => <CellStack primary={driver.fullName} secondary={driver.initials} /> },
+    { id: "contact", header: "Contact", cell: driver => <CellStack primary={driver.email || <Missing>Email not recorded</Missing>} secondary={driver.phone || "Phone not recorded"} /> },
+    { id: "account", header: "Account", width: "150px", cell: driver => driver.active ? <Badge tone="success">Account active</Badge> : <Badge tone="neutral">Deactivated</Badge> },
+    { id: "vehicle", header: "Assigned vehicle", width: "150px", cell: driver => driver.vanRegistration ? <span className="font-mono text-[13.5px]">{formatVanReg(driver.vanRegistration)}</span> : <Missing>None</Missing> },
+    { id: "work", header: "Current / next job", cell: driver => {
+      if (today.isError) return <Missing>Unavailable</Missing>;
+      if (today.isLoading) return <Missing>Loading…</Missing>;
+      const jobs = today.data?.items ?? [], job = currentJobFor(driver.initials, jobs), text = currentWork(driver.initials, jobs);
+      return job ? <button type="button" onClick={event => { event.stopPropagation(); openJob(job.jobId); }} aria-label={`Open job ${job.jobId}`} className={cx("text-left text-[13.5px] font-medium text-admin-brand hover:underline", focusRing)}>{text}</button> : <span className="text-[13.5px]">{text}</span>;
+    } },
+    { id: "actions", header: <span className="sr-only">Actions</span>, align: "right", width: "240px",
+      cell: driver => <div className="flex justify-end gap-2">
+        <Action size="sm" variant="ghost" icon={<Pencil />} onClick={() => setEditing({ initials: driver.initials, fullName: driver.fullName, email: driver.email, phone: driver.phone, vanRegistration: driver.vanRegistration, active: driver.active })} aria-label={`Edit driver ${driver.fullName}`} title="Edit driver" />
+        <Action size="sm" variant="ghost" onClick={() => setState({ profile: driver.initials }, { push: true })} aria-label={`View profile for ${driver.fullName}`}>Profile</Action>
+        <Action size="sm" onClick={() => navigateAdmin(driverReportHref(driver.initials, week.from, week.to))} aria-label={`View report for ${driver.fullName}`}>View report</Action>
+      </div> }
+  ];
+
+  return (
+    <>
+      <PageHeader title="Drivers" scope={view === "performance" ? "Performance from completed jobs · London time" : `${plural(drivers.length, "driver")} · ${activeCount} with an active account`}
+        actions={<Action variant="primary" icon={<Plus />} onClick={() => setEditing("new")}>Add driver</Action>} />
+      <Tabs label="Drivers sections" value={view} onChange={next => setState({ view: next }, { push: true })} idBase="drivers"
+        tabs={[{ id: "drivers", label: "Drivers" }, { id: "performance", label: "Performance" }]} />
+
+      {view === "drivers" ? (
+        <div id="drivers-panel-drivers" role="tabpanel" aria-labelledby="drivers-tab-drivers" className="space-y-4">
+          <Toolbar count={mode === "table" && roster.data ? `${visible.length} of ${drivers.length}` : undefined}>
+            {mode === "cards" && <DateRangePicker presets="records" from={state.from || undefined} to={state.to || undefined} onChange={(from, to) => setState({ from: from ?? "", to: to ?? "" })} />}
+            <SearchField label="Search drivers" placeholder="Name, code, vehicle, email or phone" value={state.q} onChange={q => setState({ q })} className="w-full sm:w-[360px]" />
+            <div role="group" aria-label="Driver view" className="inline-flex rounded-xl border border-admin-line p-0.5">
+              {([["cards", "Cards", <LayoutGrid key="c" aria-hidden className="h-4 w-4" />], ["table", "Table", <List key="t" aria-hidden className="h-4 w-4" />]] as const).map(([id, label, icon]) => (
+                <button key={id} type="button" aria-pressed={mode === id} onClick={() => setState({ view: "drivers", mode: id })}
+                  className={cx("inline-flex items-center gap-1.5 rounded-[10px] px-3 py-1.5 text-[13.5px] font-semibold", focusRing, mode === id ? "bg-admin-brand-soft text-admin-brand" : "text-admin-ink-2 hover:text-admin-ink")}>{icon}{label}</button>
+              ))}
+            </div>
+          </Toolbar>
+          {mode === "cards" ? (
+            <DriverCards from={state.from || week.from!} to={state.to || week.to!} search={state.q}
+              onOpen={initials => navigateAdmin(driverReportHref(initials, state.from || week.from, state.to || week.to))}
+              onProfile={initials => setState({ profile: initials }, { push: true })}
+              onEdit={driver => setEditing({ initials: driver.initials, fullName: driver.fullName, email: driver.email ?? "", phone: driver.phone, vanRegistration: driver.vanRegistration, imei: driver.imei, active: driver.active })}
+              workFor={initials => today.isError ? null : today.isLoading ? "Loading…" : currentWork(initials, today.data?.items ?? [])} />
+          ) : (
+            <section className={cx(panel, "overflow-hidden")} aria-label="Driver directory">
+              {roster.isLoading ? <LoadingState label="Loading drivers" />
+                : roster.isError ? <ErrorState title="Couldn't load drivers" message={(roster.error as { message?: string })?.message} onRetry={() => void roster.refetch()} />
+                : visible.length === 0 ? (drivers.length ? <EmptyState kind="no-matches" title={`No drivers match “${state.q}”`} actions={<Action onClick={() => setState({ q: "" })}>Clear search</Action>} />
+                  : <EmptyState title="No drivers yet" message="Add a driver to give them app access and assign jobs." actions={<Action variant="primary" onClick={() => setEditing("new")}>Add driver</Action>} />)
+                : <DataTable rows={visible} columns={columns} keyOf={driver => driver.initials} onOpen={driver => setState({ profile: driver.initials }, { push: true })} openLabel={driver => `View profile for ${driver.fullName}`}
+                  caption="Driver directory" minWidth={900} rowTone={driver => driver.active ? "default" : "muted"}
+                  mobileRow={driver => (
+                    <div className="space-y-0.5">
+                      <div className="flex items-center justify-between gap-2"><span className="font-semibold">{driver.fullName} <span className="font-normal text-admin-ink-2">· {driver.initials}</span></span>{driver.active ? <Badge tone="success">Active</Badge> : <Badge>Deactivated</Badge>}</div>
+                      <p className="text-[13px] text-admin-ink-2">{driver.vanRegistration ? formatVanReg(driver.vanRegistration) : "No vehicle"} · {currentWork(driver.initials, today.data?.items ?? [])}</p>
+                      <p className="text-[13px] text-admin-ink-2">{[driver.email, driver.phone].filter(Boolean).join(" · ") || "Contact not recorded"}</p>
+                    </div>
+                  )} />}
+            </section>
+          )}
+        </div>
+      ) : (
+        <div id="drivers-panel-performance" role="tabpanel" aria-labelledby="drivers-tab-performance">
+          <DriverPerformanceSummary from={state.from || undefined} to={state.to || undefined} driver={state.driver}
+            onRange={(from, to) => setState({ from: from ?? "", to: to ?? "" })} onDriver={driver => setState({ driver })} />
+        </div>
+      )}
+
+      {profile && <DriverProfile driver={profile} todayJobs={today.data?.items ?? []} onClose={() => setState({ profile: "" })}
+        onEdit={() => setEditing({ initials: profile.initials, fullName: profile.fullName, email: profile.email, phone: profile.phone, vanRegistration: profile.vanRegistration, active: profile.active })} />}
+      <AddDriverModal isOpen={editing !== null} onClose={() => setEditing(null)} driverToEdit={editing === "new" ? null : editing} />
+    </>
+  );
+}
+
+function DriverProfile({ driver, todayJobs, onClose, onEdit }: { driver: AdminDriver; todayJobs: NormalizedJob[]; onClose: () => void; onEdit: () => void }) {
   const queryClient = useQueryClient();
-  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
-  const [editingDriver, setEditingDriver] = useState<DriverSummaryItem | null>(null);
-  const [from, setFrom] = useState<string | undefined>(() => new URLSearchParams(window.location.search).get("from") || defaultDashboardDateRange().from);
-  const [to, setTo] = useState<string | undefined>(() => new URLSearchParams(window.location.search).get("to") || defaultDashboardDateRange().to);
+  const [confirm, setConfirm] = useState<"deactivate" | "reactivate" | "delete" | null>(null);
+  const [typed, setTyped] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [reportOpen, setReportOpen] = useState(false);
+  const week = dateRangeForPreset("7d");
+  const refresh = () => { void queryClient.invalidateQueries({ queryKey: DRIVER_OPTIONS_QUERY_KEY }); void queryClient.invalidateQueries({ queryKey: ["drivers_summary"] }); };
 
-  // Real roster + real per-driver stats (assigned/completed/revenue/missing evidence,
-  // avg delay/duration) -- all computed server-side against actual job data, not the
-  // old localStorage-backed roster + a re-aggregation of fetchJobs() here. from/to
-  // scope every one of those stats server-side (drivers-summary.routes.ts), the same
-  // way Finished Jobs' own date filter scopes its results.
-  const { data, isLoading, isError, error, refetch } = useQuery({
-    queryKey: ["drivers_summary", from, to],
-    queryFn: () => fetchDrivers(from, to),
-    staleTime: 30000
-  });
-
-  const allDrivers = data?.drivers ?? [];
-  // hasAccount is false for a code that only shows up because some job's
-  // driverInitials matches it -- e.g. typed straight into a Calendar title -- with
-  // nobody ever added via Add Driver. Those jobs stay assigned exactly as they are;
-  // this only keeps a driver-less initials code from cluttering the roster with a
-  // card that has no account behind it to edit, deactivate or delete. If a real
-  // driver is later added with the same initials, this same job then folds into
-  // their real card automatically (drivers-summary.routes.ts groups by initials).
-  const roster = allDrivers.filter(d => d.initials !== "UNASSIGNED" && d.hasAccount);
-
-  const handleDeactivate = async (driver: DriverSummaryItem) => {
-    if (!driver.email) return;
-    if (!window.confirm(`Are you sure you want to deactivate ${driver.fullName}? They will be blocked from the app.`)) return;
-    await saveDriver({
-      initials: driver.initials,
-      fullName: driver.fullName,
-      email: driver.email,
-      phone: driver.phone,
-      vanRegistration: driver.vanRegistration,
-      active: false
-    });
-    queryClient.invalidateQueries({ queryKey: ["drivers_summary"] });
-    queryClient.invalidateQueries({ queryKey: DRIVER_OPTIONS_QUERY_KEY });
-  };
-
-  const handleDelete = async (driver: DriverSummaryItem) => {
-    if (!driver.email) return;
-    if (
-      !window.confirm(
-        `Permanently delete ${driver.fullName}? This cannot be undone -- unlike Deactivate, there is no way to restore this driver afterwards. Their past jobs keep the "${driver.initials}" initials but will no longer show a name, email or phone.`
-      )
-    ) {
-      return;
-    }
+  const run = async () => {
+    setBusy(true); setError("");
     try {
-      await deleteDriver(driver.email);
-      queryClient.invalidateQueries({ queryKey: ["drivers_summary"] });
-      queryClient.invalidateQueries({ queryKey: DRIVER_OPTIONS_QUERY_KEY });
-    } catch (err: any) {
-      window.alert(err?.message || "Failed to delete driver.");
-    }
+      if (confirm === "delete") { await deleteDriver(driver.email); refresh(); onClose(); }
+      else { await saveDriver({ initials: driver.initials, fullName: driver.fullName, email: driver.email, phone: driver.phone, vanRegistration: driver.vanRegistration, active: confirm === "reactivate" }); refresh(); setConfirm(null); }
+    } catch (err) { setError((err as Error)?.message || "That change could not be saved."); }
+    finally { setBusy(false); }
   };
 
   return (
-    <div className="space-y-6 max-w-[1440px] mx-auto pb-12">
-      <div className="flex items-center justify-between px-2">
-        <div>
-          <p className="text-[13px] text-admin-muted mt-0.5">
-            {isLoading ? "..." : `${roster.filter(d => d.active).length} active drivers`}
-          </p>
-        </div>
-        <Button onClick={() => setIsAddModalOpen(true)} iconLeft={<Plus />}>
-          Add driver
-        </Button>
-      </div>
-
-      {/* TOOLBAR -- scopes every card's Completed Jobs/Revenue/Total Move Time (and
-          Avg Start Delay) to this range server-side, same as Finished Jobs' filter. */}
-      <AdminFilterBar dates={<DateRangePicker from={from} to={to} onChange={(f, t) => { setFrom(f); setTo(t); retainRangeInUrl(f, t); }} />} />
-
-      {isLoading && (
-        <div className="h-64 bg-white rounded-[6px] border border-admin-line animate-pulse flex items-center justify-center">
-          <span className="text-admin-muted font-medium">Loading drivers...</span>
-        </div>
-      )}
-
-      {!isLoading && isError && (
-        <ApiErrorState message={(error as Error)?.message} onRetry={() => refetch()} />
-      )}
-
-      {!isLoading && !isError && roster.length === 0 && (
-        <div className="h-64 bg-white rounded-[6px] border border-admin-line flex items-center justify-center">
-          <span className="text-admin-muted font-medium">No drivers to show.</span>
-        </div>
-      )}
-
-      {/* DRIVER CARDS GRID */}
-      {!isLoading && !isError && roster.length > 0 && (
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 items-stretch">
-        {roster.map((driver) => (
-          <div
-            key={driver.initials}
-            onClick={event => { if ((event.target as Element).closest("button,a,input,select")) return; navigateAdmin(driverReportHref(driver.initials, from, to)); }}
-            className="bg-white rounded-[6px] border border-admin-line p-6 flex flex-col justify-between hover:border-admin-brand/40 transition-colors cursor-pointer relative group"
-          >
-            {/* Header Row */}
-            <div className="flex items-start justify-between gap-3 mb-4">
-              <div className="flex min-w-0 items-center gap-3">
-                <div className={`w-10 h-10 shrink-0 rounded-full flex items-center justify-center font-bold text-[14px] ${getAvatarColor(driver.initials)}`}>
-                  {driver.initials}
-                </div>
-                <div className="min-w-0">
-                  <h3 className="font-bold text-admin-ink text-[16px] flex items-center gap-1.5 leading-tight">
-                    <button className="text-left truncate focus-visible:outline focus-visible:outline-2" onClick={event => { event.stopPropagation(); navigateAdmin(driverReportHref(driver.initials, from, to)); }} title={`Open report for ${driver.fullName}`}>{driver.fullName}</button>
-                    {driver.active && (
-                      <span title="Verified Active" className="cursor-help shrink-0">
-                        <ShieldCheck className="w-4 h-4 text-[#10b981]" />
-                      </span>
-                    )}
-                  </h3>
-                </div>
-              </div>
-
-              <div className="flex shrink-0 flex-col items-end gap-2">
-                <span className={`px-2 py-0.5 rounded-control text-[11px] font-bold uppercase tracking-wider ${
-                  driver.active ? "bg-admin-status-green-bg text-admin-status-green" : "bg-admin-surface text-admin-muted"
-                }`}>
-                  {driver.active ? "Active" : "Inactive"}
-                </span>
-
-                {/* Overflow menu triggers. Hover-reveal only from md up -- below that
-                    (this card grid's single-column mobile layout) touch has no real
-                    hover, so a tap would just trigger the hover state instead of the
-                    button underneath it; always visible there instead. */}
-                <div className="flex items-center gap-1 opacity-100 transition md:opacity-0 md:group-hover:opacity-100">
-                  <button
-                    onClick={(e) => { e.stopPropagation(); setEditingDriver(driver); }}
-                    title="Edit Driver"
-                    className="p-1 rounded-full text-admin-muted hover:bg-admin-brand hover:text-white transition"
-                  >
-                    <Edit3 className="w-4 h-4" />
-                  </button>
-                  <button
-                    onClick={(e) => { e.stopPropagation(); handleDeactivate(driver); }}
-                    title="Deactivate Driver"
-                    className="p-1 rounded-full text-admin-muted hover:bg-admin-status-red hover:text-white transition"
-                  >
-                    <UserX className="w-4 h-4" />
-                  </button>
-                  <button
-                    onClick={(e) => { e.stopPropagation(); handleDelete(driver); }}
-                    title="Delete Driver Permanently"
-                    className="p-1 rounded-full text-admin-muted hover:bg-admin-status-red hover:text-white transition"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                </div>
-              </div>
+    <>
+      <Drawer open onClose={onClose} width="md" title={driver.fullName} subtitle={<span className="flex flex-wrap items-center gap-2">{driver.initials}{driver.active ? <Badge tone="success">Account active</Badge> : <Badge>Account deactivated</Badge>}</span>}
+        footer={
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex gap-2">
+              <Action variant="primary" onClick={() => navigateAdmin(driverReportHref(driver.initials, week.from, week.to))}>View report</Action>
+              <Action icon={<FileText />} onClick={() => setReportOpen(true)}>Generate Report</Action>
             </div>
-
-            {/* Contact / Van Reg Line */}
-            <div className="flex flex-col gap-2 mb-6 text-[13px] text-admin-muted">
-              <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5">
-                <span className="flex min-w-0 items-center gap-1.5"><Mail className="w-3.5 h-3.5 shrink-0" /> <span className="truncate">{driver.email || "—"}</span></span>
-                <span className="flex min-w-0 items-center gap-1.5"><Phone className="w-3.5 h-3.5 shrink-0" /> <span className="truncate">{driver.phone || "—"}</span></span>
-              </div>
-              {driver.vanRegistration && (
-                <div className="flex items-center gap-1.5 mt-1">
-                  <Truck className="w-4 h-4 text-admin-ink-2" />
-                  <span className="px-2 py-1 rounded-control border border-admin-line bg-admin-surface font-mono font-bold text-admin-ink tracking-widest text-[12px] shadow-sm uppercase">
-                    {formatVanReg(driver.vanRegistration)}
-                  </span>
-                </div>
-              )}
-            </div>
-
-            {/* Stats Grid 2x2 */}
-            <div className="grid grid-cols-2 gap-x-4 gap-y-5">
-              <div>
-                <span className="text-admin-muted block text-[12px] mb-1">Completed Jobs</span>
-                <div className="flex items-baseline gap-2">
-                  <span className="font-bold text-admin-ink text-[18px] tabular-nums leading-none">
-                    {driver.completed}
-                  </span>
-                </div>
-              </div>
-
-              <div>
-                <span className="text-admin-muted block text-[12px] mb-1">Revenue Handled</span>
-                <span className="font-bold text-admin-ink text-[18px] tabular-nums leading-none block">
-                  {driver.revenueFormatted}
-                </span>
-                <span className="text-[11px] text-admin-muted font-medium mt-1.5 block tracking-wide">
-                  £{driver.cashCollectedPounds.toFixed(2)} CASH · £{driver.cardCollectedPounds.toFixed(2)} CARD
-                </span>
-              </div>
-
-              <div>
-                <span className="text-admin-muted block text-[12px] mb-1">Avg Start Delay</span>
-                <span className={`font-bold text-[16px] tabular-nums leading-none block ${driver.avgDelayMinutes > 15 ? 'text-admin-status-red' : 'text-admin-status-green'}`}>
-                  +{driver.avgDelayMinutes} mins
-                </span>
-              </div>
-
-              <div>
-                <span className="text-admin-muted block text-[12px] mb-1">Total Move Time</span>
-                <span className="font-bold text-admin-ink text-[16px] tabular-nums leading-none block">
-                  {formatDuration(driver.totalDurationMinutes)}
-                </span>
-              </div>
-
-              <div className="col-span-2 border-t border-admin-line pt-4">
-                <span className="text-admin-muted block text-[12px] mb-1">Review Reports</span>
-                <span className="font-bold text-admin-ink text-[15px] tabular-nums">
-                  {driver.reviewSentCount} sent
-                </span>
-                <span className="text-admin-muted text-[13px] tabular-nums"> · {driver.reviewNotSentCount} not sent</span>
-              </div>
+            <div className="flex gap-2">
+              <Action icon={<Pencil />} onClick={onEdit}>Edit</Action>
+              <Menu align="end" trigger={props => <Action {...props} aria-label="More driver actions" icon={<MoreHorizontal />}>More</Action>}
+                items={[
+                  driver.active ? { id: "deactivate", label: "Deactivate account…", icon: <UserX />, onSelect: () => setConfirm("deactivate") } : { id: "reactivate", label: "Reactivate account…", icon: <UserCheck />, onSelect: () => setConfirm("reactivate") },
+                  { id: "delete", label: "Delete permanently…", icon: <Trash2 />, tone: "danger", separatorBefore: true, onSelect: () => { setTyped(""); setConfirm("delete"); } }
+                ]} />
             </div>
           </div>
-        ))}
-      </div>
-      )}
+        }>
+        <div className="space-y-4">
+          <section className={cx(panel, "p-4")}>
+            <h3 className="mb-3 text-[15px] font-semibold">Contact</h3>
+            <Facts rows={[
+              { label: "Email (app sign-in)", value: driver.email ? <a className="break-all text-admin-brand hover:underline" href={`mailto:${driver.email}`}>{driver.email}</a> : <Missing /> },
+              { label: "Phone", value: driver.phone ? <a className="text-admin-brand hover:underline" href={`tel:${driver.phone}`}>{driver.phone}</a> : <Missing /> }
+            ]} />
+          </section>
+          <section className={cx(panel, "p-4")}>
+            <h3 className="mb-3 text-[15px] font-semibold">Account</h3>
+            <Facts rows={[
+              { label: "App access", value: driver.active ? "Enabled" : "Deactivated", hint: "Whether the driver can sign in. Not an online or availability status." },
+              { label: "App password", value: driver.hasPassword ? "Set" : <span className="text-admin-status-amber">Not set</span>, hint: driver.hasPassword ? undefined : "Set one with Edit so the driver can sign in." },
+              { label: "Last sign-in", value: driver.lastLoginAt ? formatDateTime(driver.lastLoginAt) : <Missing>Never signed in</Missing> },
+              { label: "Role", value: driver.role || "Driver" }
+            ]} />
+          </section>
+          <section className={cx(panel, "p-4")}>
+            <h3 className="mb-3 text-[15px] font-semibold">Vehicle and today</h3>
+            <Facts rows={[
+              { label: "Assigned vehicle", value: driver.vanRegistration ? <span className="font-mono">{formatVanReg(driver.vanRegistration)}</span> : <Missing>None</Missing> },
+              { label: "Today", value: currentWork(driver.initials, todayJobs) }
+            ]} />
+          </section>
+        </div>
+      </Drawer>
 
-      <AddDriverModal
-        isOpen={isAddModalOpen || !!editingDriver}
-        onClose={() => { setIsAddModalOpen(false); setEditingDriver(null); }}
-        driverToEdit={editingDriver}
-      />
-    </div>
+      <GenerateReportModal open={reportOpen} onClose={() => setReportOpen(false)} initial={{ drivers: [driver.initials] }} />
+      {confirm && (
+        <Modal open onClose={() => !busy && setConfirm(null)} placement="center" dismissible={!busy}
+          title={confirm === "delete" ? `Delete ${driver.fullName} permanently?` : confirm === "deactivate" ? `Deactivate ${driver.fullName}?` : `Reactivate ${driver.fullName}?`}
+          footer={<div className="flex justify-end gap-2">
+            <Action variant="ghost" onClick={() => setConfirm(null)} disabled={busy}>Cancel</Action>
+            <Action variant={confirm === "reactivate" ? "primary" : "danger"} loading={busy} disabled={confirm === "delete" && typed.trim().toUpperCase() !== driver.initials} onClick={() => void run()}>
+              {confirm === "delete" ? "Delete permanently" : confirm === "deactivate" ? "Deactivate" : "Reactivate"}
+            </Action>
+          </div>}>
+          {confirm === "deactivate" && <p className="text-[14px] text-admin-ink-2">The driver is blocked from signing in to the app. Their jobs and reports are unchanged and you can reactivate them later.</p>}
+          {confirm === "reactivate" && <p className="text-[14px] text-admin-ink-2">The driver can sign in to the app again with their existing password.</p>}
+          {confirm === "delete" && <>
+            <Notice tone="danger" title="This cannot be undone">
+              The driver's account is removed. Past jobs still carry the driver code “{driver.initials}”. Deactivate instead if you only need to block sign-in.
+            </Notice>
+            <label className="mt-3 block text-[13px] font-medium text-admin-ink-2">Type the driver code <strong className="text-admin-ink">{driver.initials}</strong> to confirm
+              <input value={typed} onChange={event => setTyped(event.target.value)} autoComplete="off" className={`${controlBase} mt-1 w-full uppercase`} />
+            </label>
+          </>}
+          {error && <p role="alert" className="mt-3 text-[13px] text-admin-status-red">{error}</p>}
+        </Modal>
+      )}
+    </>
   );
 }

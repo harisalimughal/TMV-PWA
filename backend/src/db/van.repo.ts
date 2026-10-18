@@ -1,4 +1,5 @@
 import { vanRecordsCollection } from "./mongo";
+import { driverVisible } from "../admin/driver-scope";
 
 export type VanRecordType = "MILEAGE" | "FUEL" | "SERVICE";
 
@@ -31,7 +32,7 @@ export async function insertVanRecord(doc: VanRecordDoc): Promise<VanRecordDoc> 
 export async function listVanRecords(): Promise<VanRecordDoc[]> {
   const col = await vanRecordsCollection();
   const docs = await col.find({}).sort({ submittedAt: 1 }).toArray();
-  return docs.map(doc => ({ ...doc, type: doc.type ?? "MILEAGE" }));
+  return docs.filter(doc => driverVisible(doc.driverInitials)).map(doc => ({ ...doc, type: doc.type ?? "MILEAGE" }));
 }
 
 export async function getVanRecord(id: string): Promise<VanRecordDoc | null> {

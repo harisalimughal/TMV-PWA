@@ -60,6 +60,8 @@ export default {
         },
         info: { DEFAULT: c("--info-fg"), subtle: c("--info-subtle"), line: c("--info-line") },
         neutral: { DEFAULT: c("--neutral-fg"), subtle: c("--neutral-subtle"), line: c("--neutral-line") },
+        /* Categorical chart series (classic admin at /temp, see ui/viz). */
+        viz: { 1: c("--viz-1"), 2: c("--viz-2"), 3: c("--viz-3"), 4: c("--viz-4"), 5: c("--viz-5"), grid: c("--viz-grid"), axis: c("--viz-axis") },
 
         /* The featured-job block — flat brand blue, white text. */
         "surface-dark": {
@@ -107,7 +109,12 @@ export default {
       },
       minHeight: {
         tap: "var(--tap-target)",
+        "control-sm": "var(--control-h-sm)",
+        control: "var(--control-h-md)",
         "control-lg": "var(--control-h-lg)"
+      },
+      minWidth: {
+        tap: "var(--tap-target)"
       },
 
       fontSize: {
@@ -175,7 +182,10 @@ export default {
         "2xs": "var(--shadow-xs)",
         primary: "var(--shadow-xs)",
         elevated: "var(--shadow-sm)",
-        floating: "var(--shadow-md)"
+        floating: "var(--shadow-md)",
+        /* Classic admin (/temp) cards: soft layered lift instead of grey borders. */
+        card: "0 8px 30px rgb(0 0 0 / 0.04), 0 1px 2px rgb(0 0 0 / 0.03)",
+        "card-hover": "0 14px 40px rgb(0 0 0 / 0.08), 0 2px 4px rgb(0 0 0 / 0.04)"
       },
 
       transitionTimingFunction: {
@@ -196,7 +206,9 @@ export default {
         "slide-in-bottom": { from: { transform: "translateY(100%)" }, to: { transform: "translateY(0)" } },
         "slide-in-top": { from: { opacity: "0", transform: "translateY(-16px)" }, to: { opacity: "1", transform: "translateY(0)" } },
         "sheet-in": { from: { transform: "translateY(16px)", opacity: "0" }, to: { transform: "translateY(0)", opacity: "1" } },
-        shimmer: { "100%": { transform: "translateX(100%)" } }
+        shimmer: { "100%": { transform: "translateX(100%)" } },
+        "cc-shimmer": { from: { backgroundPosition: "200% 0" }, to: { backgroundPosition: "-200% 0" } },
+        "radar-sweep": { to: { transform: "rotate(360deg)" } }
       },
       animation: {
         "fade-in": "fade-in var(--dur-slow) var(--ease-out) both",
@@ -205,7 +217,9 @@ export default {
         "slide-in-bottom": "slide-in-bottom var(--dur-slow) var(--ease-out) both",
         "slide-in-top": "slide-in-top var(--dur) var(--ease-out) both",
         "sheet-in": "sheet-in var(--dur-slow) var(--ease-out) both",
-        shimmer: "shimmer 1.6s infinite"
+        shimmer: "shimmer 1.6s infinite",
+        "cc-shimmer": "cc-shimmer 2.2s linear infinite",
+        "radar-sweep": "radar-sweep 6s linear infinite"
       }
     }
   },

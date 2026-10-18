@@ -1,81 +1,194 @@
+/**
+ * Driver report page: owns the report's URL state (driver, range, tab and each tab's
+ * view) and its three data requests:
+ *
+ * 1. core  -- the paged report without tracker detail (fast; always loaded).
+ * 2. full  -- tracker movement and road-charge events, loaded in the background when
+ *             the core response lacks them or a specific road scheme is selected.
+ * 3. range -- every completed job in the range (with road-charge detail), only for
+ *             the Comparison tab, so its filters cover the whole selected period
+ *             rather than one page.
+ *
+ * Tab names from the four-tab layout (summary, timings, road, payments with
+ * paymentsMode=reconcile) are rewritten to the matching tab of the six.
+ */
 import React, { useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Loader2, AlertCircle, RefreshCw } from "lucide-react";
 import { fetchDriverReport } from "../api";
-import { DriverReportView, REPORT_TABS, type ReportTab } from "../components/DriverReportView";
+import { DriverReportView, ReportHeader, type ReportViewLocation } from "../components/DriverReportView";
 import { DateRangePicker, dateRangeForPreset } from "../components/DateRangePicker";
-import { navigateAdmin, reportApiRange, reportJobHref } from "../utils/reportNavigation";
+import { reportApiRange, resolveReportTab } from "../utils/reportNavigation";
 import { downloadDriverReport } from "../utils/driverReportDownload";
+import { loadDriverBreakdown, type DriverBreakdown } from "../reports/driverBreakdown";
+import { PaperDriverBreakdown } from "../reports/PaperDriverBreakdown";
+import { PrintPortal } from "../components/PrintPortal";
+import { waitForPrintImages } from "../utils/printReady";
 import { useDriverOptions } from "../hooks/useDriverOptions";
+import { navigateTo, openJob, sectionHref } from "../navigation";
+import { Action, EmptyState, ErrorState, FilterSelect, LoadingState, PageHeader, panel } from "../components/ds";
+import type { ReconFilter, ReportLocationPatch } from "../components/report/types";
 
-function locationState() {
-  const params = new URLSearchParams(window.location.search), fallback = dateRangeForPreset("today");
-  const tab = params.get("reportTab") || "jobs";
-  return { driver: params.get("driver") || "", tab: REPORT_TABS.includes(tab as ReportTab) ? tab as ReportTab : "jobs" as ReportTab,
-    from: params.get("from") || fallback.from!, to: params.get("to") || fallback.to!, groupBy: "day" as const,
-    pages: Object.fromEntries(["jobs", "events", "visits", "charges", "roadAlerts"].map(key => [key, Number(params.get(`${key}Page`) || 1)])) };
+const PAGE_KEYS = ["jobs", "events", "visits", "charges", "roadAlerts"] as const;
+const RECON_MAX = 500;
+
+interface PageState extends ReportViewLocation { driver: string; from: string; to: string; pages: Record<string, number> }
+
+function readState(): PageState {
+  const params = new URLSearchParams(window.location.search), fallback = dateRangeForPreset("7d");
+  const filter = params.get("reconFilter");
+  return {
+    driver: params.get("driver") || "",
+    from: params.get("from") || fallback.from!, to: params.get("to") || fallback.to!,
+    tab: resolveReportTab(params.get("reportTab"), params.get("paymentsMode"), params.get("roadType")),
+    reconFilter: (["review", "missing", "differences", "all"].includes(filter || "") ? filter : "all") as ReconFilter,
+    roadView: params.get("roadView") === "jobs" ? "jobs" : "events",
+    expand: params.get("expand") || undefined,
+    pages: Object.fromEntries(PAGE_KEYS.map(key => [key, Math.max(1, Number(params.get(`${key}Page`) || 1))]))
+  };
 }
+
 export function DriverReportPage({ loadReport = fetchDriverReport }: { loadReport?: typeof fetchDriverReport } = {}) {
-  const [state, setState] = useState(locationState);
-  const driverRoster = useDriverOptions();
-  const [exporting, setExporting] = useState<"pdf" | "xlsx" | null>(null);
+  const [state, setState] = useState(readState);
+  const roster = useDriverOptions();
+  const [exporting, setExporting] = useState<"pdf" | "xlsx" | "breakdown" | null>(null);
+  const [printing, setPrinting] = useState<DriverBreakdown | null>(null);
   const [exportError, setExportError] = useState("");
   const exportController = useRef<AbortController | null>(null);
-  useEffect(() => { exportController.current?.abort(); exportController.current = null; setExporting(null); setExportError("");
-    return () => { exportController.current?.abort(); exportController.current = null; }; }, [state.driver, state.from, state.to, state.groupBy]);
-  const exportReport = async (format: "pdf" | "xlsx") => {
-    if (exportController.current) return;
-    const controller = new AbortController(); exportController.current = controller; setExporting(format); setExportError("");
-    try { await downloadDriverReport(state.driver, state.from, state.to, state.groupBy, format, controller.signal); }
-    catch (error) { if (!controller.signal.aborted) setExportError(error instanceof Error ? error.message : "Report download failed."); }
-    finally { if (exportController.current === controller) { exportController.current = null; setExporting(null); } }
-  };
-  useEffect(() => { const read = () => setState(locationState()); window.addEventListener("popstate", read); return () => window.removeEventListener("popstate", read); }, []);
-  const update = (values: Record<string, string | number>, resetPages = false) => {
+
+  // Canonicalise legacy tab names once, without adding a history entry.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const raw = params.get("reportTab");
+    const resolved = resolveReportTab(raw, params.get("paymentsMode"), params.get("roadType"));
+    if ((raw && raw !== resolved) || params.has("paymentsMode") || params.has("roadType")) {
+      params.set("reportTab", resolved);
+      params.delete("paymentsMode"); params.delete("roadType");
+      window.history.replaceState(window.history.state, "", `${window.location.pathname}?${params}`);
+    }
+    const read = () => setState(readState());
+    window.addEventListener("popstate", read);
+    return () => window.removeEventListener("popstate", read);
+  }, []);
+
+  useEffect(() => () => exportController.current?.abort(), []);
+  useEffect(() => { exportController.current?.abort(); exportController.current = null; setExporting(null); setExportError(""); }, [state.driver, state.from, state.to]);
+
+  /** Writes report state to the URL. Tab and mode changes push history (Back returns
+   *  to the previous tab); paging and expanding replace it. */
+  const update = (values: Record<string, string | number | undefined>, { resetPages = false, push = true } = {}) => {
     const url = new URL(window.location.href);
-    for (const [key, value] of Object.entries(values)) url.searchParams.set(key, String(value));
-    if (resetPages) for (const key of [...Object.keys(state.pages), "liabilities"]) url.searchParams.delete(`${key}Page`);
-    if (values.driver !== undefined) url.searchParams.delete("job");
-    if (url.pathname + url.search === window.location.pathname + window.location.search) return;
-    navigateAdmin(url.pathname + url.search);
+    for (const [key, value] of Object.entries(values)) { if (value === undefined || value === "") url.searchParams.delete(key); else url.searchParams.set(key, String(value)); }
+    if (resetPages) for (const key of PAGE_KEYS) url.searchParams.delete(`${key}Page`);
+    const href = url.pathname + url.search;
+    if (href === window.location.pathname + window.location.search) return;
+    if (push) navigateTo(href);
+    else { window.history.replaceState(window.history.state, "", href); setState(readState()); }
   };
+  const onLocation = (patch: ReportLocationPatch) => {
+    const values: Record<string, string | undefined> = {};
+    if (patch.tab) values.reportTab = patch.tab;
+    if (patch.reconFilter) values.reconFilter = patch.reconFilter === "all" ? undefined : patch.reconFilter;
+    if (patch.roadView) values.roadView = patch.roadView === "events" ? undefined : patch.roadView;
+    if (patch.expand !== undefined) values.expand = patch.expand || undefined;
+    const onlyExpand = Object.keys(patch).length === 1 && patch.expand !== undefined;
+    update(values, { push: !onlyExpand, resetPages: patch.tab === "tunnels" || patch.tab === "congestion" });
+  };
+
+  const range = reportApiRange(state.from, state.to);
   const activityScheme = state.tab === "tunnels" ? "tunnel" : state.tab === "congestion" ? "congestion" : "all";
-  const coreQuery = useQuery({ queryKey: ["driver_report", state.driver, state.from, state.to, state.groupBy, "core", state.pages.jobs],
-    queryFn: ({ signal }) => loadReport(state.driver, { ...reportApiRange(state.from, state.to), groupBy: state.groupBy, pageSize: 25, detail: "core", activityScheme: "all",
-      ...Object.fromEntries(Object.entries(state.pages).map(([key, value]) => [`${key}Page`, value])) }, signal),
-    enabled: !!state.driver, retry: 1, staleTime: 30_000, gcTime: 5 * 60_000 });
-  // Older backends may return a complete response to the core request; avoid fetching it twice.
-  const needsDetails = (coreQuery.data?.summary.completedJobs ?? 0) > 0 && (coreQuery.data?.meta.gpsIncluded === false || activityScheme !== "all");
-  const detailQuery = useQuery({ queryKey: ["driver_report", state.driver, state.from, state.to, state.groupBy, "full", state.pages, activityScheme],
-    queryFn: ({ signal }) => loadReport(state.driver, { ...reportApiRange(state.from, state.to), groupBy: state.groupBy, pageSize: 25, activityScheme,
-      detail: "full", ...Object.fromEntries(Object.entries(state.pages).map(([key, value]) => [`${key}Page`, value])) }, signal),
-    enabled: !!state.driver && coreQuery.isSuccess && needsDetails, retry: 1, staleTime: 30_000, gcTime: 5 * 60_000 });
+  const pageParams = Object.fromEntries(Object.entries(state.pages).map(([key, value]) => [`${key}Page`, value]));
+  const coreQuery = useQuery({
+    queryKey: ["driver_report", state.driver, state.from, state.to, "core", state.pages.jobs],
+    queryFn: ({ signal }) => loadReport(state.driver, { ...range, groupBy: "day", pageSize: 25, detail: "core", activityScheme: "all", ...pageParams }, signal),
+    enabled: !!state.driver, retry: 1, staleTime: 30_000, gcTime: 5 * 60_000
+  });
+  const completed = coreQuery.data?.summary.completedJobs ?? 0;
+  const needsDetails = completed > 0 && (coreQuery.data?.meta.gpsIncluded === false || activityScheme !== "all");
+  const detailQuery = useQuery({
+    queryKey: ["driver_report", state.driver, state.from, state.to, "full", state.pages, activityScheme],
+    queryFn: ({ signal }) => loadReport(state.driver, { ...range, groupBy: "day", pageSize: 25, activityScheme, detail: "full", ...pageParams }, signal),
+    enabled: !!state.driver && coreQuery.isSuccess && needsDetails, retry: 1, staleTime: 30_000, gcTime: 5 * 60_000
+  });
+  const reconEnabled = state.tab === "comparison" && completed > 0;
+  const reconSize = Math.min(RECON_MAX, Math.max(25, completed));
+  const reconQuery = useQuery({
+    queryKey: ["driver_report", state.driver, state.from, state.to, "reconcile", reconSize],
+    queryFn: ({ signal }) => loadReport(state.driver, { ...range, groupBy: "day", pageSize: reconSize, jobsPage: 1, detail: "full", activityScheme: "all" }, signal),
+    enabled: !!state.driver && reconEnabled, retry: 1, staleTime: 30_000, gcTime: 5 * 60_000
+  });
+
   const data = needsDetails ? detailQuery.data ?? coreQuery.data : coreQuery.data;
   const gpsLoading = needsDetails && !detailQuery.data && !detailQuery.isError;
   const gpsError = needsDetails && detailQuery.isError ? (detailQuery.error as Error)?.message || "Movement and charge details could not be loaded." : undefined;
-  const driverLabel = (name: string, initials: string) => name && name !== initials ? `${name} (${initials})` : initials;
+  const gpsAvailable = !gpsLoading && !gpsError && data?.meta.gpsIncluded !== false;
+  const reconReport = reconQuery.data;
+
+  /** "breakdown" builds the designed Driver Breakdown PDF here and opens the print
+   *  dialog; "pdf" / "xlsx" download the server's own export. */
+  const exportReport = async (format: "pdf" | "xlsx" | "breakdown") => {
+    if (exportController.current) return;
+    const controller = new AbortController(); exportController.current = controller; setExporting(format); setExportError("");
+    try {
+      if (format === "breakdown") {
+        const data = await loadDriverBreakdown(state.driver, state.from, state.to, { load: loadReport, signal: controller.signal });
+        if (controller.signal.aborted) return;
+        setPrinting(data);
+        document.body.classList.add("printing-report");
+        await new Promise(resolve => window.setTimeout(resolve, 300));
+        await waitForPrintImages("#tmv-print-portal, .print-content");
+        window.print();
+        document.body.classList.remove("printing-report");
+        setPrinting(null);
+      } else await downloadDriverReport(state.driver, state.from, state.to, "day", format, controller.signal);
+    }
+    catch (error) { if (!controller.signal.aborted) setExportError(error instanceof Error ? error.message : "Report download failed."); }
+    finally { if (exportController.current === controller) { exportController.current = null; setExporting(null); } }
+  };
+
+  const toDrivers = () => navigateTo(sectionHref("drivers", { from: state.from, to: state.to }));
   const currentName = data?.driver.initials === state.driver ? data.driver.name : state.driver;
-  const driverFilter = <div className="rpt-driver-filter">
-    <label className="rpt-driver-label"><span className="sr-only">Driver</span>
-      <select aria-label="Select report driver" value={state.driver} disabled={driverRoster.isLoading || !driverRoster.options.length}
-        onChange={event => { if (event.target.value) update({ driver: event.target.value }, true); }}
-        className="min-h-[44px] w-full rounded-md border border-admin-line bg-white px-3 py-2 text-sm text-admin-ink">
-        {!state.driver && <option value="" disabled>Select driver</option>}
-        {state.driver && !driverRoster.options.some(driver => driver.initials === state.driver) && <option value={state.driver}>{driverLabel(currentName, state.driver)}</option>}
-        {driverRoster.options.map(driver => <option key={driver.initials} value={driver.initials}>{driverLabel(driver.fullName, driver.initials)}{!driver.active ? " (Inactive)" : ""}</option>)}
-      </select>
-    </label>
-    {driverRoster.isError && <div className="flex items-center gap-2 text-xs text-red-700"><span role="status">Driver list unavailable</span><button type="button" title="Retry driver list" aria-label="Retry driver list" onClick={() => void driverRoster.refetch()} className="rounded-md border border-admin-line bg-white p-2"><RefreshCw size={16} /></button></div>}
-  </div>;
-  if (!state.driver) return <>{driverFilter}<section className="py-12 text-center text-admin-muted"><h1 className="text-xl font-semibold">No driver selected</h1><button className="mt-4 text-admin-brand" onClick={() => navigateAdmin(`${window.location.pathname}?section=drivers`)}>Drivers</button></section></>;
-  if (coreQuery.isLoading && !data) return <>{driverFilter}<DateRangePicker from={state.from} to={state.to} onChange={(from, to) => { if (from && to) update({ from, to }, true); }} /><div role="status" className="flex justify-center items-center gap-3 min-h-[300px] text-admin-muted"><Loader2 className="animate-spin" size={22} />Loading driver report</div></>;
-  if (!data) return <>{driverFilter}<section><DateRangePicker from={state.from} to={state.to} onChange={(from, to) => { if (from && to) update({ from, to }, true); }} /><div role="alert" className="py-12 text-center text-red-700"><AlertCircle className="mx-auto mb-3" /><p>{(coreQuery.error as Error)?.message || "Driver report unavailable"}</p><button title="Retry driver report" aria-label="Retry driver report" onClick={() => void coreQuery.refetch()} className="inline-flex mt-4 p-3 border border-admin-line rounded-md"><RefreshCw size={18} /></button></div></section></>;
-  return <DriverReportView report={data} tab={state.tab} from={state.from} to={state.to} groupBy={state.groupBy} refreshing={coreQuery.isFetching || detailQuery.isFetching} driverFilter={driverFilter}
-    gpsLoading={gpsLoading} gpsError={gpsError} onRetryGps={() => void detailQuery.refetch()}
-    onExport={format => void exportReport(format)} exporting={exporting} exportError={exportError}
-    onTab={tab => update({ reportTab: tab })} onGroup={group => update({ groupBy: group }, true)} onPage={(key, page) => update({ [`${key}Page`]: page })}
-    onDates={(from, to) => { if (from && to) update({ from, to }, true); }}
-    onJob={id => { const job = data.jobs.items.find(row => row.jobId === id); navigateAdmin(reportJobHref(id, !job || job.status === "COMPLETED")); }}
-    onBack={() => { const url = new URL(window.location.href); url.searchParams.set("section", "overview"); url.searchParams.delete("driver"); url.searchParams.delete("reportTab"); navigateAdmin(url.pathname + url.search); }}
-    onRefresh={() => { void coreQuery.refetch(); if (needsDetails) void detailQuery.refetch(); }} />;
+  const picker = (<>
+    <FilterSelect label="Driver" value={state.driver} disabled={roster.isLoading} className="w-[220px]"
+      onChange={driver => { if (driver) update({ driver, expand: undefined }, { resetPages: true }); }}
+      options={[
+        ...(state.driver && !roster.options.some(option => option.initials === state.driver) ? [{ value: state.driver, label: currentName || state.driver }] : []),
+        ...roster.options.map(option => ({ value: option.initials, label: `${option.fullName || option.initials} (${option.initials})${option.active ? "" : " · deactivated"}` }))
+      ]} />
+    {roster.isError && <Action size="sm" onClick={() => void roster.refetch()}>Retry driver list</Action>}
+  </>);
+  const onDates = (from?: string, to?: string) => { if (from && to) update({ from, to, expand: undefined }, { resetPages: true }); };
+
+  if (!state.driver) {
+    return <>
+      <PageHeader title="Driver Report" breadcrumbs={[{ label: "Drivers", onClick: toDrivers }, { label: "Report" }]} />
+      <div className={panel}><EmptyState title="Choose a driver" message="Pick a driver to see their report." actions={<Action onClick={toDrivers}>Back to drivers</Action>} /></div>
+    </>;
+  }
+  if (!data) {
+    return <>
+      <ReportHeader name={currentName || state.driver} initials={state.driver} onDrivers={toDrivers} actions={picker} />
+      <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-admin-line bg-surface p-2.5">
+        <DateRangePicker presets="records" from={state.from} to={state.to} onChange={onDates} />
+      </div>
+      <div className={panel}>
+        {coreQuery.isError ? <ErrorState title="Couldn't load this driver report" message={(coreQuery.error as Error)?.message} onRetry={() => void coreQuery.refetch()} />
+          : <LoadingState label="Loading driver report" rows={6} />}
+      </div>
+    </>;
+  }
+  return (<>
+    <DriverReportView report={data} location={state} from={state.from} to={state.to} driverPicker={picker}
+      gps={{ loading: gpsLoading, error: gpsError, available: gpsAvailable, retry: () => void detailQuery.refetch() }}
+      recon={{
+        jobs: reconReport?.jobs.items ?? [], total: reconReport?.jobs.total ?? completed, loading: reconQuery.isLoading,
+        gpsAvailable: !!reconReport && reconReport.meta.gpsIncluded !== false,
+        error: reconQuery.isError ? (reconQuery.error as Error)?.message || "Request failed" : undefined, retry: () => void reconQuery.refetch()
+      }}
+      refreshing={coreQuery.isFetching || detailQuery.isFetching}
+      onLocation={onLocation} onDates={onDates}
+      onPage={(key, page) => update({ [`${key}Page`]: page }, { push: false })}
+      onJob={openJob} onDrivers={toDrivers}
+      onExport={format => void exportReport(format)} exporting={exporting} exportError={exportError} />
+    {printing && <PrintPortal><PaperDriverBreakdown data={printing} /></PrintPortal>}
+  </>);
 }

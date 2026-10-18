@@ -13,6 +13,7 @@ import {
   guessPlateFromDeviceName, matchDriverByPlateAndName
 } from "../../integrations/gpslive";
 import { listDriverProfiles } from "../../auth/driver-account.service";
+import { driverVisible } from "../driver-scope";
 import { dismiss, listDismissedIds } from "../../db/dismissals.repo";
 import { log } from "../../utils/logger";
 
@@ -82,7 +83,7 @@ export function dashboardAlertsRoutes(): Router {
         };
       });
 
-      return res.status(200).json({ rows });
+      return res.status(200).json({ rows: rows.filter(row => driverVisible(row.driverInitials)) });
     } catch (error) {
       log.error("dashboard alerts lookup failed", error);
       return res.status(502).json({ error: { code: "ALERTS_LOOKUP_FAILED", message: "Failed to fetch GPSLive alerts." } });

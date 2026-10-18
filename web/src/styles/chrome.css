@@ -1,0 +1,183 @@
+/* ============================================================================
+ * Browser chrome, themed.
+ *
+ * Everything the browser would otherwise draw in its own default style — scrollbars,
+ * text selection, form-control accents, select chevrons, date/number/file/search
+ * input furniture, autofill — redrawn from the design tokens so it follows the light
+ * and dark themes like the rest of the UI. Native *behaviour* is kept everywhere
+ * (OS pickers, keyboard handling); only the look changes.
+ *
+ * Specificity is deliberately low (`:where`) except where a rule must beat a utility
+ * class it would otherwise lose to (noted inline).
+ *
+ * Driver app only: every rule is scoped to `:where(html:not(.tmv-admin))` (zero
+ * specificity), so the admin dashboard keeps its own controls and scrollbars.
+ * ========================================================================== */
+
+/* ---- scrollbars -------------------------------------------------------------
+ * Standard properties (Firefox, Chrome 121+, Edge). When `scrollbar-color` is set
+ * Chromium ignores ::-webkit-scrollbar, so the pseudo-elements below only apply to
+ * Safari and older Chromium. */
+:where(html:not(.tmv-admin), html:not(.tmv-admin) *) {
+  scrollbar-width: thin;
+  scrollbar-color: rgb(var(--line-strong)) transparent;
+}
+:where(html:not(.tmv-admin)) :where(*):hover {
+  scrollbar-color: rgb(var(--fg-subtle) / 0.7) transparent;
+}
+:where(html:not(.tmv-admin))::-webkit-scrollbar,
+:where(html:not(.tmv-admin)) ::-webkit-scrollbar { width: 10px; height: 10px; }
+:where(html:not(.tmv-admin))::-webkit-scrollbar-track,
+:where(html:not(.tmv-admin)) ::-webkit-scrollbar-track { background: transparent; }
+:where(html:not(.tmv-admin))::-webkit-scrollbar-corner,
+:where(html:not(.tmv-admin)) ::-webkit-scrollbar-corner { background: transparent; }
+:where(html:not(.tmv-admin))::-webkit-scrollbar-thumb,
+:where(html:not(.tmv-admin)) ::-webkit-scrollbar-thumb {
+  background: rgb(var(--line-strong));
+  border-radius: 9999px;
+  border: 3px solid transparent;
+  background-clip: content-box;
+}
+:where(html:not(.tmv-admin))::-webkit-scrollbar-thumb:hover,
+:where(html:not(.tmv-admin)) ::-webkit-scrollbar-thumb:hover { background: rgb(var(--fg-subtle)); background-clip: content-box; }
+
+/* ---- selection, caret, accent ------------------------------------------------ */
+:where(html:not(.tmv-admin)) ::selection { background: rgb(var(--brand) / 0.22); color: inherit; }
+:where(html:not(.tmv-admin)) {
+  /* Checkboxes, radios, range sliders and progress bars pick up the brand colour. */
+  accent-color: rgb(var(--brand));
+  caret-color: rgb(var(--brand));
+}
+:where(html:not(.tmv-admin)) ::placeholder { color: rgb(var(--fg-subtle)); opacity: 1; }
+
+/* ---- native <select> ---------------------------------------------------------
+ * Bare selects (not ui/Select, which already draws its own chevron and sets
+ * .appearance-none) get the themed chevron instead of the OS arrow. The extra
+ * :not()s raise specificity above single utility classes like `px-3` and the report
+ * page's `.rpt-page select`, so the chevron's padding/background-image always win. */
+:where(html:not(.tmv-admin)) select:not(.appearance-none):not([multiple]):not([size]) {
+  -webkit-appearance: none;
+  appearance: none;
+  padding-right: 2.25rem;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2389929E' stroke-width='2.25' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.7rem center;
+  background-size: 16px 16px;
+  cursor: pointer;
+}
+:where(html:not(.tmv-admin)) select:not(.appearance-none):not([multiple]):not([size]):disabled { cursor: not-allowed; }
+:where(html:not(.tmv-admin))[data-theme="dark"] select:not(.appearance-none):not([multiple]):not([size]),
+:where(html:not(.tmv-admin)) [data-theme="dark"] select:not(.appearance-none):not([multiple]):not([size]) {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23A3ACB8' stroke-width='2.25' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+}
+/* The dropdown list itself is OS-drawn; Chromium/Firefox on desktop honour these. */
+:where(html:not(.tmv-admin)) :where(select) option,
+:where(html:not(.tmv-admin)) :where(select) optgroup {
+  background-color: rgb(var(--surface));
+  color: rgb(var(--fg));
+}
+
+/* ---- date / time inputs --------------------------------------------------------
+ * The picker popup follows `color-scheme` (set per theme in tokens.css); the inline
+ * calendar icon is recoloured to the muted ink and given a hover affordance. */
+:where(html:not(.tmv-admin)) input[type="date"]::-webkit-calendar-picker-indicator,
+:where(html:not(.tmv-admin)) input[type="time"]::-webkit-calendar-picker-indicator,
+:where(html:not(.tmv-admin)) input[type="datetime-local"]::-webkit-calendar-picker-indicator,
+:where(html:not(.tmv-admin)) input[type="month"]::-webkit-calendar-picker-indicator,
+:where(html:not(.tmv-admin)) input[type="week"]::-webkit-calendar-picker-indicator {
+  cursor: pointer;
+  opacity: 0.55;
+  border-radius: 4px;
+  padding: 2px;
+  transition: opacity var(--dur-fast) var(--ease-out), background-color var(--dur-fast) var(--ease-out);
+}
+:where(html:not(.tmv-admin)) input::-webkit-calendar-picker-indicator:hover {
+  opacity: 1;
+  background-color: rgb(var(--brand) / 0.1);
+}
+:where(html:not(.tmv-admin))[data-theme="dark"] input::-webkit-calendar-picker-indicator,
+:where(html:not(.tmv-admin)) [data-theme="dark"] input::-webkit-calendar-picker-indicator { filter: invert(0.85); }
+:where(html:not(.tmv-admin)) input::-webkit-datetime-edit-fields-wrapper { padding: 0; }
+:where(html:not(.tmv-admin)) input::-webkit-datetime-edit-text { color: rgb(var(--fg-subtle)); padding: 0 1px; }
+:where(html:not(.tmv-admin)) input::-webkit-datetime-edit-month-field:focus,
+:where(html:not(.tmv-admin)) input::-webkit-datetime-edit-day-field:focus,
+:where(html:not(.tmv-admin)) input::-webkit-datetime-edit-year-field:focus,
+:where(html:not(.tmv-admin)) input::-webkit-datetime-edit-hour-field:focus,
+:where(html:not(.tmv-admin)) input::-webkit-datetime-edit-minute-field:focus,
+:where(html:not(.tmv-admin)) input::-webkit-datetime-edit-ampm-field:focus {
+  background-color: rgb(var(--brand) / 0.18);
+  color: rgb(var(--fg));
+  border-radius: 3px;
+  outline: none;
+}
+
+/* ---- number inputs: no OS spinner arrows (arrow keys still step) ---------------- */
+:where(html:not(.tmv-admin)) input[type="number"]::-webkit-inner-spin-button,
+:where(html:not(.tmv-admin)) input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+:where(html:not(.tmv-admin)) input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
+
+/* ---- search inputs: themed clear button instead of the OS "x" ------------------ */
+:where(html:not(.tmv-admin)) input[type="search"]::-webkit-search-decoration { -webkit-appearance: none; }
+:where(html:not(.tmv-admin)) input[type="search"]::-webkit-search-cancel-button {
+  -webkit-appearance: none;
+  height: 14px;
+  width: 14px;
+  cursor: pointer;
+  background: rgb(var(--fg-subtle));
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='3' stroke-linecap='round'%3E%3Cpath d='M18 6 6 18M6 6l12 12'/%3E%3C/svg%3E") center / contain no-repeat;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='3' stroke-linecap='round'%3E%3Cpath d='M18 6 6 18M6 6l12 12'/%3E%3C/svg%3E") center / contain no-repeat;
+}
+
+/* ---- file inputs ---------------------------------------------------------------- */
+:where(html:not(.tmv-admin)) input[type="file"]::file-selector-button {
+  margin-right: 0.75rem;
+  border: 1px solid rgb(var(--line));
+  border-radius: var(--radius);
+  background: rgb(var(--surface-sunken));
+  color: rgb(var(--fg));
+  font: inherit;
+  font-weight: 600;
+  padding: 0.4rem 0.8rem;
+  cursor: pointer;
+  transition: background-color var(--dur-fast) var(--ease-out);
+}
+:where(html:not(.tmv-admin)) input[type="file"]::file-selector-button:hover { background: rgb(var(--surface-raised)); }
+
+/* ---- autofill: keep the themed surface instead of Chrome's pale yellow/blue ---- */
+:where(html:not(.tmv-admin)) input:-webkit-autofill,
+:where(html:not(.tmv-admin)) input:-webkit-autofill:hover,
+:where(html:not(.tmv-admin)) input:-webkit-autofill:focus,
+:where(html:not(.tmv-admin)) textarea:-webkit-autofill,
+:where(html:not(.tmv-admin)) select:-webkit-autofill {
+  -webkit-text-fill-color: rgb(var(--fg));
+  -webkit-box-shadow: 0 0 0 1000px rgb(var(--surface)) inset;
+  box-shadow: 0 0 0 1000px rgb(var(--surface)) inset;
+  transition: background-color 9999s ease-out 0s;
+}
+
+/* ---- <details> disclosure: brand-coloured marker -------------------------------- */
+:where(html:not(.tmv-admin)) summary::marker { color: rgb(var(--brand)); }
+
+/* ---- themed tooltip (ui/ThemedTooltips.tsx replaces native title="" bubbles) ---- */
+.tmv-tooltip {
+  position: fixed;
+  z-index: 2147483000;
+  max-width: min(320px, calc(100vw - 16px));
+  padding: 6px 9px;
+  border-radius: 8px;
+  background: rgb(var(--fg));
+  color: rgb(var(--bg));
+  font: 500 12.5px/1.35 var(--font-sans);
+  letter-spacing: 0;
+  box-shadow: var(--shadow-md);
+  pointer-events: none;
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+  opacity: 0;
+  transform: translateY(2px) scale(0.98);
+  transition: opacity 120ms var(--ease-out), transform 120ms var(--ease-out);
+}
+.tmv-tooltip[data-open="true"] { opacity: 1; transform: none; }
+@media (prefers-reduced-motion: reduce) {
+  .tmv-tooltip { transition: none; }
+}

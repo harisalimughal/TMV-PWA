@@ -2,13 +2,15 @@
  * Installs the dev mock API by patching `window.fetch` and `window.XMLHttpRequest` so
  * every `/api/...` request is answered from the in-memory store in handlers.ts.
  *
- * DEV ONLY. The single call site in main.tsx is guarded by `import.meta.env.DEV` and a
- * dynamic `import()`, so this whole `src/mocks/` tree is excluded from `vite build`.
+ * Dev and demo only. The single call site in main.tsx is a build-time constant plus a
+ * dynamic `import()`, so this whole `src/mocks/` tree is excluded from `vite build`
+ * unless the build sets VITE_DEMO_MOCK=true (the fictional-data preview deploy).
  *
  * Non-`/api/` traffic (HMR, assets, anything else) is passed straight through to the
  * real implementations, which are captured here before patching.
  */
 import { handle } from "./handlers";
+import { handleAdmin } from "./admin";
 
 const NativeXHR = window.XMLHttpRequest;
 const nativeFetch = window.fetch.bind(window);
@@ -37,9 +39,19 @@ async function mockFetch(input: RequestInfo | URL, init?: RequestInit): Promise<
 
   const bodyText = typeof init?.body === "string" ? init.body : undefined;
   await wait(MOCK_LATENCY_MS);
-  const res = handle(method, path, bodyText);
-  if (!res) return nativeFetch(input as RequestInfo, init);
+  const search = (() => {
+    try {
+      const parsed = new URL(url, window.location.origin);
+      const headers = new Headers(init?.headers ?? (input instanceof Request ? input.headers : undefined));
+      if (!parsed.searchParams.has("includeMA") && headers.has("X-TMV-Include-MA")) parsed.searchParams.set("includeMA", headers.get("X-TMV-Include-MA") === "true" ? "1" : "0");
+      return parsed.search;
+    } catch { return ""; }
+  })();
+  const res = (await handleAdmin(method, path, search, bodyText)) ?? handle(method, path, bodyText, search);
+  // Never let an unsupported preview operation reach a configured live backend.
+  if (!res) return new Response(JSON.stringify({ error: { code: "MOCK_NOT_IMPLEMENTED", message: "This operation is not available in the development preview." } }), { status: 501, headers: { "Content-Type": "application/json" } });
 
+  if (res.file) return new Response(String(res.body), { status: res.status, headers: { "Content-Type": res.file.contentType, "Content-Disposition": `attachment; filename="${res.file.filename}"` } });
   return new Response(JSON.stringify(res.body), {
     status: res.status,
     headers: { "Content-Type": "application/json" }
@@ -145,5 +157,5 @@ export function installMockApi(): void {
   window.fetch = mockFetch as typeof window.fetch;
   window.XMLHttpRequest = MockXHR as unknown as typeof XMLHttpRequest;
   // eslint-disable-next-line no-console
-  console.info("%c[mock-api]", "color:#1B75BC;font-weight:600", "dev mock API active — VITE_MOCK_API=false to disable");
+  console.info("%c[mock-api]", "color:#1B75BC;font-weight:600", import.meta.env.DEV ? "dev mock API active — VITE_MOCK_API=false to disable" : "demo build: fictional mock data, no backend");
 }

@@ -3,6 +3,7 @@ import { listVanRecords, getVanRecord, deleteVanRecord, VanRecordType } from "..
 import { listVanCompliance, saveVanCompliance } from "../../db/van-compliance.repo";
 import { toVanComplianceItem, VanComplianceItem } from "../../jobs/van-mileage.service";
 import { listDriverProfiles } from "../../auth/driver-account.service";
+import { driverVisible } from "../driver-scope";
 import { toThumbnailUrl, destroyEvidenceImage, publicIdFromCloudinaryUrl } from "../../storage/cloudinary";
 
 type VanRecordApiItem = {
@@ -165,6 +166,7 @@ export function dashboardVanRoutes(): Router {
       const grouped = new Map<string, VanDriverApiItem>();
 
       for (const driver of drivers) {
+        if (!driverVisible(driver.initials)) continue;
         const key = driver.email || driver.initials || driver.fullName;
         if (!key) continue;
         const vanRegistration = driver.vanRegistration || "";

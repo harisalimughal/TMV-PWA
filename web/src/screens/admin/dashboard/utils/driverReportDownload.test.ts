@@ -17,6 +17,26 @@ describe("Complete driver report downloads", () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({ error: { message: "Narrow the range." } }), { status: 413 })));
     await expect(downloadDriverReport("AB", "2026-10-09", "2026-10-09", "day", "xlsx")).rejects.toThrow("Narrow the range.");
   });
+  it("returns an expired session to sign-in instead of a vague failure", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("{}", { status: 401 })));
+    const expired = vi.fn();
+    window.addEventListener("tmv:admin-session-expired", expired);
+    try {
+      await expect(downloadDriverReport("AB", "2026-10-09", "2026-10-09", "day", "pdf")).rejects.toThrow("session expired");
+      expect(expired).toHaveBeenCalledOnce();
+    } finally {
+      window.removeEventListener("tmv:admin-session-expired", expired);
+    }
+  });
+  it("gives up after the download timeout instead of spinning forever", async () => {
+    vi.useFakeTimers();
+    vi.stubGlobal("fetch", vi.fn((_url: string, init: RequestInit) => new Promise((_resolve, reject) => {
+      init.signal?.addEventListener("abort", () => reject(new DOMException("aborted", "AbortError")));
+    })));
+    const pending = expect(downloadDriverReport("AB", "2026-10-09", "2026-10-09", "day", "pdf")).rejects.toThrow("timed out");
+    await vi.advanceTimersByTimeAsync(120_000);
+    await pending;
+  });
   it("refuses HTML sign-in responses masquerading as successful downloads", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("sign in", { headers: { "Content-Type": "text/html" } })));
     await expect(downloadDriverReport("AB", "2026-10-09", "2026-10-09", "day", "pdf")).rejects.toThrow("valid report");

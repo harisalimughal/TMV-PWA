@@ -91,3 +91,8 @@ export { Tooltip } from "./Tooltip";
 export type { TooltipProps } from "./Tooltip";
 
 export { useMediaQuery } from "./useMediaQuery";
+
+export { InfoTip } from "./InfoTip";
+export type { InfoTipProps } from "./InfoTip";
+export { useShowMore, ShowMoreButton } from "./ShowMore";
+export { BrandLockup } from "./BrandLockup";

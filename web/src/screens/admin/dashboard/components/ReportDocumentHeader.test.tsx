@@ -10,8 +10,9 @@ describe("Shared formal report identity", () => {
     expect(screen.getByText("Page 2 of 2")).toBeInTheDocument();
     expect(screen.getByText("Sample Driver (QA)")).toBeInTheDocument();
     expect(container.querySelector("header")).not.toHaveTextContent("FULL-REFERENCE-123");
-    expect(container.querySelector("footer")).not.toHaveTextContent("Europe/London");
+    expect(container.querySelector("footer")).not.toHaveTextContent("London time");
     expect(container.querySelectorAll("header")).toHaveLength(1);
-    expect(container.querySelector(".report-record-meta")).toHaveTextContent("Europe/London");
+    expect(container.querySelector(".report-record-meta")).toHaveTextContent("10 Oct 2026, 10:00, London time");
+    expect(container.querySelector(".report-record-meta")).not.toHaveTextContent("Europe/London");
   });
 });

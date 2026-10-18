@@ -1,5 +1,16 @@
 // Web Push Notifications & Background Click Handler
 
+// SAFE-URL-BEGIN
+function safeInternalUrl(raw, origin) {
+  if (typeof raw !== "string" || !raw.trim()) return "/";
+  try {
+    var url = new URL(raw.trim(), origin);
+    if (url.origin !== origin || (url.protocol !== "https:" && url.protocol !== "http:")) return "/";
+    return url.pathname + url.search + url.hash;
+  } catch (_) { return "/"; }
+}
+// SAFE-URL-END
+
 // Persisted notification history for the app's bell icon -- see
 // src/lib/pwa/notificationLog.ts, which reads this exact same IndexedDB database.
 // Kept in plain vanilla IndexedDB calls (no import) so both sides open an identical
@@ -143,11 +154,12 @@ self.addEventListener("push", function (event) {
 self.addEventListener("notificationclick", function (event) {
   event.notification.close();
   var data = event.notification.data || {};
-  var targetUrl = data.url || "/";
+  var rawUrl = data.url || "/";
+  var targetUrl = safeInternalUrl(rawUrl, self.location.origin);
 
   event.waitUntil(
     Promise.all([
-      notifMarkRead(targetUrl),
+      notifMarkRead(rawUrl),
       clients.matchAll({ type: "window", includeUncontrolled: true }).then(function (windowClients) {
         // If an existing app window is open, navigate and focus it
         for (var i = 0; i < windowClients.length; i++) {

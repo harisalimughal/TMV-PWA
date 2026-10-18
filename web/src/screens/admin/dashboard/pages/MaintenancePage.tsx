@@ -49,6 +49,7 @@ export function MaintenancePage() {
   return (
     <div className="space-y-6 max-w-[900px] mx-auto pb-12">
       <div className="px-2">
+        <h1 className="mb-1 text-[28px] font-bold leading-9 tracking-tight text-admin-ink">Data maintenance</h1>
         <p className="text-[13px] text-admin-muted">
           A one-time cleanup for handing this app to a new client -- clears every job-generated
           record so it starts from zero, without touching jobs, drivers or settings.
@@ -70,7 +71,7 @@ export function MaintenancePage() {
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
           <div>
-            <span className="text-[11px] font-bold uppercase tracking-wider text-admin-status-red block mb-2">Wipes</span>
+            <span className="text-[12px] font-bold uppercase tracking-wider text-admin-status-red block mb-2">Wipes</span>
             <ul className="space-y-1.5">
               {WIPES.map(item => (
                 <li key={item} className="text-[13px] text-admin-ink flex gap-2">
@@ -80,7 +81,7 @@ export function MaintenancePage() {
             </ul>
           </div>
           <div>
-            <span className="text-[11px] font-bold uppercase tracking-wider text-admin-status-green block mb-2">Keeps</span>
+            <span className="text-[12px] font-bold uppercase tracking-wider text-admin-status-green block mb-2">Keeps</span>
             <ul className="space-y-1.5">
               {KEEPS.map(item => (
                 <li key={item} className="text-[13px] text-admin-ink flex gap-2">

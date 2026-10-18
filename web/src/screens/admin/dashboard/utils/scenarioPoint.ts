@@ -4,6 +4,8 @@ export interface ScenarioPoint {
 }
 
 type ScenarioPointSource = {
+  address?: string;
+  Address?: string;
   reportedAt?: string;
   reportedAtPoint?: string;
   fields?: Record<string, string | undefined>;
@@ -11,6 +13,16 @@ type ScenarioPointSource = {
   "Reported At"?: string;
   reported_at?: string;
 };
+
+/** Read the location captured with the submission, never a later job address. */
+export function scenarioAddressFromRecord(record: ScenarioPointSource | null | undefined): string {
+  if (!record) return "";
+  const explicit = [record.address, record.Address, record.fields?.address, record.fields?.Address, record.rawRecord?.address, record.rawRecord?.Address]
+    .find(value => typeof value === "string" && value.trim());
+  if (explicit) return explicit.trim();
+  const reported = scenarioPointFromRecord(record)?.full || "";
+  return reported.match(/^(?:Pickup|Drop-off|Stop-by)\s+[—-]\s+([\s\S]+)$/i)?.[1]?.trim() || "";
+}
 
 export function scenarioPointFromRecord(record: ScenarioPointSource | null | undefined): ScenarioPoint | null {
   if (!record) return null;

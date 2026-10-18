@@ -1,8 +1,13 @@
+import { adminFetch } from "../../../../lib/adminTransport";
 import { reportApiRange } from "./reportNavigation";
+
+/** Large PDF/XLSX exports can take a while to render; allow longer than the 30 s default. */
+const REPORT_DOWNLOAD_TIMEOUT_MS = 120_000;
 
 export async function downloadDriverReport(initials: string, from: string, to: string, groupBy: string, format: "pdf" | "xlsx", signal?: AbortSignal): Promise<void> {
   const params = new URLSearchParams({ ...reportApiRange(from, to), groupBy });
-  const response = await fetch(`/api/admin/driver-reports/${encodeURIComponent(initials)}/export.${format}?${params}`, { credentials: "same-origin", signal });
+  // adminFetch: same-origin cookies, a bounded wait, and a 401 returns the admin to sign-in.
+  const response = await adminFetch(`/api/admin/driver-reports/${encodeURIComponent(initials)}/export.${format}?${params}`, { signal }, REPORT_DOWNLOAD_TIMEOUT_MS);
   if (!response.ok) {
     const payload = await response.json().catch(() => null);
     throw new Error(payload?.error?.message || (response.status === 401 ? "Your admin session has expired. Please sign in again." : "Report download failed. Please retry."));

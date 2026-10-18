@@ -1,0 +1,224 @@
+/* ============================================================================
+ * Design tokens — single source of truth for colour, radius, shadow, motion, type.
+ *
+ * Colours are stored as space-separated RGB channel triplets ("27 117 188"), NOT
+ * hex, so Tailwind can apply opacity modifiers: tailwind.config.js maps each colour
+ * name to `rgb(var(--token) / <alpha-value>)`. In raw CSS, use `rgb(var(--token))`
+ * or `rgb(var(--token) / 0.5)`.
+ *
+ * Light values live on :root / [data-theme="light"]; dark values under
+ * [data-theme="dark"]. Scoping to the attribute (not just :root) means a subtree can
+ * force a theme regardless of the document — used to pin the not-yet-redesigned admin
+ * dashboard to light, and by the device-frame preview to theme its contents.
+ *
+ * The ThemeProvider (src/ui/theme.tsx) — and an inline script in index.html for the
+ * first paint — always set an explicit data-theme on <html>, so there is no
+ * prefers-color-scheme media block here.
+ *
+ * Palette: "designer's cut" — neutral dark ground, blue = action, amber = attention,
+ * green = done. One typeface throughout: Inter, with tabular figures for numbers.
+ * ========================================================================== */
+
+:root,
+[data-theme="light"] {
+  color-scheme: light;
+
+  /* ---- neutrals — white surfaces on a faint cool ground ------------------ */
+  --bg: 233 236 241;             /* #E9ECF1  a step deeper so white cards read as distinct sections */
+  --bg-2: 244 245 247;           /* #F4F5F7 */
+  --surface: 255 255 255;
+  --surface-sunken: 242 244 247; /* #F2F4F7 */
+  --surface-raised: 231 234 239; /* #E7EAEF  segmented-control active, pressed rows */
+  --line: 214 218 224;           /* #D6DAE0 */
+  --line-strong: 198 203 211;    /* #C6CBD3 */
+  --fg: 17 22 32;                /* #111620 */
+  --fg-muted: 71 79 92;          /* #474F5C  ~8:1 on white */
+  --fg-subtle: 104 112 124;      /* #68707C  ~4.9:1 on white; was #89929E (3:1, read as dim) */
+
+  /* ---- accent — one restrained blue --------------------------------------- */
+  --brand: 47 99 239;           /* #2F63EF */
+  --brand-hover: 37 84 214;
+  --brand-active: 30 64 175;
+  --brand-fg: 255 255 255;      /* --brand-ink */
+  --brand-subtle: 234 239 253;  /* rgba(47,99,239,.1) flattened */
+  --brand-subtle-fg: 30 74 199;
+  --brand-line: 191 214 252;
+
+  /* ---- status tints ----------------------------------------------------- */
+  --success-fg: 23 138 81;       /* #178A51 */
+  --success-signal: 23 138 81;
+  --success-subtle: 227 241 234; /* rgba(23,138,81,.12) flattened */
+  --success-line: 190 226 206;
+
+  --warning-fg: 179 118 15;      /* #B3760F */
+  --warning-signal: 179 118 15;
+  --warning-subtle: 246 239 226; /* rgba(179,118,15,.12) flattened */
+  --warning-line: 238 220 180;
+
+  --danger-fg: 185 28 28;         /* #B91C1C  red-700 */
+  --danger-signal: 220 38 38;     /* #DC2626  red-600 */
+  --danger-solid: 220 38 38;      /* filled danger buttons: white text >= 4.5:1 */
+  --danger-subtle: 254 242 242;   /* #FEF2F2  red-50 */
+  --danger-line: 254 202 202;     /* red-200 */
+
+  --info-fg: 30 74 199;
+  --info-subtle: 234 239 253;
+  --info-line: 191 214 252;
+
+  --neutral-fg: 88 97 112;
+  --neutral-subtle: 242 244 247;
+  --neutral-line: 218 221 226;
+
+  /* ---- data viz — categorical series, fixed order (validated: dataviz six checks) */
+  --viz-1: 47 99 239;            /* #2F63EF blue = brand */
+  --viz-2: 235 104 52;           /* #EB6834 orange */
+  --viz-3: 27 175 122;           /* #1BAF7A aqua  (<3:1 — always legend/label) */
+  --viz-4: 237 161 0;            /* #EDA100 yellow (<3:1 — always legend/label) */
+  --viz-5: 98 80 214;            /* #6250D6 violet */
+  --viz-grid: 234 236 240;       /* hairline gridline */
+  --viz-axis: 207 210 216;       /* baseline */
+
+  /* ---- blurred bar ground (top bar / tab bar) ------------------------------ */
+  --bar: 255 255 255;
+
+  /* ---- hero next-job card gradient --------------------------------------- */
+  --hero-from: 255 255 255;
+  --hero-to: 245 247 251;        /* #F5F7FB */
+
+  /* ---- radius — rounded, generous. Controls 12, cards 16, panels 22. ---- */
+  --radius-sm: 12px;
+  --radius: 12px;
+  --radius-md: 16px;
+  --radius-lg: 22px;
+  --radius-card-lg: 22px;
+  --radius-xl: 18px;
+  --radius-pill: 9999px;
+
+  /* ---- dark slate — only for a dense header strip if needed ------------- */
+  --surface-dark: 27 33 48;      /* hero-from, kept for legacy `surface-dark` utils */
+  --surface-dark-fg: 243 245 248;
+  --surface-dark-muted: 160 169 180;
+  --surface-dark-line: 60 66 77;
+
+  /* ---- shadow — subtle real elevation for cards / docks / the modal ---- */
+  --shadow-xs: 0 1px 2px rgb(15 23 42 / 0.05);
+  --shadow-sm: 0 1px 2px rgb(15 23 42 / 0.07), 0 8px 22px -10px rgb(15 23 42 / 0.16);
+  --shadow-md: 0 14px 40px rgb(15 23 42 / 0.14);
+  --shadow-dock: 0 -1px 0 rgb(var(--line)), 0 -12px 28px -20px rgb(15 23 42 / 0.14);
+
+  /* ---- focus ring ---------------------------------------------------------- */
+  --ring: 0 0 0 3px rgb(var(--brand) / 0.28);
+
+  /* ---- motion ---------------------------------------------------------- */
+  --ease-out: cubic-bezier(0.22, 0.61, 0.36, 1);
+  --ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
+  --dur-fast: 130ms;
+  --dur: 170ms;
+  --dur-slow: 240ms;
+
+  /* ---- type -----------------------------------------------------------
+   * Inter is the single application typeface (self-hosted variable woff2, see
+   * index.css). --font-mono is kept as a token for figure-heavy text but resolves
+   * to Inter too; alignment comes from tabular numerals set on <body>. The
+   * platform stack is the true fallback if the woff2 never arrives. */
+  --font-sans: "Hanken Grotesk Variable", "Inter Variable", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: "Hanken Grotesk Variable", "Inter Variable", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; /* figures: Inter tabular numerals (set on body) */
+
+  /* ---- controls --------------------------------------------------------------
+   * One set of control heights, used by buttons, inputs, choice rows and taps.
+   * `md` is the 44px WCAG 2.5.5 floor; `lg` is the comfortable one-handed size
+   * for a driver standing next to a van, sometimes in gloves. */
+  --control-h-sm: 40px;
+  --control-h-md: 48px;
+  --control-h-lg: 56px;
+  --tap-target: 44px;
+
+  /* ---- layout ------------------------------------------------------------- */
+  --dock-height: 80px;
+  --app-max-width: 520px;    /* centred column for a flow screen */
+  --content-max-width: 760px; /* centred column for the jobs workspace on desktop */
+  --bottom-nav-height: 72px;  /* mobile tab bar, before safe-area */
+  --sidebar-width: 244px;     /* desktop nav rail */
+}
+
+[data-theme="dark"] {
+  color-scheme: dark;
+
+  /* ---- neutrals — layered dark, not pure black -------------------------
+   * bg (page) < surface-sunken < surface (cards) < surface-raised.
+   * Elevation reads as a lighter step, the way a screen actually behaves. */
+  --bg: 13 15 18;               /* #0D0F12 */
+  --bg-2: 16 19 23;             /* #101317 */
+  --surface: 23 26 32;          /* #171A20  cards, headers, docks */
+  --surface-sunken: 29 33 41;   /* #1D2129  inset wells, inputs, hover */
+  --surface-raised: 38 44 53;   /* #262C35  segmented-control active, pressed rows */
+  --line: 38 42 49;             /* card edges stay visible on the dark ground */
+  --line-strong: 50 54 62;      /* rgba(255,255,255,.14) flattened */
+  --fg: 243 245 248;            /* #F3F5F8 */
+  --fg-muted: 172 180 191;      /* #ACB4BF */
+  --fg-subtle: 132 140 151;     /* #848C97  ~5:1 on the dark surface */
+
+  /* ---- accent — brighter blue so it lifts off a dark surface ---------- */
+  --brand: 91 140 255;         /* #5B8CFF */
+  --brand-hover: 122 163 255;
+  --brand-active: 71 116 224;
+  --brand-fg: 10 17 34;        /* #0A1122  --brand-ink */
+  --brand-subtle: 30 42 66;    /* rgba(91,140,255,.15) flattened */
+  --brand-subtle-fg: 154 184 255;
+  --brand-line: 44 66 110;
+
+  /* ---- status — brighter signals, deep tinted grounds ---------------- */
+  --success-fg: 74 196 134;      /* #4AC486 */
+  --success-signal: 74 196 134;
+  --success-subtle: 24 44 36;    /* rgba(74,196,134,.15) flattened */
+  --success-line: 38 66 54;
+
+  --warning-fg: 243 172 69;      /* #F3AC45 */
+  --warning-signal: 243 172 69;
+  --warning-subtle: 48 40 28;    /* rgba(243,172,69,.14) flattened */
+  --warning-line: 74 58 30;
+
+  --danger-fg: 248 113 113;      /* #F87171 red-400 */
+  --danger-signal: 239 68 68;    /* #EF4444 red-500 */
+  --danger-solid: 220 38 38;     /* #DC2626: white text >= 4.5:1 (red-500 is 3.8:1) */
+  --danger-subtle: 44 22 22;     /* #2C1616 */
+  --danger-line: 78 40 40;       /* #4E2828 */
+
+  --info-fg: 154 184 255;
+  --info-subtle: 30 42 66;
+  --info-line: 44 66 110;
+
+  --neutral-fg: 160 169 180;
+  --neutral-subtle: 29 33 41;
+  --neutral-line: 32 35 41;
+
+  /* ---- data viz — same hues stepped for the dark surface */
+  --viz-1: 91 140 255;           /* #5B8CFF */
+  --viz-2: 217 89 38;            /* #D95926 */
+  --viz-3: 25 158 112;           /* #199E70 */
+  --viz-4: 201 133 0;            /* #C98500 */
+  --viz-5: 144 133 233;          /* #9085E9 */
+  --viz-grid: 36 40 47;
+  --viz-axis: 56 61 70;
+
+  /* ---- blurred bar ground (top bar / tab bar) ------------------------------ */
+  --bar: 15 18 22;
+
+  /* ---- hero next-job card gradient --------------------------------------- */
+  --hero-from: 27 33 48;         /* #1B2130 */
+  --hero-to: 22 26 33;           /* #161A21 */
+
+  /* featured-job accent surface — kept for legacy `surface-dark` utils */
+  --surface-dark: 35 40 49;      /* #232831 */
+  --surface-dark-fg: 243 245 248;
+  --surface-dark-muted: 160 169 180;
+  --surface-dark-line: 60 66 77;
+
+  --shadow-xs: 0 1px 2px rgb(0 0 0 / 0.4);
+  --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.4), 0 8px 20px -10px rgb(0 0 0 / 0.6);
+  --shadow-md: 0 14px 40px rgb(0 0 0 / 0.5);
+  --shadow-dock: 0 -1px 0 rgb(var(--line)), 0 -14px 30px -20px rgb(0 0 0 / 0.6);
+
+  /* softer focus ring on dark */
+  --ring: 0 0 0 3px rgb(var(--brand) / 0.32);
+}

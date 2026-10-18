@@ -1,0 +1,370 @@
+/* Design tokens (CSS custom properties) must load before Tailwind's layers so the
+   `rgb(var(--token))` values they define are available to every generated utility. */
+@import "./styles/tokens.css";
+@import "./styles/chrome.css";
+
+/* Hanken Grotesk — the application typeface (human content: names, streets, copy).
+   `wght.css` is the weight axis only (no italics — the UI uses none), split into
+   unicode-range subsets so an English-only browser fetches just the latin file.
+   IBM Plex Mono carries the dispatch-board data — times, postcodes, prices, counts —
+   at 400/500/600 (see `.mono` in this file and `var(--font-mono)`). Both self-hosted:
+   Vite fingerprints the woff2 and the service worker precaches them, so there is no
+   third-party request and they are present offline. `font-display: swap` is set by
+   the packages. */
+@import "@fontsource-variable/hanken-grotesk/wght.css";
+@import "@fontsource/ibm-plex-mono/400.css";
+@import "@fontsource/ibm-plex-mono/500.css";
+@import "@fontsource/ibm-plex-mono/600.css";
+
+/* Leaflet's stylesheet is NOT imported here any more. It used to be, which meant 45kB
+   of map CSS shipped to every driver's phone for a map only /admin ever renders. It's
+   now imported inside LiveFleetMap.tsx itself, so it rides along with the lazily
+   loaded admin chunk. */
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  min-height: -webkit-fill-available;
+  overscroll-behavior-y: none; /* stops the iOS "rubber-band" bounce feeling non-native */
+  -webkit-tap-highlight-color: transparent; /* no grey flash on tap */
+  -webkit-text-size-adjust: 100%;
+  font-family: var(--font-sans);
+  /* Hanken Grotesk is light at 400 in small sizes; 450 keeps body copy from reading dim.
+     The admin dashboard resets this in adminTheme.css. */
+  font-weight: 450;
+  background: rgb(var(--bg));
+  color: rgb(var(--fg));
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  /* Never let the browser fake a bold/italic — with a variable font every weight is
+     real, and a synthesised one looks muddy. */
+  font-synthesis: none;
+  letter-spacing: 0;
+  /* Tabular numerals everywhere — this is an operations tool: times, distances,
+     prices and job numbers should align in columns. IBM Plex Mono (var(--font-mono))
+     carries the actual dispatch-board figures. */
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+}
+
+/* Small section eyebrow — used sparingly, e.g. "PICKUP" / "DELIVER" on a route. */
+.op-label {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0;
+  color: rgb(var(--fg-subtle));
+}
+
+/* ---------------------------------------------------------------------------
+ * Form controls at 16px.
+ *
+ * iOS Safari auto-zooms the viewport whenever a focused input's font-size is under
+ * 16px. The previous fix for that was `user-scalable=no, maximum-scale=1` in
+ * index.html -- which stopped the zoom, but also stopped the user pinch-zooming
+ * anything at all (a WCAG 2.1 AA failure, 1.4.4 Resize Text). Drivers read legal
+ * liability copy on this screen, outdoors, sometimes in gloves; they need to zoom.
+ *
+ * So the viewport meta no longer blocks zoom, and the auto-zoom is prevented the
+ * correct way instead: every text-entry control is at least 16px. Tailwind's
+ * `text-sm` on an input would re-break this, hence the !important.
+ * ------------------------------------------------------------------------- */
+input:not([type="checkbox"]):not([type="radio"]),
+select,
+textarea {
+  font-size: 16px !important;
+}
+
+/* ---------------------------------------------------------------------------
+ * Focus.
+ *
+ * There were 19 `focus:outline-none` in the codebase and zero focus-visible rules, so
+ * keyboard users had no idea where they were. This restores a visible ring for
+ * keyboard/AT navigation only -- it does not come back on touch or mouse, which is
+ * why the component-level `focus:outline-none` are harmless to leave in place.
+ * ------------------------------------------------------------------------- */
+:focus-visible {
+  outline: 2px solid rgb(var(--brand));
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* Safe-area utilities for iOS notch / home-indicator clearance. */
+.pt-safe { padding-top: env(safe-area-inset-top); }
+.pb-safe { padding-bottom: env(safe-area-inset-bottom); }
+.pl-safe { padding-left: env(safe-area-inset-left); }
+.pr-safe { padding-right: env(safe-area-inset-right); }
+/* For a sticky bottom action bar: its own padding plus the home-indicator inset. */
+.pb-dock { padding-bottom: calc(env(safe-area-inset-bottom) + 12px); }
+/* Bottom spacer inside a scroll area so the last item clears the sticky dock. */
+.scroll-pb-dock { padding-bottom: calc(var(--dock-height) + env(safe-area-inset-bottom)); }
+/* Bottom spacer inside a tab screen's scroll area so content clears the mobile tab bar.
+   Prefers the tab bar's real measured height (--bottom-nav-h, published by <BottomNav>,
+   already includes its blur bar + safe-area padding); the token formula is the fallback
+   for the frame before that effect runs. The extra 16px is breathing room under the
+   last row. */
+.scroll-pb-nav {
+  padding-bottom: calc(
+    var(--bottom-nav-h, calc(var(--bottom-nav-height) + env(safe-area-inset-bottom))) + 16px
+  );
+}
+@media (min-width: 1024px) { .scroll-pb-nav { padding-bottom: 32px; } }
+
+/* Keyboard-safe viewport height. 100dvh accounts for the mobile keyboard and address
+   bar resizing the visible area; 100vh does not. */
+.h-screen-safe {
+  height: 100vh;
+  height: 100dvh;
+}
+.max-h-screen-safe {
+  max-height: 100vh;
+  max-height: 100dvh;
+}
+
+/* Momentum scrolling + no scroll chaining into the page behind a sheet. */
+.scroll-touch {
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+}
+
+/* ---------------------------------------------------------------------------
+ * Animation utilities.
+ *
+ * The dashboard used `animate-in fade-in slide-in-from-right-10 zoom-in-95` in 12
+ * places -- those are tailwindcss-animate class names, and that plugin was never in
+ * package.json, so every drawer and modal appeared instantly with no transition. The
+ * keyframes live in tailwind.config.js; these aliases keep the existing call sites
+ * working (now driven by the motion tokens) without adding a dependency.
+ * ------------------------------------------------------------------------- */
+.animate-in { animation-duration: var(--dur-slow); animation-fill-mode: both; }
+.fade-in { animation-name: fade-in; }
+.zoom-in-95 { animation-name: zoom-in-95; }
+.slide-in-from-right-10 { animation-name: slide-in-right; }
+.slide-in-from-bottom-5 { animation-name: slide-in-bottom; }
+.slide-in-from-top-4 { animation-name: slide-in-top; }
+
+/* Subtle route/screen entry — a small rise + fade, 240ms. */
+@keyframes screen-enter {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.screen-enter {
+  animation: screen-enter var(--dur-slow) var(--ease-out) both;
+}
+
+/* Staggered list-row entry — a slightly deeper rise + fade than screen-enter, so a
+   freshly loaded schedule cascades in. Call sites set `animation-delay` per row. */
+@keyframes row-in {
+  from { opacity: 0; transform: translateY(9px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.row-stagger {
+  animation: row-in 0.34s var(--ease-out) both;
+}
+
+/* Ease the page backdrop + primary text over on a theme switch — the dominant
+   surface transitions, everything else snaps (so interactions never feel slow). */
+body {
+  transition: background-color 220ms var(--ease-out), color 220ms var(--ease-out);
+}
+
+/* Referenced in 14 places, never defined. A slim scrollbar for dashboard panes. */
+.custom-scrollbar::-webkit-scrollbar { width: 8px; height: 8px; }
+.custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: rgb(var(--line-strong));
+  border-radius: 9999px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb:hover { background: rgb(var(--fg-subtle)); background-clip: content-box; }
+
+/* Skeleton shimmer for loading placeholders (replaces bare spinners on list screens,
+   which give no sense of what's coming). Themed via tokens: a translucent-ink base
+   block with a faint brand-tinted sheen sweeping across it — the same accent the rest
+   of the UI reserves for "something is happening". */
+.skeleton {
+  position: relative;
+  overflow: hidden;
+  background: rgb(var(--fg) / 0.07);
+}
+.skeleton::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgb(var(--surface) / 0.55) 40%,
+    rgb(var(--brand) / 0.12) 50%,
+    rgb(var(--surface) / 0.55) 60%,
+    transparent
+  );
+  animation: shimmer 1.6s infinite;
+}
+
+/* Anyone who's set "Reduce Motion" gets none of the above. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+ * Admin dashboard globals (Live Fleet map + print/PDF export).
+ * ------------------------------------------------------------------------- */
+
+.van-marker-container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.van-marker-container:hover {
+  transform: scale(1.15);
+  z-index: 1000 !important;
+}
+@keyframes ping-slow {
+  0% { transform: scale(0.95); opacity: 0.8; }
+  70% { transform: scale(2.2); opacity: 0; }
+  100% { transform: scale(2.2); opacity: 0; }
+}
+.animate-pulse-beacon {
+  animation: ping-slow 2s cubic-bezier(0, 0, 0.2, 1) infinite;
+}
+.leaflet-popup-content-wrapper {
+  background: rgb(var(--surface)) !important;
+  color: rgb(var(--fg)) !important;
+  border: 1px solid rgb(var(--line)) !important;
+  border-radius: 8px !important;
+  padding: 0 !important;
+}
+.leaflet-popup-content {
+  margin: 0 !important;
+  line-height: 1.4 !important;
+}
+.leaflet-popup-tip {
+  background: rgb(var(--surface)) !important;
+  border: 1px solid rgb(var(--line)) !important;
+}
+
+/* ---------------------------------------------------------------------------
+ * PDF/print export.
+ *
+ * When printing a report dossier or scenario submission:
+ * 1. The print portal (#tmv-print-portal / .print-content) is mounted via
+ *    React createPortal directly into document.body (outside #root).
+ * 2. In normal on-screen display, it is positioned off-screen (left: -99999px)
+ *    with opacity: 0 so the browser lays it out and loads/decodes all images,
+ *    without introducing scrollbars or affecting page layout.
+ * 3. When window.print() is called for a report, body.printing-report (or
+ *    body:has(#tmv-print-portal)) is active:
+ *    - #root is set to display: none !important (taking up 0 space).
+ *    - #tmv-print-portal is set to display: block !important, position: static.
+ *    - The document starts cleanly at (0, 0) on Page 1.
+ * 4. When the user prints a table directly (no active report), body.printing-report
+ *    is not present, so #root is printed normally with standard UI chrome hidden.
+ * ------------------------------------------------------------------------- */
+#tmv-print-portal,
+.print-content {
+  position: fixed;
+  top: 0;
+  left: -99999px;
+  width: 210mm;
+  opacity: 0;
+  pointer-events: none;
+  overflow: hidden;
+  z-index: -9999;
+}
+
+@media print {
+  html,
+  body {
+    height: auto !important;
+    min-height: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    background: #ffffff !important;
+    overflow: visible !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  aside,
+  header,
+  .no-print,
+  button {
+    display: none !important;
+  }
+
+  /* Report print mode: hide React #root completely so it consumes zero layout space */
+  body.printing-report #root,
+  body:has(#tmv-print-portal) #root {
+    display: none !important;
+  }
+
+  body.printing-report #tmv-print-portal,
+  body.printing-report .print-content,
+  body:has(#tmv-print-portal) #tmv-print-portal,
+  body:has(#tmv-print-portal) .print-content {
+    display: block !important;
+    visibility: visible !important;
+    position: static !important;
+    width: 210mm !important;
+    max-width: 210mm !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    opacity: 1 !important;
+    pointer-events: auto !important;
+  }
+
+  /* Dialogs and drawers are portalled to <body>, outside #root: hide every body-level
+     layer except the report, so an open dialog can never print over the document. */
+  body.printing-report > *:not(#tmv-print-portal):not(.print-content) {
+    display: none !important;
+  }
+
+  /* Landscape documents (driver job report, driver breakdown) use the full landscape page width. */
+  body.printing-report #tmv-print-portal:has(.report-driver-jobs),
+  body:has(#tmv-print-portal) #tmv-print-portal:has(.report-driver-jobs),
+  body.printing-report #tmv-print-portal:has(.report-breakdown),
+  body:has(#tmv-print-portal) #tmv-print-portal:has(.report-breakdown) {
+    width: auto !important;
+    max-width: none !important;
+  }
+
+  body.printing-report #tmv-print-portal *,
+  body.printing-report .print-content *,
+  body:has(#tmv-print-portal) #tmv-print-portal *,
+  body:has(#tmv-print-portal) .print-content * {
+    visibility: visible !important;
+  }
+
+  /* Table / generic print mode (no report portal) */
+  body:not(.printing-report):not(:has(#tmv-print-portal)) #root {
+    display: block !important;
+    height: auto !important;
+    overflow: visible !important;
+  }
+
+  body:not(.printing-report):not(:has(#tmv-print-portal)) #tmv-print-portal,
+  body:not(.printing-report):not(:has(#tmv-print-portal)) .print-content {
+    display: none !important;
+  }
+}

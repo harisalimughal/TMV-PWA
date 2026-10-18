@@ -1,0 +1,495 @@
+/**
+ * Adapted from TMV-Chat-bot's dashboard/web/src/api/client.ts -- same functions, same
+ * shapes, paths repointed from /admin/api/... to /api/admin/... (tmv-pwa's existing
+ * prefix, shared with the Drivers/Settings tab built earlier). saveDriver and
+ * fetchSettings/saveSetting point at tmv-pwa's own already-working endpoints
+ * (auth/admin.routes.ts, db/settings.repo.ts) instead of the source's Sheets-backed
+ * ones -- those were rebuilt this migration, not ported, so the payload shapes differ
+ * slightly (password not pwaPassword; settings carry `type` not `description`).
+ */
+import {
+  DriverSummaryItem, FinanceSummaryResponse, NormalizedJob, ScenarioItem, SummaryResponse, VanComplianceItem, VanDriverRecordItem, VanRecordItem
+} from "./types";
+import { SERVER_ERROR_MESSAGE } from "../../../lib/apiErrors";
+import { adminFetch } from "../../../lib/adminTransport";
+import type { DriverReport } from "./driverReport.types";
+
+/**
+ * Every admin fetch goes through this instead of a bare `fetch()`. A 5xx, or the
+ * request never reaching the server at all (offline, DNS, a dead upstream -- these
+ * throw before a Response even exists), means our own infrastructure is the problem,
+ * not anything the admin did. Surfacing "Internal Server Error" or a raw
+ * "TypeError: Failed to fetch" isn't useful to anyone, so both collapse to the same
+ * calm, honest message (see the Sept 2026 MongoDB Atlas connectivity incident this
+ * was written after -- every page just looked quiet with no indication of an outage).
+ * A 4xx keeps whatever specific reason the backend gave, via apiError() below, since
+ * that IS something the admin can act on.
+ */
+async function apiFetch(path: string, init?: RequestInit, timeoutMs?: number): Promise<Response> {
+  return adminFetch(path, init, timeoutMs);
+}
+
+/** Builds the Error for a non-ok apiFetch response -- always a 4xx by the time this
+ *  is called, so the backend's own message is worth showing. */
+async function apiError(res: Response, fallback: string): Promise<Error> {
+  const data = await res.json().catch(() => ({}));
+  return new Error(data?.error?.message || fallback);
+}
+
+export interface PaginationMeta {
+  page: number;
+  pageSize: number;
+  total: number;
+  totalPages: number;
+  hasMore: boolean;
+}
+
+export async function fetchJobLiabilityReport(jobId: string): Promise<{ items: import("./driverReport.types").ReportLiability[]; coverage: string }> {
+  const res = await apiFetch("/api/admin/liabilities/jobs/" + encodeURIComponent(jobId));
+  if (!res.ok) throw await apiError(res, "Job liability evidence could not be loaded.");
+  return res.json();
+}
+
+export async function fetchDriverReport(initials: string, query: Record<string, string | number>, signal?: AbortSignal): Promise<DriverReport> {
+  const params = new URLSearchParams(Object.entries(query).map(([key, value]) => [key, String(value)]));
+  const res = await apiFetch(`/api/admin/driver-reports/${encodeURIComponent(initials)}?${params}`, { signal });
+  if (!res.ok) throw await apiError(res, "Driver report could not be loaded.");
+  return res.json();
+}
+
+export async function fetchRoadAssessment(jobId: string): Promise<{ flags: import("./driverReport.types").ReportFlag[]; comparisons: Array<{ type: string; observedExpectedPence: number | null; jobRecordedPence: number | null; manualReportedPence: number | null }>; activity: Array<{ visitId: string; reason: string; chargeable: boolean | null }> }> {
+  const res = await apiFetch(`/api/admin/gps/jobs/${encodeURIComponent(jobId)}/charges`);
+  if (!res.ok) throw await apiError(res, "Charge evidence could not be loaded.");
+  return res.json();
+}
+
+export interface JobsResponse {
+  items: NormalizedJob[];
+  pagination: PaginationMeta;
+  meta: { fetchedAt: string; durationMs: number };
+}
+
+export async function fetchSummary(from?: string, to?: string): Promise<SummaryResponse> {
+  const params = new URLSearchParams();
+  if (from) params.set("from", from);
+  if (to) params.set("to", to);
+  const res = await apiFetch(`/api/admin/summary?${params.toString()}`);
+  if (!res.ok) throw await apiError(res, "Failed to load summary");
+  return res.json();
+}
+
+export async function fetchJobs(query: Record<string, any> = {}, signal?: AbortSignal): Promise<JobsResponse> {
+  const params = new URLSearchParams();
+  for (const [k, v] of Object.entries(query)) {
+    if (v !== undefined && v !== null && v !== "") params.set(k, String(v));
+  }
+  const res = await apiFetch(`/api/admin/jobs?${params.toString()}`, signal ? { signal } : undefined);
+  if (!res.ok) throw await apiError(res, "Failed to load jobs");
+  return res.json();
+}
+
+export async function fetchJobDetail(jobId: string): Promise<NormalizedJob> {
+  const res = await apiFetch(`/api/admin/jobs/${encodeURIComponent(jobId)}`);
+  if (!res.ok) throw await apiError(res, `Failed to load job ${jobId}`);
+  const data = await res.json();
+  return data.job;
+}
+
+export async function reassignJob(jobId: string, driverInitials: string): Promise<{ ok: true; driverInitials: string; driverName: string }> {
+  const res = await apiFetch(`/api/admin/jobs/${encodeURIComponent(jobId)}/reassign`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ driverInitials })
+  });
+  if (!res.ok) throw await apiError(res, "Failed to reassign driver");
+  return res.json();
+}
+
+export async function markJobFinishedManually(jobId: string, note: string): Promise<{ ok: true; job: NormalizedJob }> {
+  const res = await apiFetch(`/api/admin/jobs/${encodeURIComponent(jobId)}/finish-manually`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ note })
+  });
+  if (!res.ok) throw await apiError(res, "Failed to mark job as finished");
+  return res.json();
+}
+
+export async function deleteJob(jobId: string): Promise<{ ok: true }> {
+  const res = await apiFetch(`/api/admin/jobs/${encodeURIComponent(jobId)}`, { method: "DELETE" });
+  if (!res.ok) throw await apiError(res, "Failed to delete job");
+  return res.json();
+}
+
+/** Purely our own storage (Mongo + Cloudinary) -- no Calendar involvement, so this
+ *  is a plain delete with no reassign/delete-job-style permission dance beforehand. */
+export async function deleteEvidencePhoto(jobId: string, evidenceId: string): Promise<{ ok: true }> {
+  const res = await apiFetch(`/api/admin/jobs/${encodeURIComponent(jobId)}/evidence/${encodeURIComponent(evidenceId)}`, { method: "DELETE" });
+  if (!res.ok) throw await apiError(res, "Failed to delete photo");
+  return res.json();
+}
+
+export async function saveJobReview(
+  jobId: string,
+  payload: { status: "Pending" | "Approved" | "Flagged"; note: string }
+): Promise<{ job?: NormalizedJob; review: { status: "Pending" | "Approved" | "Flagged"; note: string; reviewedAt: string } }> {
+  const res = await apiFetch(`/api/admin/jobs/${encodeURIComponent(jobId)}/review`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload)
+  });
+  if (!res.ok) throw await apiError(res, "Failed to save manager review");
+  return res.json();
+}
+
+export async function fetchDrivers(from?: string, to?: string, includeMoving = false, signal?: AbortSignal, completedOnly = false): Promise<{ drivers: DriverSummaryItem[] }> {
+  const params = new URLSearchParams();
+  if (from) params.set("from", from);
+  if (to) params.set("to", to);
+  if (includeMoving) params.set("includeMoving", "1");
+  if (completedOnly) params.set("completedOnly", "1");
+  const res = await apiFetch(`/api/admin/drivers/summary?${params.toString()}`, { signal });
+  if (!res.ok) throw await apiError(res, "Failed to load drivers summary");
+  return res.json();
+}
+
+export async function fetchFinance(from?: string, to?: string, groupBy = "day"): Promise<FinanceSummaryResponse> {
+  const params = new URLSearchParams({ groupBy });
+  if (from) params.set("from", from);
+  if (to) params.set("to", to);
+  const res = await apiFetch(`/api/admin/finance/summary?${params.toString()}`);
+  if (!res.ok) throw await apiError(res, "Failed to load finance summary");
+  return res.json();
+}
+
+export async function fetchScenarios(
+  kind: string,
+  page = 1,
+  driver?: string,
+  from?: string,
+  to?: string,
+  signal?: AbortSignal
+): Promise<{ kind: string; items: ScenarioItem[]; pagination: PaginationMeta }> {
+  const params = new URLSearchParams({ page: String(page) });
+  if (driver) params.set("driver", driver);
+  if (from) params.set("from", from);
+  if (to) params.set("to", to);
+  const res = await apiFetch(`/api/admin/scenarios/${encodeURIComponent(kind)}?${params.toString()}`, signal ? { signal } : undefined);
+  if (!res.ok) throw await apiError(res, `Failed to load scenario ${kind}`);
+  return res.json();
+}
+
+export async function fetchVanRecords(query: Record<string, any> = {}): Promise<{ items: VanRecordItem[]; pagination: PaginationMeta }> {
+  const params = new URLSearchParams();
+  for (const [k, v] of Object.entries(query)) {
+    if (v !== undefined && v !== null && v !== "") params.set(k, String(v));
+  }
+  const res = await apiFetch(`/api/admin/van/records?${params.toString()}`);
+  if (!res.ok) throw await apiError(res, "Failed to load van records");
+  return res.json();
+}
+
+export async function fetchVanDriverRecords(query: Record<string, any> = {}, signal?: AbortSignal): Promise<{ items: VanDriverRecordItem[]; pagination: PaginationMeta }> {
+  const params = new URLSearchParams();
+  for (const [k, v] of Object.entries(query)) {
+    if (v !== undefined && v !== null && v !== "") params.set(k, String(v));
+  }
+  const res = await apiFetch(`/api/admin/van/drivers?${params.toString()}`, signal ? { signal } : undefined);
+  if (!res.ok) throw await apiError(res, "Failed to load van driver records");
+  return res.json();
+}
+
+export async function saveVanCompliance(
+  vanRegistration: string,
+  payload: Pick<
+    VanComplianceItem,
+    "roadTaxRenewalDate" | "motExpiryDate" | "insuranceExpiryDate" | "notes" | "serviceIntervalMiles" | "lastServiceMileageOverride"
+  >
+): Promise<VanComplianceItem> {
+  const res = await apiFetch(`/api/admin/van/compliance/${encodeURIComponent(vanRegistration)}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload)
+  });
+  if (!res.ok) throw await apiError(res, "Failed to save van compliance");
+  const data = await res.json();
+  return data.compliance;
+}
+
+/** Purely our own storage (Mongo + Cloudinary) -- no Calendar involvement. */
+export async function deleteVanRecord(id: string): Promise<{ ok: true }> {
+  const res = await apiFetch(`/api/admin/van/records/${encodeURIComponent(id)}`, { method: "DELETE" });
+  if (!res.ok) throw await apiError(res, "Failed to delete van record");
+  return res.json();
+}
+
+export async function triggerDatasetRefresh(): Promise<void> {
+  // No dedicated /refresh endpoint here (Mongo reads have no cache to invalidate,
+  // unlike the source's Sheets-backed sheetCache) -- kept as a no-op resolve so the
+  // Layout.tsx refresh button doesn't need special-casing.
+  return Promise.resolve();
+}
+
+async function postJson(path: string, body: unknown): Promise<void> {
+  const res = await apiFetch(path, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body)
+  });
+  if (!res.ok) throw await apiError(res, "Request failed");
+}
+
+export interface AddJobPayload {
+  customerName: string;
+  customerEmail?: string;
+  customerPhone?: string;
+  pickup: string;
+  dropoff: string;
+  crewSize: number;
+  price: number;
+  paidOnline?: boolean;
+  driverInitials?: string;
+  start: string;
+  finish: string;
+}
+
+/** Creates a real Calendar event (see backend/src/admin/dashboard/jobs.routes.ts) --
+ * not a local write, tmv-pwa's own sync path picks this up. */
+export async function addJob(payload: AddJobPayload): Promise<void> {
+  return postJson("/api/admin/jobs", payload);
+}
+
+export interface SaveDriverPayload {
+  initials: string;
+  fullName: string;
+  email: string;
+  role?: string;
+  active?: boolean;
+  phone?: string;
+  vanRegistration?: string;
+  imei?: string;
+  /** Sets/resets the driver's app login. Leave blank on an edit to keep whatever
+   * password is already set. */
+  password?: string;
+}
+
+/** Upserts a driver_accounts doc, keyed on email -- add and edit both go through this.
+ * This is tmv-pwa's own working endpoint (auth/admin.routes.ts), not a port of the
+ * source's Sheets-backed drivers.route.ts. */
+export async function saveDriver(payload: SaveDriverPayload): Promise<{ warning?: string }> {
+  const res = await apiFetch("/api/admin/drivers", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ ...payload, role: payload.role || "Driver" })
+  });
+  if (!res.ok) throw await apiError(res, "Request failed");
+  const data = await res.json().catch(() => ({}));
+  return { warning: data?.warning };
+}
+
+/** Permanently removes a driver from the roster. Unlike saveDriver with active:false
+ * (which only blocks their login), this deletes the driver_accounts doc outright. */
+export async function deleteDriver(email: string): Promise<{ ok: true }> {
+  const res = await apiFetch(`/api/admin/drivers/${encodeURIComponent(email)}`, { method: "DELETE" });
+  if (!res.ok) throw await apiError(res, "Failed to delete driver");
+  return res.json();
+}
+
+export interface EditableSetting {
+  key: string;
+  label: string;
+  type: "text" | "textarea" | "number" | "password";
+  fallback: string;
+  hint?: string;
+  value: string;
+}
+
+/** tmv-pwa's own working settings endpoint (db/settings.repo.ts), not a port of the
+ * source's Sheets-backed settings.route.ts. */
+export async function fetchSettings(): Promise<{ settings: EditableSetting[] }> {
+  const res = await apiFetch("/api/admin/settings");
+  if (!res.ok) throw await apiError(res, "Failed to load settings");
+  return res.json();
+}
+
+export async function saveSetting(key: string, value: string): Promise<void> {
+  return postJson("/api/admin/settings", { key, value });
+}
+
+export type MessageAudience = "customer" | "driver";
+export type MessageChannel = "SMS" | "Email" | "Push";
+
+export interface MessageCatalogItem {
+  id: string;
+  audience: MessageAudience;
+  channel: MessageChannel;
+  label: string;
+  hint: string;
+  variables: string[];
+  enabled: boolean;
+  hasTitle: boolean;
+  hasHtml: boolean;
+  title?: string;
+  titleFallback?: string;
+  body: string;
+  bodyFallback: string;
+  html?: string;
+  htmlEnabled?: boolean;
+  htmlFallback?: string;
+}
+
+/** notifications/message-catalog.ts's full inventory of every message the app sends,
+ *  backing the admin Messaging tab's Customer/Driver lists. */
+export async function fetchMessages(): Promise<{ items: MessageCatalogItem[] }> {
+  const res = await apiFetch("/api/admin/messages");
+  if (!res.ok) throw await apiError(res, "Failed to load messages");
+  return res.json();
+}
+
+export async function toggleMessage(id: string, enabled: boolean): Promise<void> {
+  return postJson(`/api/admin/messages/${encodeURIComponent(id)}/toggle`, { enabled });
+}
+
+export async function saveMessageTemplate(id: string, fields: { title?: string; body?: string; html?: string; htmlEnabled?: boolean }): Promise<void> {
+  return postJson(`/api/admin/messages/${encodeURIComponent(id)}`, fields);
+}
+
+export interface NotificationRow {
+  jobId: string;
+  customerName: string;
+  customerEmail: string;
+  customerPhone: string;
+  driverInitials: string;
+  actualStart: string;
+  email: { state: "sent" | "failed" | "pending" | "skipped" | "disabled"; detail: string; at: string };
+  sms: { state: "sent" | "failed" | "pending" | "skipped" | "disabled"; detail: string; at: string };
+}
+
+export async function fetchNotifications(): Promise<{ rows: NotificationRow[] }> {
+  const res = await apiFetch("/api/admin/notifications");
+  if (!res.ok) throw await apiError(res, "Failed to load notifications");
+  return res.json();
+}
+
+/** Hides the given rows from the Notifications tab -- see notifications.routes.ts's
+ *  own comment for why this is a dismiss, not a real delete (a row here is a job, not
+ *  its own record). */
+export async function dismissNotifications(jobIds: string[]): Promise<void> {
+  return postJson("/api/admin/notifications/dismiss", { jobIds });
+}
+
+export interface LiveFleetVehicle {
+  imei: string;
+  name: string;
+  plateNumber: string;
+  lat: number;
+  lng: number;
+  speedMph: number;
+  lastUpdate: string;
+  driverInitials: string | null;
+  driverName: string | null;
+  odometerMiles: number | null;
+  ignitionOn: boolean | null;
+  batteryVoltage: number | null;
+  gpsSignalLevel: number | null;
+  gsmSignalLevel: number | null;
+  jammingDetected: boolean;
+  ecoDrivingEvent: string | null;
+  ecoDrivingScore: number | null;
+}
+
+export async function fetchLiveFleet(): Promise<{ vehicles: LiveFleetVehicle[]; fetchedAt: string }> {
+  const res = await apiFetch("/api/admin/fleet/live");
+  if (!res.ok) throw await apiError(res, "Failed to load live fleet positions");
+  return res.json();
+}
+
+export interface CongestionDetectionRow {
+  jobId: string;
+  customerName: string;
+  driverInitials: string;
+  driverName: string | null;
+  vanRegistration: string | null;
+  detectedAt: string;
+  jobStatus: string;
+  chargeAdded: boolean;
+  gpsliveImei: string | null;
+  /** Which zone this row is for -- the same panel/endpoint covers both. */
+  zone: "congestion" | "tunnel";
+}
+
+export async function fetchCongestionDetections(): Promise<{ rows: CongestionDetectionRow[] }> {
+  const res = await apiFetch("/api/admin/fleet/congestion");
+  if (!res.ok) throw await apiError(res, "Failed to load congestion zone detections");
+  return res.json();
+}
+
+export interface CongestionZonePolygon {
+  zoneId: number;
+  zoneName: string;
+  vertices: [number, number][];
+}
+
+export async function fetchCongestionZones(): Promise<{ zones: CongestionZonePolygon[] }> {
+  const res = await apiFetch("/api/admin/fleet/congestion-zones");
+  if (!res.ok) throw await apiError(res, "Failed to load congestion zone shapes");
+  return res.json();
+}
+
+export type AlertCategory = "congestion" | "tunnel" | "other";
+
+export interface AlertRow {
+  eventId: string;
+  type: string;
+  description: string;
+  category: AlertCategory;
+  deviceName: string | null;
+  driverInitials: string | null;
+  driverName: string | null;
+  detectedAt: string;
+}
+
+/** No from/to: GPSLive's own "last 50 across the fleet" feed, no date range. With
+ *  both: a real date-ranged query across every device (see alerts.routes.ts). */
+export async function fetchAlerts(from?: string, to?: string): Promise<{ rows: AlertRow[] }> {
+  const params = new URLSearchParams();
+  if (from) params.set("from", from);
+  if (to) params.set("to", to);
+  const qs = params.toString();
+  const res = await apiFetch(`/api/admin/alerts${qs ? `?${qs}` : ""}`);
+  if (!res.ok) throw await apiError(res, "Failed to load GPSLive alerts");
+  return res.json();
+}
+
+/** Hides the given rows from the Alerts tab -- these are proxied live from GPSLive's
+ *  own account, so this only remembers the id locally; nothing changes on GPSLive's
+ *  side (see alerts.routes.ts's own comment). */
+export async function dismissAlerts(eventIds: string[]): Promise<void> {
+  return postJson("/api/admin/alerts/dismiss", { eventIds });
+}
+
+export interface FactoryResetSummary {
+  evidence: number;
+  activity: number;
+  scenarioSubmissions: number;
+  vanRecords: number;
+  vanCompliance: number;
+  exceptions: number;
+  pushSubscriptions: number;
+  cloudinaryAssetsDestroyed: number;
+}
+
+/** Wipes every app-generated record (evidence, activity, scenario submissions, van
+ *  records/compliance, exceptions, push subscriptions) and their Cloudinary photos --
+ *  jobs, driver accounts and settings are untouched. See maintenance.routes.ts. */
+export async function factoryReset(): Promise<{ ok: true; deleted: FactoryResetSummary }> {
+  // Deleting every Cloudinary photo can take minutes, far beyond the normal 30 s admin
+  // timeout. Cutting it short would report a failure while the server keeps deleting.
+  const res = await apiFetch("/api/admin/maintenance/factory-reset", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ confirm: "RESET" })
+  }, 10 * 60_000);
+  if (!res.ok) throw await apiError(res, "Factory reset failed");
+  return res.json();
+}

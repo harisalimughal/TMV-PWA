@@ -8,7 +8,7 @@ describe("Performance chart data", () => {
     const row = report.trends[0];
     const data = performanceChartData([{ ...row, expectedKnownPence: 65300, paymentCards: { ...row.paymentCards!, driverCollectionPence: 37600 }, workingMinutesKnown: 150, workingMinutesUnknownJobs: 0 }]);
     expect(data[0]).toMatchObject({ hours: 2.5, jobs: row.completedJobs });
-    expect(data[0]).not.toHaveProperty("collected");
+    expect(data[0]).not.toHaveProperty("finalCharges");
     expect(performanceChartData(report.trends)).toHaveLength(report.trends.length);
     expect(report.jobs.items).toHaveLength(1);
   });

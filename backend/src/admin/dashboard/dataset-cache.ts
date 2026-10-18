@@ -20,7 +20,7 @@
 import { readMongoDataset, MongoDataset } from "./read";
 import { normalizeMongoDataset } from "./normalize";
 import { NormalizedJob } from "./types";
-import { invalidateReportReads } from "../../reports/report-read-cache";
+import { createReportReadCache, invalidateReportReads } from "../../reports/report-read-cache";
 
 export interface DashboardDataset {
   dataset: MongoDataset;
@@ -29,34 +29,20 @@ export interface DashboardDataset {
 
 const TTL_MS = 45_000;
 
-let cached: { at: number; value: DashboardDataset } | null = null;
-// Collapses concurrent cache-miss requests (e.g. several dashboard widgets fetching at
-// once on first load) into a single in-flight read instead of each kicking off its own.
-let pending: Promise<DashboardDataset> | null = null;
+const reads = createReportReadCache<DashboardDataset>(TTL_MS, 4);
 
 export async function getDashboardDataset(): Promise<DashboardDataset> {
-  if (cached && Date.now() - cached.at < TTL_MS) return cached.value;
-  if (pending) return pending;
-
-  pending = (async () => {
+  return reads.get("dashboard", async () => {
     const dataset = await readMongoDataset();
     const jobs = await normalizeMongoDataset(dataset);
     const value: DashboardDataset = { dataset, jobs };
-    cached = { at: Date.now(), value };
     return value;
-  })();
-
-  try {
-    return await pending;
-  } finally {
-    pending = null;
-  }
+  });
 }
 
 /** Call after any admin-dashboard write that changes job/evidence/activity data
  *  (reassign, manager review, manual job creation) so the very next dashboard read
  *  reflects it immediately instead of waiting out the TTL. */
 export function invalidateDashboardDataset(): void {
-  cached = null;
   invalidateReportReads();
 }

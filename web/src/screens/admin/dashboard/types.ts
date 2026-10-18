@@ -141,6 +141,9 @@ export interface NormalizedJob {
   trackerDistanceMeters?: number;
   trackerLocationName?: string;
   trackerUnverifiedReason?: string;
+  /** Tracker evidence at the drop-off, when the backend includes it. Absent means "not
+   *  supplied", which the preview shows as Not recorded; it is never guessed. */
+  dropoffTracking?: { arrivalAt?: string; departureAt?: string; unverifiedReason?: string };
   arrivalProofDelayMinutes?: number;
   arrivalProofLate?: boolean;
   arrivalProofOverdue?: boolean;

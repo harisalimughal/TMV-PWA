@@ -1,165 +1,121 @@
+/**
+ * Broadcast a push notice to drivers. Deliberate by design (audit p.19): compose,
+ * then review the audience, recipient count and a preview, then confirm. Nothing is
+ * sent until "Send now" on the review step.
+ */
 import React, { useState } from "react";
-import { X, Send, Bell, Loader2, Users } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { fetchDrivers } from "../../../../api/admin";
-import { Button, IconButton } from "../../../../ui";
+import { adminFetch } from "../../../../lib/adminTransport";
+import { broadcastErrorMessage } from "../utils/broadcastError";
+import { fetchJobDetail } from "../api";
+import { DEFAULT_DESTINATION, destinationProblem } from "../utils/notificationDestination";
+import { Bell } from "lucide-react";
+import type { ComposeTarget } from "../activityLinks";
+import { Modal } from "../../../../ui/Modal";
 import { useToast } from "../../../../components/ui/Toast";
+import { Action, Notice, controlBase } from "./ds";
 
 interface Props {
   isOpen: boolean;
   onClose: () => void;
+  /**
+   * Notify-driver mode: the audience is fixed to the job's one driver and cannot be changed to
+   * "all drivers" here. It uses the same push endpoint as a broadcast, addressed to that driver only.
+   */
+  direct?: ComposeTarget;
+  onSent?: () => void;
 }
 
-export function SendBroadcastPushModal({ isOpen, onClose }: Props) {
+export function SendBroadcastPushModal({ isOpen, onClose, direct, onSent }: Props) {
   const toast = useToast();
-  const [target, setTarget] = useState<string>("all");
-  const [title, setTitle] = useState<string>("The Man Van Operations");
-  const [body, setBody] = useState<string>("");
-  const [url, setUrl] = useState<string>("/?tab=jobs");
-  const [isSending, setIsSending] = useState(false);
-
-  // The lightweight roster endpoint (/api/admin/drivers -- just initials/name/active,
-  // no per-driver job stats), not the dashboard's own fetchDrivers (/api/admin/drivers/
-  // summary), which computes every driver's full performance stats via the same
-  // whole-dataset rebuild that made the Jobs list and Reassign slow before their own
-  // fixes earlier this session. That endpoint took long enough to answer that this
-  // modal's individual-driver options were still empty by the time an admin looked at
-  // the dropdown -- "Broadcast to All Active Drivers" was the only option that ever
-  // seemed to exist.
-  const { data: drivers } = useQuery({
-    queryKey: ["broadcast_modal_drivers"],
-    queryFn: () => fetchDrivers(),
-    enabled: isOpen
-  });
-
+  const [step, setStep] = useState<"compose" | "review">("compose");
+  const [target, setTarget] = useState(direct?.driver ?? "all");
+  const [title, setTitle] = useState(direct ? `Job Update — ${direct.jobId}` : "The Man Van Operations");
+  const [body, setBody] = useState("");
+  const [url, setUrl] = useState(DEFAULT_DESTINATION);
+  const [touched, setTouched] = useState(false);
+  const [sending, setSending] = useState(false);
+  const [error, setError] = useState("");
+  const drivers = useQuery({ queryKey: ["broadcast_modal_drivers"], queryFn: () => fetchDrivers(), enabled: isOpen });
   if (!isOpen) return null;
+  const active = (drivers.data ?? []).filter(driver => driver.active);
+  const recipient = target === "all" ? null : active.find(driver => driver.initials === target);
+  const audience = target === "all" ? `All ${active.length} active driver${active.length === 1 ? "" : "s"}` : `${recipient?.fullName || target} (${target})`;
+  const urlProblem = destinationProblem(url);
+  const titleProblem = title.trim() ? "" : "Enter a title.";
+  const bodyProblem = body.trim() ? "" : "Enter the message.";
+  const close = () => { if (!sending) { setStep("compose"); setError(""); onClose(); } };
 
-  // Every entry from this endpoint is already a real driver_accounts doc (it only
-  // ever returns the roster, never a job-only driverInitials code with no account
-  // behind it) -- active is the only filter still needed.
-  const activeDrivers = (drivers || []).filter(d => d.active);
-
-  const handleSend = async () => {
-    if (!title.trim() || !body.trim()) {
-      toast.error("Please provide both a title and message body.");
-      return;
-    }
-
+  const send = async () => {
+    if (sending) return; // one request per confirmation, however many times it is triggered
+    setSending(true); setError("");
     try {
-      setIsSending(true);
-      const res = await fetch("/api/push/admin/broadcast", {
-        method: "POST",
-        credentials: "same-origin",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          title,
-          body,
-          url,
-          driverInitials: target !== "all" ? target : undefined
-        })
+      if (direct) {
+        // The job may have been reassigned since the conversation was opened: check the current assignment
+        // and refuse rather than notify someone who is no longer on it.
+        const job = await fetchJobDetail(direct.jobId).catch(() => null);
+        if (!job) throw new Error("Couldn't confirm who is assigned to this job. Nothing was sent. Try again.");
+        if (!job.driverInitials) throw new Error("This job has no assigned driver. Nothing was sent.");
+        if (job.driverInitials !== direct.driver) throw new Error("This job was reassigned after you opened it. Go back to Activity and notify the current driver. Nothing was sent.");
+      }
+      const res = await adminFetch("/api/push/admin/broadcast", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title, body, url, driverInitials: direct ? direct.driver : target !== "all" ? target : undefined })
       });
-
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to broadcast push notification");
-
-      toast.success(
-        target === "all"
-          ? `Push notification broadcasted to ${data.result?.sent ?? 0} active device(s)!`
-          : `Push notification sent to ${target} (${data.result?.sent ?? 0} device(s))!`
-      );
-      onClose();
-    } catch (err: any) {
-      toast.error(err.message || "Failed to send notification");
-    } finally {
-      setIsSending(false);
-    }
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(broadcastErrorMessage(data, "The notice could not be sent."));
+      // The server reports only how many subscribed devices accepted the push. Zero is not a
+      // success: say so and keep the message so it can be reviewed, instead of "sent".
+      const sent = Number(data.result?.sent ?? 0);
+      if (sent <= 0) { setError("The server accepted the notice, but no subscribed device received it. Drivers need to turn on notifications in the driver app first."); return; }
+      toast.success(direct ? `Notification submitted successfully. ${sent} subscribed device${sent === 1 ? "" : "s"} of ${recipient?.fullName || direct.driver} accepted it.` : `Notification submitted successfully. ${sent} subscribed device${sent === 1 ? "" : "s"} accepted it.`);
+      setStep("compose"); setBody(""); onClose(); onSent?.();
+    } catch (err) {
+      setError((err as Error)?.message || "The notice could not be sent.");
+    } finally { setSending(false); }
   };
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-      <div className="bg-white rounded-module shadow-2xl w-full max-w-[520px] flex flex-col overflow-hidden animate-in zoom-in-95 duration-200">
-        {/* Header */}
-        <div className="px-6 py-4 border-b border-admin-line flex items-center justify-between bg-[#FAFAFA] shrink-0">
-          <h2 className="text-title text-fg flex items-center gap-2">
-            <Bell className="w-5 h-5 text-admin-brand" /> Send Push Notification
-          </h2>
-          <IconButton aria-label="Close" icon={<X />} onClick={onClose} className="-mr-2" />
+    <Modal open onClose={close} title={<span className="inline-flex items-center gap-2"><Bell aria-hidden className="h-5 w-5 text-admin-brand" />{step === "compose" ? "Send Push Notification" : "Review notification"}</span>} size="lg" placement="center" dismissible={!sending}
+      footer={step === "compose" ? (
+        <div className="flex justify-end gap-2"><Action variant="ghost" onClick={close}>Cancel</Action><Action variant="primary" disabled={drivers.isLoading} onClick={() => { setTouched(true); if (!titleProblem && !bodyProblem && !urlProblem) setStep("review"); }}>Review notice</Action></div>
+      ) : (
+        <div className="flex justify-between gap-2"><Action variant="ghost" onClick={() => setStep("compose")} disabled={sending}>Back to edit</Action><Action variant="primary" loading={sending} onClick={() => void send()}>Send Notification</Action></div>
+      )}>
+      {step === "compose" ? (
+        <div className="space-y-3">
+          <label className="block text-[13px] font-medium text-admin-ink-2">Recipient
+            <select aria-label="Recipient" value={target} disabled={Boolean(direct)} onChange={event => setTarget(event.target.value)} className={`${controlBase} mt-1 w-full`}>
+              {direct ? <option value={direct.driver}>{recipient?.fullName || direct.driver} ({direct.driver})</option>
+                : <option value="all">{drivers.isLoading ? "Loading drivers…" : `Broadcast to all active drivers (${active.length})`}</option>}
+              {!direct && active.map(driver => <option key={driver.initials} value={driver.initials}>{driver.fullName || driver.initials} ({driver.initials})</option>)}
+            </select>
+            {direct && <span className="mt-1 block text-[12.5px] font-normal text-admin-ink-2">About job {direct.jobId}. Only this driver is notified.</span>}
+          </label>
+          <label className="block text-[13px] font-medium text-admin-ink-2">Notification Title<input aria-label="Notification Title" value={title} onChange={event => setTitle(event.target.value)} maxLength={80} aria-invalid={touched && Boolean(titleProblem)} className={`${controlBase} mt-1 w-full`} />
+            {touched && titleProblem && <span role="alert" className="mt-1 block text-[12.5px] font-normal text-admin-status-red">{titleProblem}</span>}</label>
+          <label className="block text-[13px] font-medium text-admin-ink-2">Message Content<textarea aria-label="Message Content" value={body} rows={4} maxLength={240} placeholder="e.g. New jobs have been allocated for tomorrow. Please check your schedule." aria-invalid={touched && Boolean(bodyProblem)} onChange={event => setBody(event.target.value)} className="mt-1 w-full rounded-xl border border-admin-line bg-surface px-3 py-2 text-[14px] text-admin-ink outline-none transition focus:border-admin-brand focus:ring-2 focus:ring-admin-brand/20" />
+            <span className="mt-1 flex justify-between text-[12.5px] font-normal"><span role={touched && bodyProblem ? "alert" : undefined} className="text-admin-status-red">{touched ? bodyProblem : ""}</span><span className="tabular-nums text-admin-muted">{body.length}/240</span></span></label>
+          <label className="block text-[13px] font-medium text-admin-ink-2">Tap Destination URL<input aria-label="Tap Destination URL" value={url} onChange={event => setUrl(event.target.value)} aria-invalid={Boolean(urlProblem)} className={`${controlBase} mt-1 w-full font-mono text-[13px]`} />
+            <span className={`mt-1 block text-[12.5px] font-normal ${urlProblem ? "text-admin-status-red" : "text-admin-ink-2"}`} role={urlProblem ? "alert" : undefined}>{urlProblem || "Where the driver lands after tapping the notification."}</span></label>
+          {direct && error && <p role="alert" className="text-[13px] text-admin-status-red">{error}</p>}
         </div>
-
-        {/* Body */}
-        <div className="p-6 space-y-4">
-          {/* Target Audience */}
-          <div>
-            <label className="block text-eyebrow text-fg-subtle tracking-wider mb-1.5">Recipient</label>
-            <div className="relative">
-              <select
-                value={target}
-                onChange={e => setTarget(e.target.value)}
-                className="w-full h-10 px-3 rounded-card border border-admin-line bg-admin-surface text-[13px] text-admin-ink outline-none focus:border-admin-brand transition"
-              >
-                <option value="all">📢 Broadcast to All Active Drivers</option>
-                {activeDrivers.map(d => (
-                  <option key={d.initials} value={d.initials}>
-                    Driver: {d.fullName || d.initials} ({d.initials})
-                  </option>
-                ))}
-              </select>
-            </div>
+      ) : (
+        <div className="space-y-3">
+          <dl className="grid gap-2 text-[14px] sm:grid-cols-2">
+            <div><dt className="text-[12.5px] text-admin-ink-2">Recipients</dt><dd className="font-semibold">{audience}</dd></div>
+            <div><dt className="text-[12.5px] text-admin-ink-2">Destination</dt><dd className="font-mono text-[13px]">{url}</dd></div>
+          </dl>
+          <div className="rounded-xl border border-admin-line bg-admin-surface p-3">
+            <p className="text-[12px] font-semibold uppercase tracking-wide text-admin-muted">Title and message</p>
+            <p className="mt-1 text-[14.5px] font-semibold">{title}</p>
+            <p className="whitespace-pre-wrap text-[14px] text-admin-ink-2">{body}</p>
           </div>
-
-          {/* Title */}
-          <div>
-            <label className="block text-eyebrow text-fg-subtle tracking-wider mb-1.5">Notification Title</label>
-            <input
-              type="text"
-              value={title}
-              onChange={e => setTitle(e.target.value)}
-              placeholder="e.g. Schedule Update"
-              className="w-full h-10 px-3 rounded-card border border-admin-line bg-admin-surface text-[13px] text-admin-ink outline-none focus:border-admin-brand transition"
-            />
-          </div>
-
-          {/* Message Body */}
-          <div>
-            <label className="block text-eyebrow text-fg-subtle tracking-wider mb-1.5">Message Content</label>
-            <textarea
-              rows={3}
-              value={body}
-              onChange={e => setBody(e.target.value)}
-              placeholder="e.g. New jobs have been allocated for tomorrow. Please check your schedule."
-              className="w-full p-3 rounded-card border border-admin-line bg-admin-surface text-[13px] text-admin-ink outline-none focus:border-admin-brand transition resize-none"
-            />
-          </div>
-
-          {/* Target Deep Link */}
-          <div>
-            <label className="block text-eyebrow text-fg-subtle tracking-wider mb-1.5">Tap Destination URL</label>
-            <input
-              type="text"
-              value={url}
-              onChange={e => setUrl(e.target.value)}
-              placeholder="/?tab=jobs"
-              className="w-full h-10 px-3 rounded-card border border-admin-line bg-admin-surface text-[13px] text-admin-ink outline-none focus:border-admin-brand transition"
-            />
-          </div>
+          <Notice tone="warning">{direct ? `This sends a real push notification to ${recipient?.fullName || direct.driver} only. It can't be recalled.` : "This sends a real push notification immediately. It can't be recalled."}</Notice>
+          {error && <p role="alert" className="text-[13px] text-admin-status-red">{error}</p>}
         </div>
-
-        {/* Footer */}
-        <div className="flex shrink-0 items-center justify-end gap-3 border-t border-line bg-surface-sunken px-6 py-4">
-          <Button variant="ghost" onClick={onClose} disabled={isSending}>
-            Cancel
-          </Button>
-          <Button
-            variant="primary"
-            onClick={handleSend}
-            disabled={!title.trim() || !body.trim() || isSending}
-            iconLeft={isSending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-          >
-            {isSending ? "Sending Push…" : "Send Notification"}
-          </Button>
-        </div>
-      </div>
-    </div>
+      )}
+    </Modal>
   );
 }
-

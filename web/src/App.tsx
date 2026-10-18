@@ -19,6 +19,7 @@ import { DevicePreview } from "./app/DevicePreview";
 import { UpdateBanner } from "./app/UpdateBanner";
 import { PwaInstallPrompt } from "./app/PwaInstallPrompt";
 import { ConfirmDialog } from "./ui";
+import { isAdminLocation, shouldRedirectAdminPath } from "./lib/adminHost";
 import { useToast } from "./components/ui/Toast";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { InAppNotificationListener } from "./components/InAppNotificationListener";
@@ -110,8 +111,7 @@ function resetTokenFromUrl(): string | null {
   try {
     if (typeof window === "undefined") return;
     const { hostname, pathname } = window.location;
-    const onAdminPath = pathname === "/admin" || pathname === "/admin/";
-    if (onAdminPath && hostname !== "dashboard.themanvan.co.uk" && hostname !== "localhost") {
+    if (shouldRedirectAdminPath(hostname, pathname)) {
       window.location.replace("/");
     }
   } catch {
@@ -168,9 +168,7 @@ export function App() {
   // so a local server can still switch between the two by path alone.
   const path = window.location.pathname;
   const hostname = window.location.hostname;
-  const isAdmin =
-    hostname === "dashboard.themanvan.co.uk" ||
-    (hostname === "localhost" && (path === "/admin" || path === "/admin/"));
+  const isAdmin = isAdminLocation(hostname, path);
 
   const showGallery =
     import.meta.env.DEV &&
@@ -267,11 +265,9 @@ export function App() {
   }
 
   if (isAdmin) {
-    // The admin dashboard is not part of the driver-app redesign yet and its screens
-    // still use literal light colours, so pin this subtree to the light token set
-    // regardless of the user's theme. `display: contents` keeps it out of layout.
+      // The dashboard applies its own document theme, including portalled dialogs.
     return (
-      <div data-theme="light" style={{ display: "contents" }}>
+      <div style={{ display: "contents" }}>
         <ErrorBoundary>
           <Suspense fallback={<FullScreenSpinner label="Loading Operations…" />}>
             <AdminApp />

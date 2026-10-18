@@ -1,3 +1,4 @@
+import { scopedAdminUrl } from "../../../../lib/adminDriverScope";
 import React, { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { fetchScenarios } from "../api";
@@ -219,7 +220,7 @@ export function ParkingLiabilityPage({ filterControl, viewSwitcher }: { filterCo
         tableHeader={tableHeader}
         tableBody={tableBody}
         onExportCsv={() => {
-          window.location.href = "/api/admin/scenarios/parking/export.csv";
+          window.location.href = scopedAdminUrl("/api/admin/scenarios/parking/export.csv");
         }}
       />
       {selectedSubmission && (

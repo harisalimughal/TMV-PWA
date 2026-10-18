@@ -1,0 +1,45 @@
+/*
+ * Booking OS design tokens. Scoped to `.bos`, so nothing here reaches the rest of the admin or the driver app.
+ * Light is a warm ivory; dark is true black with grey steps (R = G = B for every neutral). Accents are semantic:
+ * azure = primary action, cyan = information, violet = scheduling, emerald = confirmed/success, amber = needs
+ * attention, coral = risk/error. `--bos-*-fg` variants are the text-safe shade of each accent (AA on surfaces);
+ * the plain accent is for fills, rings and chart marks. bookingTheme.test.ts checks the contrast.
+ */
+.bos {
+  --bos-canvas: #FAF7F0; --bos-surface: #FFFFFF; --bos-surface-2: #F4F0E6; --bos-surface-3: #ECE6D8;
+  --bos-line: #E4DDCC; --bos-line-strong: #CFC6B1;
+  --bos-ink: #1D1B16; --bos-ink-2: #55504A; --bos-ink-3: #6B665F;
+  --bos-azure: #258BFF; --bos-cyan: #20C5E8; --bos-violet: #7959F5; --bos-emerald: #16B887; --bos-amber: #F4AC45; --bos-coral: #F16870;
+  --bos-azure-fg: #0B5CC4; --bos-cyan-fg: #0A6A80; --bos-violet-fg: #5B3CD6; --bos-emerald-fg: #0B7352; --bos-amber-fg: #85540A; --bos-coral-fg: #BB343D;
+  --bos-azure-soft: #E8F2FF; --bos-cyan-soft: #E3F7FC; --bos-violet-soft: #EFEBFE; --bos-emerald-soft: #E1F6EE; --bos-amber-soft: #FDF1DD; --bos-coral-soft: #FDE9EA;
+  --bos-on-accent: #FFFFFF; --bos-primary: #1366D6;
+  --bos-shadow: 0 1px 2px rgb(60 48 20 / 6%), 0 8px 24px -12px rgb(60 48 20 / 14%);
+  --bos-radius: 16px; --bos-radius-sm: 10px;
+  --bos-font: "Inter Variable", var(--font-sans), system-ui, sans-serif;
+  background: var(--bos-canvas); color: var(--bos-ink); font-family: var(--bos-font);
+  font-variant-numeric: tabular-nums; border-radius: 20px;
+}
+html.tmv-admin[data-admin-theme="dark"] .bos {
+  --bos-canvas: #080808; --bos-surface: #121212; --bos-surface-2: #191919; --bos-surface-3: #222222;
+  --bos-line: #2A2A2A; --bos-line-strong: #3D3D3D;
+  --bos-ink: #F4F2EC; --bos-ink-2: #B7B3AA; --bos-ink-3: #928E85;
+  --bos-azure-fg: #5BA8FF; --bos-cyan-fg: #3FD2EE; --bos-violet-fg: #A590FF; --bos-emerald-fg: #34D3A2; --bos-amber-fg: #F7BF6B; --bos-coral-fg: #F68E94;
+  --bos-azure-soft: #0F2236; --bos-cyan-soft: #0B2A31; --bos-violet-soft: #1E1840; --bos-emerald-soft: #0B2A21; --bos-amber-soft: #33260F; --bos-coral-soft: #361618;
+  --bos-on-accent: #04101F; --bos-primary: #4BA0FF;
+  --bos-shadow: 0 0 0 1px rgb(255 255 255 / 3%);
+}
+.bos .bos-card { background: var(--bos-surface); border: 1px solid var(--bos-line); border-radius: var(--bos-radius); box-shadow: var(--bos-shadow); }
+.bos .bos-focus:focus-visible, .bos a:focus-visible, .bos button:focus-visible, .bos input:focus-visible, .bos select:focus-visible, .bos textarea:focus-visible, .bos [tabindex]:focus-visible {
+  outline: 2px solid var(--bos-primary); outline-offset: 2px;
+}
+.bos .bos-skeleton { background: linear-gradient(90deg, var(--bos-surface-2), var(--bos-surface-3), var(--bos-surface-2)); background-size: 200% 100%; animation: bos-shimmer 1.4s linear infinite; border-radius: 8px; }
+@keyframes bos-shimmer { to { background-position: -200% 0; } }
+@media (prefers-reduced-motion: reduce) {
+  .bos .bos-skeleton { animation: none; }
+  .bos * { transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; }
+}
+
+.bos, .bos .bos-card { min-width: 0; }
+.bos [class*="grid-cols"] > *, .bos .grid > * { min-width: 0; }
+/* Headings that receive focus from code (a new step, a result) are not controls: no ring. */
+.bos [tabindex="-1"]:focus-visible { outline: none; }

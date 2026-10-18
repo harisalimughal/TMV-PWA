@@ -1,4 +1,5 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { isAdminDocument, isAdminLocation } from "../lib/adminHost";
 
 /**
  * Theme preference + resolution.
@@ -44,7 +45,17 @@ function systemPrefersDark(): boolean {
   return typeof window !== "undefined" && !!window.matchMedia && window.matchMedia(MQ).matches;
 }
 
+/**
+ * The admin dashboard owns <html> on its own location (useAdminTheme). Writing the
+ * driver theme there put an inline color-scheme on the dashboard, so Midnight showed
+ * light date pickers and selects, and the loading screen flipped to the driver theme.
+ */
+function adminOwnsDocument(): boolean {
+  return isAdminDocument() || isAdminLocation(window.location.hostname, window.location.pathname);
+}
+
 function applyResolvedTheme(resolved: ResolvedTheme): void {
+  if (adminOwnsDocument()) return;
   const root = document.documentElement;
   root.dataset.theme = resolved;
   root.style.colorScheme = resolved;

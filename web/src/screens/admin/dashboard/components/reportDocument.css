@@ -69,3 +69,88 @@
   .report-job-facts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .report-document-header, .report-document-continuation, .report-record-meta, .report-signature, .report-media-section, .report-page-footer, .report-fact-list > div { break-inside: avoid; }
 }
+
+/* ---- shared header ---------------------------------------------------------- */
+.report-document .report-company { margin: 0 0 1px; font-size: 10.5px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: #65716f; }
+
+/* ---- Job Completed dossier --------------------------------------------------
+ * Fixed millimetre heights so buildDossierPages (PaperDossierReport.tsx) can pack
+ * A4 pages without overflow: photo row 104 mm, section title 14 mm. Paper is always
+ * the light palette (see the top of adminTheme.css). */
+.report-dossier { font-family: var(--font-sans); color: #1d2329; font-variant-numeric: tabular-nums; }
+.report-dossier .report-document-header { align-items: center; padding-bottom: 12px; margin-bottom: 16px; border-bottom: 1px solid #d6dde3; }
+.report-dossier .report-document-header h1 { font-size: 21px; font-weight: 700; }
+.report-dossier .report-page-body { display: block; }
+.report-dossier .report-record-meta { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px 20px; margin: 0 0 16px; padding: 12px 14px; border: 1px solid #e3e8ec; border-radius: 6px; background: #f7f9fa; }
+.report-dossier .report-record-meta dt { font-size: 9.5px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: #6b7680; }
+.report-dossier .report-record-meta dd { font-size: 12px; font-weight: 600; color: #1d2329; }
+.report-dossier .report-block { margin-bottom: 14px; }
+.report-dossier .report-section-title { height: 14mm; display: flex; align-items: flex-end; margin: 0; padding-bottom: 2.5mm; font-size: 13px; font-weight: 700; color: #1d2329; break-after: avoid; }
+.report-dossier .report-block > .report-section-title, .report-dossier .report-two-col .report-section-title { height: auto; padding: 0; margin-bottom: 6px; }
+.report-dossier .report-section-title span { margin-left: 4px; font-weight: 500; color: #6b7680; }
+.report-dossier .report-route { list-style: none; margin: 0; padding: 0; border: 1px solid #e3e8ec; border-radius: 6px; }
+.report-dossier .report-route li { display: grid; grid-template-columns: 74px minmax(0, 1fr); gap: 12px; padding: 8px 12px; font-size: 12px; font-weight: 600; line-height: 1.45; overflow-wrap: anywhere; }
+.report-dossier .report-route li + li { border-top: 1px solid #edf1f4; }
+.report-dossier .report-route-label { font-weight: 500; color: #6b7680; }
+.report-dossier .report-two-col { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; margin-bottom: 14px; align-items: start; }
+.report-dossier .report-fact-list { border: 1px solid #e3e8ec; border-radius: 6px; overflow: hidden; }
+.report-dossier .report-fact-list > div { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 6.5px 12px; background: #fff; }
+.report-dossier .report-fact-list > div + div { border-top: 1px solid #edf1f4; }
+.report-dossier .report-fact-list > div > span { font-size: 11.5px; line-height: 1.4; overflow-wrap: anywhere; }
+.report-dossier .report-fact-list > div > span:first-child { flex: 0 0 44%; color: #5b6670; }
+.report-dossier .report-fact-list > div > span:last-child { flex: 1; text-align: right; font-weight: 600; color: #1d2329; }
+.report-dossier .report-fact-list small { display: block; margin-top: 2px; font-size: 10px; font-weight: 500; color: #6b7680; }
+.report-dossier .report-money strong { font-weight: 700; }
+.report-dossier .report-value-danger { color: #b42318 !important; }
+.report-dossier .report-value-good { color: #167a45 !important; }
+.report-dossier .report-signature { display: grid; grid-template-columns: 62mm minmax(0, 1fr); gap: 14px; align-items: center; padding: 10px 12px; border: 1px solid #e3e8ec; border-radius: 6px; background: #fff; }
+.report-dossier .report-signature-image { height: 24mm; display: grid; place-items: center; border-radius: 4px; background: #f7f9fa; }
+.report-dossier .report-signature-image img { max-height: 21mm; max-width: 100%; object-fit: contain; mix-blend-mode: multiply; }
+.report-dossier .report-signature-lines p { margin: 0 0 3px; font-size: 11.5px; color: #3d4852; }
+.report-dossier .report-signature-heading { font-weight: 700; color: #1d2329 !important; }
+.report-dossier .report-scenario { display: grid; grid-template-columns: minmax(0, 1fr) 62mm; gap: 12px; align-items: start; margin-bottom: 6mm; }
+.report-dossier .report-scenario .report-signature { grid-template-columns: minmax(0, 1fr); }
+.report-dossier .report-photo-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6mm; height: 104mm; break-inside: avoid; }
+.report-dossier .report-photo { margin: 0; min-width: 0; }
+.report-dossier .report-photo-title { height: 6mm; font-size: 11.5px; font-weight: 700; color: #1d2329; }
+.report-dossier .report-photo-frame { height: 86mm; display: grid; place-items: center; overflow: hidden; border: 1px solid #e3e8ec; border-radius: 6px; background: #f7f9fa; }
+.report-dossier .report-photo-frame img { max-width: 100%; max-height: 100%; object-fit: contain; }
+.report-dossier .report-photo-caption { height: 8mm; margin: 1.5mm 0 0; font-size: 9.5px; line-height: 1.3; color: #6b7680; overflow: hidden; }
+.report-dossier .report-photo-missing { font-size: 12px; font-weight: 600; font-style: italic; color: #6b7680; }
+.report-dossier .report-note { height: 14mm; margin: 0; padding-top: 2mm; font-size: 12px; color: #5b6670; }
+.report-dossier .report-legal-text { margin: 0; padding: 9px 12px; border: 1px solid #e3e8ec; border-radius: 6px; background: #fff; font-size: 11.5px; line-height: 1.5; color: #1d2329; white-space: pre-wrap; }
+.report-dossier .report-template-meta { margin: 10px 0 0; font-size: 9.5px; line-height: 1.4; color: #6b7680; }
+.report-dossier .report-time { margin-bottom: 0; max-height: 100mm; }
+@media (max-width: 639px) {
+  .report-dossier .report-record-meta, .report-dossier .report-two-col, .report-dossier .report-scenario, .report-dossier .report-signature { grid-template-columns: minmax(0, 1fr); }
+  .report-dossier .report-photo-row { grid-template-columns: minmax(0, 1fr); height: auto; }
+  .report-dossier .report-photo-frame { height: 70vw; }
+}
+@media print {
+  /* Footer at the foot of every page. 268 mm, not the exact 269 mm left inside the 14 mm
+     margins, so rounding can never push a page over and print a blank one. */
+  .report-document.report-dossier .report-page-content { display: flex; flex-direction: column; min-height: 268mm; }
+  .report-document.report-dossier .report-page-footer { margin-top: auto; }
+  .report-dossier .report-record-meta { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .report-dossier .report-two-col { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+/* ---- Job Report tables and original booking text ---------------------------- */
+.report-dossier .report-table { width: 100%; border-collapse: collapse; border: 1px solid #e3e8ec; border-radius: 6px; font-size: 11.5px; }
+.report-dossier .report-table caption { caption-side: top; text-align: left; margin: 8px 0 4px; font-size: 10.5px; font-weight: 600; color: #5b6670; }
+.report-dossier .report-table thead th { padding: 6px 10px; background: #f1f4f7; border-bottom: 1px solid #d6dde3; font-size: 10px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: #5b6670; text-align: left; }
+.report-dossier .report-table thead { display: table-header-group; }
+.report-dossier .report-table tr { break-inside: avoid; }
+.report-dossier .report-table tbody th, .report-dossier .report-table tbody td { padding: 5px 10px; border-top: 1px solid #edf1f4; text-align: left; font-weight: 500; vertical-align: top; overflow-wrap: anywhere; }
+.report-dossier .report-table tbody th { font-weight: 600; color: #1d2329; width: 46%; }
+.report-dossier .report-table tbody td { color: #3d4852; }
+.report-dossier .report-table .report-num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.report-dossier .report-table th small { display: block; margin-top: 1px; font-size: 9.5px; font-weight: 500; color: #6b7680; white-space: normal; }
+.report-dossier .report-row-strong th, .report-dossier .report-row-strong td { font-weight: 700; color: #1d2329; background: #f7f9fa; }
+.report-dossier .report-table-note, .report-dossier .report-note-inline { margin: 6px 0 0; font-size: 10.5px; color: #5b6670; }
+.report-dossier .report-compare { margin-top: 8px; }
+.report-dossier .report-booking { margin-bottom: 8px; }
+.report-dossier .report-booking h3 { margin: 0 0 3px; font-size: 10.5px; font-weight: 700; color: #5b6670; }
+.report-dossier .report-booking pre { margin: 0; padding: 8px 10px; border: 1px solid #e3e8ec; border-radius: 6px; background: #f7f9fa; font: 10px/1.45 var(--font-sans); color: #1d2329; white-space: pre-wrap; overflow-wrap: anywhere; word-break: break-word; }
+.report-dossier .report-document-header { border-bottom: 2px solid #5b21b6; }
+.report-dossier .report-reference { margin: 3px 0 0; font-size: 11px; color: #5b6670; }

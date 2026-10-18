@@ -33,7 +33,9 @@ export function BottomActionBar({ children, note, noteTone = "muted", className 
     <div
       className={cx(
         "shrink-0 border-t border-line bg-surface/95 px-4 pt-3 shadow-dock backdrop-blur",
-        "pb-[calc(var(--bottom-nav-h,0px)+env(safe-area-inset-bottom)+12px)]",
+        // --bottom-nav-h already includes the safe area, so take the larger of the two
+        // rather than adding them (which double-counted the home-indicator inset).
+        "pb-[calc(max(var(--bottom-nav-h,0px),env(safe-area-inset-bottom))+12px)]",
         className
       )}
     >

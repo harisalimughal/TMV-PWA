@@ -1,3 +1,4 @@
+import { scopedAdminUrl } from "../../../../lib/adminDriverScope";
 import { withArrivalDistance } from "../../../../lib/trackerArrival";
 import { AdminFilterBar } from "../components/AdminFilterBar";
 import React, { useState, useRef, useEffect } from "react";
@@ -154,11 +155,11 @@ export function FinishedJobsPage({
     const cust = (job.customerName || "").toLowerCase();
     const p = (job.pickup || "").toLowerCase();
     const d = (job.dropoff || "").toLowerCase();
-    
+
     if (cust.includes("test") || cust === "hh" || cust === "number test") return true;
     if (p.length < 5 || d.length < 5) return true;
     if (!p.includes(" ") || !d.includes(" ")) return true; // Single word route
-    
+
     return false;
   };
 
@@ -217,8 +218,8 @@ export function FinishedJobsPage({
             </div>
           </div>
         </div>
-      )}
-
+      )}
+
       {/* CONSOLIDATED TOOLBAR CARD -- identical layout to JobsPage */}
       <AdminFilterBar dates={<DateRangePicker from={from} to={to} onChange={handleDateChange} />} count={<>{isLoading || isFetching ? "Updating..." : `${data?.pagination?.total ?? items.length} moves`}</>}>
 <div className="flex items-center p-1 bg-admin-surface rounded-card border border-admin-line/50 shrink-0">
@@ -293,7 +294,7 @@ export function FinishedJobsPage({
               if (from) params.set("from", from);
               if (to) params.set("to", to);
               if (debouncedSearch) params.set("search", debouncedSearch);
-              window.location.href = `/api/admin/jobs/export.csv?${params.toString()}`;
+              window.location.href = scopedAdminUrl(`/api/admin/jobs/export.csv?${params.toString()}`);
             }}
             className="p-2 rounded-card bg-admin-surface hover:bg-admin-line/40 text-admin-muted hover:text-admin-ink transition border border-admin-line/50"
             title="Export CSV"
@@ -516,7 +517,7 @@ export function FinishedJobsPage({
 
                         <td className="px-4">
                           <div className="flex flex-col items-start justify-center leading-tight">
-                            <button 
+                            <button
                               className={`font-semibold text-[14px] ${isUnassigned ? "text-admin-muted" : "text-admin-brand"}`}
                               onClick={(e) => e.stopPropagation()}
                             >
@@ -637,7 +638,7 @@ export function FinishedJobsPage({
                             </span>
                           </div>
                         </td>
-                        
+
                         <td className="px-4 text-center">
       <FolderActionDropdown
         hasFolderUrl={!!job.driveFolderUrl}
@@ -663,7 +664,7 @@ export function FinishedJobsPage({
                         </td>
                       </tr>
 
-                      
+
                     </React.Fragment>
                   );
                 })}

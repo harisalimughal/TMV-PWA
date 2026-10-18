@@ -10,6 +10,7 @@ import {
   isGpsLiveDeviceActive, matchDriverByPlateAndName
 } from "../../integrations/gpslive";
 import { listDriverProfiles } from "../../auth/driver-account.service";
+import { driverVisible } from "../driver-scope";
 import { jobsCollection } from "../../db/mongo";
 import { ExtraChargeType, Job } from "../../jobs/job.types";
 import { log } from "../../utils/logger";
@@ -199,7 +200,7 @@ export function dashboardFleetRoutes(): Router {
   router.get("/live", async (_req: Request, res: Response) => {
     try {
       const vehicles = await getLiveFleet();
-      return res.status(200).json({ vehicles, fetchedAt: new Date().toISOString() });
+      return res.status(200).json({ vehicles: vehicles.filter(vehicle => driverVisible(vehicle.driverInitials)), fetchedAt: new Date().toISOString() });
     } catch (error) {
       log.error("fleet live lookup failed", error);
       return res.status(502).json({ error: { code: "FLEET_LOOKUP_FAILED", message: "Failed to fetch live vehicle positions." } });
@@ -219,7 +220,7 @@ export function dashboardFleetRoutes(): Router {
   router.get("/congestion", async (_req: Request, res: Response) => {
     try {
       const rows = await getZoneDetections();
-      return res.status(200).json({ rows });
+      return res.status(200).json({ rows: rows.filter(row => driverVisible(row.driverInitials)) });
     } catch (error) {
       log.error("zone detections lookup failed", error);
       return res.status(502).json({ error: { code: "CONGESTION_LOOKUP_FAILED", message: "Failed to fetch congestion/tunnel zone detections." } });

@@ -1,6 +1,7 @@
 /* Design tokens (CSS custom properties) must load before Tailwind's layers so the
    `rgb(var(--token))` values they define are available to every generated utility. */
 @import "./styles/tokens.css";
+@import "./styles/chrome.css";
 
 /* Hanken Grotesk — the application typeface (human content: names, streets, copy).
    `wght.css` is the weight axis only (no italics — the UI uses none), split into
@@ -37,6 +38,9 @@ body {
   -webkit-tap-highlight-color: transparent; /* no grey flash on tap */
   -webkit-text-size-adjust: 100%;
   font-family: var(--font-sans);
+  /* Hanken Grotesk is light at 400 in small sizes; 450 keeps body copy from reading dim.
+     The admin dashboard resets this in adminTheme.css. */
+  font-weight: 450;
   background: rgb(var(--bg));
   color: rgb(var(--fg));
   text-rendering: optimizeLegibility;
@@ -58,7 +62,6 @@ body {
   font-size: 12px;
   font-weight: 600;
   letter-spacing: 0;
-  text-transform: uppercase;
   color: rgb(var(--fg-subtle));
 }
 
@@ -329,6 +332,21 @@ body {
     padding: 0 !important;
     opacity: 1 !important;
     pointer-events: auto !important;
+  }
+
+  /* Dialogs and drawers are portalled to <body>, outside #root: hide every body-level
+     layer except the report, so an open dialog can never print over the document. */
+  body.printing-report > *:not(#tmv-print-portal):not(.print-content) {
+    display: none !important;
+  }
+
+  /* Landscape documents (driver job report, driver breakdown) use the full landscape page width. */
+  body.printing-report #tmv-print-portal:has(.report-driver-jobs),
+  body:has(#tmv-print-portal) #tmv-print-portal:has(.report-driver-jobs),
+  body.printing-report #tmv-print-portal:has(.report-breakdown),
+  body:has(#tmv-print-portal) #tmv-print-portal:has(.report-breakdown) {
+    width: auto !important;
+    max-width: none !important;
   }
 
   body.printing-report #tmv-print-portal *,

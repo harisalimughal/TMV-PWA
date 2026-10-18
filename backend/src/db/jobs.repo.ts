@@ -2,6 +2,7 @@ import { getClient, jobsCollection } from "./mongo";
 import { Job } from "../jobs/job.types";
 import { DateTime } from "luxon";
 import { invalidateReportReads } from "../reports/report-read-cache";
+import { maExcluded } from "../admin/driver-scope";
 
 /** Replaces google/sheets.ts's upsertJob/getJob/listJobs. Same signatures deliberately,
  * so jobs.service.ts/booking.service.ts/workflow.engine.ts port by swapping the import
@@ -34,7 +35,9 @@ export async function saveRescheduledAttempt(previous: Job, next: Job): Promise<
 
 export async function getJob(jobId: string): Promise<Job | null> {
   const col = await jobsCollection();
-  const doc = await col.findOne({ _id: jobId } as any);
+  const doc = maExcluded()
+    ? (await col.aggregate<Job>([{ $match: { _id: jobId } }, ...excludedDriverStages()]).toArray())[0]
+    : await col.findOne({ _id: jobId } as any);
   if (!doc) return null;
   const { _id, ...job } = doc as any;
   return job as Job;
@@ -67,8 +70,25 @@ export async function listJobs(filter?: { driverInitials?: string; gpsliveImei?:
   const query: Record<string, unknown> = {};
   if (filter?.driverInitials) query.driverInitials = filter.driverInitials;
   if (filter?.gpsliveImei) query.$or = [{ gpsliveImei: filter.gpsliveImei }, { "gpsDeviceHistory.imei": filter.gpsliveImei }];
-  const docs = await col.find(query).toArray();
+  const docs = maExcluded()
+    ? await col.aggregate<Job>([{ $match: query }, ...excludedDriverStages()]).toArray()
+    : await col.find(query).toArray();
   return docs.map(({ _id, ...job }: any) => job as Job);
+}
+
+function displayDriverStages(): any[] {
+  const firstNonempty = (fields: Array<string | Record<string, unknown>>): any => fields.reduceRight((fallback: any, field) => ({
+    $cond: [{ $ne: [{ $ifNull: [field, ""] }, ""] }, field, fallback]
+  }), "");
+  return [
+    { $lookup: { from: "driver_job_summaries", localField: "jobId", foreignField: "jobId", as: "__driverSummary" } },
+    { $addFields: { __displayDriverInitials: { $toUpper: { $trim: { input: firstNonempty([
+      "$reportIdentity.initials", "$timeBilling.driverInitials", { $arrayElemAt: ["$__driverSummary.driverInitials", 0] }, "$driverInitials"
+    ]) } } } } }
+  ];
+}
+function excludedDriverStages(): any[] {
+  return maExcluded() ? [...displayDriverStages(), { $match: { __displayDriverInitials: { $ne: "MA" } } }, { $unset: ["__driverSummary", "__displayDriverInitials"] }] : [];
 }
 
 function escapeRegex(value: string): string {
@@ -137,6 +157,7 @@ export async function listJobsPage(filter: JobsPageFilter): Promise<{ items: Job
   const col = await jobsCollection();
 
   const andClauses: Record<string, any>[] = [];
+  if (maExcluded()) andClauses.push({ __displayDriverInitials: { $ne: "MA" } });
 
   if (filter.status) andClauses.push({ status: filter.status });
 
@@ -163,13 +184,7 @@ export async function listJobsPage(filter: JobsPageFilter): Promise<{ items: Job
 
   const pipeline: any[] = [];
   // Match the identity precedence used by dashboard normalization, including legacy summaries.
-  pipeline.push({ $lookup: { from: "driver_job_summaries", localField: "jobId", foreignField: "jobId", as: "__driverSummary" } });
-  const firstNonempty = (fields: Array<string | Record<string, unknown>>): any => fields.reduceRight((fallback: any, field) => ({
-    $cond: [{ $ne: [{ $ifNull: [field, ""] }, ""] }, field, fallback]
-  }), "");
-  pipeline.push({ $addFields: { __displayDriverInitials: { $toUpper: { $trim: { input: firstNonempty([
-    "$reportIdentity.initials", "$timeBilling.driverInitials", { $arrayElemAt: ["$__driverSummary.driverInitials", 0] }, "$driverInitials"
-  ]) } } } } });
+  pipeline.push(...displayDriverStages());
   if (filter.from || filter.to) {
     // Mirrors the old in-memory filter's semantics: prefer actualStart (when the job
     // has genuinely started) over bookedStart, so a job that ran late/early is filtered
@@ -226,6 +241,6 @@ export async function listJobsInRange(from?: string, to?: string): Promise<Job[]
   const range: Record<string, Date> = {};
   if (from) range.$gte = rangeBoundary(from);
   if (to) range.$lte = rangeBoundary(to, true);
-  const pipeline = [effectiveStartStage(), { $match: { __effectiveStart: range } }, { $project: { _id: 0 } }];
+  const pipeline = [effectiveStartStage(), { $match: { __effectiveStart: range } }, ...excludedDriverStages(), { $project: { _id: 0 } }];
   return col.aggregate<Job>(pipeline).toArray();
 }

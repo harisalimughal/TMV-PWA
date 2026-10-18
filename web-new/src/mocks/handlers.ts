@@ -1,0 +1,322 @@
+/**
+ * Dev mock API router. Maps `/api/...` requests to responses backed by an in-memory
+ * store, including the job workflow state machine (workflow.ts).
+ *
+ * DEV ONLY (see fixtures.ts). `handle()` returns null for any path it doesn't own, so
+ * the caller falls through to the real network.
+ */
+import type { ActivityEntry, EvidenceSummary, Job, DriverJobSummary, DriverJobSummaryInput } from "../api/jobs";
+import { DAMAGE_CATEGORIES } from "../scenarioSpec";
+import { DEFAULT_CONFIRMATION_TEXT, makeEvidenceItem, seedStore, type MockStore } from "./fixtures";
+import { applyTrigger, type WorkflowTrigger } from "./workflow";
+import { handleDriverActivity } from "./activity";
+import { handleDriverRecords, recordMockScenario, resetDriverRecords } from "./driverRecords";
+
+let store: MockStore = seedStore();
+
+/** Exposed for the HMR hook in install.ts. */
+export function resetStore(): void {
+  store = seedStore();
+  resetDriverRecords();
+}
+
+export interface MockResponse {
+  status: number;
+  body: unknown;
+  /** A file response (CSV export): sent as-is with this type instead of as JSON. */
+  file?: { contentType: string; filename: string };
+}
+
+const ok = (body: unknown): MockResponse => ({ status: 200, body });
+const err = (status: number, code: string, message: string): MockResponse => ({
+  status,
+  body: { error: { code, message } }
+});
+
+const HAPPY_ORDER = [
+  "READY",
+  "WAITING_ARRIVAL_PHOTO",
+  "WAITING_ARRIVAL_ISSUES_CHECK",
+  "WAITING_LOADED_PHOTO",
+  "IN_PROGRESS",
+  "WAITING_EMPTY_VAN_ISSUES_CHECK",
+  "WAITING_EXTRA_CHARGES",
+  "WAITING_OVERTIME",
+  "WAITING_TOTAL_CHARGES",
+  "WAITING_PAYMENT",
+  "WAITING_EMPTY_VAN_PHOTO",
+  "WAITING_CLIENT_CONFIRMATION",
+  "WAITING_REVIEW_CHECK",
+  "COMPLETED"
+];
+
+function reached(job: Job, state: string): boolean {
+  const at = HAPPY_ORDER.indexOf(job.currentState);
+  const target = HAPPY_ORDER.indexOf(state);
+  return at >= 0 && target >= 0 && at > target;
+}
+
+function evidenceFor(job: Job): EvidenceSummary {
+  const completed: Record<string, number> = {};
+  if (reached(job, "WAITING_ARRIVAL_PHOTO")) completed.Arrival = 1;
+  if (reached(job, "WAITING_LOADED_PHOTO")) completed.VanLoaded = 1;
+  if (reached(job, "WAITING_EMPTY_VAN_PHOTO")) completed.EmptyVan = 1;
+  return { completed, pending: {}, failed: {}, hasSignature: Boolean(job.signatureUrl) };
+}
+
+function suggestedTotal(job: Job): number {
+  if (job.totalCharges) return job.totalCharges;
+  let extras = 0;
+  if (job.extraCharges?.includes("London Congestion charge")) extras += 18;
+  if (job.extraCharges?.includes("Tunnel Charges")) extras += 13;
+  return job.basePrice + extras + (job.overtimeCharge ?? 0);
+}
+
+function logActivity(job: Job, action: string, fromState: string): void {
+  const entry: ActivityEntry = {
+    jobId: job.jobId,
+    driver: store.driver.initials,
+    action,
+    fromState,
+    toState: job.currentState,
+    timestamp: new Date().toISOString()
+  };
+  (store.activity[job.jobId] ??= []).unshift(entry);
+}
+
+function sendMockOnMyWay(jobId: string): MockResponse {
+  if (pendingManual()) return err(409, "MANUAL_DETAILS_PENDING", "Submit Manual details before the next job.");
+  const job = store.jobs[jobId];
+  if (!job) return err(404, "JOB_NOT_FOUND", "That job no longer exists.");
+  if (!job.onMyWayAt) {
+    const now = new Date().toISOString();
+    store.jobs[jobId] = { ...job, onMyWayAt: now, updatedAt: now };
+  }
+  return ok({ job: store.jobs[jobId] });
+}
+
+function bucketJobs(ids: string[]): Job[] {
+  return ids.map(id => store.jobs[id]).filter(Boolean);
+}
+
+function transition(jobId: string, trigger: WorkflowTrigger, input?: Record<string, string[]>): MockResponse {
+  if (trigger === "start" && pendingManual()) return err(409, "MANUAL_DETAILS_PENDING", "Submit Manual details before the next job.");
+  const job = store.jobs[jobId];
+  if (!job) return err(404, "JOB_NOT_FOUND", "That job no longer exists.");
+  const fromState = job.currentState;
+  const updated = applyTrigger(job, trigger, input ?? {});
+  if (updated.status === "COMPLETED" && job.status !== "COMPLETED") updated.manualDetailsRequiredAt = new Date().toISOString();
+  store.jobs[jobId] = updated;
+  if (updated.currentState !== fromState) logActivity(updated, trigger, fromState);
+  return ok({
+    job: updated,
+    suggestedTotal: suggestedTotal(updated),
+    evidenceItems: store.evidence[jobId] ?? []
+  });
+}
+
+function pendingManual(): Job | null {
+  return Object.values(store.jobs).find(job => job.status === "COMPLETED" && job.manualDetailsRequiredAt && !store.manualDetails[job.jobId]) ?? null;
+}
+
+const PHOTO_STATE_TYPE: Record<string, string> = {
+  WAITING_ARRIVAL_PHOTO: "Arrival",
+  WAITING_LOADED_PHOTO: "VanLoaded",
+  WAITING_EMPTY_VAN_PHOTO: "EmptyVan"
+};
+
+/** Mock photo upload: stash one synthetic photo for the step's type (up to its max)
+ *  before advancing, so a later step-back shows something real to delete. */
+function recordMockEvidence(jobId: string): void {
+  const job = store.jobs[jobId];
+  const type = job && PHOTO_STATE_TYPE[job.currentState];
+  if (!type) return;
+  const max = job.currentState === "WAITING_EMPTY_VAN_PHOTO" ? 1 : 2;
+  const items = store.evidence[jobId] ?? (store.evidence[jobId] = []);
+  if (items.filter(i => i.evidenceType === type).length < max) {
+    items.push(makeEvidenceItem(type));
+  }
+}
+
+function parse(bodyText?: string): any {
+  if (!bodyText) return {};
+  try {
+    return JSON.parse(bodyText);
+  } catch {
+    return {};
+  }
+}
+
+function parseCategories(raw: string | undefined): string[] {
+  if (raw) {
+    try {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        const categories = parsed.map(item => String(item).trim()).filter(Boolean);
+        if (categories.length > 0) return Array.from(new Set(categories));
+      }
+    } catch {
+      const categories = raw.split(/\r?\n/).map(item => item.trim()).filter(Boolean);
+      if (categories.length > 0) return Array.from(new Set(categories));
+    }
+  }
+  return DAMAGE_CATEGORIES;
+}
+
+/**
+ * @param method  upper-case HTTP method
+ * @param path    pathname only, e.g. "/api/jobs/10231" (no origin, no query)
+ * @param bodyText JSON request body as a string, when present
+ * @param search  the URL's query string, e.g. "?page=2&q=van", when present
+ */
+export function handle(method: string, path: string, bodyText?: string, search = ""): MockResponse | null {
+  if (!path.startsWith("/api/")) return null;
+
+  // Before the /api/jobs/:id matcher below, which would swallow pending-submissions.
+  const driverRes = handleDriverRecords(method, path, new URLSearchParams(search));
+  if (driverRes) return driverRes;
+
+  // ---- auth --------------------------------------------------------------------
+  if (path === "/api/auth/me" && method === "GET") {
+    return store.loggedOut
+      ? err(401, "UNAUTHENTICATED", "No active session.")
+      : ok({ driver: store.driver });
+  }
+  if (path === "/api/auth/login" && method === "POST") {
+    store.loggedOut = false;
+    return ok({ driver: store.driver });
+  }
+  if (path === "/api/auth/logout" && method === "POST") {
+    store.loggedOut = true;
+    return ok({ ok: true });
+  }
+  if (path === "/api/auth/forgot-password" && method === "POST") {
+    return ok({ message: "If that email is registered, a reset link is on its way." });
+  }
+  if (path === "/api/auth/reset-password" && method === "POST") {
+    store.loggedOut = false;
+    return ok({ driver: store.driver });
+  }
+
+  // ---- admin (minimal — enough to mount the dashboard shell for visual QA) ----
+  if (path === "/api/admin/me" && method === "GET") {
+    return store.loggedOut ? err(401, "UNAUTHENTICATED", "No admin session.") : ok({ ok: true });
+  }
+  if (path === "/api/admin/login" && method === "POST") {
+    store.loggedOut = false;
+    return ok({ ok: true });
+  }
+  if (path === "/api/admin/logout" && method === "POST") {
+    store.loggedOut = true;
+    return ok({ ok: true });
+  }
+  if (path === "/api/admin/settings" && method === "GET") {
+    return ok({
+      settings: [
+        {
+          key: "LIABILITY_DAMAGE_CATEGORIES",
+          label: "Liability Damage Categories",
+          type: "textarea",
+          fallback: JSON.stringify(DAMAGE_CATEGORIES),
+          hint: "JSON array used by the driver Liability Report category picker.",
+          value: store.settings.LIABILITY_DAMAGE_CATEGORIES ?? ""
+        }
+      ]
+    });
+  }
+  if (path === "/api/admin/settings" && method === "POST") {
+    const { key, value } = parse(bodyText);
+    if (key !== "LIABILITY_DAMAGE_CATEGORIES") return err(400, "VALIDATION_FAILED", "Unknown setting key.");
+    store.settings.LIABILITY_DAMAGE_CATEGORIES = String(value ?? "");
+    return ok({ ok: true });
+  }
+
+  // Driver activity and messages (before the /api/jobs/:id matcher below, which would swallow them).
+  const driverActivity = handleDriverActivity(method, path, search, bodyText, Object.values(store.jobs), store.driver);
+  if (driverActivity) return driverActivity;
+
+  // ---- jobs ------------------------------------------------------------------
+  if (path === "/api/jobs/list" && method === "GET") {
+    return ok({
+      driver: { fullName: store.driver.fullName, initials: store.driver.initials },
+      today: bucketJobs(store.buckets.today),
+      past: bucketJobs(store.buckets.past),
+      next: bucketJobs(store.buckets.next),
+      pendingManualDetails: pendingManual()
+    });
+  }
+  if (path === "/api/jobs/liability-categories" && method === "GET") {
+    return ok({ categories: parseCategories(store.settings.LIABILITY_DAMAGE_CATEGORIES) });
+  }
+
+  const jobMatch = path.match(/^\/api\/jobs\/([^/]+)(\/[^?]*)?$/);
+  if (jobMatch) {
+    const jobId = decodeURIComponent(jobMatch[1]);
+    const sub = jobMatch[2] ?? "";
+    const job = store.jobs[jobId];
+
+    if (sub === "" && method === "GET") {
+      if (!job) return err(404, "JOB_NOT_FOUND", "That job no longer exists.");
+      return ok({
+        job,
+        activity: store.activity[jobId] ?? [],
+        evidence: evidenceFor(job),
+        evidenceItems: store.evidence[jobId] ?? [],
+        suggestedTotal: suggestedTotal(job),
+        confirmationText: DEFAULT_CONFIRMATION_TEXT,
+        driverJobSummary: store.manualDetails[jobId] ?? null
+      });
+    }
+    if (sub === "/on-my-way" && method === "POST") return sendMockOnMyWay(jobId);
+    if (sub === "/start" && method === "POST") return transition(jobId, "start");
+    if (sub === "/driver-summary" && method === "POST") {
+      if (!job || job.status !== "COMPLETED") return err(400, "VALIDATION_FAILED", "Complete this job first.");
+      const input = parse(bodyText) as DriverJobSummaryInput;
+      if (store.manualDetails[jobId]) return ok({ summary: store.manualDetails[jobId] });
+      const hoursOnly = input.schemaVersion === 3;
+      const paymentBreakdown = hoursOnly ? (job.paymentBreakdown ?? []).map(row => ({ method: row.method, amountPence: Math.round(row.amount * 100) })) : (input.paymentMethods ?? []).map(method => ({ method, amountPence: Math.round(Number(input.paymentAmounts?.[method]) * 100) }));
+      const chargeItems = hoursOnly ? ([
+        { type: "congestion" as const, selected: job.extraCharges.includes("London Congestion charge"), amountPence: job.chargeSnapshot?.congestionPence ?? null },
+        { type: "tunnel" as const, selected: job.extraCharges.includes("Tunnel Charges"), amountPence: job.chargeSnapshot?.tunnelPence ?? null }
+      ]).filter(row => row.selected).map(({ type, amountPence }) => ({ type, amountPence })) : (input.chargeItems ?? []).map(row => ({ type: row.type, amountPence: row.amount.trim() ? Math.round(Number(row.amount) * 100) : null, name: row.name, reference: row.reference }));
+      store.manualDetails[jobId] = {
+        schemaVersion: hoursOnly ? 3 : 2, driverJobHours: hoursOnly ? Number(input.driverJobHours) : undefined, jobId, driverEmail: store.driver.email, driverInitials: job.driverInitials,
+        startTime: input.startTime ?? job.actualStart, endTime: input.endTime ?? job.actualFinish, helperName: input.helperName ?? "", helperHours: Number(input.helperHours || 0),
+        paymentBreakdown: paymentBreakdown as NonNullable<DriverJobSummary["paymentBreakdown"]>, paymentMethod: hoursOnly ? job.paymentMethod : input.paymentMethods?.join(", ") || "No payment received",
+        amountCollectedPence: paymentBreakdown.filter(row => row.method !== "Invoice").reduce((sum, row) => sum + row.amountPence, 0),
+        noPaymentReceived: input.noPaymentReceived, invoiceAmountPence: paymentBreakdown.find(row => row.method === "Invoice")?.amountPence ?? 0,
+        congestionCharge: chargeItems.some(row => row.type === "congestion"), congestionChargePence: chargeItems.find(row => row.type === "congestion")?.amountPence ?? 0,
+        chargeItems, submittedAt: new Date().toISOString()
+      };
+      return ok({ summary: store.manualDetails[jobId] });
+    }
+    if (sub === "/evidence" && method === "POST") {
+      recordMockEvidence(jobId);
+      return transition(jobId, "evidence");
+    }
+    const evidenceDelete = sub.match(/^\/evidence\/([^/]+)$/);
+    if (evidenceDelete && method === "DELETE") {
+      const id = decodeURIComponent(evidenceDelete[1]);
+      store.evidence[jobId] = (store.evidence[jobId] ?? []).filter(item => item.evidenceId !== id);
+      return ok({ evidenceItems: store.evidence[jobId] });
+    }
+    if (sub === "/signature" && method === "POST") return transition(jobId, "signature");
+    if (sub === "/actions" && method === "POST") {
+      const { action, input } = parse(bodyText);
+      if (!action) return err(400, "BAD_REQUEST", "Missing action.");
+      return transition(jobId, action as WorkflowTrigger, input);
+    }
+    if (sub.startsWith("/scenarios/") && method === "POST") {
+      recordMockScenario(jobId, decodeURIComponent(sub.slice("/scenarios/".length)));
+      if (job && job.currentState.endsWith("ISSUES_CHOICE")) transition(jobId, "scenario");
+      return ok({ ok: true });
+    }
+  }
+
+  // ---- standalone storage scenarios ---------------------------------------
+  if (/^\/api\/storage\/[^/]+$/.test(path) && method === "POST") {
+    return ok({ ok: true });
+  }
+
+  return err(404, "NOT_FOUND", `No mock handler for ${method} ${path}`);
+}

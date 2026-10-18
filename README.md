@@ -60,6 +60,17 @@ live on TMV-Chat-bot's dashboard.
 
 ## Local dev
 
+The supplied `web-new` dashboard has been integrated into `web`, which remains the
+frontend build and serving directory. The original snapshot is retained. All supplied
+UI modules remain present, including Booking OS views awaiting further backend work.
+Existing job workflows and data stores are preserved; new enquiries and admin Activity
+read markers use separate collections. See
+[the integration plan and contract coverage](backend/docs/new-frontend-integration.md)
+for connected APIs, limitations and verification results. No migration is required.
+
+Frontend development uses the configured backend by default. To preview fictional data
+explicitly, set `VITE_MOCK_API=true`; production builds exclude the mock API.
+
 ```bash
 # backend
 cd backend && npm install && npm run dev   # listens on PORT (see .env)

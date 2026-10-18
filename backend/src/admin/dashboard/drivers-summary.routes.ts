@@ -19,6 +19,7 @@ import { createReportReadCache } from "../../reports/report-read-cache";
 import type { DriverMovingSummary } from "./driver-summary-movement";
 import { NormalizedJob } from "./types";
 import { normalizedPayments } from "../../reports/report-payments";
+import { driverVisible } from "../driver-scope";
 
 interface DriverStat {
   initials: string;
@@ -62,6 +63,8 @@ interface DriverStat {
 }
 
 export function summarizeDrivers(drivers: DriverProfile[], jobs: NormalizedJob[]) {
+  drivers = drivers.filter(driver => driverVisible(driver.initials));
+  jobs = jobs.filter(job => driverVisible(job.driverInitials));
   const driverStats = new Map<string, DriverStat>();
 
   // Seed from the roster so an inactive/unassigned driver still shows up with zeroes.

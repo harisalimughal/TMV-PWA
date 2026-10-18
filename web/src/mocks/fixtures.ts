@@ -9,9 +9,10 @@ import type { ActivityEntry, EvidenceItem, Job, DriverJobSummary } from "../api/
 import type { DriverProfile } from "../api/auth";
 
 export const mockDriver: DriverProfile = {
-  email: "sam.driver@themanvan.co.uk",
-  fullName: "Sam Driver",
-  initials: "SD"
+  email: "caio@example.test",
+  fullName: "Caio",
+  initials: "KA",
+  vanRegistration: "LK21 TMV"
 };
 
 export const DEFAULT_CONFIRMATION_TEXT =
@@ -209,8 +210,13 @@ export function seedStore(): MockStore {
       basePrice: 285,
       bookedStart: iso(0, 8, 30),
       bookedFinish: iso(0, 11, 30),
-      status: "READY",
-      currentState: "READY"
+      // Already under way (arrived, loading the van) so the dev Liability tab has an
+      // active job with recorded reports to show. Tom Fletcher's 13:30 job below
+      // stays READY for the "I'm on my way" -> Proof of arrival path.
+      status: "IN_PROGRESS",
+      currentState: "WAITING_LOADED_PHOTO",
+      onMyWayAt: iso(0, 8, 5),
+      actualStart: iso(0, 8, 32)
     }),
     makeJob({
       jobId: "10232",

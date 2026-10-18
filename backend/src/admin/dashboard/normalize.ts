@@ -11,6 +11,7 @@ import { listDriverProfiles } from "../../auth/driver-account.service";
 import { ExtraChargeType, Job } from "../../jobs/job.types";
 import { EvidenceStatus, EvidenceType } from "../../jobs/job.types";
 import { fromPounds, Pence, pence } from "../../utils/money";
+import { driverVisible } from "../driver-scope";
 import { reportPayments, poundsToReportPence } from "../../reports/report-payments";
 import { MongoDataset } from "./read";
 import { toThumbnailUrl } from "../../storage/cloudinary";
@@ -455,7 +456,7 @@ export async function normalizeMongoDataset(dataset: MongoDataset): Promise<Norm
     });
   }
 
-  return normalizedJobs;
+  return normalizedJobs.filter(job => driverVisible(job.driverInitials));
 }
 
 function safePence(value: unknown): Pence {

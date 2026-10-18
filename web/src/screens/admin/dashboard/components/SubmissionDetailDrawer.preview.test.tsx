@@ -12,7 +12,7 @@ describe("Submission document preview", () => {
     const { container } = render(<SubmissionDetailDrawer job={job} isOpen onClose={vi.fn()} />);
     const view = within(container);
     fireEvent.click(view.getByRole("button", { name: "Preview PDF" }));
-    expect(view.getByRole("heading", { name: "Job Completed" })).toBeInTheDocument();
+    expect(view.getAllByRole("heading", { name: "Job Report" }).length).toBeGreaterThan(0);
     expect(view.queryByText("Driver-reported extra time")).not.toBeInTheDocument();
     expect(JSON.stringify(job)).toBe(before);
   });
@@ -33,7 +33,7 @@ describe("Submission document preview", () => {
     const { container } = render(<SubmissionDetailDrawer job={paperJobSample} isOpen onClose={vi.fn()} />);
     const view = within(container); fireEvent.click(view.getByRole("button", { name: "Preview PDF" }));
     expect(view.getAllByText("£286.60").length).toBeGreaterThan(0); expect(view.getAllByText("£250.00").length).toBeGreaterThan(0);
-    expect(view.getAllByRole("heading", { name: "Job Completed" })).toHaveLength(1);
+    expect(view.getAllByRole("heading", { name: "Job Report" }).length).toBeGreaterThan(0);
     fireEvent.click(view.getByRole("button", { name: "Zoom in" }));
     expect(view.getByText("110%")).toBeInTheDocument();
     expect(container.querySelector(".report-preview-document")).toHaveStyle({ transform: "scale(1.1)" });

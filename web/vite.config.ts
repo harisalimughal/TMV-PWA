@@ -4,6 +4,8 @@ import { fileURLToPath } from "node:url";
 import { defineConfig, loadEnv } from "vite";
 import react from "@vitejs/plugin-react";
 import { VitePWA } from "vite-plugin-pwa";
+import { adminChunksPlugin, isAdminOnlyFile } from "./scripts/adminChunks";
+import { resolveBuildSha } from "./scripts/buildSha";
 
 /* ---- version / build identity ------------------------------------------------
  * Single source of truth for the version shown in PWA Settings: package.json.
@@ -28,7 +30,7 @@ function resolveBuildId(): string {
 }
 
 // Point the dev server's /api proxy at a remote backend instead of running one
-// locally: set BACKEND_TARGET in web/.env.local (gitignored), e.g.
+// locally: set BACKEND_TARGET in .env.local (gitignored, see .env.example), e.g.
 // BACKEND_TARGET=https://chat.themanvan.co.uk
 // Defaults to the local backend on :8090 when unset.
 const localEnv = loadEnv("development", process.cwd(), "BACKEND_TARGET");
@@ -42,6 +44,26 @@ export default defineConfig({
   },
   plugins: [
     react(),
+    // Stamps the commit into index.html: <meta name="tmv-build" content="<short sha>">.
+    {
+      name: "tmv-build-meta",
+      transformIndexHtml: () => [
+        {
+          tag: "meta",
+          attrs: {
+            name: "tmv-build",
+            content: resolveBuildSha(process.env, () =>
+              execFileSync("git", ["rev-parse", "--short", "HEAD"], {
+                stdio: ["ignore", "pipe", "ignore"],
+              }).toString()
+            ),
+          },
+          injectTo: "head",
+        },
+      ],
+    },
+    // Marks admin-only chunks so the precache below can leave them out (see the file).
+    adminChunksPlugin(),
     VitePWA({
       // "prompt", not "autoUpdate": a new service worker installs and then WAITS, so
       // the app can surface an explicit "Update available / Update Now" flow (see
@@ -123,13 +145,16 @@ export default defineConfig({
         // first offline launch with no fallback flash.
         globPatterns: ["**/*.{js,css,html,ico,png,svg,woff2}"],
 
-        // The admin dashboard is a separate lazy chunk (~920kB) that no driver ever
+        // The admin dashboard is a separate lazy chunk (~1 MB) that no driver ever
         // opens. Without this it still got precached on install, so every driver
         // downloaded it in the background even though it's no longer in their initial
         // bundle -- which would have thrown away most of the benefit of splitting it.
-        // The dashboard runs on desktop and fetches its chunk on demand.
+        // The dashboard runs on desktop and fetches its chunks on demand.
+        // `AdminApp-*` is excluded by name here; manifestTransforms below also drops every
+        // other admin-only chunk (lazy admin pages, their CSS) using the chunk graph from
+        // scripts/adminChunks.ts. `npm run check:precache` verifies the result.
         //
-        // The non-latin Inter subsets (Cyrillic / Greek / Vietnamese / latin-ext) are
+        // Non-latin font subsets (Cyrillic / Greek / Vietnamese / latin-ext) are
         // ignored too: the UI is English, so they'd only ever sit unused in the
         // cache. They still load straight from the network on the rare name that
         // needs them.
@@ -139,7 +164,15 @@ export default defineConfig({
           "**/inter-cyrillic*",
           "**/inter-greek*",
           "**/inter-vietnamese*",
-          "**/inter-latin-ext*"
+          "**/inter-latin-ext*",
+          "**/hanken-grotesk-vietnamese*",
+          "**/hanken-grotesk-latin-ext*",
+          "**/ibm-plex-mono-cyrillic*",
+          "**/ibm-plex-mono-vietnamese*",
+          "**/ibm-plex-mono-latin-ext*"
+        ],
+        manifestTransforms: [
+          async entries => ({ manifest: entries.filter(entry => !isAdminOnlyFile(entry.url)), warnings: [] })
         ]
       }
     })

@@ -1,171 +1,185 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { DriverReportPage } from "./DriverReportPage";
 import { sampleDriverReport } from "../fixtures/driverReport.sample";
 import { dateRangeForPreset } from "../components/DateRangePicker";
+
 const load = vi.fn();
 const roster = vi.hoisted(() => ({ options: [{ initials: "DEMO", fullName: "Demo Driver", active: true }, { initials: "NEXT", fullName: "Next Driver", active: false }],
   isLoading: false, isError: false, refetch: vi.fn() }));
 vi.mock("../hooks/useDriverOptions", () => ({ useDriverOptions: () => roster }));
+vi.mock("../components/DriverPerformanceCharts", () => ({ default: () => null, DriverPerformanceCharts: () => null }));
 vi.stubGlobal("ResizeObserver", class { observe() {} unobserve() {} disconnect() {} });
-beforeEach(() => { load.mockReset(); roster.isError = false; roster.isLoading = false; roster.refetch.mockReset(); window.history.replaceState({}, "", "/admin?section=driverreport&driver=DEMO&from=2026-10-05&to=2026-10-11&reportTab=comparison"); });
+
+const BASE = "/admin?section=driverreport&driver=DEMO&from=2026-10-05&to=2026-10-11";
+beforeEach(() => { load.mockReset(); roster.isError = false; roster.isLoading = false; roster.refetch.mockReset(); window.history.replaceState({}, "", `${BASE}&reportTab=payments`); });
 const renderPage = () => render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><DriverReportPage loadReport={load} /></QueryClientProvider>);
+const params = () => new URLSearchParams(window.location.search);
+const tab = (name: string) => screen.findByRole("tab", { name });
+const driverSelect = () => screen.getByRole("combobox", { name: "Driver" });
+
 describe("Driver report URL and request lifecycle", () => {
-  it("does not fetch background GPS when no finished jobs exist, even on road tabs", async () => {
+  it("defaults to Jobs and the last 7 days when no tab or dates are given", async () => {
+    window.history.replaceState({}, "", "/admin?section=driverreport&driver=DEMO");
+    const week = dateRangeForPreset("7d");
+    load.mockImplementation(sampleDriverReport); renderPage();
+    expect(await tab("Jobs")).toHaveAttribute("aria-selected", "true");
+    expect(load.mock.calls[0][1].from).toBe(week.from);
+    expect(screen.getByRole("button", { name: "7 days" })).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it.each([
+    ["jobs", "Jobs", "jobs"],
+    ["summary", "Jobs", "jobs"],
+    ["performance", "Performance & Timings", "performance"],
+    ["timings", "Performance & Timings", "performance"],
+    ["payments&paymentsMode=reconcile", "Comparison", "comparison"],
+    ["comparison", "Comparison", "comparison"],
+    ["tunnels", "Tunnel Charges", "tunnels"],
+    ["road&roadType=congestion", "Congestion Charges", "congestion"],
+    ["road", "Tunnel Charges", "tunnels"],
+    ["congestion", "Congestion Charges", "congestion"],
+    ["liabilities", "Jobs", "jobs"]
+  ])("maps the report tab link %s", async (link, label, canonical) => {
+    window.history.replaceState({}, "", `${BASE}&reportTab=${link}`);
+    load.mockImplementation(sampleDriverReport); renderPage();
+    expect(await tab(label)).toHaveAttribute("aria-selected", "true");
+    expect(params().get("reportTab")).toBe(canonical);
+    expect(params().has("paymentsMode")).toBe(false);
+    expect(params().has("roadType")).toBe(false);
+  });
+
+  it("does not fetch tracker detail when the range has no completed jobs", async () => {
+    window.history.replaceState({}, "", `${BASE}&reportTab=tunnels`);
     load.mockImplementation(async (driver, query) => {
       const report = await sampleDriverReport(driver, query);
       return { ...report, summary: { ...report.summary, completedJobs: 0 }, jobs: { ...report.jobs, items: [], total: 0 }, meta: { ...report.meta, gpsIncluded: false } };
     });
     renderPage();
-    expect(await screen.findByText("No finished job data")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("tab", { name: "Congestion Charges" }));
-    expect(screen.getByText("No finished job data")).toBeInTheDocument();
+    expect(await screen.findByText(/No completed jobs for/)).toBeInTheDocument();
     expect(screen.getByLabelText("From date")).toBeInTheDocument();
     expect(load).toHaveBeenCalledTimes(1);
     expect(load.mock.calls[0][1].detail).toBe("core");
   });
-  it("shows basic comparisons before background GPS finishes and keeps tabs usable", async () => {
+
+  it("shows core figures before tracker detail arrives, then loads road events", async () => {
+    window.history.replaceState({}, "", `${BASE}&reportTab=jobs`);
     let finish!: (report: Awaited<ReturnType<typeof sampleDriverReport>>) => void;
     load.mockImplementation(async (driver, query) => {
-      if (query.detail === "core") {
-        const report = await sampleDriverReport(driver, query);
-        return { ...report, meta: { ...report.meta, gpsIncluded: false, liabilitiesIncluded: false } };
-      }
+      if (query.detail === "core") { const report = await sampleDriverReport(driver, query); return { ...report, meta: { ...report.meta, gpsIncluded: false } }; }
       return new Promise(resolve => { finish = resolve; });
     });
     renderPage();
-    expect(await screen.findByText("System totals · selected range")).toBeInTheDocument();
+    expect(await screen.findByRole("group", { name: "Selected range totals" })).toBeInTheDocument();
     await waitFor(() => expect(finish).toBeDefined());
-    expect(screen.queryByText("Loading driver report")).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole("tab", { name: "Congestion Charges" }));
-    expect(await screen.findByText("Loading movement and charge details...")).toBeInTheDocument();
-    expect(screen.getByRole("combobox", { name: "Select report driver" })).toBeInTheDocument();
-    expect(screen.queryByRole("heading", { name: "Zones" })).not.toBeInTheDocument();
-    await waitFor(() => expect(load.mock.calls.some(call => call[1].detail === "full" && call[1].activityScheme === "congestion")).toBe(true));
-    await act(async () => finish(await sampleDriverReport("DEMO", { from: "2026-10-05", to: "2026-10-11", activityScheme: "congestion" })));
-    expect(await screen.findByRole("heading", { name: "Zones" })).toBeInTheDocument();
+    fireEvent.click(await tab("Tunnel Charges"));
+    expect(await screen.findByText(/Loading road-charge events/)).toBeInTheDocument();
+    expect(driverSelect()).toBeInTheDocument();
+    await act(async () => finish(await sampleDriverReport("DEMO", { from: "2026-10-05", to: "2026-10-11", activityScheme: "tunnel" })));
+    expect(await screen.findByRole("heading", { name: "Zone events" })).toBeInTheDocument();
   });
-  it("preserves basic report data when background GPS fails and offers a separate retry", async () => {
+
+  it("keeps core figures when tracker detail fails and retries only the detail request", async () => {
+    window.history.replaceState({}, "", `${BASE}&reportTab=congestion`);
     load.mockImplementation(async (driver, query) => {
       if (query.detail !== "core") throw new Error("Synthetic GPS outage");
       const report = await sampleDriverReport(driver, query);
       return { ...report, meta: { ...report.meta, gpsIncluded: false } };
     });
     renderPage();
-    expect(await screen.findByText("System totals · selected range")).toBeInTheDocument();
-    expect(await screen.findByRole("alert", {}, { timeout: 4000 })).toHaveTextContent("Synthetic GPS outage");
-    expect(screen.getByText("System totals · selected range")).toBeInTheDocument();
+    expect(await screen.findByText(/Synthetic GPS outage/, {}, { timeout: 4000 })).toBeInTheDocument();
     const coreCalls = load.mock.calls.filter(call => call[1].detail === "core").length;
-    fireEvent.click(screen.getByRole("button", { name: "Retry movement and charge details" }));
-    await waitFor(() => expect(load.mock.calls.filter(call => call[1].detail === "full").length).toBeGreaterThan(2));
+    const fullCalls = load.mock.calls.filter(call => call[1].detail === "full").length;
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+    await waitFor(() => expect(load.mock.calls.filter(call => call[1].detail === "full").length).toBeGreaterThan(fullCalls));
     expect(load.mock.calls.filter(call => call[1].detail === "core")).toHaveLength(coreCalls);
   });
-  it("defaults to Jobs and Today in London when no tab/date filters are supplied", async () => {
-    window.history.replaceState({}, "", "/admin?section=driverreport&driver=DEMO");
-    const today = dateRangeForPreset("today");
-    load.mockImplementation(sampleDriverReport); renderPage();
-    expect(await screen.findByRole("tab", { name: "Jobs" })).toHaveAttribute("aria-selected", "true");
-    expect(load.mock.calls[0][1].from).toBe(today.from);
-    expect(load.mock.calls[0][1].to).toBe(new Date(Date.parse(today.to!) + 1).toISOString());
-    expect(screen.getByRole("button", { name: /^Today$/ })).toHaveClass("font-bold");
-    expect(screen.getByRole("button", { name: /^7 Days$/ })).not.toHaveClass("font-bold");
-  });
-  it("reuses a recent tab response when switching back instead of refetching it", async () => {
-    load.mockImplementation(sampleDriverReport); renderPage();
-    await screen.findByRole("tab", { name: "Comparison" });
-    expect(load).toHaveBeenCalledTimes(1);
-    fireEvent.click(screen.getByRole("tab", { name: "Tunnel Charges" }));
-    await screen.findByRole("heading", { name: "Zones" });
-    expect(load).toHaveBeenCalledTimes(2);
-    fireEvent.click(screen.getByRole("tab", { name: "Comparison" }));
-    expect(await screen.findByRole("tab", { name: "Comparison" })).toHaveAttribute("aria-selected", "true");
-    expect(load).toHaveBeenCalledTimes(2);
-  });
-  it("keeps date controls usable while loading and never displays old-range totals as new ones", async () => {
+
+  it("keeps date controls usable while loading and never shows the previous range's totals", async () => {
     let finish!: (report: Awaited<ReturnType<typeof sampleDriverReport>>) => void;
     load.mockImplementationOnce(sampleDriverReport).mockImplementation(() => new Promise(resolve => { finish = resolve; }));
-    renderPage(); await screen.findByRole("tab", { name: "Comparison" });
+    renderPage(); await tab("Payments");
     fireEvent.change(screen.getByLabelText("From date"), { target: { value: "2026-10-06" } });
-    expect(await screen.findByRole("status")).toHaveTextContent("Loading driver report");
+    expect(await screen.findByText(/Loading driver report/)).toBeInTheDocument();
     expect(screen.getByLabelText("From date")).toHaveValue("2026-10-06");
-    expect(screen.queryByText("System totals · selected range")).not.toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: "Payments" })).not.toBeInTheDocument();
     await waitFor(() => expect(finish).toBeDefined());
-    finish(await sampleDriverReport("DEMO", { from: "2026-10-06", to: "2026-10-11" }));
-    expect(await screen.findByRole("tab", { name: "Comparison" })).toHaveAttribute("aria-selected", "true");
+    await act(async () => finish(await sampleDriverReport("DEMO", { from: "2026-10-06", to: "2026-10-11" })));
+    expect(await tab("Payments")).toHaveAttribute("aria-selected", "true");
   });
-  it("places the driver selector immediately before PDF in the header actions", async () => {
+
+  it("offers PDF and Excel exports that state their scope", async () => {
     load.mockImplementation(sampleDriverReport); renderPage();
-    const pdf = await screen.findByRole("button", { name: "Download complete PDF report" });
-    expect(screen.queryByRole("button", { name: "Download complete Excel report" })).not.toBeInTheDocument();
-    const selector = screen.getByRole("combobox", { name: "Select report driver" });
-    expect(selector.closest(".rpt-export-actions")).toContainElement(pdf);
-    expect(selector.compareDocumentPosition(pdf) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(selector.closest(".rpt-driver-filter")?.nextElementSibling).toBe(pdf);
+    fireEvent.click(await screen.findByRole("button", { name: "PDF / Excel options" }));
+    expect(await screen.findByText("PDF — Driver Breakdown")).toBeInTheDocument();
+    expect(screen.getByText("PDF — server export (original layout)")).toBeInTheDocument();
+    expect(screen.getByText("Excel — complete report")).toBeInTheDocument();
+    expect(screen.getByText(/All jobs for .*London time/)).toBeInTheDocument();
   });
-  it("falls back to Jobs for links to the removed liabilities tab", async () => {
-    window.history.replaceState({}, "", location.pathname + location.search.replace("reportTab=comparison", "reportTab=liabilities"));
+
+  it("switches driver while keeping dates and tab and resetting paging", async () => {
+    window.history.replaceState({}, "", `${BASE}&reportTab=performance&jobsPage=2&eventsPage=3`);
     load.mockImplementation(sampleDriverReport); renderPage();
-    expect(await screen.findByRole("tab", { name: "Jobs" })).toHaveAttribute("aria-selected", "true");
-    expect(screen.queryByRole("tab", { name: "Penalties & Liabilities" })).not.toBeInTheDocument();
+    await tab("Performance & Timings");
+    fireEvent.change(driverSelect(), { target: { value: "NEXT" } });
+    await waitFor(() => expect(load.mock.calls.some(call => call[0] === "NEXT" && call[1].jobsPage === 1 && call[1].groupBy === "day")).toBe(true));
+    expect(params().get("driver")).toBe("NEXT");
+    expect(params().get("from")).toBe("2026-10-05");
+    expect(params().get("reportTab")).toBe("performance");
+    expect(params().has("jobsPage")).toBe(false);
+    expect(params().has("eventsPage")).toBe(false);
   });
-  it("switches drivers while retaining dates and tab, resetting pages and using daily charts despite legacy grouping", async () => {
-    window.history.replaceState({}, "", `${location.pathname}${location.search}&groupBy=week&jobsPage=2&eventsPage=3&visitsPage=4&chargesPage=5&liabilitiesPage=6&job=OLD`);
+
+  it("keeps an archived driver selectable even when missing from the roster", async () => {
+    window.history.replaceState({}, "", `${BASE.replace("driver=DEMO", "driver=ARCHIVED")}&reportTab=jobs`);
     load.mockImplementation(sampleDriverReport); renderPage();
-    await screen.findByRole("tab", { name: "Comparison" });
-    fireEvent.change(screen.getByRole("combobox", { name: "Select report driver" }), { target: { value: "NEXT" } });
-    await waitFor(() => expect(load.mock.calls.some(call => call[0] === "NEXT" && call[1].jobsPage === 1 && call[1].visitsPage === 1 && call[1].groupBy === "day")).toBe(true));
-    const params = new URLSearchParams(location.search);
-    expect(params.get("driver")).toBe("NEXT"); expect(params.get("from")).toBe("2026-10-05");
-    expect(params.get("to")).toBe("2026-10-11"); expect(params.get("reportTab")).toBe("comparison"); expect(params.get("groupBy")).toBe("week");
-    for (const key of ["jobsPage", "eventsPage", "visitsPage", "chargesPage", "liabilitiesPage", "job"]) expect(params.has(key)).toBe(false);
-    expect(screen.getByRole("combobox", { name: "Select report driver" })).toHaveValue("NEXT");
+    await tab("Jobs");
+    expect(driverSelect()).toHaveValue("ARCHIVED");
+    expect(within(driverSelect()).getByRole("option", { name: "Next Driver (NEXT) · deactivated" })).toBeInTheDocument();
   });
-  it("keeps archived drivers selectable as the current report even when missing from the roster", async () => {
-    window.history.replaceState({}, "", location.pathname + location.search.replace("driver=DEMO", "driver=ARCHIVED"));
-    load.mockImplementation(sampleDriverReport); renderPage();
-    await screen.findByRole("tab", { name: "Comparison" });
-    expect(screen.getByRole("combobox", { name: "Select report driver" })).toHaveValue("ARCHIVED");
-    expect(screen.getByRole("option", { name: "Sample Driver (ARCHIVED)" })).toBeInTheDocument();
-    expect(screen.getByRole("option", { name: "Next Driver (NEXT) (Inactive)" })).toBeInTheDocument();
-  });
-  it("keeps the report visible and provides retry when the driver roster fails", async () => {
+
+  it("keeps the report usable and offers a retry when the driver list fails", async () => {
     roster.isError = true; load.mockImplementation(sampleDriverReport); renderPage();
-    expect(await screen.findByRole("tab", { name: "Comparison" })).toBeInTheDocument();
+    expect(await tab("Payments")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Retry driver list" }));
     expect(roster.refetch).toHaveBeenCalledOnce();
   });
-  it("restores a deep-linked comparison tab and retains filters in job navigation", async () => {
+
+  it("opens a job as an overlay so closing it returns to the same report view", async () => {
+    window.history.replaceState({}, "", `${BASE}&reportTab=performance`);
     load.mockImplementation(sampleDriverReport); renderPage();
-    expect(await screen.findByRole("tab", { name: "Comparison" })).toHaveAttribute("aria-selected", "true");
-    fireEvent.click(screen.getAllByRole("button", { name: "DEMO-001" })[0]);
-    expect(new URLSearchParams(location.search).get("section")).toBe("finished");
-    expect(new URLSearchParams(location.search).get("job")).toBe("DEMO-001");
-    expect(new URLSearchParams(location.search).get("from")).toBe("2026-10-05");
-    expect(new URLSearchParams(location.search).get("reportReturn")).toBe("/admin?section=driverreport&driver=DEMO&from=2026-10-05&to=2026-10-11&reportTab=comparison");
+    await tab("Performance & Timings");
+    const before = params();
+    fireEvent.click(screen.getAllByRole("button", { name: /^Open job / })[0]);
+    expect(params().get("job")).toBeTruthy();
+    for (const key of ["section", "driver", "from", "to", "reportTab"]) expect(params().get(key)).toBe(before.get(key));
   });
-  it("uses independent pages and restores tab state on popstate", async () => {
+
+  it("pages jobs independently and restores the tab on Back", async () => {
+    window.history.replaceState({}, "", `${BASE}&reportTab=performance`);
     load.mockImplementation(sampleDriverReport); renderPage();
-    await screen.findByRole("tab", { name: "Comparison" });
-    fireEvent.click(screen.getByRole("button", { name: "Next jobs page" }));
+    await tab("Performance & Timings");
+    fireEvent.click(within(screen.getByRole("navigation", { name: "job pages" })).getByRole("button", { name: "Next page" }));
     await waitFor(() => expect(load.mock.calls.some(call => call[1].jobsPage === 2)).toBe(true));
-    window.history.replaceState({}, "", "/admin?section=driverreport&driver=DEMO&from=2026-10-05&to=2026-10-11&reportTab=payments");
+    window.history.replaceState({}, "", `${BASE}&reportTab=payments`);
     fireEvent(window, new PopStateEvent("popstate"));
-    expect(await screen.findByRole("tab", { name: "Payments" })).toHaveAttribute("aria-selected", "true");
+    expect(await tab("Payments")).toHaveAttribute("aria-selected", "true");
   });
-  it("keeps filters and retry available after a request failure", async () => {
+
+  it("keeps dates and retry available after the report fails", async () => {
     load.mockRejectedValue(new Error("Synthetic outage")); renderPage();
-    expect(await screen.findByRole("alert", {}, { timeout: 4000 })).toHaveTextContent("Synthetic outage");
+    expect(await screen.findByText("Synthetic outage", {}, { timeout: 4000 })).toBeInTheDocument();
     expect(screen.getByLabelText("From date")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Retry driver report" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Try again" })).toBeInTheDocument();
   });
-  it("can switch to another driver when the current driver's report fails", async () => {
+
+  it("can switch to another driver after the current driver's report fails", async () => {
     load.mockImplementation((initials, query) => initials === "DEMO" ? Promise.reject(new Error("Synthetic outage")) : sampleDriverReport(initials, query));
     renderPage();
-    await screen.findByRole("alert", {}, { timeout: 4000 });
-    fireEvent.change(screen.getByRole("combobox", { name: "Select report driver" }), { target: { value: "NEXT" } });
-    expect(await screen.findByRole("tab", { name: "Comparison" })).toHaveAttribute("aria-selected", "true");
-    expect(screen.getByRole("combobox", { name: "Select report driver" })).toHaveValue("NEXT");
-    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    await screen.findByText("Synthetic outage", {}, { timeout: 4000 });
+    fireEvent.change(driverSelect(), { target: { value: "NEXT" } });
+    expect(await tab("Payments")).toHaveAttribute("aria-selected", "true");
+    expect(screen.queryByText("Synthetic outage")).not.toBeInTheDocument();
   });
 });

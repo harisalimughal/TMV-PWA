@@ -7,7 +7,6 @@ import L from "leaflet";
 import { useQuery } from "@tanstack/react-query";
 import { DateTime } from "luxon";
 import {
-  Radio,
   ZoomIn,
   ZoomOut,
   Maximize2,
@@ -20,10 +19,16 @@ import {
 } from "lucide-react";
 import { NormalizedJob } from "../types";
 import { fetchCongestionZones, fetchLiveFleet } from "../api";
+import { TRACKER_STALE_AFTER_MINUTES, motionLabel, parseTrackerTime, signalFreshness } from "../utils/freshness";
+import { formatAge, formatDateTime } from "../utils/format";
 
 interface Props {
   jobs: NormalizedJob[];
+  /** Opens the exact job (the canonical job detail), not just the Jobs list. */
   onSelectJob?: (jobId: string) => void;
+  /** Vehicle to select on load (e.g. from an alert's "View on map"). */
+  initialVehicle?: string | null;
+  onSelectVehicle?: (imei: string | null) => void;
 }
 
 interface FleetVehicle {
@@ -48,7 +53,7 @@ interface FleetVehicle {
   jammingDetected: boolean;
 }
 
-type FilterId = "ALL" | "MOVING" | "IDLE" | "PARKED";
+type FilterId = "ALL" | "MOVING" | "STOPPED" | "STALE";
 
 /** A never-blank short label for a van: the matched driver's initials, otherwise the
  *  first two alphanumerics of its plate / device name. Keeps "??" off every surface. */
@@ -58,20 +63,11 @@ function shortBadge(v: { matched: boolean; driverInitials: string; plateNumber: 
   return src.slice(0, 2).toUpperCase() || "—";
 }
 
-/** A parked van's tracker reports far less often (ignition off -> it sleeps), so a
- * gap between updates is normal and doesn't mean the van is gone -- GPSLive keeps
- * showing it, and so do we; past this many minutes the pin just greys to "parked". */
-const STALE_AFTER_MINUTES = 30;
-
+/** Signal freshness and motion are separate facts (utils/freshness.ts). A position
+ *  older than the stale threshold is only the *last known* position: the pin greys
+ *  and the label says "Last known: stopped/moving" instead of claiming a current state. */
 function relativeTime(dtTracker: string): string {
-  const dt = DateTime.fromSQL(dtTracker, { zone: "utc" });
-  if (!dt.isValid) return dtTracker;
-  const minutes = DateTime.utc().diff(dt, "minutes").minutes;
-  if (minutes < 1) return "just now";
-  if (minutes < 60) return `${Math.round(minutes)}m ago`;
-  const hours = minutes / 60;
-  if (hours < 24) return `${Math.round(hours)}h ago`;
-  return `${Math.round(hours / 24)}d ago`;
+  return formatAge(dtTracker);
 }
 
 /** Approximate "stopped for" -- how long since the last position report (we don't get
@@ -100,21 +96,21 @@ function bearing(a: { lat: number; lng: number }, b: { lat: number; lng: number 
 
 const STATE_COLOR = {
   moving: "#16A34A",
-  idle: "#DC2626",
-  parked: "#9CA3AF",
+  stopped: "#B3760F",
+  stale: "#9CA3AF",
   selected: "#1B75BC"
 } as const;
 
 function vehState(v: FleetVehicle): keyof typeof STATE_COLOR {
-  if (v.isStale) return "parked";
+  if (v.isStale) return "stale";
   if (v.isMoving) return "moving";
-  return "idle";
+  return "stopped";
 }
 
 const esc = (s: string) =>
   s.replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]!));
 
-export function LiveFleetMap({ jobs, onSelectJob }: Props) {
+export function LiveFleetMap({ jobs, onSelectJob, initialVehicle = null, onSelectVehicle }: Props) {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<L.Map | null>(null);
   const markersRef = useRef<Record<string, L.Marker>>({});
@@ -128,6 +124,7 @@ export function LiveFleetMap({ jobs, onSelectJob }: Props) {
   /** Which van's popup is open, so it survives the 10s marker rebuild. */
   const openPopupImeiRef = useRef<string | null>(null);
   const rebuildingRef = useRef(false);
+  const popupTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   /** Parent passes a fresh onSelectJob each render -- hold it in a ref so the popup
    *  builder and marker effect don't churn every poll. */
   const onSelectJobRef = useRef(onSelectJob);
@@ -135,34 +132,19 @@ export function LiveFleetMap({ jobs, onSelectJob }: Props) {
     onSelectJobRef.current = onSelectJob;
   }, [onSelectJob]);
 
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedId, setSelectedIdState] = useState<string | null>(initialVehicle);
+  const onSelectVehicleRef = useRef(onSelectVehicle);
+  onSelectVehicleRef.current = onSelectVehicle;
+  const setSelectedId = useCallback((imei: string | null) => { setSelectedIdState(imei); onSelectVehicleRef.current?.(imei); }, []);
   const [activeFilter, setActiveFilter] = useState<FilterId>("ALL");
   const [showCongestionZone, setShowCongestionZone] = useState(true);
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const [drawerOpen, setDrawerOpen] = useState(true);
+  // On a phone the vehicle list would cover the map, so it starts collapsed there; the toggle opens it.
+  const [drawerOpen, setDrawerOpen] = useState(() => typeof window === "undefined" || !window.matchMedia || !window.matchMedia("(max-width: 639px)").matches);
   const [search, setSearch] = useState("");
-  /** One-time nudge pointing at the collapse control -- persists once dismissed. */
-  const [showCollapseHint, setShowCollapseHint] = useState(() => {
-    try {
-      return localStorage.getItem("tmv:lf-collapse-hint") !== "1";
-    } catch {
-      return true;
-    }
-  });
-  const dismissCollapseHint = () => {
-    setShowCollapseHint(false);
-    try {
-      localStorage.setItem("tmv:lf-collapse-hint", "1");
-    } catch {
-      /* ignore */
-    }
-  };
-  const collapseDrawer = () => {
-    setDrawerOpen(false);
-    dismissCollapseHint();
-  };
+  const collapseDrawer = () => setDrawerOpen(false);
 
-  const { data: fleetData } = useQuery({
+  const { data: fleetData, isLoading: fleetLoading, isError: fleetError, error: fleetErrorValue, refetch: refetchFleet, dataUpdatedAt } = useQuery({
     queryKey: ["fleet_live"],
     queryFn: fetchLiveFleet,
     refetchInterval: 10000
@@ -177,9 +159,7 @@ export function LiveFleetMap({ jobs, onSelectJob }: Props) {
 
   const vehicles: FleetVehicle[] = useMemo(() => {
     return (fleetData?.vehicles || []).map(v => {
-      const dt = DateTime.fromSQL(v.lastUpdate, { zone: "utc" });
-      const minutesAgo = dt.isValid ? DateTime.utc().diff(dt, "minutes").minutes : Infinity;
-      const isStale = minutesAgo > STALE_AFTER_MINUTES;
+      const isStale = signalFreshness(v.lastUpdate) !== "current";
       const currentJob = v.driverInitials
         ? jobs.find(j => j.driverInitials === v.driverInitials && j.status === "IN_PROGRESS") || null
         : null;
@@ -214,12 +194,17 @@ export function LiveFleetMap({ jobs, onSelectJob }: Props) {
     const map = L.map(mapContainerRef.current, {
       center: [51.5074, -0.1278],
       zoom: 11,
+      // Leaflet's CSS zoom-end timer can run after this route has unmounted.
+      // Keep map navigation responsive without scheduling that detached-pane callback.
+      zoomAnimation: false,
       zoomControl: false,
       attributionControl: false
     });
     L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19, subdomains: "abc" }).addTo(map);
     mapInstanceRef.current = map;
     return () => {
+      if (popupTimerRef.current) clearTimeout(popupTimerRef.current);
+      map.stop();
       map.remove();
       mapInstanceRef.current = null;
     };
@@ -238,6 +223,9 @@ export function LiveFleetMap({ jobs, onSelectJob }: Props) {
     zonePolygonsRef.current.forEach(p => map.removeLayer(p));
     zonePolygonsRef.current = [];
     if (!showCongestionZone) return;
+    // The zone name sits in its own pane below the markers (Leaflet's tooltip pane is above them),
+    // so it can never cover a vehicle's plate.
+    if (!map.getPane("zoneLabels")) { const pane = map.createPane("zoneLabels"); pane.style.zIndex = "450"; pane.style.pointerEvents = "none"; }
     (zonesData?.zones || []).forEach(zone => {
       const polygon = L.polygon(zone.vertices, {
         color: "#DC2626",
@@ -245,7 +233,8 @@ export function LiveFleetMap({ jobs, onSelectJob }: Props) {
         fillColor: "#DC2626",
         fillOpacity: 0.12
       }).addTo(map);
-      polygon.bindTooltip(zone.zoneName, { permanent: true, direction: "center", className: "congestion-zone-label" });
+      // The zone name shows on hover and in the legend, not permanently: a permanent label sat in the middle of the zone, right on top of the vehicles inside it.
+      polygon.bindTooltip(zone.zoneName, { sticky: true, direction: "top", className: "congestion-zone-label", pane: "zoneLabels" });
       zonePolygonsRef.current.push(polygon);
     });
   }, [zonesData, showCongestionZone]);
@@ -254,8 +243,8 @@ export function LiveFleetMap({ jobs, onSelectJob }: Props) {
   const visibleVehicles = useMemo(() => {
     let list = vehicles;
     if (activeFilter === "MOVING") list = list.filter(v => v.isMoving);
-    else if (activeFilter === "IDLE") list = list.filter(v => !v.isStale && !v.isMoving);
-    else if (activeFilter === "PARKED") list = list.filter(v => v.isStale);
+    else if (activeFilter === "STOPPED") list = list.filter(v => !v.isStale && !v.isMoving);
+    else if (activeFilter === "STALE") list = list.filter(v => v.isStale);
     const q = search.trim().toLowerCase();
     if (q) {
       list = list.filter(
@@ -269,26 +258,26 @@ export function LiveFleetMap({ jobs, onSelectJob }: Props) {
   }, [vehicles, activeFilter, search]);
 
   const movingCount = vehicles.filter(v => v.isMoving).length;
-  const parkedCount = vehicles.filter(v => v.isStale).length;
+  const staleCount = vehicles.filter(v => v.isStale).length;
   const unlinkedCount = vehicles.filter(v => !v.matched).length;
-  const idleCount = vehicles.length - movingCount - parkedCount;
+  const stoppedCount = vehicles.length - movingCount - staleCount;
 
   // ---- popup HTML ---------------------------------------------------------
   const popupHtml = useCallback((v: FleetVehicle): string => {
     const color = STATE_COLOR[vehState(v)];
     const addr = addrRef.current[v.imei];
-    const stateLabel = v.isStale ? "Parked" : v.isMoving ? "Moving" : "Stopped";
+    const stateLabel = motionLabel(v.speedMph, v.isStale ? "stale" : "current");
     const g = (label: string, value: string) =>
       `<div class="vfm-cell"><span class="vfm-k">${esc(label)}</span><span class="vfm-v">${esc(value)}</span></div>`;
 
     const job = v.currentJob;
     const jobBlock = job
       ? `<div class="vfm-job">
-           <div class="vfm-job-hd">Current job · ${esc(job.jobId)}</div>
+           <div class="vfm-job-hd">Current job (matched by assigned driver) · ${esc(job.jobId)}</div>
            <div class="vfm-job-row"><b>A</b> ${esc(job.pickup || "—")}</div>
            <div class="vfm-job-row"><b>B</b> ${esc(job.dropoff || "—")}</div>
            <div class="vfm-job-cust">${esc(job.customerName || "")}</div>
-           ${onSelectJobRef.current ? `<button class="vfm-btn" data-job="${esc(job.jobId)}">Inspect move</button>` : ""}
+           ${onSelectJobRef.current ? `<button class="vfm-btn" data-job="${esc(job.jobId)}">View job ${esc(job.jobId)}</button>` : ""}
          </div>`
       : "";
 
@@ -304,20 +293,20 @@ export function LiveFleetMap({ jobs, onSelectJob }: Props) {
           <span class="vfm-title">${esc(v.plateNumber || v.name)}</span>
           ${v.matched ? `<span class="vfm-init">${esc(v.driverInitials)}</span>` : `<span class="vfm-unlinked">Unlinked</span>`}
         </div>
-        <div class="vfm-addr">${addr ? esc(addr) : "Locating…"}</div>
+        <div class="vfm-fresh ${v.isStale ? "vfm-fresh-stale" : ""}">${v.isStale ? "Signal stale" : "Updated"} · ${esc(relativeTime(v.lastUpdate))}</div>
+        <div class="vfm-addr">${addr ? esc(addr) : "Looking up address…"}</div>
         <a class="vfm-maps" href="https://www.google.com/maps?q=${v.lat},${v.lng}" target="_blank" rel="noopener noreferrer">Open in Google Maps</a>
         ${unlinked}
         <div class="vfm-grid">
           ${g("State", stateLabel)}
-          ${g("Speed", `${v.speedMph} mph`)}
-          ${g("Last report", relativeTime(v.lastUpdate))}
-          ${g("Stopped for", v.isMoving ? "—" : stoppedFor(v.lastUpdate))}
+          ${g("Speed reported", v.isStale ? "Not current" : `${v.speedMph} mph`)}
+          ${g("No update for", stoppedFor(v.lastUpdate))}
           ${g("Ignition", v.ignitionOn === null ? "—" : v.ignitionOn ? "On" : "Off")}
           ${g("Battery", v.batteryVoltage === null ? "—" : `${v.batteryVoltage}V`)}
           ${g("GPS / GSM", `${v.gpsSignalLevel ?? "—"} / ${v.gsmSignalLevel ?? "—"}`)}
           ${g("Mileage", v.odometerMiles === null ? "—" : `${v.odometerMiles.toLocaleString()} mi`)}
         </div>
-        <div class="vfm-time">Position time: ${esc(v.lastUpdate)} UTC · Driver: ${esc(v.matched ? v.driverName : "No driver")}</div>
+        <div class="vfm-time">Position ${esc(formatDateTime(parseTrackerTime(v.lastUpdate)?.toISO() ?? null))} London · ${v.lat.toFixed(5)}, ${v.lng.toFixed(5)} · Driver: ${esc(v.matched ? v.driverName : "No driver")}</div>
         ${jobBlock}
       </div>`;
   }, []);
@@ -440,9 +429,22 @@ export function LiveFleetMap({ jobs, onSelectJob }: Props) {
     setSelectedId(v.imei);
     const map = mapInstanceRef.current;
     if (!map) return;
-    map.flyTo([v.lat, v.lng], Math.max(map.getZoom(), 14), { animate: true, duration: 0.9 });
-    setTimeout(() => markersRef.current[v.imei]?.openPopup(), 950);
+    const reduceMotion = typeof window.matchMedia === "function" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    map.flyTo([v.lat, v.lng], Math.max(map.getZoom(), 14), { animate: !reduceMotion, duration: 0.9 });
+    if (popupTimerRef.current) clearTimeout(popupTimerRef.current);
+    popupTimerRef.current = setTimeout(() => markersRef.current[v.imei]?.openPopup(), reduceMotion ? 50 : 950);
   };
+
+  // A vehicle selected via the URL (e.g. an alert's "View on map") is focused once
+  // its position has loaded.
+  const focusedInitialRef = useRef(false);
+  useEffect(() => {
+    if (focusedInitialRef.current || !initialVehicle) return;
+    const vehicle = vehicles.find(v => v.imei === initialVehicle);
+    if (!vehicle || !mapInstanceRef.current) return;
+    focusedInitialRef.current = true;
+    focusVehicle(vehicle);
+  }, [vehicles, initialVehicle]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const fitAll = () => {
     const map = mapInstanceRef.current;
@@ -454,7 +456,7 @@ export function LiveFleetMap({ jobs, onSelectJob }: Props) {
 
   return (
     <div
-      className={`bg-white border border-admin-line rounded shadow-card overflow-hidden text-admin-ink transition-all ${
+      className={`bg-white border border-admin-line rounded-2xl shadow-card overflow-hidden text-admin-ink transition-all ${
         isFullscreen ? "fixed inset-4 z-50 flex flex-col shadow-pop" : "relative"
       }`}
     >
@@ -468,71 +470,68 @@ export function LiveFleetMap({ jobs, onSelectJob }: Props) {
           font-family: 'IBM Plex Mono', monospace; font-size: 14.5px; font-weight: 700; letter-spacing: .02em;
           white-space: nowrap; box-shadow: 0 2px 8px rgba(16,24,40,.4); }
         .vfm-glyph { line-height: 0; transition: transform .4s ease; }
-        .vfm-popup .leaflet-popup-content-wrapper { border-radius: 12px; box-shadow: 0 12px 34px -10px rgba(16,24,40,.35); }
+        .vfm-popup .leaflet-popup-content-wrapper { border-radius: 12px; box-shadow: var(--admin-shadow-lg); }
         .vfm-popup .leaflet-popup-content { margin: 0; width: 270px !important; }
         .vfm-pop { padding: 12px 13px; font-family: inherit; }
         .vfm-pop-hd { display: flex; align-items: center; gap: 7px; }
         .vfm-dot { width: 9px; height: 9px; border-radius: 999px; flex: none; }
-        .vfm-title { font-weight: 800; font-size: 14px; color: #101828; }
+        .vfm-title { font-weight: 800; font-size: 14px; color: rgb(var(--fg)); }
         .vfm-init { margin-left: auto; font-family: 'IBM Plex Mono', monospace; font-weight: 700; font-size: 11px;
-          background: #eef2ff; color: #1b75bc; padding: 1px 6px; border-radius: 5px; }
+          background: rgb(var(--brand-subtle)); color: rgb(var(--brand)); padding: 1px 6px; border-radius: 5px; }
         .vfm-unlinked { margin-left: auto; font-size: 10px; font-weight: 700; text-transform: uppercase;
-          letter-spacing: .04em; background: #f1f5f9; color: #64748b; padding: 2px 6px; border-radius: 5px; }
-        .vfm-addr { margin-top: 8px; font-size: 12px; line-height: 1.4; color: #334155; }
-        .vfm-maps { display: inline-block; margin-top: 4px; font-size: 11px; font-weight: 600; color: #1b75bc; }
-        .vfm-warn { margin-top: 8px; padding: 7px 8px; border-radius: 7px; background: #fffbeb; border: 1px solid #fde68a;
-          font-size: 10.5px; line-height: 1.45; color: #92400e; }
+          letter-spacing: .04em; background: rgb(var(--surface-sunken)); color: rgb(var(--fg-subtle)); padding: 2px 6px; border-radius: 5px; }
+        .vfm-fresh { margin-top: 6px; display: inline-block; font-size: 12px; font-weight: 700; color: rgb(var(--success-fg)); }
+        .vfm-fresh-stale { color: rgb(var(--warning-fg)); }
+        .vfm-addr { margin-top: 6px; font-size: 12px; line-height: 1.4; color: rgb(var(--fg-muted)); }
+        .vfm-maps { display: inline-block; margin-top: 4px; font-size: 11px; font-weight: 600; color: rgb(var(--brand)); }
+        .vfm-warn { margin-top: 8px; padding: 7px 8px; border-radius: 7px; background: rgb(var(--warning-subtle)); border: 1px solid rgb(var(--warning-line));
+          font-size: 10.5px; line-height: 1.45; color: rgb(var(--warning-fg)); }
         .vfm-grid { margin-top: 10px; display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
-        .vfm-cell { background: #f8fafc; border: 1px solid #eef2f6; border-radius: 7px; padding: 5px 7px; }
-        .vfm-k { display: block; font-size: 9.5px; text-transform: uppercase; letter-spacing: .04em; color: #94a3b8; }
-        .vfm-v { display: block; font-size: 12px; font-weight: 700; color: #101828; margin-top: 1px; }
-        .vfm-time { margin-top: 8px; font-size: 9.5px; color: #94a3b8; font-family: 'IBM Plex Mono', monospace; line-height: 1.5; }
-        .vfm-job { margin-top: 9px; padding: 8px; background: #f8fafc; border: 1px solid #eef2f6; border-radius: 8px; }
-        .vfm-job-hd { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: #94a3b8; }
-        .vfm-job-row { margin-top: 4px; font-size: 11px; color: #334155; }
+        .vfm-cell { background: rgb(var(--surface-sunken)); border: 1px solid rgb(var(--line)); border-radius: 7px; padding: 5px 7px; }
+        .vfm-k { display: block; font-size: 9.5px; text-transform: uppercase; letter-spacing: .04em; color: rgb(var(--fg-subtle)); }
+        .vfm-v { display: block; font-size: 12px; font-weight: 700; color: rgb(var(--fg)); margin-top: 1px; }
+        .vfm-time { margin-top: 8px; font-size: 9.5px; color: rgb(var(--fg-subtle)); font-family: 'IBM Plex Mono', monospace; line-height: 1.5; }
+        .vfm-job { margin-top: 9px; padding: 8px; background: rgb(var(--surface-sunken)); border: 1px solid rgb(var(--line)); border-radius: 8px; }
+        .vfm-job-hd { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: rgb(var(--fg-subtle)); }
+        .vfm-job-row { margin-top: 4px; font-size: 11px; color: rgb(var(--fg-muted)); }
         .vfm-job-row b { display: inline-block; width: 14px; height: 14px; line-height: 14px; text-align: center;
-          border-radius: 999px; background: #e0edff; color: #1b75bc; font-size: 9px; margin-right: 5px; }
-        .vfm-job-cust { margin-top: 5px; font-size: 11px; font-weight: 600; color: #101828; }
+          border-radius: 999px; background: rgb(var(--brand-subtle)); color: rgb(var(--brand)); font-size: 9px; margin-right: 5px; }
+        .vfm-job-cust { margin-top: 5px; font-size: 11px; font-weight: 600; color: rgb(var(--fg)); }
         .vfm-btn { margin-top: 7px; width: 100%; height: 28px; border: none; border-radius: 6px; cursor: pointer;
-          background: #1b75bc; color: #fff; font-size: 11px; font-weight: 600; }
+          background: rgb(var(--brand-solid)); color: #fff; font-size: 11px; font-weight: 600; }
       `}</style>
 
       {/* toolbar */}
       <div className="p-3.5 border-b border-admin-line flex flex-wrap items-center gap-3 bg-white">
-        <div className="flex items-center gap-2 shrink-0">
-          <span className="relative flex h-3 w-3">
-            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-admin-status-green opacity-75"></span>
-            <span className="relative inline-flex rounded-full h-3 w-3 bg-admin-status-green"></span>
-          </span>
-          <h3 className="text-btn text-admin-ink whitespace-nowrap">Live Fleet GPS</h3>
-        </div>
-        <div className="hidden sm:flex items-center gap-2 text-xs font-mono shrink-0">
-          <span className="flex items-center gap-1.5 text-admin-muted">
-            <Radio className="w-3.5 h-3.5 text-admin-brand animate-pulse" />
-            {movingCount} in transit &bull; {vehicles.length} tracked
+        <div className="flex min-w-0 flex-wrap items-center gap-2 text-[13px]">
+          <span className="text-admin-ink-2" aria-live="polite">
+            {fleetLoading ? "Loading positions…" : fleetError ? "Positions unavailable" : `${vehicles.length} tracked · ${movingCount} moving · ${staleCount} stale signal`}
           </span>
           {unlinkedCount > 0 && (
-            <span className="rounded-full bg-amber-100 border border-amber-200 px-2 py-0.5 font-medium text-amber-700">
-              {unlinkedCount} unlinked
+            <span className="rounded-full bg-admin-status-amber-bg border border-admin-status-amber/30 px-2 py-0.5 font-medium text-admin-status-amber">
+              {unlinkedCount} not linked to a driver
             </span>
           )}
+          {dataUpdatedAt > 0 && <span className="text-admin-ink-2">Refreshed {DateTime.fromMillis(dataUpdatedAt).setZone("Europe/London").toFormat("HH:mm:ss")}</span>}
         </div>
 
         <div className="flex items-center gap-2 flex-wrap sm:ml-auto">
-          <div className="flex items-center p-0.5 bg-admin-surface rounded border border-admin-line text-xs font-medium shrink-0">
+          <div className="tmv-segmented inline-flex max-w-full shrink-0 flex-wrap items-center gap-0.5 rounded-2xl border border-admin-line bg-admin-surface p-1">
             {(
               [
                 { id: "ALL", label: `All (${vehicles.length})` },
                 { id: "MOVING", label: `Moving (${movingCount})` },
-                { id: "IDLE", label: `Idle (${idleCount})` },
-                { id: "PARKED", label: `Parked (${parkedCount})` }
+                { id: "STOPPED", label: `Stopped (${stoppedCount})` },
+                { id: "STALE", label: `Stale signal (${staleCount})` }
               ] as const
             ).map(tab => (
               <button
                 key={tab.id}
+                type="button"
+                aria-pressed={activeFilter === tab.id}
                 onClick={() => setActiveFilter(tab.id)}
-                className={`shrink-0 whitespace-nowrap px-2.5 py-1 rounded transition text-xs ${
-                  activeFilter === tab.id ? "bg-white text-admin-ink shadow-card font-semibold" : "text-admin-muted hover:text-admin-ink"
+                className={`inline-flex h-8 shrink-0 items-center whitespace-nowrap rounded-xl px-3 text-[13px] font-semibold transition ${
+                  activeFilter === tab.id ? "bg-surface text-admin-brand shadow-[var(--admin-shadow-sm)] ring-1 ring-admin-brand/25" : "text-admin-ink-2 hover:text-admin-ink"
                 }`}
               >
                 {tab.label}
@@ -540,29 +539,23 @@ export function LiveFleetMap({ jobs, onSelectJob }: Props) {
             ))}
           </div>
 
-          <select
-            defaultValue="osm"
-            aria-label="Map provider"
-            className="shrink-0 h-8 px-2 bg-admin-surface border border-admin-line rounded text-xs text-admin-ink font-medium"
-            title="Map provider"
-          >
-            <option value="osm">OpenStreetMap</option>
-          </select>
-
           <button
+            type="button"
+            aria-pressed={showCongestionZone}
             onClick={() => setShowCongestionZone(v => !v)}
-            className={`shrink-0 px-2.5 py-1.5 rounded border text-xs font-medium transition ${
-              showCongestionZone ? "bg-admin-brand-soft border-admin-brand/30 text-admin-brand" : "bg-admin-surface border-admin-line text-admin-muted"
+            className={`inline-flex h-10 shrink-0 items-center rounded-xl border px-3 text-[13px] font-semibold transition ${
+              showCongestionZone ? "bg-admin-brand-soft border-admin-brand/30 text-admin-brand" : "bg-surface border-admin-line text-admin-ink-2 hover:text-admin-ink"
             }`}
             title="Toggle London Congestion Charge zone"
           >
-            Congestion Zone
+            Congestion zone overlay
           </button>
 
           <button
             onClick={() => setIsFullscreen(v => !v)}
-            className="shrink-0 p-1.5 rounded border border-admin-line bg-admin-surface hover:bg-admin-surface-2 text-admin-ink-2 transition"
+            className="grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-admin-line bg-surface text-admin-ink-2 transition hover:bg-admin-surface hover:text-admin-ink"
             title={isFullscreen ? "Exit fullscreen" : "Fullscreen"}
+            aria-label={isFullscreen ? "Exit fullscreen map" : "Fullscreen map"}
           >
             {isFullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
           </button>
@@ -574,25 +567,25 @@ export function LiveFleetMap({ jobs, onSelectJob }: Props) {
         <div ref={mapContainerRef} className="absolute inset-0 w-full h-full" />
 
         {/* zoom controls */}
-        <div className="absolute top-3 right-3 z-[500] flex flex-col gap-1.5 bg-white/95 backdrop-blur-xs p-1 rounded border border-admin-line shadow-card">
-          <button onClick={() => mapInstanceRef.current?.zoomIn()} className="p-1.5 rounded hover:bg-admin-surface text-admin-ink transition" title="Zoom in">
+        <div className="absolute top-3 right-3 z-[500] flex flex-col gap-1 bg-white/95 backdrop-blur-xs p-1 rounded-xl border border-admin-line shadow-card">
+          <button onClick={() => mapInstanceRef.current?.zoomIn()} className="grid h-8 w-8 place-items-center rounded-lg hover:bg-admin-surface text-admin-ink transition" title="Zoom in" aria-label="Zoom in">
             <ZoomIn className="w-4 h-4" />
           </button>
-          <button onClick={() => mapInstanceRef.current?.zoomOut()} className="p-1.5 rounded hover:bg-admin-surface text-admin-ink transition" title="Zoom out">
+          <button onClick={() => mapInstanceRef.current?.zoomOut()} className="grid h-8 w-8 place-items-center rounded-lg hover:bg-admin-surface text-admin-ink transition" title="Zoom out" aria-label="Zoom out">
             <ZoomOut className="w-4 h-4" />
           </button>
-          <button onClick={fitAll} className="p-1.5 rounded hover:bg-admin-surface text-admin-ink transition" title="Fit fleet + zone">
+          <button onClick={fitAll} className="grid h-8 w-8 place-items-center rounded-lg hover:bg-admin-surface text-admin-ink transition" title="Fit all vehicles" aria-label="Fit all vehicles on the map">
             <RotateCcw className="w-4 h-4" />
           </button>
         </div>
 
         {/* marker legend */}
-        <div className="absolute top-3 left-1/2 -translate-x-1/2 z-[500] flex flex-wrap items-center justify-center gap-x-3 gap-y-1 max-w-[calc(100%-24px)] bg-white/95 backdrop-blur-xs px-2.5 py-1.5 rounded border border-admin-line shadow-card text-[10px] font-medium text-admin-ink-2">
+        <div className="absolute top-3 left-1/2 -translate-x-1/2 z-[500] flex flex-wrap items-center justify-center gap-x-3 gap-y-1 max-w-[calc(100%-24px)] bg-white/95 backdrop-blur-xs px-3 py-1.5 rounded-xl border border-admin-line shadow-card text-[12px] font-medium text-admin-ink-2">
           {(
             [
               ["Moving", STATE_COLOR.moving],
-              ["Stopped", STATE_COLOR.idle],
-              ["Parked", STATE_COLOR.parked],
+              ["Stopped", STATE_COLOR.stopped],
+              [`Stale signal (over ${TRACKER_STALE_AFTER_MINUTES} min)`, STATE_COLOR.stale],
               ["Selected", STATE_COLOR.selected]
             ] as const
           ).map(([label, color]) => (
@@ -601,6 +594,12 @@ export function LiveFleetMap({ jobs, onSelectJob }: Props) {
               {label}
             </span>
           ))}
+          {showCongestionZone && (zonesData?.zones?.length ?? 0) > 0 && (
+            <span className="flex basis-full items-center justify-center gap-1.5">
+              <span aria-hidden className="h-2.5 w-3.5 rounded-sm border border-[#DC2626] bg-[#DC2626]/20" />
+              {zonesData!.zones.map(zone => zone.zoneName).join(", ")}
+            </span>
+          )}
         </div>
 
         {/* collapsed: hamburger */}
@@ -609,6 +608,7 @@ export function LiveFleetMap({ jobs, onSelectJob }: Props) {
             onClick={() => setDrawerOpen(true)}
             className="absolute top-3 left-3 z-[500] flex items-center gap-2 px-3 h-10 rounded-lg bg-white shadow-card border border-admin-line text-admin-ink text-xs font-semibold hover:bg-admin-surface transition"
             title="Show vehicle list"
+            aria-label="Show vehicle list"
           >
             <PanelLeftOpen className="w-4 h-4" />
             {vehicles.length} vans
@@ -619,32 +619,16 @@ export function LiveFleetMap({ jobs, onSelectJob }: Props) {
         {drawerOpen && (
           <div className="absolute top-3 left-3 bottom-3 z-[500] w-[320px] max-w-[calc(100%-24px)] flex flex-col rounded-lg bg-white shadow-pop border border-admin-line overflow-hidden">
             <div className="relative flex items-center justify-between gap-2 px-3 h-11 border-b border-admin-line shrink-0">
-              <span className="text-xs font-bold text-admin-ink">Vehicles ({visibleVehicles.length})</span>
+              <span className="text-[13px] font-semibold text-admin-ink">Vehicles ({visibleVehicles.length})</span>
               <button
+                type="button"
                 onClick={collapseDrawer}
-                className={`p-1 rounded transition ${
-                  showCollapseHint
-                    ? "bg-admin-brand text-white ring-2 ring-admin-brand/30"
-                    : "hover:bg-admin-surface text-admin-muted hover:text-admin-ink"
-                }`}
+                className="grid h-8 w-8 place-items-center rounded-lg transition hover:bg-admin-surface text-admin-muted hover:text-admin-ink"
                 title="Collapse list"
+                aria-label="Collapse vehicle list"
               >
                 <PanelLeftClose className="w-4 h-4" />
               </button>
-
-              {showCollapseHint && (
-                <div className="absolute right-2 top-full z-[10] mt-2 w-[220px]">
-                  <div className="absolute -top-1.5 right-2.5 h-3 w-3 rotate-45 border-l border-t border-admin-brand/40 bg-admin-brand" />
-                  <button
-                    type="button"
-                    onClick={dismissCollapseHint}
-                    className="relative block w-full rounded-lg bg-admin-brand px-3 py-2.5 text-left text-white shadow-pop"
-                  >
-                    <span className="block text-[12px] font-semibold leading-snug">You can collapse here for a bigger map view</span>
-                    <span className="mt-1 block text-[10px] font-bold uppercase tracking-wider text-white/80">Got it</span>
-                  </button>
-                </div>
-              )}
             </div>
 
             <div className="px-2.5 py-2 border-b border-admin-line shrink-0">
@@ -652,64 +636,69 @@ export function LiveFleetMap({ jobs, onSelectJob }: Props) {
                 <Search className="w-3.5 h-3.5 text-admin-muted absolute left-2.5 top-1/2 -translate-y-1/2" />
                 <input
                   value={search}
+                  aria-label="Search vehicles by registration or driver"
                   onChange={e => setSearch(e.target.value)}
-                  placeholder="Search plate or driver..."
-                  className="w-full h-8 pl-8 pr-2 rounded bg-admin-surface border border-admin-line text-[12px] text-admin-ink placeholder:text-admin-muted outline-none focus:border-admin-brand"
+                  placeholder="Registration or driver"
+                  className="w-full h-10 pl-8 pr-2 rounded-xl bg-surface border border-admin-line text-[13px] text-admin-ink placeholder:text-admin-muted outline-none focus:border-admin-brand"
                 />
               </div>
             </div>
 
             <div className="flex-1 overflow-y-auto">
               {visibleVehicles.length === 0 && (
-                <p className="p-4 text-center text-[11px] text-admin-muted">No vehicles match.</p>
+                <p className="p-4 text-center text-[12px] text-admin-muted">No vehicles match.</p>
               )}
               {visibleVehicles.map(v => {
                 const isSel = selectedId === v.imei;
                 const color = STATE_COLOR[vehState(v)];
+                const motion = motionLabel(v.speedMph, v.isStale ? "stale" : "current");
                 return (
-                  <button
-                    key={v.imei}
-                    onClick={() => focusVehicle(v)}
-                    className={`w-full text-left px-3 py-2.5 border-b border-admin-line/70 transition ${
-                      isSel ? "bg-admin-brand-soft" : "hover:bg-admin-surface"
-                    }`}
-                  >
-                    <div className="flex items-center gap-2">
-                      <span className="font-mono text-[12.5px] font-bold text-admin-ink truncate">
-                        {v.plateNumber || v.name}
-                        {v.matched && <span className="text-admin-muted font-medium"> · {v.driverInitials}</span>}
-                      </span>
-                      <span className="ml-auto flex items-center gap-1.5 shrink-0">
-                        <span className="text-[11px] font-mono text-admin-muted">{v.speedMph} mph</span>
-                        <span className="w-2.5 h-2.5 rounded-full" style={{ background: color }} />
-                      </span>
-                    </div>
-                    <div className="mt-0.5 text-[11px] text-admin-muted">
-                      Driver: {v.matched ? v.driverName : "No driver"}
-                    </div>
-                    <div className="text-[11px] text-admin-muted">
-                      {v.isMoving ? "Moving" : `${v.isStale ? "Parked" : "Stopped"} · ${stoppedFor(v.lastUpdate)}`}
-                      {" · "}
-                      {relativeTime(v.lastUpdate)}
-                    </div>
-                    <div className="mt-0.5 text-[11px] text-admin-ink-2 truncate">
-                      {addrRef.current[v.imei] || `${v.lat.toFixed(4)}, ${v.lng.toFixed(4)}`}
-                    </div>
-                  </button>
+                  <div key={v.imei} className={`border-b border-admin-line/70 ${isSel ? "bg-admin-brand-soft" : "hover:bg-admin-surface"}`}>
+                    <button
+                      type="button"
+                      onClick={() => focusVehicle(v)}
+                      aria-pressed={isSel}
+                      aria-label={`${v.matched ? v.driverName : "No driver"}, ${v.plateNumber || v.name}, ${motion}, updated ${relativeTime(v.lastUpdate)}`}
+                      className="w-full text-left px-3 pt-2.5 pb-2"
+                    >
+                      <div className="flex items-center gap-2">
+                        <span aria-hidden className="w-2.5 h-2.5 shrink-0 rounded-full" style={{ background: color }} />
+                        <span className="min-w-0 truncate text-[13.5px] font-semibold text-admin-ink">{v.matched ? v.driverName : "No driver linked"}</span>
+                        <span className="ml-auto shrink-0 font-mono text-[12.5px] font-semibold text-admin-ink-2">{v.plateNumber || v.name}</span>
+                      </div>
+                      <div className="mt-1 flex items-center justify-between gap-2 text-[12.5px]">
+                        <span className="text-admin-ink-2">{motion}{v.isMoving ? ` · ${v.speedMph} mph` : ""}</span>
+                        <span className={`shrink-0 font-semibold ${v.isStale ? "text-admin-status-amber" : "text-admin-status-green"}`}>{v.isStale ? "Stale · " : "Updated "}{relativeTime(v.lastUpdate)}</span>
+                      </div>
+                      {addrRef.current[v.imei] && <div className="mt-0.5 truncate text-[12px] text-admin-ink-2">{addrRef.current[v.imei]}</div>}
+                    </button>
+                    {v.currentJob && onSelectJob && (
+                      <button type="button" onClick={() => onSelectJob(v.currentJob!.jobId)} aria-label={`View current job ${v.currentJob.jobId} for ${v.driverName}`}
+                        className="mx-3 mb-2 -mt-0.5 inline-flex max-w-[calc(100%-24px)] items-center gap-1 truncate rounded-md border border-admin-line bg-white px-2 py-1 text-[12px] font-semibold text-admin-brand hover:bg-admin-surface">
+                        Current job: {v.currentJob.customerName || v.currentJob.jobId}
+                      </button>
+                    )}
+                  </div>
                 );
               })}
             </div>
           </div>
         )}
 
-        {/* no data */}
+        {/* loading / failed / empty are three different states, never an indefinite "waiting" */}
         {vehicles.length === 0 && (
-          <div className="absolute inset-0 z-[400] flex items-center justify-center bg-white/80 backdrop-blur-xs">
+          <div className="absolute inset-0 z-[400] flex items-center justify-center bg-white/80 backdrop-blur-xs" role={fleetError ? "alert" : "status"}>
             <div className="text-center px-6">
-              <WifiOff className="w-8 h-8 text-admin-muted mx-auto mb-2 opacity-50" />
-              <p className="text-label font-semibold text-fg">No vehicle positions available</p>
-              <p className="text-[11px] text-admin-muted mt-1">Waiting for GPSLive telemetry...</p>
+              <WifiOff className="w-8 h-8 text-admin-muted mx-auto mb-2 opacity-50" aria-hidden />
+              <p className="text-[15px] font-semibold text-admin-ink">{fleetLoading ? "Loading vehicle positions…" : fleetError ? "Couldn't load vehicle positions" : "No vehicles are reporting"}</p>
+              <p className="text-[13px] text-admin-ink-2 mt-1">{fleetError ? (fleetErrorValue as Error)?.message || "The tracker service did not respond." : fleetLoading ? "Contacting GPSLive." : "GPSLive returned no devices for this account."}</p>
+              {fleetError && <button type="button" onClick={() => void refetchFleet()} className="mt-3 h-9 rounded-lg border border-admin-line bg-white px-3 text-[13px] font-semibold hover:bg-admin-surface">Try again</button>}
             </div>
+          </div>
+        )}
+        {vehicles.length > 0 && fleetError && (
+          <div role="status" className="absolute bottom-3 left-1/2 z-[500] -translate-x-1/2 rounded-lg border border-admin-status-amber/30 bg-admin-status-amber-bg px-3 py-1.5 text-[12.5px] text-admin-status-amber shadow-sm">
+            Latest refresh failed — showing positions from {DateTime.fromMillis(dataUpdatedAt).setZone("Europe/London").toFormat("HH:mm")}
           </div>
         )}
       </div>

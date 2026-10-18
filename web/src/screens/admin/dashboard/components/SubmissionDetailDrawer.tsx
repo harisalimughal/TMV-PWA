@@ -563,7 +563,7 @@ export function SubmissionDetailDrawer({ job: initialJob, isOpen, onClose, onNav
                        className="aspect-square rounded-card bg-admin-surface overflow-hidden border border-admin-line shadow-sm hover:ring-2 hover:ring-admin-brand/50 transition cursor-pointer block relative group"
                      >
                        <img src={p.thumbSrc} className="w-full h-full object-cover" alt={p.category} />
-                       <div className="absolute inset-0 bg-admin-ink/50 opacity-0 group-hover:opacity-100 transition flex items-center justify-center">
+                       <div className="absolute inset-0 tmv-scrim opacity-0 group-hover:opacity-100 transition flex items-center justify-center">
                           <Maximize2 className="w-5 h-5 text-white" />
                        </div>
                        <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-admin-ink/80 to-transparent p-2 text-[9px] text-white font-bold truncate">
@@ -669,7 +669,7 @@ export function SubmissionDetailDrawer({ job: initialJob, isOpen, onClose, onNav
     // outer div being position:fixed at print time meant that ancestor was itself
     // pinned to one viewport-sized box, silently capping the printed report to a
     // single page regardless of .print-content's own positioning.
-    <div className="fixed inset-0 print:static z-[100] flex items-center justify-center overflow-hidden bg-admin-ink/70 backdrop-blur-sm p-3 sm:p-6 animate-in fade-in duration-200">
+    <div className="fixed inset-0 print:static z-[100] flex items-center justify-center overflow-hidden tmv-scrim backdrop-blur-sm p-3 sm:p-6 animate-in fade-in duration-200">
       <div className="absolute inset-0 cursor-pointer print:hidden" onClick={onClose} />
       <div className="relative z-10 flex w-full h-full items-center justify-center print:hidden">
       

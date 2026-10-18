@@ -1,1160 +1,353 @@
-import { AdminFilterBar } from "../components/AdminFilterBar";
-import React, { useState, useMemo, useEffect, useRef } from "react";
-import { useQuery, keepPreviousData } from "@tanstack/react-query";
-import { fetchDrivers, fetchJobs, fetchJobDetail, markJobFinishedManually, reassignJob } from "../api";
-import { NormalizedJob } from "../types";
-import { JobDetailDrawer } from "../components/JobDetailDrawer";
-import { JobStatusBadge, JobRescheduleWarning } from "../components/StatusBadge";
-import { DateRangePicker, defaultDashboardDateRange } from "../components/DateRangePicker";
-import { ApiErrorState } from "../components/ApiErrorState";
+/**
+ * Jobs: every booking, one list, one canonical job detail.
+ *
+ * - "Finished Jobs" is the Completed filter here, not a competing page (legacy
+ *   `section=finished` links land on this filter).
+ * - Two views over the same request: cards (default; route, driver, money and issues per
+ *   job, see components/jobs/JobCard.tsx) and the compact table for comparing many
+ *   jobs. The choice is kept in the URL and remembered in this browser.
+ * - Status chips show how many jobs of each status match the other filters (one
+ *   counting request per status, page size 1), so the counts are exact, not page-local.
+ * - Every filter, the sort, the page and the view live in the URL, and the job detail
+ *   opens over this page, so closing it returns to the same list and scroll position.
+ * - One clearly labelled amount per row; a missing amount is "Not recorded", never £0.
+ */
+import React, { useEffect, useMemo, useState } from "react";
+import { useQueries, useQuery } from "@tanstack/react-query";
+import { AlertTriangle, CheckCircle2, ChevronDown, ChevronRight, ChevronUp, Download, LayoutGrid, List, Plus, RefreshCw, Trash2, UserPlus, UserX, X } from "lucide-react";
+import { AddJobModal } from "../components/AddJobModal";
+import { fetchJobs, reassignJob } from "../api";
+import type { NormalizedJob } from "../types";
+import { DateRangePicker, dateRangeForPreset } from "../components/DateRangePicker";
 import { BulkDeleteModal } from "../components/BulkDeleteModal";
-import { DriverViewedDot } from "../components/DriverViewedDot";
-import { formatLondonDateTime } from "../utils/date";
-import { downloadCsv, stampForFilename, toCsv } from "../utils/csv";
-import { resolveDriver, formatVanReg } from "../utils/drivers";
+import { JobStatusBadge } from "../components/StatusBadge";
+import { JobCard, JobCardGrid, JobCardSkeleton } from "../components/jobs/JobCard";
+import { attentionOf, crewLine, rowCharge } from "../components/jobs/jobView";
 import { useDriverOptions } from "../hooks/useDriverOptions";
-import { FinishedJobsPage } from "./FinishedJobsPage";
-import { ReportReturnButton } from "../components/ReportReturnButton";
+import { useUrlState } from "../hooks/useUrlState";
+import { isUnassigned, jobAttention } from "../hooks/useAttention";
+import { openJob } from "../navigation";
+import { downloadCsv, stampForFilename, toCsv } from "../utils/csv";
+import { downloadServerCsv } from "../utils/serverDownload";
+import { formatDate, formatDateTime, formatMoney, formatRange, formatTime } from "../utils/format";
+import { resolveDriver } from "../utils/drivers";
+import { Modal } from "../../../../ui/Modal";
+import { cx } from "../../../../ui/cx";
 import {
-  Search,
-  Download,
-  LayoutGrid,
-  List,
-  ChevronDown,
-  ChevronUp,
-  ChevronRight,
-  ChevronLeft,
-  Camera,
-  RefreshCw,
-  AlertTriangle,
-  UserPlus,
-  Trash2,
-  MoreHorizontal,
-  CheckCircle2
-} from "lucide-react";
+  Action, CellStack, ChoiceChips, DataTable, EmptyState, ErrorState, ExportMenu, FilterSelect, LoadingState, Missing,
+  PageHeader, Pagination, SearchField, Toolbar, Notice, controlBase, focusRing, panel, type ActiveFilter, type Column
+} from "../components/ds";
 
-export interface JobsPageProps {
-  initialStatus?: string;
+type StatusFilter = "all" | "scheduled" | "in_progress" | "completed" | "cancelled";
+const STATUS_PARAM: Record<StatusFilter, string | undefined> = { all: undefined, scheduled: "READY", in_progress: "IN_PROGRESS", completed: "COMPLETED", cancelled: "CANCELLED" };
+const STATUS_LABEL: Record<StatusFilter, string> = { all: "All statuses", scheduled: "Scheduled", in_progress: "In progress", completed: "Completed", cancelled: "Cancelled" };
+const SORT_FIELD: Record<string, string> = { time: "bookedStart", amount: "amountCharged", status: "status" };
+
+export { rowCharge };
+
+const VIEW_KEY = "tmv:jobs-view";
+function rememberedView(): "cards" | "table" {
+  try { return window.localStorage.getItem(VIEW_KEY) === "table" ? "table" : "cards"; } catch { return "cards"; }
 }
 
-export function JobsPage({ initialStatus = "All" }: JobsPageProps = {}) {
-  // The table is 12 columns wide and lives behind a horizontal scrollbar on anything
-  // narrower than a desktop -- close to unusable there. Cards are the default view on
-  // every screen size now; table is still available via the toggle for anyone who
-  // wants the denser, sortable layout.
-  const [viewMode, setViewMode] = useState<"table" | "cards">("cards");
-  const [reassignOpen, setReassignOpen] = useState(false);
-  const [cardReassignJob, setCardReassignJob] = useState<NormalizedJob | null>(null);
-  const [manualFinishJob, setManualFinishJob] = useState<NormalizedJob | null>(null);
-  const [deleteJobIds, setDeleteJobIds] = useState<string[] | null>(null);
-  const [drawerJob, setDrawerJob] = useState<NormalizedJob | null>(null);
-  
-  // Filtering & Pagination
-  const [from, setFrom] = useState<string | undefined>(() => defaultDashboardDateRange().from);
-  const [to, setTo] = useState<string | undefined>(() => defaultDashboardDateRange().to);
-  const [searchQuery, setSearchQuery] = useState("");
-  const [debouncedSearch, setDebouncedSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState(initialStatus); // All, In Progress, Finished
-  const [driverFilter, setDriverFilter] = useState<string>("");
-  
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(25);
-
-  // Sorting
-  const [sortConfig, setSortConfig] = useState<{ key: string, direction: "asc" | "desc" } | null>({ key: "Timing", direction: "asc" });
-
-  // Selection
-  const [selectedRows, setSelectedRows] = useState<Set<string>>(new Set());
-
-  // Maps the UI's sort column to a raw Mongo field jobs.repo.ts's listJobsPage can
-  // actually sort on.
-  const SORT_FIELD_MAP: Record<string, string> = { Timing: "bookedStart", Total: "amountCharged", Status: "status" };
-  const serverSort = sortConfig ? SORT_FIELD_MAP[sortConfig.key] : undefined;
-  const serverStatus = statusFilter === "In Progress" ? "IN_PROGRESS" : statusFilter === "Finished" ? "COMPLETED" : undefined;
-
-  /**
-   * Real server-side pagination. This used to pull up to 500 rows -- the whole
-   * company's job history, with evidence/activity/etc. joined in via the shared
-   * dashboard dataset cache -- on every request, then filter/sort/paginate all of it
-   * client-side, just to show 25 rows. Measured live in production: fetching everything
-   * took 9-11s; a genuinely limited, filtered Mongo query (jobs.routes.ts's GET /, now
-   * backed by listJobsPage) takes well under 1s, because the cost was proportional to
-   * how many documents came back, not a fixed per-request tax.
-   *
-   * `page` is in the query key so changing it actually refetches (a jobs.routes.ts
-   * fix from earlier this migration -- see that route's own comments); search/status/
-   * sort are sent to the server rather than filtered from an oversized local batch, so
-   * a job doesn't have to be in the first N rows to be found or correctly ordered.
-   */
-  const { data, isLoading, isError, error, refetch, isFetching } = useQuery({
-    queryKey: ["jobs", from, to, debouncedSearch, serverStatus, driverFilter, page, pageSize, serverSort, sortConfig?.direction],
-    queryFn: () => fetchJobs({
-      page, pageSize, from, to, q: debouncedSearch || undefined, status: serverStatus,
-      driver: driverFilter || undefined, sort: serverSort, dir: sortConfig?.direction
-    }),
-    // Without this, `data` (and its pagination.totalPages) goes to undefined the
-    // instant `page` changes, before the new page has even loaded. That made
-    // totalPages fall back to its default of 1, which the "snap back to a valid page"
-    // effect below then read as "page 2 is out of range" and immediately reverted to
-    // page 1 -- so Next looked like it silently did nothing. Keeping the previous
-    // page's data on screen during the fetch avoids that false-positive entirely, and
-    // is also just better UX (no flash to a loading/empty state on every page change).
-    placeholderData: keepPreviousData
+export function JobsPage() {
+  const today = dateRangeForPreset("today");
+  const [state, setState] = useUrlState({
+    from: today.from!, to: today.to!, range: "", q: "", status: "all", driver: "", sort: "time", dir: "asc", page: "1", size: "25", view: rememberedView()
   });
+  const allDates = state.range === "all";
+  const from = allDates ? undefined : state.from;
+  const to = allDates ? undefined : state.to;
+  const page = Math.max(1, Number(state.page) || 1);
+  const pageSize = [25, 50, 100].includes(Number(state.size)) ? Number(state.size) : 25;
+  const status = (Object.keys(STATUS_PARAM).includes(state.status) ? state.status : "all") as StatusFilter;
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [reassignIds, setReassignIds] = useState<string[] | null>(null);
+  const [deleteIds, setDeleteIds] = useState<string[] | null>(null);
+  const [creating, setCreating] = useState(false);
+  const [created, setCreated] = useState(false);
+  const [exportError, setExportError] = useState("");
+  const drivers = useDriverOptions();
 
-  // Same roster + filter pattern as Finished Jobs' driver filter -- every driver with
-  // a real account, resolved server-side by jobs.routes.ts's own driver filter.
-  const { options: driverOptions, isLoading: driverOptionsLoading } = useDriverOptions();
+  const query = useQuery({
+    queryKey: ["jobs", from, to, state.q, status, state.driver, page, pageSize, state.sort, state.dir],
+    queryFn: () => fetchJobs({
+      page, pageSize, from, to,
+      // `q` is the search parameter the jobs route reads; the former Finished Jobs
+      // page sent `search` instead. Both are sent so neither backend reading breaks.
+      q: state.q.toLowerCase() || undefined, search: state.q.toLowerCase() || undefined,
+      status: STATUS_PARAM[status], driver: state.driver || undefined, sort: SORT_FIELD[state.sort] ?? "bookedStart", dir: state.dir
+    })
+  });
+  // Exact counts per status for the other filters: one page-size-1 request each.
+  const countFilters = { from, to, q: state.q.toLowerCase() || undefined, search: state.q.toLowerCase() || undefined, driver: state.driver || undefined };
+  const counts = useQueries({
+    queries: (Object.keys(STATUS_PARAM) as StatusFilter[]).map(key => ({
+      queryKey: ["jobs_count", key, countFilters],
+      queryFn: ({ signal }: { signal: AbortSignal }) => fetchJobs({ ...countFilters, status: STATUS_PARAM[key], page: 1, pageSize: 1 }, signal).then(response => response.pagination.total),
+      staleTime: 30_000
+    }))
+  });
+  const countOf = (key: StatusFilter) => { const value = counts[(Object.keys(STATUS_PARAM) as StatusFilter[]).indexOf(key)]?.data; return typeof value === "number" ? value : undefined; };
+  const items = query.data?.items ?? [];
+  const total = query.data?.pagination.total ?? 0;
+  const view: "cards" | "table" = state.view === "table" ? "table" : "cards";
+  const setView = (next: "cards" | "table") => { setState({ view: next }); try { window.localStorage.setItem(VIEW_KEY, next); } catch { /* optional */ } };
+  const attentionOnPage = useMemo(() => items.filter(job => attentionOf(job).items.length > 0).length, [items]);
+  const totalPages = Math.max(1, query.data?.pagination.totalPages ?? 1);
+  useEffect(() => { if (query.data && page > totalPages) setState({ page: String(totalPages) }); }, [query.data, page, totalPages]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { setSelected(new Set()); }, [from, to, state.q, status, state.driver, page, pageSize, state.sort, state.dir]);
 
-  // Debounce search
-  useEffect(() => {
-    const handler = setTimeout(() => {
-      setDebouncedSearch(searchQuery.toLowerCase());
-      setPage(1);
-    }, 300);
-    return () => clearTimeout(handler);
-  }, [searchQuery]);
+  const setFilter = (patch: Partial<typeof state>) => setState({ ...patch, page: "1" });
+  const driverName = (code: string) => drivers.options.find(option => option.initials === code)?.fullName || code;
+  const activeFilters: ActiveFilter[] = [
+    ...(state.q ? [{ id: "q", label: `Search: “${state.q}”`, onRemove: () => setFilter({ q: "" }) }] : []),
+    ...(status !== "all" ? [{ id: "status", label: `Status: ${STATUS_LABEL[status]}`, onRemove: () => setFilter({ status: "all" }) }] : []),
+    ...(state.driver ? [{ id: "driver", label: `Driver: ${driverName(state.driver)}`, onRemove: () => setFilter({ driver: "" }) }] : []),
+    ...(allDates ? [{ id: "range", label: "All dates", onRemove: () => setFilter({ range: "", from: today.from!, to: today.to! }) }] : [])
+  ];
+  const clearFilters = () => setFilter({ q: "", status: "all", driver: "", range: "", from: today.from!, to: today.to! });
+  const scope = allDates ? "All dates" : formatRange(from, to);
 
-  // Final client-side sort pass over just the current page (cheap -- pageSize rows,
-  // not the whole company) so every sort column behaves identically regardless of
-  // whether the server could also sort on it.
-  const sortedItems = useMemo(() => {
-    const items = data?.items ? [...data.items] : [];
-    if (!sortConfig) return items;
-    items.sort((a, b) => {
-      let valA: any = 0;
-      let valB: any = 0;
-
-      if (sortConfig.key === "Timing") {
-        valA = new Date(a.bookedStart || 0).getTime();
-        valB = new Date(b.bookedStart || 0).getTime();
-      } else if (sortConfig.key === "Total") {
-        valA = a.amountCharged || 0;
-        valB = b.amountCharged || 0;
-      } else if (sortConfig.key === "Status") {
-        valA = a.status;
-        valB = b.status;
-      }
-
-      if (valA < valB) return sortConfig.direction === "asc" ? -1 : 1;
-      if (valA > valB) return sortConfig.direction === "asc" ? 1 : -1;
-      return 0;
-    });
-    return items;
-  }, [data?.items, sortConfig]);
-
-  const total = data?.pagination?.total ?? 0;
-  const totalPages = Math.max(1, data?.pagination?.totalPages ?? 1);
-  const safePage = Math.min(page, totalPages);
-
-  // A new filter/search can shrink the result set beneath the current page; snap back
-  // rather than stranding the user on an empty page with no way to tell why.
-  useEffect(() => {
-    if (page > totalPages) setPage(totalPages);
-  }, [page, totalPages]);
-
-  const openedDeepLinkJobRef = useRef<string | null>(null);
-
-  useEffect(() => {
-    const handleJobParam = () => {
-      const jobId = new URLSearchParams(window.location.search).get("job");
-      if (!jobId || openedDeepLinkJobRef.current === jobId) return;
-      openedDeepLinkJobRef.current = jobId;
-      fetchJobDetail(jobId)
-        .then(job => {
-          if (job) setDrawerJob(job);
-        })
-        .catch(() => {
-          openedDeepLinkJobRef.current = null;
-        });
-    };
-
-    handleJobParam();
-    window.addEventListener("popstate", handleJobParam);
-    return () => window.removeEventListener("popstate", handleJobParam);
-  }, []);
-
-  const handleCloseDrawer = () => {
-    setDrawerJob(null);
-    openedDeepLinkJobRef.current = null;
-    const url = new URL(window.location.href);
-    if (url.searchParams.has("job")) {
-      url.searchParams.delete("job");
-      window.history.replaceState({}, "", url.toString());
-    }
+  const sortHeader = (key: "time" | "amount" | "status", label: string) => {
+    const active = state.sort === key;
+    const nextDir = active && state.dir === "asc" ? "desc" : "asc";
+    return (
+      <button type="button" onClick={() => setState({ sort: key, dir: active ? nextDir : key === "time" ? "asc" : "desc", page: "1" })}
+        aria-label={`Sort by ${label}${active ? `, currently ${state.dir === "asc" ? "ascending" : "descending"}` : ""}`}
+        className={cx("inline-flex items-center gap-1 rounded hover:text-admin-ink", focusRing, active && "text-admin-ink")}>
+        {label}{active ? state.dir === "asc" ? <ChevronUp aria-hidden className="h-3.5 w-3.5" /> : <ChevronDown aria-hidden className="h-3.5 w-3.5" /> : null}
+      </button>
+    );
   };
 
-  const handleSort = (key: string) => {
-    setSortConfig(current => {
-      if (current?.key === key) {
-        return { key, direction: current.direction === "asc" ? "desc" : "asc" };
-      }
-      return { key, direction: "desc" };
-    });
-    setPage(1);
-  };
+  const toggle = (id: string) => setSelected(previous => { const next = new Set(previous); if (next.has(id)) next.delete(id); else next.add(id); return next; });
+  const allSelected = items.length > 0 && items.every(job => selected.has(job.jobId));
 
-  function exportFilteredCsv() {
+  const columns: Column<NormalizedJob>[] = [
+    {
+      id: "select", width: "44px", header: <input type="checkbox" aria-label="Select all jobs on this page" checked={allSelected} onChange={() => setSelected(allSelected ? new Set() : new Set(items.map(job => job.jobId)))} className="h-4 w-4 accent-admin-brand" />,
+      cell: job => <input type="checkbox" aria-label={`Select job ${job.jobId}`} checked={selected.has(job.jobId)} onChange={() => toggle(job.jobId)} className="h-4 w-4 accent-admin-brand" />
+    },
+    { id: "time", header: sortHeader("time", "Scheduled"), width: "104px", cell: job => <CellStack primary={<span className="text-[15px] font-bold tabular-nums">{formatTime(job.bookedStart, "—")}</span>} secondary={formatDate(job.bookedStart, "Not scheduled")} /> },
+    {
+      id: "customer", header: "Customer & route",
+      cell: job => <CellStack className="max-w-[420px]" primary={<span className="font-semibold">{job.customerName || <Missing>Customer not recorded</Missing>}</span>}
+        secondary={<span className="flex min-w-0 items-center gap-1" title={`${job.pickup || "Pickup not recorded"} → ${job.dropoff || "Drop-off not recorded"}`}>
+          <span className="truncate">{job.pickup || "Pickup not recorded"}</span><ChevronRight aria-label="to" className="h-3.5 w-3.5 shrink-0 text-admin-brand" /><span className="truncate">{job.dropoff || "Drop-off not recorded"}</span>
+        </span>} />
+    },
+    {
+      id: "driver", header: "Driver", width: "176px",
+      cell: job => isUnassigned(job)
+        ? <span className="inline-flex items-center gap-1.5 rounded-lg border border-admin-status-amber/35 bg-admin-status-amber-bg px-2 py-1 text-[12.5px] font-semibold text-admin-status-amber"><UserX aria-hidden className="h-3.5 w-3.5" />No driver</span>
+        : <span className="flex min-w-0 items-center gap-2.5">
+            <span aria-hidden className="tmv-avatar grid h-8 w-8 shrink-0 place-items-center rounded-lg text-[11.5px] font-bold">{job.driverInitials || "?"}</span>
+            <CellStack className="min-w-0" primary={resolveDriver(job.driverName, job.driverInitials).name} secondary={[job.driverInitials, crewLine(job)].filter(Boolean).join(" · ")} />
+          </span>
+    },
+    { id: "status", header: sortHeader("status", "Job status"), width: "124px", cell: job => <JobStatusBadge status={job.status} activity={job.activity} /> },
+    {
+      id: "amount", header: sortHeader("amount", "Charge"), align: "right", width: "124px",
+      cell: job => { const charge = rowCharge(job); return <CellStack className="text-right" primary={<span className="font-semibold tabular-nums">{formatMoney(charge.pence, charge.label === "Not charged" ? "—" : charge.label === "Calculated" ? "Not priced" : "Not recorded")}</span>} secondary={charge.label === "Final" ? "Final charge" : charge.label === "Not charged" ? "Cancelled" : "Calculated"} />; }
+    },
+    { id: "exception", header: "Needs attention", hideBelow: "lg", width: "196px", cell: job => <ExceptionCell job={job} /> },
+    { id: "open", header: <span className="sr-only">Open</span>, width: "84px", align: "right", cell: job => <Action size="sm" onClick={() => openJob(job.jobId)} aria-label={`Open job ${job.jobId}`}>Open</Action> }
+  ];
+
+  const exportFiltered = () => {
     const params = new URLSearchParams();
     if (from) params.set("from", from);
     if (to) params.set("to", to);
-    if (debouncedSearch) params.set("q", debouncedSearch);
-    if (serverStatus) params.set("status", serverStatus);
-    window.location.href = `/api/admin/jobs/export.csv?${params.toString()}`;
-  }
-
-  const toPounds = (cents: number | undefined) => (cents || 0) / 100;
-
-  /** Columns shared by both export buttons, so the two files always match. */
-  const exportColumns = [
-    { header: "Job ID", value: (j: NormalizedJob) => j.jobId },
-    { header: "Booked start", value: (j: NormalizedJob) => formatLondonDateTime(j.bookedStart) },
-    { header: "Driver", value: (j: NormalizedJob) => resolveDriver(j.driverName, j.driverInitials).name },
-    { header: "Customer", value: (j: NormalizedJob) => j.customerName },
-    { header: "Pickup", value: (j: NormalizedJob) => j.pickup },
-    { header: "Drop-off", value: (j: NormalizedJob) => j.dropoff },
-    { header: "Status", value: (j: NormalizedJob) => j.status },
-    { header: "Delay (min)", value: (j: NormalizedJob) => j.delayMinutes ?? "" },
-    { header: "Payment method", value: (j: NormalizedJob) => j.paymentMethod },
-    { header: "Total Charges (GBP)", value: (j: NormalizedJob) => toPounds(j.totalCharges).toFixed(2) },
-    { header: "Amount Charged (GBP)", value: (j: NormalizedJob) => toPounds(j.amountCharged).toFixed(2) }
-  ];
-
-  function exportRows(rows: NormalizedJob[], suffix: string) {
-    if (rows.length === 0) return;
-    downloadCsv(`tmv-jobs-${suffix}-${stampForFilename()}.csv`, toCsv(rows, exportColumns));
-  }
-
-  const toggleAll = () => {
-    if (selectedRows.size === sortedItems.length) {
-      setSelectedRows(new Set());
-    } else {
-      setSelectedRows(new Set(sortedItems.map(j => j.jobId)));
-    }
+    if (state.q) { params.set("q", state.q.toLowerCase()); params.set("search", state.q.toLowerCase()); }
+    if (STATUS_PARAM[status]) params.set("status", STATUS_PARAM[status]!);
+    if (state.driver) params.set("driver", state.driver);
+    setExportError("");
+    downloadServerCsv(`/api/admin/jobs/export.csv?${params.toString()}`, `tmv-jobs-${stampForFilename()}.csv`).catch(error => setExportError((error as Error)?.message || "The export could not be downloaded."));
   };
-
-  const toggleRow = (id: string) => {
-    const next = new Set(selectedRows);
-    if (next.has(id)) next.delete(id);
-    else next.add(id);
-    setSelectedRows(next);
+  const exportSelection = () => {
+    const rows = items.filter(job => selected.has(job.jobId));
+    downloadCsv(`tmv-jobs-selected-${stampForFilename()}.csv`, toCsv(rows, [
+      { header: "Job ID", value: job => job.jobId },
+      { header: "Scheduled start (London)", value: job => formatDateTime(job.bookedStart, "Not scheduled") },
+      { header: "Customer", value: job => job.customerName },
+      { header: "Pickup", value: job => job.pickup },
+      { header: "Drop-off", value: job => job.dropoff },
+      { header: "Driver", value: job => resolveDriver(job.driverName, job.driverInitials).name },
+      { header: "Job status", value: job => job.status },
+      { header: "Calculated charge (GBP)", value: job => { const value = job.totalCharges ?? job.calculatedTotalCharges; return typeof value === "number" ? (value / 100).toFixed(2) : "Not recorded"; } },
+      { header: "Final charge (GBP)", value: job => job.status === "COMPLETED" && typeof job.amountCharged === "number" ? (job.amountCharged / 100).toFixed(2) : "Not recorded" }
+    ]));
   };
+  const filterSummary = [scope, status !== "all" ? STATUS_LABEL[status] : "", state.driver ? driverName(state.driver) : "", state.q ? `search “${state.q}”` : ""].filter(Boolean).join(", ");
 
-  const SortIcon = ({ column }: { column: string }) => {
-    if (sortConfig?.key !== column) return <ChevronDown className="inline w-3 h-3 opacity-0 group-hover:opacity-100 transition ml-1" />;
-    return sortConfig.direction === "asc" 
-      ? <ChevronUp className="inline w-3 h-3 text-admin-brand ml-1" />
-      : <ChevronDown className="inline w-3 h-3 text-admin-brand ml-1" />;
-  };
-
-  if (statusFilter === "Finished") {
-    return (
-      <FinishedJobsPage
-        from={from}
-        to={to}
-        onDateRangeChange={(f, t) => { setFrom(f); setTo(t); setPage(1); }}
-        driverFilter={driverFilter}
-        onDriverFilterChange={d => { setDriverFilter(d); setPage(1); }}
-        statusFilter={statusFilter}
-        onStatusFilterChange={s => { setStatusFilter(s); setPage(1); }}
-        searchQuery={searchQuery}
-        onSearchQueryChange={s => { setSearchQuery(s); setPage(1); }}
-        viewMode={viewMode}
-        onViewModeChange={v => setViewMode(v)}
-      />
-    );
-  }
+  const statusOptions = (Object.keys(STATUS_LABEL) as StatusFilter[]).map(value => ({ value, label: value === "all" ? "All" : STATUS_LABEL[value], count: countOf(value) }));
+  const cardActions = { onToggle: toggle, onReassign: (id: string) => setReassignIds([id]), onDelete: (id: string) => setDeleteIds([id]) };
 
   return (
-    <div className="space-y-6 max-w-[1440px] mx-auto pb-12 relative">
-      <ReportReturnButton />
-      
-      {/* BULK ACTION BAR (Floating) */}
-      {selectedRows.size > 0 && (
-        <div className="fixed bottom-4 sm:bottom-6 left-4 right-4 sm:left-1/2 sm:right-auto sm:-translate-x-1/2 z-50 animate-in slide-in-from-bottom-5 flex justify-center">
-          <div className="bg-admin-ink text-white rounded-full shadow-2xl px-4 sm:px-5 py-3 flex items-center gap-3 sm:gap-6 max-w-full overflow-x-auto">
-            <span className="text-[13px] font-bold whitespace-nowrap shrink-0">
-              {selectedRows.size} job{selectedRows.size > 1 ? 's' : ''} selected
-            </span>
-            <div className="h-4 w-px bg-white/20 shrink-0" />
-            <div className="flex items-center gap-2 shrink-0">
-              <button
-                onClick={() => setReassignOpen(true)}
-                className="shrink-0 whitespace-nowrap px-2.5 sm:px-3 py-1.5 rounded-full text-[12px] font-semibold hover:bg-white/10 transition flex items-center gap-1.5"
-              >
-                <UserPlus className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Bulk Reassign</span>
-              </button>
-              <button
-                onClick={() => exportRows(sortedItems.filter(j => selectedRows.has(j.jobId)), "selection")}
-                className="shrink-0 whitespace-nowrap px-2.5 sm:px-3 py-1.5 rounded-full text-[12px] font-semibold hover:bg-white/10 transition flex items-center gap-1.5"
-              >
-                <Download className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Export Selection</span>
-              </button>
-              <button
-                onClick={() => setDeleteJobIds(Array.from(selectedRows))}
-                title="Deleting a job also cancels its linked Calendar event -- this currently fails with a permission error until Calendar write access is enabled."
-                className="shrink-0 whitespace-nowrap px-2.5 sm:px-3 py-1.5 rounded-full text-[12px] font-semibold text-red-300 hover:bg-white/10 hover:text-red-200 transition flex items-center gap-1.5"
-              >
-                <Trash2 className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Delete</span>
-              </button>
-              <button
-                onClick={() => setSelectedRows(new Set())}
-                className="shrink-0 px-2.5 py-1.5 rounded-full text-[12px] font-semibold hover:bg-white/10 transition"
-              >
-                Clear
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+    <>
+      <PageHeader title="Jobs" scope={<>{scope} · London time</>}
+        actions={<><Action variant="primary" icon={<Plus />} onClick={() => setCreating(true)}>Add job</Action><ExportMenu options={[
+          { id: "filtered", label: "CSV — all filtered jobs", scope: `${total} job${total === 1 ? "" : "s"}: ${filterSummary}. Generated by the server; columns as defined by the export.`, onSelect: exportFiltered, disabled: total === 0 },
+          { id: "selected", label: `CSV — selected jobs (${selected.size})`, scope: "Only the jobs ticked on this page, with the labels used in this list.", onSelect: exportSelection, disabled: selected.size === 0 }
+        ]} /></>} />
 
-      {/* CONSOLIDATED TOOLBAR CARD -- date range on its own row up top, everything
-          else (including the driver filter) on a second row below. */}
-      <AdminFilterBar dates={<DateRangePicker from={from} to={to} onChange={(f, t) => { setFrom(f); setTo(t); setPage(1); }} />} count={<>{isLoading || isFetching ? "Updating..." : `${total} moves`}</>}>
-<div className="flex items-center p-1 bg-admin-surface rounded-card border border-admin-line/50 shrink-0">
-            <button
-              onClick={() => setViewMode("table")}
-              className={`p-1.5 rounded-control transition ${viewMode === 'table' ? 'bg-white shadow-sm text-admin-ink' : 'text-admin-muted hover:text-admin-ink'}`}
-            >
-              <List className="w-4 h-4" />
-            </button>
-            <button
-              onClick={() => setViewMode("cards")}
-              className={`p-1.5 rounded-control transition ${viewMode === 'cards' ? 'bg-white shadow-sm text-admin-ink' : 'text-admin-muted hover:text-admin-ink'}`}
-            >
-              <LayoutGrid className="w-4 h-4" />
-            </button>
-          </div>
-
-          {/* Driver filter -- same roster + behaviour as Finished Jobs' driver filter. */}
-          <select
-            value={driverFilter}
-            onChange={e => { setDriverFilter(e.target.value); setPage(1); }}
-            disabled={driverOptionsLoading}
-            className="shrink-0 h-10 px-3 rounded-card border border-admin-line/50 bg-admin-surface text-[13px] font-medium text-admin-ink outline-none focus:border-admin-brand"
-          >
-            <option value="">{driverOptionsLoading ? "Loading drivers..." : "All drivers"}</option>
-            {!driverOptionsLoading && driverOptions.map(d => (
-              <option key={d.initials} value={d.initials}>{d.fullName || d.initials}</option>
-            ))}
-          </select>
-
-          <div className="relative w-full sm:w-64 order-last sm:order-none">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-admin-muted" />
-            <input
-              type="text"
-              placeholder="Search ID, customer, route..."
-              value={searchQuery}
-              onChange={e => setSearchQuery(e.target.value)}
-              className="w-full pl-9 pr-4 h-10 rounded-card bg-admin-surface border border-admin-line/50 text-[13px] text-admin-ink focus:border-admin-brand focus:ring-1 focus:ring-admin-brand outline-none transition"
-            />
-          </div>
-
-          <div className="flex items-center bg-admin-surface p-1 rounded-card border border-admin-line/50 shrink-0">
-            {["All", "In Progress", "Finished"].map(status => (
-              <button
-                key={status}
-                onClick={() => { setStatusFilter(status); setPage(1); }}
-                className={`shrink-0 whitespace-nowrap px-3 py-1.5 rounded-control text-[13px] font-medium transition ${statusFilter === status ? 'bg-white text-admin-ink shadow-sm' : 'text-admin-muted hover:text-admin-ink'}`}
-              >
-                {status}
-              </button>
-            ))}
-          </div>
-
-          <div className="hidden sm:block w-px h-6 bg-admin-line mx-1 shrink-0" />
-
-          <button
-            onClick={() => refetch()}
-            className="shrink-0 w-10 h-10 rounded-card flex items-center justify-center bg-admin-surface border border-admin-line/50 hover:bg-admin-line/40 text-admin-muted hover:text-admin-ink transition"
-            title="Refresh Data"
-          >
-            <RefreshCw className={`w-4 h-4 ${isFetching ? 'animate-spin' : ''}`} />
-          </button>
-          <button
-            onClick={exportFilteredCsv}
-            disabled={total === 0}
-            className="shrink-0 w-10 h-10 rounded-card flex items-center justify-center bg-admin-surface border border-admin-line/50 hover:bg-admin-line/40 text-admin-muted hover:text-admin-ink transition disabled:opacity-40"
-            title={`Export ${total} rows as CSV`}
-            aria-label="Export filtered jobs as CSV"
-          >
-            <Download className="w-4 h-4" />
-          </button>
-      </AdminFilterBar>
-
-      {isError && <ApiErrorState message={(error as Error)?.message} onRetry={() => refetch()} />}
-
-      {/* TABLE CARD */}
-      {!isError && viewMode === "table" && (
-        <div className="bg-white rounded-module shadow-sm overflow-hidden border border-admin-line">
-          <div className="overflow-x-auto relative min-h-[400px]">
-            <table className="w-full text-left text-[14px] border-collapse relative">
-              <thead className="bg-white sticky top-0 z-10 shadow-[0_1px_0_rgba(0,0,0,0.05)]">
-                <tr className="border-b border-admin-line">
-                  <th className="py-4 px-4 w-10 text-center">
-                    <input 
-                      type="checkbox" 
-                      onChange={toggleAll}
-                      checked={sortedItems.length > 0 && selectedRows.size === sortedItems.length}
-                      className="rounded text-admin-brand cursor-pointer" 
-                    />
-                  </th>
-                  <th className="py-4 px-2 w-10 text-center font-mono text-eyebrow text-fg-subtle tracking-[0.03em]">#</th>
-                  <th className="py-4 px-4 font-semibold text-eyebrow text-fg-subtle tracking-[0.03em] uppercase tracking-[0.03em]">
-                    Job ID & Driver
-                  </th>
-                  <th 
-                    className="py-4 px-4 font-semibold text-eyebrow text-fg-subtle tracking-[0.03em] uppercase tracking-[0.03em] group cursor-pointer hover:text-admin-ink transition select-none"
-                    onClick={() => handleSort("Timing")}
-                  >
-                    Timing <SortIcon column="Timing" />
-                  </th>
-                  <th className="py-4 px-4 font-semibold text-eyebrow text-fg-subtle tracking-[0.03em] uppercase tracking-[0.03em]">Customer</th>
-                  <th className="py-4 px-4 font-semibold text-eyebrow text-fg-subtle tracking-[0.03em] uppercase tracking-[0.03em]">Pickup</th>
-                  <th className="py-4 px-4 font-semibold text-eyebrow text-fg-subtle tracking-[0.03em] uppercase tracking-[0.03em]">Dropoff</th>
-                  <th 
-                    className="py-4 px-4 font-semibold text-eyebrow text-fg-subtle tracking-[0.03em] uppercase tracking-[0.03em] group cursor-pointer hover:text-admin-ink transition select-none"
-                    onClick={() => handleSort("Status")}
-                  >
-                    Status <SortIcon column="Status" />
-                  </th>
-                  <th className="py-4 px-4 font-semibold text-eyebrow text-fg-subtle tracking-[0.03em] uppercase tracking-[0.03em] text-center">Photos</th>
-                  <th 
-                    className="py-4 px-6 font-semibold text-eyebrow text-fg-subtle tracking-[0.03em] uppercase tracking-[0.03em] text-right group cursor-pointer hover:text-admin-ink transition select-none"
-                    onClick={() => handleSort("Total")}
-                  >
-                    Amount Charged <SortIcon column="Total" />
-                  </th>
-                  <th className="py-4 px-6 font-semibold text-eyebrow text-fg-subtle tracking-[0.03em] uppercase tracking-[0.03em] text-right">
-                    Total Charges
-                  </th>
-                  <th className="py-4 px-4 w-10"></th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-admin-line/60">
-                {isLoading || isFetching ? (
-                  // Skeleton Rows
-                  Array.from({ length: 8 }).map((_, i) => (
-                    <tr key={i} className="h-[64px]">
-                       <td colSpan={12} className="px-4">
-                         <div className="h-4 bg-admin-line/40 rounded w-full animate-pulse"></div>
-                       </td>
-                    </tr>
-                  ))
-                ) : sortedItems.length === 0 ? (
-                  // Empty State
-                  <tr>
-                    <td colSpan={12} className="py-16 text-center">
-                      <div className="w-12 h-12 bg-admin-surface text-admin-muted rounded-full flex items-center justify-center mx-auto mb-3">
-                        <Search className="w-5 h-5" />
-                      </div>
-                      <h3 className="text-card text-fg mb-1">No jobs match your filters</h3>
-                      <p className="text-[13px] text-admin-muted mb-4">Try adjusting your search or clearing filters.</p>
-                      <button
-                        onClick={() => {
-                          const range = defaultDashboardDateRange();
-                          setSearchQuery("");
-                          setStatusFilter("All");
-                          setFrom(range.from);
-                          setTo(range.to);
-                          setPage(1);
-                        }}
-                        className="px-4 py-2 bg-admin-surface hover:bg-admin-line text-admin-ink text-[13px] font-semibold rounded-card transition"
-                      >
-                        Clear all filters
-                      </button>
-                    </td>
-                  </tr>
-                ) : (
-                  sortedItems.map((job: NormalizedJob, index: number) => {
-                    const rowNumber = (safePage - 1) * pageSize + index + 1;
-                    const formattedTime = formatLondonDateTime(job.bookedStart);
-                    const amountPounds = toPounds(job.amountCharged);
-                    const totalPounds = toPounds(job.totalCharges);
-                    const photoCount = job.evidenceItems?.filter(e => (e.thumbProxyUrl || e.driveUrl)).length || 0;
-                    
-                    const resolvedDriver = resolveDriver(job.driverName, job.driverInitials);
-                    const isUnassigned = resolvedDriver.code === "UN";
-                    
-                    return (
-                      <tr 
-                        key={job.jobId}
-                        onClick={() => setDrawerJob(job)}
-                        className={`h-[64px] group cursor-pointer hover:bg-admin-surface transition select-none ${resolvedDriver.needsReassignment ? 'bg-amber-50/40 hover:bg-amber-50/70' : ''}`}
-                      >
-                        <td className="px-4 text-center">
-                          <input 
-                            type="checkbox" 
-                            checked={selectedRows.has(job.jobId)}
-                            onChange={() => toggleRow(job.jobId)}
-                            onClick={e => e.stopPropagation()}
-                            className="rounded text-admin-brand cursor-pointer" 
-                          />
-                        </td>
-                        <td className="px-2 text-center font-mono text-[14px] font-bold text-admin-muted tabular-nums">{rowNumber}</td>
-                        
-                        <td className="px-4">
-                          <div className="flex items-center gap-3">
-                            <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-[11px] shrink-0 ${resolvedDriver.color}`}>
-                              {resolvedDriver.code}
-                            </div>
-                            <div className="min-w-0">
-                              <div className="flex items-center gap-2">
-                                <span className="font-semibold text-admin-brand text-[14px] leading-tight truncate">
-                                  {job.jobId}
-                                </span>
-                                <DriverViewedDot viewedAt={job.driverViewedAt} />
-                                {!isUnassigned && resolvedDriver.vehicleReg && (
-                                  <span className="bg-admin-surface px-1 py-[1px] border border-admin-line rounded-[3px] font-mono font-bold uppercase text-[9px] text-admin-muted truncate max-w-[80px]">
-                                    {formatVanReg(resolvedDriver.vehicleReg)}
-                                  </span>
-                                )}
-                              </div>
-                              <div className="text-[13px] text-admin-muted font-normal mt-2 flex flex-col items-start gap-2">
-                                 <span className="truncate">{resolvedDriver.name}</span>
-                                 {resolvedDriver.needsReassignment && (
-                                   <div 
-                                     className="flex items-center gap-1.5 text-[11px] tracking-[0.02em] font-semibold text-amber-700 bg-amber-100 px-2.5 py-1 rounded-control shrink-0 hover:bg-amber-200 transition"
-                                     onClick={(e) => { e.stopPropagation(); /* Mock Inline Assign */ }}
-                                   >
-                                     <AlertTriangle className="w-3 h-3" /> Reassign
-                                   </div>
-                                 )}
-                              </div>
-                            </div>
-                          </div>
-                        </td>
-
-                        <td className="px-4 text-[13px] font-normal text-admin-muted tabular-nums whitespace-nowrap">
-                          {formattedTime || <span className="text-[14px] font-normal text-[#B0B0B0] italic">Not recorded</span>}
-                        </td>
-                        
-                        <td className="px-4 text-[14px] font-normal text-admin-ink truncate max-w-[120px]">
-                          {job.customerName || <span className="text-[14px] font-normal text-[#B0B0B0] italic">Not recorded</span>}
-                        </td>
-                        
-                        <td className="px-4 text-[14px] font-normal text-admin-ink truncate max-w-[140px]" title={job.pickup}>
-                          {job.pickup || <span className="text-[14px] font-normal text-[#B0B0B0] italic">Not recorded</span>}
-                        </td>
-                        
-                        <td className="px-4 text-[14px] font-normal text-admin-ink truncate max-w-[140px]" title={job.dropoff}>
-                          {job.dropoff || <span className="text-[14px] font-normal text-[#B0B0B0] italic">Not recorded</span>}
-                        </td>
-
-                        <td className="px-4 whitespace-nowrap">
-                          <JobStatusBadge status={job.status} activity={job.activity} />
-                          <JobRescheduleWarning notice={job.rescheduleNotice} />
-                        </td>
-
-                        <td className="px-4 text-center">
-                          <div className="flex items-center justify-center">
-                            {photoCount > 0 ? (
-                              <div className="flex items-center gap-1 px-2 py-0.5 bg-admin-surface border border-admin-line text-admin-ink rounded-card text-[11px] font-bold">
-                                <Camera className="w-3 h-3 text-admin-brand" /> {photoCount}
-                              </div>
-                            ) : (
-                              <span className="text-[14px] font-normal text-[#B0B0B0] italic">-</span>
-                            )}
-                          </div>
-                        </td>
-
-                        <td className="px-6 text-right">
-                          <div className={`font-mono text-[14px] font-bold tabular-nums ${amountPounds === 0 ? "text-[#B0B0B0] italic" : "text-admin-ink"}`}>
-                            {amountPounds === 0 ? "-" : `£${amountPounds.toLocaleString("en-GB", { minimumFractionDigits: 2 })}`}
-                          </div>
-                        </td>
-
-                        <td className="px-6 text-right">
-                          <div className={`font-mono text-[13px] font-semibold tabular-nums ${totalPounds === 0 ? "text-[#B0B0B0] italic" : "text-admin-muted"}`}>
-                            {totalPounds === 0 ? "-" : `£${totalPounds.toLocaleString("en-GB", { minimumFractionDigits: 2 })}`}
-                          </div>
-                        </td>
-
-                        <td className="px-4 text-center" onClick={e => e.stopPropagation()}>
-                          <div className="flex items-center justify-center gap-1">
-                            <JobActionsMenu
-                              job={job}
-                              onReassign={setCardReassignJob}
-                              onManualFinish={setManualFinishJob}
-                            />
-                            <button
-                              onClick={() => setDrawerJob(job)}
-                              className="opacity-0 group-hover:opacity-100 transition text-admin-muted p-1 rounded-full hover:bg-admin-surface hover:text-admin-ink"
-                              aria-label={`Open job ${job.jobId}`}
-                            >
-                              <ChevronRight className="w-5 h-5" />
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })
-                )}
-              </tbody>
-            </table>
-          </div>
-
-          {/* PAGINATION FOOTER */}
-          {sortedItems.length > 0 && (
-            <div className="px-4 sm:px-6 py-4 border-t border-admin-line bg-white flex flex-wrap items-center justify-between gap-3">
-               <div className="flex items-center gap-2 text-[13px] text-admin-muted">
-                 Show
-                 <select 
-                   value={pageSize}
-                   onChange={e => { setPageSize(Number(e.target.value)); setPage(1); }}
-                   className="h-8 px-2 rounded-card border border-admin-line bg-admin-surface outline-none focus:border-admin-brand"
-                 >
-                   <option value={25}>25</option>
-                   <option value={50}>50</option>
-                   <option value={100}>100</option>
-                 </select>
-                 rows
-               </div>
-               
-               <div className="flex items-center gap-4">
-                 <span className="text-label font-medium text-fg-muted">
-                   Page {safePage} of {totalPages}
-                 </span>
-                 <div className="flex items-center gap-1">
-                   <button 
-                     disabled={safePage <= 1}
-                     onClick={() => setPage(p => Math.max(1, p - 1))}
-                     className="p-1.5 rounded-card border border-admin-line bg-white text-admin-ink hover:bg-admin-surface disabled:opacity-50 transition"
-                   >
-                     <ChevronLeft className="w-4 h-4" />
-                   </button>
-                   <button 
-                     disabled={safePage >= totalPages}
-                     onClick={() => setPage(p => Math.min(totalPages, p + 1))}
-                     className="p-1.5 rounded-card border border-admin-line bg-white text-admin-ink hover:bg-admin-surface disabled:opacity-50 transition"
-                   >
-                     <ChevronRight className="w-4 h-4" />
-                   </button>
-                 </div>
-               </div>
-            </div>
-          )}
-        </div>
-      )}
-
-      {!isError && viewMode === "cards" && (
-        <JobCardList
-          jobs={sortedItems}
-          isLoading={isLoading}
-          isFetching={isFetching}
-          selected={selectedRows}
-          onToggle={toggleRow}
-          onOpen={setDrawerJob}
-          onReassign={setCardReassignJob}
-          onManualFinish={setManualFinishJob}
-          toPounds={toPounds}
-          page={safePage}
-          totalPages={totalPages}
-          onPageChange={setPage}
-        />
-      )}
-
-      {drawerJob && (
-        <JobDetailDrawer
-          job={drawerJob}
-          isOpen={!!drawerJob}
-          onClose={handleCloseDrawer}
-          onUpdated={() => refetch()}
-        />
-      )}
-
-      {reassignOpen && (
-        <BulkReassignModal
-          jobIds={Array.from(selectedRows)}
-          onClose={() => setReassignOpen(false)}
-          onDone={() => {
-            setReassignOpen(false);
-            setSelectedRows(new Set());
-            void refetch();
-          }}
-        />
-      )}
-
-      {cardReassignJob && (
-        <BulkReassignModal
-          jobIds={[cardReassignJob.jobId]}
-          onClose={() => setCardReassignJob(null)}
-          onDone={() => {
-            setCardReassignJob(null);
-            void refetch();
-          }}
-        />
-      )}
-
-      {manualFinishJob && (
-        <ManualFinishModal
-          job={manualFinishJob}
-          onClose={() => setManualFinishJob(null)}
-          onDone={() => {
-            setManualFinishJob(null);
-            void refetch();
-          }}
-        />
-      )}
-
-      {deleteJobIds && (
-        <BulkDeleteModal
-          jobIds={deleteJobIds}
-          onClose={() => setDeleteJobIds(null)}
-          onDone={() => {
-            setDeleteJobIds(null);
-            setSelectedRows(new Set());
-            void refetch();
-          }}
-        />
-      )}
-    </div>
-  );
-}
-
-/* ------------------------------------------------------------------ card view --- */
-
-interface JobCardListProps {
-  jobs: NormalizedJob[];
-  isLoading: boolean;
-  isFetching: boolean;
-  selected: Set<string>;
-  onToggle: (id: string) => void;
-  onOpen: (job: NormalizedJob) => void;
-  onReassign: (job: NormalizedJob) => void;
-  onManualFinish: (job: NormalizedJob) => void;
-  toPounds: (pence: number | undefined) => number;
-  page: number;
-  totalPages: number;
-  onPageChange: (page: number) => void;
-}
-
-/**
- * The card view used to be a placeholder that said "Switch to table for detailed
- * layout" -- which, on a phone, meant the only option was a 12-column table behind a
- * horizontal scrollbar. This is the real thing, and it's the default below md.
- */
-function JobCardList({
-  jobs,
-  isLoading,
-  isFetching,
-  selected,
-  onToggle,
-  onOpen,
-  onReassign,
-  onManualFinish,
-  toPounds,
-  page,
-  totalPages,
-  onPageChange
-}: JobCardListProps) {
-  if (isLoading || isFetching) {
-    return (
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-        {Array.from({ length: 6 }).map((_, i) => (
-          <div key={i} className="h-[150px] rounded-[6px] bg-white border border-admin-line skeleton" />
-        ))}
-      </div>
-    );
-  }
-
-  if (jobs.length === 0) {
-    return (
-      <div className="text-center p-12 bg-white rounded-[6px] border border-admin-line">
-        <h3 className="text-card text-fg mb-1">No jobs match your filters</h3>
-        <p className="text-[13px] text-admin-muted">Try adjusting your search or clearing the date range.</p>
-      </div>
-    );
-  }
-
-  return (
-    <div className="space-y-4">
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-        {jobs.map(job => {
-          const driver = resolveDriver(job.driverName, job.driverInitials);
-          const amount = toPounds(job.amountCharged);
-          const total = toPounds(job.totalCharges);
-          const isSelected = selected.has(job.jobId);
-          return (
-            <article
-              key={job.jobId}
-              className={`rounded-[6px] bg-white border p-4 transition-colors ${
-                isSelected ? "border-admin-brand ring-2 ring-admin-brand/20" : "border-admin-line"
-              }`}
-            >
-              <div className="flex items-start gap-3">
-                <input
-                  type="checkbox"
-                  checked={isSelected}
-                  onChange={() => onToggle(job.jobId)}
-                  className="mt-1 w-4 h-4 rounded accent-admin-brand cursor-pointer shrink-0"
-                  aria-label={`Select job ${job.jobId}`}
-                />
-                {/* Sibling of the onOpen button below, not nested inside it -- a <button>
-                    inside a <button> is invalid HTML and browsers handle it unpredictably. */}
-                <div className="order-3 shrink-0 mt-0.5">
-                  <JobActionsMenu job={job} onReassign={onReassign} onManualFinish={onManualFinish} />
-                </div>
-                <button onClick={() => onOpen(job)} className="order-2 flex-1 min-w-0 text-left">
-                  <div className="flex items-start gap-2">
-                    <span className={`w-9 h-9 rounded-full flex items-center justify-center font-bold text-[11px] shrink-0 ${driver.color}`}>
-                      {driver.code}
-                    </span>
-                    <span className="min-w-0 flex-1">
-                      <span className="flex items-center gap-1.5 min-w-0">
-                        <span className="text-[15px] text-admin-ink font-bold truncate">{driver.name}</span>
-                        <DriverViewedDot viewedAt={job.driverViewedAt} />
-                      </span>
-                      <span className="mt-1 block text-[12px] font-semibold text-admin-muted tabular-nums">
-                        {formatLondonDateTime(job.bookedStart) || "Not scheduled"}
-                      </span>
-                    </span>
-                    <JobStatusBadge status={job.status} activity={job.activity} />
-                  </div>
-                  <div className="mt-4 flex items-start justify-between gap-3">
-                    <p className="text-card text-fg font-bold truncate">
-                    {job.customerName || "Not recorded"}
-                    </p>
-                    <span className="shrink-0 font-mono text-[15px] font-bold tabular-nums text-admin-ink">
-                      {amount === 0 ? "-" : `${String.fromCharCode(163)}${amount.toLocaleString("en-GB", { minimumFractionDigits: 2 })}`}
-                    </span>
-                  </div>
-                  <p className="text-[13px] text-admin-muted mt-1 truncate">
-                    {job.rawTitle || "—"}
-                  </p>
-                  <JobRescheduleWarning notice={job.rescheduleNotice} />
-                  <div className="mt-4 flex items-center justify-between gap-3 border-t border-admin-line pt-3">
-                    <span className="text-[11px] font-medium text-admin-muted truncate">{job.jobId}</span>
-                    <span className="shrink-0 font-mono text-[13px] font-bold tabular-nums text-admin-ink">
-                      Total {total === 0 ? "-" : `${String.fromCharCode(163)}${total.toLocaleString("en-GB", { minimumFractionDigits: 2 })}`}
-                    </span>
-                  </div>
-                  <div className="hidden">
-                    <span className="flex items-center gap-2 min-w-0">
-                      <span
-                        className={`w-6 h-6 rounded-full flex items-center justify-center font-bold text-[10px] shrink-0 ${driver.color}`}
-                      >
-                        {driver.code}
-                      </span>
-                      <span className="min-w-0 leading-tight">
-                        <span className="text-[13px] text-admin-ink font-medium truncate block">
-                          {driver.name}
-                        </span>
-                        <span className="text-[11px] text-admin-muted truncate block">
-                          {formatLondonDateTime(job.bookedStart) || "Not scheduled"}
-                        </span>
-                      </span>
-                    </span>
-                    <span className="flex shrink-0 flex-col items-end gap-0.5 font-mono tabular-nums">
-                      <span className="text-[14px] font-bold text-admin-ink">
-                        {amount === 0 ? "—" : `£${amount.toLocaleString("en-GB", { minimumFractionDigits: 2 })}`}
-                      </span>
-                      <span className="text-[11px] font-semibold text-admin-muted">
-                        Total {total === 0 ? "—" : `£${total.toLocaleString("en-GB", { minimumFractionDigits: 2 })}`}
-                      </span>
-                    </span>
-                  </div>
-                </button>
-              </div>
-            </article>
-          );
-        })}
-      </div>
-
-      {totalPages > 1 && (
-        <div className="flex items-center justify-center gap-3">
-          <button
-            disabled={page <= 1}
-            onClick={() => onPageChange(page - 1)}
-            className="w-11 h-11 rounded-card border border-admin-line bg-white disabled:opacity-40 flex items-center justify-center"
-            aria-label="Previous page"
-          >
-            <ChevronLeft className="w-4 h-4" />
-          </button>
-          <span className="text-label font-medium text-fg-muted tabular-nums">
-            Page {page} of {totalPages}
+      {exportError && <Notice tone="danger" role="alert" action={<Action size="sm" onClick={() => setExportError("")}>Dismiss</Action>}>{exportError}</Notice>}
+      {created && <Notice tone="success" action={<Action size="sm" onClick={() => setCreated(false)}>Dismiss</Action>}>Booking created. It will appear after Calendar synchronization. Check your date and status filters if it is not visible.</Notice>}
+      <Toolbar label="Job filters" activeFilters={activeFilters} onClearFilters={clearFilters}>
+        <SearchField label="Search jobs by reference, customer, address or driver" placeholder="Search jobs" value={state.q} debounceMs={300} onChange={q => setFilter({ q })} className="sm:w-auto sm:min-w-[240px] sm:flex-1" />
+        <FilterSelect label="Driver" value={state.driver} onChange={driver => setFilter({ driver })} allLabel={drivers.isLoading ? "Loading drivers…" : "All drivers"}
+          disabled={drivers.isLoading} options={drivers.options.map(option => ({ value: option.initials, label: `${option.fullName || option.initials} (${option.initials})${option.active ? "" : " · inactive"}` }))} className="w-full sm:w-[190px]" />
+        <DateRangePicker compact from={from} to={to} allowAll onChange={(nextFrom, nextTo) => setFilter(nextFrom || nextTo ? { range: "", from: nextFrom ?? "", to: nextTo ?? "" } : { range: "all" })} />
+        <div className="flex w-full min-w-0 flex-wrap items-center gap-x-2 gap-y-2.5 xl:flex-nowrap">
+        <div className="min-w-0 basis-full xl:basis-auto xl:flex-1 [&>div]:flex-nowrap [&>div]:overflow-x-auto [&>div]:[scrollbar-width:none]"><ChoiceChips label="Job status" value={status} onChange={value => setFilter({ status: value })} options={statusOptions} /></div>
+        <div className="ml-auto flex shrink-0 items-center gap-2">
+          {/* The status chips carry the counts; this line only adds what they don't. */}
+          <span aria-live="polite" className="whitespace-nowrap px-1 text-[13px] font-medium text-admin-ink-2">
+            {!query.isLoading && !query.isError && <span className="tabular-nums text-admin-ink">{total} job{total === 1 ? "" : "s"}{(query.isFetching || attentionOnPage > 0) && <span aria-hidden className="mx-1.5 text-admin-muted">·</span>}</span>}
+            {query.isFetching && !query.isLoading ? "Updating…" : !query.isLoading && attentionOnPage > 0 ? <span className="inline-flex items-center gap-1 text-admin-status-amber"><AlertTriangle aria-hidden className="h-3.5 w-3.5" />{attentionOnPage} need attention</span> : null}
           </span>
-          <button
-            disabled={page >= totalPages}
-            onClick={() => onPageChange(page + 1)}
-            className="w-11 h-11 rounded-card border border-admin-line bg-white disabled:opacity-40 flex items-center justify-center"
-            aria-label="Next page"
-          >
-            <ChevronRight className="w-4 h-4" />
+          <button type="button" onClick={() => { void query.refetch(); counts.forEach(count => void count.refetch()); }} aria-label="Refresh jobs" title="Refresh"
+            className={cx("grid h-10 w-10 place-items-center rounded-xl border border-admin-line bg-surface text-admin-ink-2 hover:text-admin-ink", focusRing)}>
+            <RefreshCw aria-hidden className={cx("h-4 w-4", query.isFetching && "animate-spin motion-reduce:animate-none")} />
           </button>
+          <div role="group" aria-label="View" className="inline-flex rounded-xl border border-admin-line bg-admin-surface p-1">
+            {([["cards", "Card view", LayoutGrid], ["table", "Table view", List]] as const).map(([value, label, Icon]) => (
+              <button key={value} type="button" aria-label={label} aria-pressed={view === value} title={label} onClick={() => setView(value)}
+                className={cx("inline-flex h-8 items-center gap-1.5 rounded-lg px-2.5 text-[13px] font-semibold", focusRing, view === value ? "bg-surface text-admin-brand shadow-[var(--admin-shadow-sm)] ring-1 ring-admin-brand/25" : "text-admin-ink-2 hover:text-admin-ink")}>
+                <Icon aria-hidden className="h-4 w-4" /><span className="hidden xl:inline">{value === "cards" ? "Cards" : "Table"}</span>
+              </button>
+            ))}
+          </div>
         </div>
-      )}
-    </div>
-  );
-}
-
-function canManualFinish(job: NormalizedJob): boolean {
-  return job.status !== "COMPLETED" && job.status !== "CANCELLED";
-}
-
-function JobActionsMenu({
-  job,
-  onReassign,
-  onManualFinish
-}: {
-  job: NormalizedJob;
-  onReassign: (job: NormalizedJob) => void;
-  onManualFinish: (job: NormalizedJob) => void;
-}) {
-  const [open, setOpen] = useState(false);
-  const allowManualFinish = canManualFinish(job);
-
-  function closeAnd(run: () => void) {
-    setOpen(false);
-    run();
-  }
-
-  return (
-    <div className="relative inline-flex">
-      <button
-        type="button"
-        onClick={event => {
-          event.stopPropagation();
-          setOpen(value => !value);
-        }}
-        title="Job actions"
-        aria-label={`Actions for job ${job.jobId}`}
-        className="p-1.5 rounded-full text-admin-muted hover:bg-admin-brand hover:text-white transition"
-      >
-        <MoreHorizontal className="w-4 h-4" />
-      </button>
-
-      {open && (
-        <div
-          className="absolute right-0 top-9 z-30 w-48 overflow-hidden rounded-card border border-admin-line bg-white shadow-xl"
-          onClick={event => event.stopPropagation()}
-        >
-          <button
-            type="button"
-            onClick={() => closeAnd(() => onReassign(job))}
-            className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-[13px] font-medium text-admin-ink hover:bg-admin-surface"
-          >
-            <UserPlus className="w-4 h-4 text-admin-muted" /> Reassign driver
-          </button>
-          {allowManualFinish && (
-            <button
-              type="button"
-              onClick={() => closeAnd(() => onManualFinish(job))}
-              className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-[13px] font-medium text-admin-status-green hover:bg-admin-status-green-bg"
-            >
-              <CheckCircle2 className="w-4 h-4" /> Mark as Finished
-            </button>
-          )}
         </div>
-      )}
-    </div>
-  );
-}
+      </Toolbar>
 
-/* ------------------------------------------------------------- bulk reassign ---- */
-
-/**
- * Reassigns every selected job to one driver. The endpoint already existed
- * (api.ts's reassignJob, used by the single-job drawer) -- the toolbar button simply
- * had no handler wired to it.
- */
-function BulkReassignModal({
-  jobIds,
-  onClose,
-  onDone
-}: {
-  jobIds: string[];
-  onClose: () => void;
-  onDone: () => void;
-}) {
-  const { options, isLoading: driversLoading } = useDriverOptions();
-  const [initials, setInitials] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [done, setDone] = useState(0);
-
-  const drivers = options.filter(d => d.active);
-
-  async function handleConfirm() {
-    if (!initials || busy) return;
-    setBusy(true);
-    setError(null);
-    try {
-      // Sequential rather than Promise.all: the progress counter stays truthful, and a
-      // partial failure leaves a clear record of how far it got.
-      for (const jobId of jobIds) {
-        await reassignJob(jobId, initials);
-        setDone(n => n + 1);
-      }
-      onDone();
-    } catch (err: any) {
-      setError(err?.message || "Couldn't reassign every job. Some may have been changed.");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return (
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-admin-ink/40 backdrop-blur-sm p-4">
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="bulk-reassign-title"
-        className="bg-white rounded-module shadow-2xl w-full max-w-[440px] p-6 animate-in zoom-in-95"
-      >
-        <h2 id="bulk-reassign-title" className="text-title text-fg">
-          Reassign {jobIds.length} job{jobIds.length === 1 ? "" : "s"}
-        </h2>
-        <p className="text-[13px] text-admin-muted mt-1">
-          {jobIds.length === 1
-            ? "This job moves to the selected driver, who will be notified, and the linked Calendar event is updated."
-            : "Every selected job moves to the selected driver, who will be notified for each one, and their linked Calendar events are updated."}
-        </p>
-
-        <label className="block mt-5">
-          <span className="text-label font-semibold text-fg">Assign to</span>
-          <div className="relative mt-1.5">
-            <select
-              value={initials}
-              onChange={e => setInitials(e.target.value)}
-              disabled={busy || driversLoading}
-              className="w-full h-11 px-3 pr-9 rounded-card border border-admin-line bg-admin-surface outline-none focus:border-admin-brand disabled:opacity-70"
-            >
-              <option value="">{driversLoading ? "Loading drivers…" : "Choose a driver…"}</option>
-              {!driversLoading && drivers.map(driver => (
-                <option key={driver.initials} value={driver.initials}>
-                  {driver.fullName || driver.initials} ({driver.initials})
-                </option>
-              ))}
-            </select>
-            {driversLoading && (
-              <RefreshCw className="w-4 h-4 text-admin-muted animate-spin absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+      <section aria-label="Job list" aria-busy={query.isFetching} className={cx(view === "table" && panel, view === "table" && "overflow-hidden")}>
+        {query.isLoading ? (view === "cards"
+            ? <><span role="status" aria-label="Loading jobs" className="sr-only">Loading jobs</span><JobCardGrid label="Loading jobs">{Array.from({ length: 6 }, (_, index) => <li key={index}><JobCardSkeleton /></li>)}</JobCardGrid></>
+            : <LoadingState label="Loading jobs" rows={8} />)
+          : query.isError ? <div className={view === "cards" ? panel : undefined}><ErrorState title="Couldn't load jobs" message={(query.error as Error)?.message} onRetry={() => void query.refetch()} /></div>
+          : items.length === 0 ? (
+            <div className={view === "cards" ? panel : undefined}>
+              {activeFilters.length || !allDates
+                ? <EmptyState kind="no-matches" title={activeFilters.length ? "No jobs match your filters" : "No jobs scheduled for this period"}
+                  message={activeFilters.length ? "Clear filters or widen the date range." : `Nothing is booked for ${scope}. Try another day or search all dates.`}
+                  actions={<>{activeFilters.length > 0 && <Action onClick={clearFilters}>Clear filters</Action>}{!allDates && <Action onClick={() => setFilter({ range: "all" })}>Show all dates</Action>}</>} />
+                : <EmptyState title="No jobs yet" message="Jobs appear here when bookings sync from the Calendar." />}
+            </div>
+          ) : view === "cards" ? (
+            <JobCardGrid>{items.map(job => <li key={job.jobId} className="flex [&>article]:flex-1"><JobCard job={job} selected={selected.has(job.jobId)} actions={cardActions} /></li>)}</JobCardGrid>
+          ) : <DataTable rows={items} columns={columns} keyOf={job => job.jobId} onOpen={job => openJob(job.jobId)} openLabel={job => `Open job ${job.jobId}, ${job.customerName}`}
+            caption="Jobs" layout="fixed" minWidth={1000} rowTone={job => selected.has(job.jobId) ? "attention" : "default"} mobileRow={job => <JobMobileRow job={job} />} />}
+        {/* One page of results: the count already sits in the toolbar, so no separate footer bar. */}
+        {!query.isLoading && !query.isError && items.length > 0 && (totalPages > 1 || total > 25) && (
+          <div className={cx("flex flex-wrap items-center justify-between gap-2", view === "cards" && cx(panel, "mt-4"))}>
+            <div className="flex-1"><Pagination page={page} pageSize={pageSize} total={total} noun="job" onPage={next => setState({ page: String(next) })} /></div>
+            {total > 25 && (
+              <label className="flex items-center gap-2 px-4 py-3 text-[13px] text-admin-ink-2">Per page
+                <select value={pageSize} onChange={event => setState({ size: event.target.value, page: "1" })} className={cx(controlBase, "h-8 w-[76px] px-2")}>
+                  {[25, 50, 100].map(size => <option key={size} value={size}>{size}</option>)}
+                </select>
+              </label>
             )}
           </div>
-        </label>
-
-        {busy && (
-          <p className="text-[13px] text-admin-muted mt-3" role="status">
-            Reassigning… {done} of {jobIds.length}
-          </p>
         )}
-        {error && (
-          <p className="text-[13px] text-admin-status-red mt-3" role="alert">
-            {error}
-          </p>
-        )}
+      </section>
 
-        <div className="flex gap-3 mt-6">
-          <button
-            onClick={onClose}
-            disabled={busy}
-            className="flex-1 h-11 rounded-card bg-admin-surface text-card text-fg disabled:opacity-50"
-          >
-            Cancel
-          </button>
-          <button
-            onClick={handleConfirm}
-            disabled={!initials || busy}
-            className="flex-1 h-11 rounded-card bg-admin-brand text-white text-[14px] font-semibold disabled:opacity-50"
-          >
-            {busy ? "Reassigning…" : "Reassign"}
-          </button>
+      {selected.size > 0 && (
+        <div role="region" aria-label="Selected jobs" className="tmv-bulkbar sticky bottom-3 z-20 mx-auto flex w-full max-w-3xl flex-wrap items-center gap-2 rounded-2xl border border-admin-brand/30 bg-surface px-4 py-2.5 pb-[max(0.625rem,env(safe-area-inset-bottom))]">
+          <span className="inline-flex items-center gap-1.5 text-[14px] font-semibold text-admin-ink"><CheckCircle2 aria-hidden className="h-4 w-4 text-admin-brand" />{selected.size} selected</span>
+          <Action size="sm" icon={<UserPlus />} onClick={() => setReassignIds(Array.from(selected))}>Reassign…</Action>
+          <Action size="sm" icon={<Download />} onClick={exportSelection}>Export</Action>
+          <span className="flex-1" />
+          <Action size="sm" variant="ghost" icon={<Trash2 />} className="text-admin-status-red" onClick={() => setDeleteIds(Array.from(selected))}>Delete…</Action>
+          <Action size="sm" variant="ghost" icon={<X />} onClick={() => setSelected(new Set())}>Clear</Action>
         </div>
+      )}
+
+      {creating && <AddJobModal isOpen onClose={() => setCreating(false)} onCreated={() => setCreated(true)} />}
+      {reassignIds && <BulkReassignDialog jobs={reassignIds.map(id => ({ jobId: id, status: items.find(job => job.jobId === id)?.status ?? "" }))} onClose={() => setReassignIds(null)} onDone={() => { setReassignIds(null); setSelected(new Set()); void query.refetch(); }} />}
+      {deleteIds && <BulkDeleteModal jobIds={deleteIds} onClose={() => setDeleteIds(null)} onDone={() => { setDeleteIds(null); setSelected(new Set()); void query.refetch(); counts.forEach(count => void count.refetch()); }} />}
+    </>
+  );
+}
+
+function ExceptionCell({ job }: { job: NormalizedJob }) {
+  const { items, severity } = attentionOf(job);
+  if (!items.length) return <span className="text-[13px] text-admin-muted">No issues</span>;
+  const tone = severity === "high" ? "border-admin-status-red/30 bg-admin-status-red-bg text-admin-status-red" : severity === "medium" ? "border-admin-status-amber/30 bg-admin-status-amber-bg text-admin-status-amber" : "border-admin-line bg-admin-surface text-admin-ink-2";
+  return (
+    <span className={cx("inline-flex max-w-full items-center gap-1.5 rounded-lg border px-2 py-1 text-[12.5px] font-semibold", tone)} title={items.map(item => item.title).join("; ")}>
+      <AlertTriangle aria-hidden className="h-3.5 w-3.5 shrink-0" />
+      <span className="truncate">{items[0].title}</span>
+      {items.length > 1 && <span className="shrink-0 font-medium opacity-80">+{items.length - 1}</span>}
+    </span>
+  );
+}
+
+function JobMobileRow({ job }: { job: NormalizedJob }) {
+  const charge = rowCharge(job);
+  const issues = jobAttention(job);
+  return (
+    <div className="space-y-1">
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-[13px] font-semibold tabular-nums text-admin-ink-2">{formatDate(job.bookedStart, "Not scheduled")} · {formatTime(job.bookedStart, "—")}</span>
+        <JobStatusBadge status={job.status} activity={job.activity} />
       </div>
+      <p className="truncate text-[15px] font-semibold text-admin-ink">{job.customerName || "Customer not recorded"}</p>
+      <p className="truncate text-[13px] text-admin-ink-2">{job.pickup || "Pickup not recorded"} → {job.dropoff || "Drop-off not recorded"}</p>
+      <div className="flex items-center justify-between gap-2 text-[13px]">
+        <span className="truncate text-admin-ink-2">{isUnassigned(job) ? "No driver assigned" : job.driverName}</span>
+        <span className="shrink-0 tabular-nums text-admin-ink">{charge.label === "Not charged" ? <span className="text-admin-ink-2">Not charged</span> : <>{formatMoney(charge.pence, charge.label === "Calculated" ? "Not priced" : "Not recorded")} <span className="text-admin-ink-2">{charge.label.toLowerCase()}</span></>}</span>
+      </div>
+      {issues.length > 0 && <p className="flex items-center gap-1 text-[13px] text-admin-status-amber"><AlertTriangle aria-hidden className="h-3.5 w-3.5" />{issues[0].title}{issues.length > 1 ? ` +${issues.length - 1}` : ""}</p>}
     </div>
   );
 }
 
-function ManualFinishModal({
-  job,
-  onClose,
-  onDone
-}: {
-  job: NormalizedJob;
-  onClose: () => void;
-  onDone: () => void;
-}) {
-  const [note, setNote] = useState("");
+/** Only scheduled and in-progress jobs can change driver; completed and cancelled
+ *  jobs keep the driver they were done (or cancelled) with. */
+export const REASSIGNABLE = new Set(["READY", "IN_PROGRESS"]);
+
+/** Reassigns each eligible selected job in turn. Sequential so the progress count is
+ *  truthful and a partial failure says exactly which jobs moved. */
+function BulkReassignDialog({ jobs, onClose, onDone }: { jobs: Array<{ jobId: string; status: string }>; onClose: () => void; onDone: () => void }) {
+  const { options, isLoading } = useDriverOptions();
+  const [initials, setInitials] = useState("");
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const trimmedNote = note.trim();
-
-  async function handleConfirm() {
-    if (!trimmedNote || busy) return;
-    setBusy(true);
-    setError(null);
+  const [done, setDone] = useState(0);
+  const [error, setError] = useState("");
+  const active = useMemo(() => options.filter(option => option.active), [options]);
+  const jobIds = useMemo(() => jobs.filter(job => REASSIGNABLE.has(job.status)).map(job => job.jobId), [jobs]);
+  const skipped = jobs.length - jobIds.length;
+  const confirm = async () => {
+    if (!jobIds.length) { onClose(); return; }
+    if (!initials) { setError("Choose a driver."); return; }
+    setBusy(true); setError("");
+    let moved = done;
     try {
-      await markJobFinishedManually(job.jobId, trimmedNote);
+      for (const jobId of jobIds.slice(done)) { await reassignJob(jobId, initials); moved++; setDone(moved); }
       onDone();
-    } catch (err: any) {
-      setError(err?.message || "Couldn't mark this job as finished.");
-      setBusy(false);
-    }
-  }
-
+    } catch (err) {
+      setError(`${moved} of ${jobIds.length} reassigned. ${(err as Error)?.message || "The rest were not changed."}`);
+    } finally { setBusy(false); }
+  };
   return (
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-admin-ink/40 backdrop-blur-sm p-4">
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="manual-finish-title"
-        className="bg-white rounded-module shadow-2xl w-full max-w-[460px] p-6 animate-in zoom-in-95"
-      >
-        <div className="flex items-start gap-3">
-          <div className="mt-0.5 w-9 h-9 rounded-full bg-admin-status-green-bg text-admin-status-green flex items-center justify-center shrink-0">
-            <CheckCircle2 className="w-5 h-5" />
-          </div>
-          <div className="min-w-0">
-            <h2 id="manual-finish-title" className="text-title text-fg">
-              Mark as Finished
-            </h2>
-            <p className="text-[13px] text-admin-muted mt-1">
-              {job.jobId} · {job.customerName || "Not recorded"}
-            </p>
-          </div>
-        </div>
-
-        <div className="mt-5 rounded-card border border-amber-200 bg-amber-50 px-3 py-2.5 text-[13px] leading-relaxed text-amber-900">
-          This completes the job for scheduling and driver flow, but missing photos or signature will stay missing in the record.
-        </div>
-
-        <label className="block mt-5">
-          <span className="text-label font-semibold text-fg">Admin note</span>
-          <textarea
-            value={note}
-            onChange={event => setNote(event.target.value)}
-            disabled={busy}
-            rows={4}
-            maxLength={1000}
-            placeholder="Example: Driver completed this job manually outside the app."
-            className="mt-1.5 w-full rounded-card border border-admin-line bg-admin-surface px-3 py-2 text-[13px] text-admin-ink outline-none focus:border-admin-brand disabled:opacity-70"
-          />
-          <span className="mt-1 block text-[11px] text-admin-muted">{trimmedNote.length}/1000</span>
-        </label>
-
-        {error && (
-          <p className="text-[13px] text-admin-status-red mt-3" role="alert">
-            {error}
-          </p>
-        )}
-
-        <div className="flex gap-3 mt-6">
-          <button
-            onClick={onClose}
-            disabled={busy}
-            className="flex-1 h-11 rounded-card bg-admin-surface text-card text-fg disabled:opacity-50"
-          >
-            Cancel
-          </button>
-          <button
-            onClick={handleConfirm}
-            disabled={!trimmedNote || busy}
-            className="flex-1 h-11 rounded-card bg-admin-status-green text-white text-[14px] font-semibold disabled:opacity-50"
-          >
-            {busy ? "Finishing..." : "Finish manually"}
-          </button>
-        </div>
-      </div>
-    </div>
+    <Modal open onClose={onClose} title={jobIds.length ? `Reassign ${jobIds.length} job${jobIds.length === 1 ? "" : "s"}` : "Nothing to reassign"} placement="center" dismissible={!busy}
+      footer={<div className="flex justify-end gap-2"><Action variant="ghost" onClick={onClose} disabled={busy}>Cancel</Action><Action variant="primary" loading={busy} onClick={() => void confirm()}>{!jobIds.length ? "Close" : done ? "Retry remaining" : "Reassign and notify"}</Action></div>}>
+      {skipped > 0 && <p role="note" className="mb-3 rounded-lg border border-admin-status-amber/30 bg-admin-status-amber-bg px-3 py-2 text-[13px] text-admin-ink">{skipped} completed or cancelled job{skipped === 1 ? " is" : "s are"} left with {skipped === 1 ? "its" : "their"} recorded driver.</p>}
+      {jobIds.length > 0 && <p className="text-[14px] text-admin-ink-2">The chosen driver is notified for each job and the linked Calendar events are updated.</p>}
+      {jobIds.length > 0 && (
+      <label className="mt-4 block text-[13px] font-medium text-admin-ink-2">Assign to
+        <select value={initials} onChange={event => { setInitials(event.target.value); setError(""); }} disabled={busy || isLoading} className={cx(controlBase, "mt-1 w-full")}>
+          <option value="">{isLoading ? "Loading drivers…" : "Choose a driver"}</option>
+          {active.map(driver => <option key={driver.initials} value={driver.initials}>{driver.fullName || driver.initials} ({driver.initials})</option>)}
+        </select>
+      </label>
+      )}
+      {busy && <p role="status" className="mt-3 text-[13px] text-admin-ink-2">Reassigning… {done} of {jobIds.length}</p>}
+      {error && <p role="alert" className="mt-3 text-[13px] text-admin-status-red">{error}</p>}
+    </Modal>
   );
 }

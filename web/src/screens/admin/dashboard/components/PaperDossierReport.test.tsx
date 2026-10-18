@@ -1,9 +1,9 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { describe, expect, it } from "vitest";
 import { JobScenarioSection } from "./JobScenarioSection";
-import { JobDetailDrawer } from "./JobDetailDrawer";
-import { PaperDossierReport } from "./PaperDossierReport";
-import { PaperJobReport } from "./PaperJobReport";
+import { JobDetailModal } from "./JobDetailModal";
+import { PaperDossierReport, buildDossierPages } from "./PaperDossierReport";
 import type { JobScenarioSubmission, NormalizedJob } from "../types";
 import { vi } from "vitest";
 import { paperJobSample } from "../../../../../test/reportPreview.sample";
@@ -15,7 +15,10 @@ describe("Formal dossier print consistency", () => {
     expect(preview.container.textContent).toBe(printable.container.textContent);
     expect(preview.container.querySelector(".report-record-meta")).toHaveTextContent(paperJobSample.jobId);
     expect(preview.container.querySelectorAll(".report-heading img")).toHaveLength(1);
-    expect(printable.container.querySelectorAll(".report-page-footer")).toHaveLength(7);
+    // Summary page plus the packed evidence pages; every page is numbered.
+    const total = buildDossierPages(paperJobSample).length + 1;
+    expect(printable.container.querySelectorAll(".report-page-footer")).toHaveLength(total);
+    expect(printable.container).toHaveTextContent(`Page ${total} of ${total}`);
   });
 });
 
@@ -38,9 +41,9 @@ const checkinScenario: JobScenarioSubmission = {
   kind: "checkin",
   timestamp: "2026-09-22T09:00:00.000Z",
   driver: "TI",
-  clientName: "Tom Hostick",
-  clientPhone: "07815695889",
-  clientEmail: "hosticktom@gmail.com",
+  clientName: "Alex Sample",
+  clientPhone: "07000000001",
+  clientEmail: "alex.sample@example.test",
   containerNumber: "CONT-123",
   address: "",
   damageCategories: "",
@@ -69,9 +72,9 @@ const liabilityScenario: JobScenarioSubmission = {
   kind: "liability",
   timestamp: "2026-09-22T10:45:00.000Z",
   driver: "TI",
-  clientName: "Tom Hostick",
-  clientPhone: "07815695889",
-  clientEmail: "hosticktom@gmail.com",
+  clientName: "Alex Sample",
+  clientPhone: "07000000001",
+  clientEmail: "alex.sample@example.test",
   containerNumber: "",
   address: "",
   damageCategories: "Wall mark",
@@ -99,9 +102,9 @@ const job = {
   delayMinutes: 0,
   delayBand: "ON_TIME",
   timingTrustworthy: true,
-  customerName: "Tom Hostick",
-  customerEmail: "hosticktom@gmail.com",
-  customerPhone: "07815695889",
+  customerName: "Alex Sample",
+  customerEmail: "alex.sample@example.test",
+  customerPhone: "07000000001",
   pickup: "2 Mercers Place",
   dropoff: "Store First",
   crewSize: 2,
@@ -149,7 +152,7 @@ const job = {
   rawTitle: "TMV test",
   rawDescription: "",
   bookingDetails: {},
-  clientConfirmedName: "Tom Hostick",
+  clientConfirmedName: "Alex Sample",
   signatureUrl: "/signature.jpg",
   activity: [],
   exceptions: [],
@@ -183,13 +186,13 @@ describe("PaperDossierReport", () => {
       scenarios: [checkinScenario, liabilityScenario] };
     const before = JSON.stringify(source);
     const { container } = render(<PaperDossierReport job={source} isPreview />);
-    expect(screen.getAllByRole("heading", { name: "Job Completed" })).toHaveLength(1);
+    expect(screen.getAllByRole("heading", { name: "Job Report" })).toHaveLength(1);
     expect(screen.getAllByText("020 3773 9113")).toHaveLength(1);
     expect(screen.queryByText("THE MAN VAN")).not.toBeInTheDocument();
     expect(screen.getByText(source.pickup)).toBeInTheDocument(); expect(screen.getByText(source.dropoff)).toBeInTheDocument();
     expect(screen.getAllByText("£175.00").length).toBeGreaterThan(0);
     expect(screen.getByRole("img", { name: "Arrival" })).toHaveAttribute("src", "/arrival.jpg");
-    expect(container.querySelectorAll(".report-preview-page")).toHaveLength(4);
+    expect(container.querySelectorAll(".report-preview-page")).toHaveLength(5);
     expect(container.querySelectorAll(".report-document-continuation")).toHaveLength(0);
     expect(JSON.stringify(source)).toBe(before);
   });
@@ -203,13 +206,13 @@ describe("PaperDossierReport", () => {
       }]
     }} isPreview />);
 
-    expect(screen.getByText(/22\/09\/26.*11:30.*London/)).toBeInTheDocument();
-    expect(screen.getByText("Check In (Pickup) Evidence")).toBeInTheDocument();
+    expect(screen.getAllByText(/22 Sep 2026, 11:30/).length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByRole("heading", { name: /^Storage check-in/ })[0]).toHaveTextContent(/Storage check-in\s*·\s*Pickup/);
     expect(screen.getByText("CONT-123")).toBeInTheDocument();
-    expect(screen.getByText("Reported At")).toBeInTheDocument();
+    expect(screen.getByText("Reported at")).toBeInTheDocument();
     expect(screen.getByText("Pickup — 2 Mercers Place")).toBeInTheDocument();
-    expect(screen.getByText(/22\/09\/26.*16:45/)).toBeInTheDocument();
-    expect(screen.getAllByText("2 Mercers Place, London").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText(/22 Sep 2026, 16:45/).length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText(/2 Mercers Place, London/).length).toBeGreaterThanOrEqual(1);
   });
 
   it("prints the driver's on-my-way timestamp in the job dossier preview", () => {
@@ -226,15 +229,14 @@ describe("PaperDossierReport", () => {
     }} isPreview />);
 
     expect(screen.getByText("On my way")).toBeInTheDocument();
-    expect(screen.getByText(/22\/09\/26.*10:45/)).toBeInTheDocument();
+    expect(screen.getByText("22 Sep 2026, 10:45")).toBeInTheDocument();
     expect(screen.getByText("Customer signature time")).toBeInTheDocument();
-    expect(screen.getAllByText(/22\/09\/26.*15:20/).length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText(/22 Sep 2026, 15:20/).length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText("Proof of arrival photo time")).toBeInTheDocument();
     expect(screen.getByText("Van loaded photo time")).toBeInTheDocument();
     expect(screen.getByText("Empty van photo time")).toBeInTheDocument();
-    expect(screen.getAllByText(/22\/09\/26.*17:00/).length).toBeGreaterThanOrEqual(1);
-    expect(screen.getByText("Gap between tracker arrival and proof photo")).toBeInTheDocument();
-    expect(screen.getByText("18 min")).toBeInTheDocument();
+    expect(screen.getAllByText(/22 Sep 2026, 17:00/).length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText(/Gap between tracker arrival and proof photo: 18 min/)).toBeInTheDocument();
   });
 
   it("prints the adjustment reason when amount charged mismatches total charges", () => {
@@ -246,8 +248,7 @@ describe("PaperDossierReport", () => {
       totalAdjustmentNote: "Customer agreed discount with office"
     }} isPreview />);
 
-    expect(screen.getByText("Adjustment Reason")).toBeInTheDocument();
-    expect(screen.getByText("Customer agreed discount with office")).toBeInTheDocument();
+    expect(screen.getByText(/Adjustment reason: Customer agreed discount with office/)).toBeInTheDocument();
   });
 
   it("prints evidence and scenario submissions in the order the driver submitted them", () => {
@@ -273,53 +274,29 @@ describe("PaperDossierReport", () => {
     render(<PaperDossierReport job={jobWithMidFlowLiability} isPreview />);
 
     const arrival = screen.getByText("Arrival");
-    const liability = screen.getByText("Liability Report Evidence");
-    const vanLoaded = screen.getByText("VanLoaded");
+    const liability = screen.getAllByRole("heading", { name: /^Liability report/ })[0];
+    const vanLoaded = screen.getByText("Van loaded");
 
     expect(arrival.compareDocumentPosition(liability) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(liability.compareDocumentPosition(vanLoaded) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 });
 
-describe("PaperJobReport", () => {
-  it("has one completion heading and no repeated brand logo across evidence and final pages", () => {
-    render(<PaperJobReport job={job} />);
-    expect(screen.getAllByRole("heading", { name: "Job Completed" })).toHaveLength(1);
-    expect(screen.queryByRole("img", { name: "The Man Van" })).not.toBeInTheDocument();
-    expect(screen.getByText(job.customerEmail)).toBeInTheDocument();
-    expect(screen.getAllByText("020 3773 9113")).toHaveLength(1);
+describe("JobDetailModal", () => {
+  it("shows the booked hire duration on Details, as the legacy dossier did", () => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false, enabled: false } } });
+    const { rerender } = render(<QueryClientProvider client={client}><JobDetailModal jobId={job.jobId} onClose={vi.fn()} initialJob={{ ...job, bookingDetails: { ...job.bookingDetails, hireDuration: "03 Hours and 30 Minutes" } }} /></QueryClientProvider>);
+    expect(screen.getByText("Booked hire").nextElementSibling).toHaveTextContent("03 Hours and 30 Minutes");
+    rerender(<QueryClientProvider client={client}><JobDetailModal jobId={`${job.jobId}-2`} onClose={vi.fn()} initialJob={{ ...job, jobId: `${job.jobId}-2`, bookingDetails: {} }} /></QueryClientProvider>);
+    expect(screen.getByText("Booked hire").nextElementSibling).toHaveTextContent("Not recorded");
   });
-  it("prints the driver's on-my-way timestamp in the finished job preview", () => {
-    render(<PaperJobReport job={{
-      ...job,
-      onMyWayAt: "2026-09-22T09:45:00.000Z",
-      clientSignatureAt: "2026-09-22T14:20:00.000Z",
-      pickupArrivalAt: "2026-09-22T10:30:00.000Z",
-      vanLoadedAt: "2026-09-22T10:48:00.000Z",
-      actualFinish: "2026-09-22T16:00:00.000Z",
-      trackerArrivalAt: "2026-09-22T10:12:00.000Z",
-      arrivalProofDelayMinutes: 18,
-      arrivalProofLate: true
-    }} />);
 
-    expect(screen.getByText("On my way")).toBeInTheDocument();
-    expect(screen.getByText(/22\/09\/26.*10:45/)).toBeInTheDocument();
-    expect(screen.getByText("Customer signature time")).toBeInTheDocument();
-    expect(screen.getAllByText(/22\/09\/26.*15:20/).length).toBeGreaterThanOrEqual(1);
-    expect(screen.getByText("Proof of arrival photo time")).toBeInTheDocument();
-    expect(screen.getByText("Van loaded photo time")).toBeInTheDocument();
-    expect(screen.getByText("Empty van photo time")).toBeInTheDocument();
-    expect(screen.getAllByText(/22\/09\/26.*17:00/).length).toBeGreaterThanOrEqual(1);
-    expect(screen.getByText("Gap between tracker arrival and proof photo")).toBeInTheDocument();
-    expect(screen.getByText("18 min")).toBeInTheDocument();
-  });
-});
 
-describe("JobDetailDrawer", () => {
-  it("shows the driver's on-my-way timestamp in active job details", () => {
+  it("shows each timeline step with its source, including the driver's On my way time", () => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false, enabled: false } } });
     render(
-      <JobDetailDrawer
-        job={{
+      <QueryClientProvider client={client}>
+        <JobDetailModal jobId={job.jobId} onClose={vi.fn()} initialJob={{
           ...job,
           onMyWayAt: "2026-09-22T09:45:00.000Z",
           clientSignatureAt: "2026-09-22T14:20:00.000Z",
@@ -328,19 +305,17 @@ describe("JobDetailDrawer", () => {
           trackerArrivalAt: "2026-09-22T10:12:00.000Z",
           arrivalProofDelayMinutes: 18,
           arrivalProofLate: true
-        }}
-        isOpen
-        onClose={vi.fn()}
-      />
+        }} />
+      </QueryClientProvider>
     );
-
-    expect(screen.getByText("On my way")).toBeInTheDocument();
-    expect(screen.getByText(/22\/09\/26.*10:45/)).toBeInTheDocument();
-    expect(screen.getByText("Customer signature time")).toBeInTheDocument();
-    expect(screen.getByText(/22\/09\/26.*15:20/)).toBeInTheDocument();
-    expect(screen.getByText("Proof of arrival photo")).toBeInTheDocument();
-    expect(screen.getByText("Van loaded photo")).toBeInTheDocument();
-    expect(screen.getByText("Empty van photo")).toBeInTheDocument();
-    expect(screen.getByText("Arrival to proof gap (18 min)")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("tab", { name: "Timeline & evidence" }));
+    expect(screen.getByText("Driver marked On my way")).toBeInTheDocument();
+    expect(screen.getByText("Tue 22 Sep, 10:45")).toBeInTheDocument();
+    expect(screen.getAllByText("Customer signature").length).toBeGreaterThan(0);
+    expect(screen.getByText("Tue 22 Sep, 15:20")).toBeInTheDocument();
+    expect(screen.getAllByText("Proof of arrival photo").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Van loaded photo").length).toBeGreaterThan(0);
+    expect(screen.getByText("18 min after tracker arrival")).toBeInTheDocument();
+    expect(screen.queryByText(/Customer notified/)).not.toBeInTheDocument();
   });
 });

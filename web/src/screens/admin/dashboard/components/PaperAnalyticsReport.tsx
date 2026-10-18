@@ -78,9 +78,9 @@ export function PaperAnalyticsReport({ reportType, from, to, driver, jobs = [], 
             <div className="text-[11px] font-bold uppercase tracking-wider text-admin-brand mb-1">Official Operational Audit</div>
             <h1 className="text-[24px] font-bold text-admin-ink">{reportType}</h1>
             <div className="text-[13px] font-medium text-[#6B7280] mt-1">
-              Period: <span className="text-[#111827] font-semibold">{dateRangeLabel}</span>
+              Period: <span className="text-[#171717] font-semibold">{dateRangeLabel}</span>
               {driver && driver !== "all" && (
-                <span className="ml-3">| Driver: <span className="text-[#111827] font-semibold">{driver.toUpperCase()}</span></span>
+                <span className="ml-3">| Driver: <span className="text-[#171717] font-semibold">{driver.toUpperCase()}</span></span>
               )}
             </div>
           </div>
@@ -98,22 +98,22 @@ export function PaperAnalyticsReport({ reportType, from, to, driver, jobs = [], 
         <div className="grid grid-cols-4 gap-3 mb-6 shrink-0">
           <div className="p-3.5 bg-[#F9FAFB] rounded-card border border-[#E5E7EB]">
             <div className="text-[11px] font-bold text-[#6B7280] uppercase tracking-wider">{settlementRows.some(row => row.unknownCollectionJobs) ? "Known Collections" : "Total Collected"}</div>
-            <div className="text-[20px] font-extrabold text-[#111827] mt-1">£{totalCollectedPounds.toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+            <div className="text-[20px] font-extrabold text-[#171717] mt-1">£{totalCollectedPounds.toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
           </div>
 
           <div className="p-3.5 bg-[#F9FAFB] rounded-card border border-[#E5E7EB]">
             <div className="text-[11px] font-bold text-[#6B7280] uppercase tracking-wider">Completed Jobs</div>
-            <div className="text-[20px] font-extrabold text-[#111827] mt-1">{totalCompletedJobs}</div>
+            <div className="text-[20px] font-extrabold text-[#171717] mt-1">{totalCompletedJobs}</div>
           </div>
 
           <div className="p-3.5 bg-[#F9FAFB] rounded-card border border-[#E5E7EB]">
             <div className="text-[11px] font-bold text-[#6B7280] uppercase tracking-wider">Working Hours</div>
-            <div className="text-[20px] font-extrabold text-[#111827] mt-1">{formatDuration(totalMovingMinutes)}</div>
+            <div className="text-[20px] font-extrabold text-[#171717] mt-1">{formatDuration(totalMovingMinutes)}</div>
           </div>
 
           <div className="p-3.5 bg-[#F9FAFB] rounded-card border border-[#E5E7EB]">
             <div className="text-[11px] font-bold text-[#6B7280] uppercase tracking-wider">Drivers</div>
-            <div className="text-[20px] font-extrabold text-[#111827] mt-1">{settlementRows.length}</div>
+            <div className="text-[20px] font-extrabold text-[#171717] mt-1">{settlementRows.length}</div>
           </div>
         </div>
 
@@ -144,7 +144,7 @@ export function PaperAnalyticsReport({ reportType, from, to, driver, jobs = [], 
               <tbody>
                 {driverSettlement.map((d, i) => (
                   <tr key={d.initials || i} className={i % 2 === 0 ? "bg-white" : "bg-[#F9FAFB]"}>
-                    <td className="p-2 border border-[#E5E7EB] font-semibold text-[#111827]">{d.fullName}</td>
+                    <td className="p-2 border border-[#E5E7EB] font-semibold text-[#171717]">{d.fullName}</td>
                     <td className="p-2 border border-[#E5E7EB] font-mono">{d.initials}</td>
                     <td className="p-2 border border-[#E5E7EB] text-right font-medium text-[#059669]">{d.completed}</td>
                     <td className="p-2 border border-[#E5E7EB] text-right font-mono">{knownSubtotal(d.congestionChargePounds, d.congestionUnknownJobs)}</td>
@@ -184,7 +184,7 @@ export function PaperAnalyticsReport({ reportType, from, to, driver, jobs = [], 
               {displayJobs.slice(0, 30).map((j, i) => (
                 <tr key={j.jobId || i} className={i % 2 === 0 ? "bg-white" : "bg-[#F9FAFB]"}>
                   <td className="p-1.5 border border-[#E5E7EB] font-mono font-semibold">{j.jobId}</td>
-                  <td className="p-1.5 border border-[#E5E7EB] font-medium text-[#111827] truncate max-w-[120px]">{j.customerName}</td>
+                  <td className="p-1.5 border border-[#E5E7EB] font-medium text-[#171717] truncate max-w-[120px]">{j.customerName}</td>
                   <td className="p-1.5 border border-[#E5E7EB]">{j.driverName || j.driverInitials || "—"}</td>
                   <td className="p-1.5 border border-[#E5E7EB]">{formatLondonDate(j.bookedStart || j.actualStart)}</td>
                   <td className="p-1.5 border border-[#E5E7EB]">

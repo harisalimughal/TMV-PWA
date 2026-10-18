@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <!-- viewport-fit=cover is required for env(safe-area-inset-*) to have any effect on
+         iOS -- without it the safe-area env() variables just resolve to 0.
+         maximum-scale/user-scalable were deliberately REMOVED: they were there to stop
+         iOS auto-zooming on focused inputs, but they also disabled pinch-zoom entirely,
+         which is a WCAG 2.1 AA failure (1.4.4 Resize Text) and a real problem for
+         drivers reading liability copy outdoors. The auto-zoom is now prevented the
+         correct way instead -- every input is 16px, see index.css. -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content" />
+    <meta name="theme-color" content="#F4F5F7" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="description" content="The Man Van driver app - jobs, evidence photos and customer sign-off." />
+    <link rel="icon" href="/tmv-logo.png" />
+
+    <!-- Apply the theme before first paint so there is no flash. The app defaults to
+         LIGHT: only an explicit "dark" choice, or "system" while the OS is dark,
+         resolves to dark. The React ThemeProvider (src/ui/theme.tsx) takes over and
+         keeps this in sync. -->
+    <script>
+      (function () {
+        try {
+          var pref = localStorage.getItem("tmv-theme");
+          var dark =
+            pref === "dark" ||
+            (pref === "system" &&
+              window.matchMedia &&
+              window.matchMedia("(prefers-color-scheme: dark)").matches);
+          var theme = dark ? "dark" : "light";
+          document.documentElement.dataset.theme = theme;
+          document.documentElement.style.colorScheme = theme;
+          var m = document.querySelector('meta[name="theme-color"]');
+          if (m) m.setAttribute("content", dark ? "#0D0F12" : "#F4F5F7");
+        } catch (e) {
+          /* no-op: falls back to the :root (light) tokens */
+        }
+      })();
+    </script>
+
+    <!-- The admin dashboard has its own theme (tmv:admin-theme: light | dark | system,
+         default system; see src/screens/admin/dashboard/hooks/useAdminTheme.ts). On the
+         admin location, apply it before first paint too, so a saved Midnight choice
+         does not flash light while the dashboard chunk loads. The location test mirrors
+         isAdminLocation in src/lib/adminHost.ts. When VITE_ADMIN_HOSTNAMES is unset the
+         build warns and leaves the placeholder text, which matches no hostname. -->
+    <script>
+      (function () {
+        try {
+          var path = location.pathname.replace(/\/$/, "");
+          var hosts = ("dashboard.themanvan.co.uk,%VITE_ADMIN_HOSTNAMES%").toLowerCase().split(",");
+          var admin = path === "/admin" || hosts.indexOf(location.hostname.toLowerCase()) !== -1;
+          if (!admin) return;
+          var pref = localStorage.getItem("tmv:admin-theme");
+          var dark = pref === "dark" || (pref !== "light" && window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches);
+          var root = document.documentElement;
+          root.dataset.theme = dark ? "dark" : "light";
+          root.dataset.adminTheme = dark ? "dark" : "light";
+          root.style.colorScheme = dark ? "dark" : "light";
+          var m = document.querySelector('meta[name="theme-color"]');
+          if (m) m.setAttribute("content", dark ? "#000000" : "#F8F9FB");
+        } catch (e) {
+          /* no-op: the dashboard applies its theme when it mounts */
+        }
+      })();
+    </script>
+
+    <!-- Capture `beforeinstallprompt` before the app bundle executes: Chromium can
+         fire it during initial load, earlier than React mounts. The event is stashed
+         so usePwaInstall() can offer a working Install button; `appinstalled` clears
+         it. iOS/desktop Safari never fire this and fall back to guidance. -->
+    <script>
+      (function () {
+        window.__tmvInstallPrompt = window.__tmvInstallPrompt || null;
+        window.addEventListener("beforeinstallprompt", function (e) {
+          e.preventDefault();
+          window.__tmvInstallPrompt = e;
+          window.dispatchEvent(new Event("tmv:installprompt"));
+        });
+        window.addEventListener("appinstalled", function () {
+          window.__tmvInstallPrompt = null;
+          window.__tmvInstalled = true;
+          window.dispatchEvent(new Event("tmv:appinstalled"));
+        });
+      })();
+    </script>
+
+    <!-- iOS ignores manifest.json's display:standalone in some older versions -- these
+         meta tags are the belt-and-braces iOS-specific way to force standalone mode and
+         a matching status bar, needed alongside the manifest, not instead of it.
+         status-bar-style "default" draws dark status-bar text/icons, matching this
+         light theme -- "black-translucent" (light text over content) was for the old
+         dark navy background. -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="TMV Driver" />
+    <!-- 512, not 192 -- iOS scales this down itself (recommended source is 180x180
+         minimum), and starting from the larger source looks marginally sharper on
+         modern Retina iPhones than upscaling risk from the smaller one. -->
+    <link rel="apple-touch-icon" href="/icons/icon-512.png" />
+
+    <title>TMV Driver</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

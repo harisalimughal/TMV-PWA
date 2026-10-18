@@ -1,5 +1,7 @@
-import React, { useCallback, useEffect, useId, useRef, useState } from "react";
+import React, { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { cx } from "./cx";
+import { placeMenu, type MenuPlacement } from "./menuPosition";
 
 export interface MenuItem {
   id: string;
@@ -29,7 +31,12 @@ export interface MenuProps {
 }
 
 /** Button-triggered action menu. role=menu, arrow-key navigation, Esc + outside-click
- *  close, focus returns to the trigger. */
+ *  close, focus returns to the trigger.
+ *
+ *  The list is rendered in a portal on <body> and positioned against the viewport, so a parent
+ *  with `overflow: hidden` (a dialog panel, a card) can never clip it. It opens below the trigger
+ *  when there is room, otherwise above, and is kept inside the viewport. It follows the trigger on
+ *  scroll and resize. Above dialogs (z 90/100) because it is opened from inside them. */
 export function Menu({ trigger, items, header, align = "end", className }: MenuProps) {
   const [open, setOpen] = useState(false);
   const [activeIndex, setActiveIndex] = useState(-1);
@@ -37,9 +44,11 @@ export function Menu({ trigger, items, header, align = "end", className }: MenuP
   const listRef = useRef<HTMLDivElement>(null);
   const itemRefs = useRef<(HTMLButtonElement | null)[]>([]);
   const triggerId = useId();
+  const [placement, setPlacement] = useState<MenuPlacement | null>(null);
 
   const close = useCallback((restoreFocus = true) => {
     setOpen(false);
+    setPlacement(null);
     setActiveIndex(-1);
     if (restoreFocus) triggerRef.current?.focus();
   }, []);
@@ -58,31 +67,61 @@ export function Menu({ trigger, items, header, align = "end", className }: MenuP
     return () => document.removeEventListener("pointerdown", onPointerDown);
   }, [open, close]);
 
+  // Measure the open list and place it next to the trigger; redo on scroll (any ancestor) and resize.
+  useLayoutEffect(() => {
+    if (!open) return;
+    const place = () => {
+      const trigger = triggerRef.current, list = listRef.current;
+      if (!trigger || !list) return;
+      const box = trigger.getBoundingClientRect();
+      setPlacement(placeMenu(box, { width: list.offsetWidth, height: list.scrollHeight }, { width: window.innerWidth, height: window.innerHeight }, align));
+    };
+    place();
+    window.addEventListener("resize", place);
+    window.addEventListener("scroll", place, true);
+    return () => { window.removeEventListener("resize", place); window.removeEventListener("scroll", place, true); };
+  }, [open, align, items.length]);
+
+  // Focus the active item; when every item is disabled, focus the list itself so Escape and Tab still reach the menu
+  // (otherwise focus stays on the trigger and Escape would close the dialog the menu was opened from).
   useEffect(() => {
-    if (open && activeIndex >= 0) itemRefs.current[activeIndex]?.focus();
-  }, [open, activeIndex]);
+    if (!open || !placement) return;
+    const target = activeIndex >= 0 ? itemRefs.current[activeIndex] : listRef.current;
+    (target ?? listRef.current)?.focus({ preventScroll: true });
+  }, [open, placement, activeIndex]);
+
+  /** The next enabled item from `from` in direction `step` (wrapping); -1 when every item is disabled. */
+  function enabledIndex(from: number, step: 1 | -1): number {
+    for (let tries = 0; tries < items.length; tries += 1) {
+      const index = (((from + step * tries) % items.length) + items.length) % items.length;
+      if (!items[index].disabled) return index;
+    }
+    return -1;
+  }
 
   function openMenu() {
     setOpen(true);
-    setActiveIndex(0);
+    setActiveIndex(enabledIndex(0, 1));
   }
 
   function onKeyDown(event: React.KeyboardEvent) {
     if (event.key === "Escape") {
       event.preventDefault();
       close();
+    } else if (event.key === "Tab") {
+      close(); // focus goes back to the trigger; the browser then moves on from there
     } else if (event.key === "ArrowDown") {
       event.preventDefault();
-      setActiveIndex(i => (i + 1) % items.length);
+      setActiveIndex(i => enabledIndex(i + 1, 1));
     } else if (event.key === "ArrowUp") {
       event.preventDefault();
-      setActiveIndex(i => (i - 1 + items.length) % items.length);
+      setActiveIndex(i => enabledIndex(i - 1, -1));
     } else if (event.key === "Home") {
       event.preventDefault();
-      setActiveIndex(0);
+      setActiveIndex(enabledIndex(0, 1));
     } else if (event.key === "End") {
       event.preventDefault();
-      setActiveIndex(items.length - 1);
+      setActiveIndex(enabledIndex(items.length - 1, -1));
     }
   }
 
@@ -96,16 +135,18 @@ export function Menu({ trigger, items, header, align = "end", className }: MenuP
         id: triggerId
       })}
 
-      {open && (
+      {open && createPortal(
         <div
           ref={listRef}
           role="menu"
           aria-labelledby={triggerId}
+          tabIndex={-1}
           onKeyDown={onKeyDown}
+          style={placement ? { top: placement.top, left: placement.left, maxHeight: placement.maxHeight } : { top: 0, left: 0, opacity: 0, pointerEvents: "none" }}
           className={cx(
-            "absolute top-full z-50 mt-2 min-w-[220px] overflow-hidden rounded-card border border-line bg-surface shadow-md",
-            "animate-in fade-in zoom-in-95",
-            align === "end" ? "right-0" : "left-0",
+            "fixed z-[110] min-w-[220px] outline-none max-w-[calc(100vw-24px)] overflow-y-auto overscroll-contain rounded-card border border-line bg-surface shadow-lg",
+            "animate-in fade-in zoom-in-95 motion-reduce:animate-none",
+            placement?.side === "top" ? (align === "end" ? "origin-bottom-right" : "origin-bottom-left") : (align === "end" ? "origin-top-right" : "origin-top-left"),
             className
           )}
         >
@@ -140,7 +181,8 @@ export function Menu({ trigger, items, header, align = "end", className }: MenuP
               </React.Fragment>
             ))}
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

@@ -164,7 +164,7 @@ export function JobDetailDrawer({ job: initialJob, isOpen, onClose, onUpdated }:
   const totalPounds = (job.totalCharges ?? job.calculatedTotalCharges ?? 0) / 100;
 
   return (
-    <div className="fixed inset-0 z-[100] overflow-hidden bg-admin-ink/70 backdrop-blur-sm flex items-center justify-center p-3 sm:p-6">
+    <div className="fixed inset-0 z-[100] overflow-hidden tmv-scrim backdrop-blur-sm flex items-center justify-center p-3 sm:p-6">
       
       {/* Toast Notification */}
       {toast && (
@@ -505,14 +505,14 @@ export function JobDetailDrawer({ job: initialJob, isOpen, onClose, onUpdated }:
         <PhotoModal
           isOpen={true}
           onClose={() => setActivePhoto(null)}
-          title={activePhoto.title}
-          photoUrl={activePhoto.url}
-          driveUrl={activePhoto.driveUrl}
+          photos={[{ id: activePhoto.url, title: activePhoto.title, url: activePhoto.url, driveUrl: activePhoto.driveUrl }]}
+          index={0}
+          onIndex={() => {}}
         />
       )}
 
       {manualFinishOpen && (
-        <div className="fixed inset-0 z-[180] flex items-center justify-center bg-admin-ink/40 backdrop-blur-sm p-4">
+        <div className="fixed inset-0 z-[180] flex items-center justify-center tmv-scrim backdrop-blur-sm p-4">
           <div
             role="dialog"
             aria-modal="true"
