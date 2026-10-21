@@ -18,7 +18,8 @@ import { roadZoneLabel } from "../../utils/roadZone";
 import { Modal } from "../../../../../ui/Modal";
 import { Clock3 } from "lucide-react";
 import { Action, Badge, ChoiceChips, EmptyState, ErrorState, LoadingState, Metric, MetricRow, Missing, Notice, Pagination, Section, type Tone } from "../ds";
-import type { ReportTabProps, RoadType } from "./types";
+import type { GpsState, ReportTabProps, RoadType } from "./types";
+import { TrackerLoading } from "./TrackerLoading";
 
 export const CHARGE_RULES = [
   { scheme: "Congestion Charge (London)", hours: "Mon–Fri 07:00–18:00 · Sat–Sun 12:00–18:00", unit: "Counted as chargeable jobs (one per job in charging hours)" },
@@ -88,16 +89,14 @@ export function RoadChargesTab({ report, gps, onJob, onPage, go, roadType, view 
     </details>
   );
 
-  if (gps.loading) return <div className="space-y-3">{filter}<LoadingState label="Loading road-charge events" /></div>;
-  if (gps.error) return <div className="space-y-3">{filter}<ErrorState title="Couldn't load tracker history" message={`${gps.error} No entries can be confirmed or ruled out until it loads.`} onRetry={gps.retry} />{rules}</div>;
-  if (!page) return <div className="space-y-3">{filter}<Notice tone="warning" title="Tracker history unavailable">Road-charge events were not returned for this range, so entries can't be confirmed or ruled out.</Notice>{rules}</div>;
+  const trackerValue = (value: React.ReactNode) => gps.loading ? <TrackerLoading /> : gps.error || !gps.available ? <Missing>Unavailable</Missing> : value;
 
   return (
     <div className="space-y-4">
       <MetricRow label="Road charge totals">
-        <Metric label={text.entries} value={summary?.entries ?? "Unavailable"} detail="Recorded by the tracker; one visit can produce several alerts" />
-        <Metric label={text.chargeable} value={summary?.chargeableEntries ?? "Unavailable"} detail={text.chargeableDetail} />
-        <Metric label={unpriced ? "Expected (known subtotal)" : "Expected"} value={summary ? formatMoney(summary.estimatedKnownPence) : "Unavailable"}
+        <Metric label={text.entries} value={trackerValue(summary?.entries ?? "Unavailable")} detail="Recorded by the tracker; one visit can produce several alerts" />
+        <Metric label={text.chargeable} value={trackerValue(summary?.chargeableEntries ?? "Unavailable")} detail={text.chargeableDetail} />
+        <Metric label={unpriced ? "Expected (known subtotal)" : "Expected"} value={trackerValue(summary ? formatMoney(summary.estimatedKnownPence) : "Unavailable")}
           detail={unpriced ? `${plural(unpriced, "event")} without a calculable fee` : "Calculated per event by scheme"} />
         <Metric label={manualMissing ? "Manual entry (reported, known)" : "Manual entry (reported)"} value={manualKnown === null ? "Unavailable" : manualKnownJobs === 0 && manualMissing ? "Not submitted" : formatMoney(manualKnown)}
           detail={manualMissing ? `${plural(manualMissing, "missing entry", "missing entries")}` : "From driver job summaries"} />
@@ -114,7 +113,10 @@ export function RoadChargesTab({ report, gps, onJob, onPage, go, roadType, view 
         <h2 className="text-[17px] font-bold text-admin-ink">Zones</h2>
         <ChoiceChips label="Road charges view" value={view} onChange={value => go({ roadView: value })} options={[{ value: "events", label: "Zone events" }, { value: "jobs", label: "By job" }]} />
       </div>
-      {view === "events" ? (
+      {gps.loading && <LoadingState label="Loading road-charge events" />}
+      {gps.error && <ErrorState title="Couldn't load tracker history" message={`${gps.error} No entries can be confirmed or ruled out until it loads.`} onRetry={gps.retry} />}
+      {!gps.loading && !gps.error && (!page || !gps.available) && <Notice tone="warning" title="Tracker history unavailable">Road-charge events were not returned for this range, so entries can't be confirmed or ruled out.</Notice>}
+      {view === "events" ? !gps.loading && !gps.error && page && gps.available ? (
         <Section title="Zone events" description="Every entry the tracker recorded for this driver's vehicle in the selected range.">
           {page.items.length === 0 ? (
             <EmptyState compact title="No zone entries recorded"
@@ -146,7 +148,7 @@ export function RoadChargesTab({ report, gps, onJob, onPage, go, roadType, view 
           )}
           <Pagination page={page.page} pageSize={page.pageSize} total={page.total} noun="event" onPage={next => onPage("roadAlerts", next)} />
         </Section>
-      ) : <ByJob report={report} types={types} onJob={onJob} onPage={onPage} />}
+      ) : null : <ByJob report={report} types={types} onJob={onJob} onPage={onPage} gps={gps} />}
       {rules}
 
       {selected && createPortal(
@@ -168,7 +170,8 @@ export function RoadChargesTab({ report, gps, onJob, onPage, go, roadType, view 
 }
 
 /** Expected (tracker) vs driver-reported road fees for the jobs on the current page. */
-function ByJob({ report, types, onJob, onPage }: { report: DriverReport; types: ReadonlyArray<"tunnel" | "congestion">; onJob: (id: string) => void; onPage: (key: string, page: number) => void }) {
+function ByJob({ report, types, onJob, onPage, gps }: { report: DriverReport; types: ReadonlyArray<"tunnel" | "congestion">; onJob: (id: string) => void; onPage: (key: string, page: number) => void; gps: GpsState }) {
+  const trackerValue = (value: React.ReactNode) => gps.loading ? <TrackerLoading /> : gps.error || !gps.available ? <Missing>Unavailable</Missing> : value;
   const rows = report.jobs.items.map(job => {
     const expected = types.map(type => expectedJobRoadCharge(job, type));
     const reported = types.map(type => manualRoadFee(job.manualDetails, type));
@@ -186,10 +189,10 @@ function ByJob({ report, types, onJob, onPage }: { report: DriverReport; types: 
             {rows.map(({ job, expectedTotal, reportedTotal, entries }) => (
               <tr key={job.jobId}>
                 <td className="px-4 py-2"><span className="block font-medium">{job.customer.name}</span><span className="text-[12.5px] text-admin-ink-2">{job.jobId}</span></td>
-                <td className="px-4 py-2 tabular-nums">{entries}</td>
-                <td className="px-4 py-2 tabular-nums">{formatMoney(expectedTotal, "Not calculated")}</td>
+                <td className="px-4 py-2 tabular-nums">{trackerValue(entries)}</td>
+                <td className="px-4 py-2 tabular-nums">{trackerValue(formatMoney(expectedTotal, "Not calculated"))}</td>
                 <td className="px-4 py-2 tabular-nums">{reportedTotal === undefined ? <Missing>Not submitted</Missing> : formatMoney(reportedTotal, "Unreadable")}</td>
-                <td className="px-4 py-2 tabular-nums">{typeof expectedTotal === "number" && typeof reportedTotal === "number" ? formatMoney(reportedTotal - expectedTotal) : <Missing>Unknown</Missing>}</td>
+                <td className="px-4 py-2 tabular-nums">{trackerValue(typeof expectedTotal === "number" && typeof reportedTotal === "number" ? formatMoney(reportedTotal - expectedTotal) : <Missing>Unknown</Missing>)}</td>
                 <td className="px-4 py-2 text-right"><Action size="sm" onClick={() => onJob(job.jobId)} aria-label={`Open job ${job.jobId}`}>Open job</Action></td>
               </tr>
             ))}

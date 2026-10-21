@@ -55,5 +55,5 @@ export interface DriverReport {
   gpsSummary: { coverage: string; providerCoverage: string; truncated: boolean; portalIssue: string | null; observedEventCount: number; congestionEntries: number; confirmedTunnelCrossings: number | null; inferredVisits: number; observedChargeKnownPence: number; unknownChargeAmounts: number; chargeVerificationCounts: Record<string, number> };
   activitySummary?: { scheme: string; observedVisits: number; observedEntries: number; confirmedCrossings: number | null; chargeableObligations: number; knownCustomerPence: number; unknownChargeAmounts: number };
   contextJobs: Array<{ jobId: string; includedInFinancialTotals: false; jobDetailsUrl: string }>;
-  meta: { financialTotalsCoverAllMatchingJobs: boolean; monetaryLiabilityIntakeEnabled: false; adminManualEditingEnabled: false; gpsIncluded?: boolean; liabilitiesIncluded?: boolean };
+  meta: { financialTotalsCoverAllMatchingJobs: boolean; monetaryLiabilityIntakeEnabled: false; adminManualEditingEnabled: false; gpsIncluded?: boolean; liabilitiesIncluded?: boolean; movementIncluded?: boolean };
 }

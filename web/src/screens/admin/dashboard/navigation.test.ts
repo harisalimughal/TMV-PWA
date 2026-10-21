@@ -4,8 +4,8 @@ import { NAV, resolveRoute, navOwner } from "./navigation";
 const canonical = (search: string) => Object.fromEntries(resolveRoute(search).canonical ?? []);
 
 describe("information architecture", () => {
-  it("has exactly the ten destinations, in order", () => {
-    expect(NAV.map(entry => entry.label)).toEqual(["Overview", "Bookings", "Jobs", "Activity", "Live Fleet", "Drivers", "Van", "Liability", "Notifications & Alerts", "Settings"]);
+  it("has the admin destinations, including Logs under System", () => {
+    expect(NAV.map(entry => entry.label)).toEqual(["Overview", "Bookings", "Jobs", "Activity", "Live Fleet", "Drivers", "Van", "Liability", "Notifications & Alerts", "Settings", "Logs"]);
   });
   it("keeps the driver report under Drivers", () => {
     expect(navOwner("driverreport")).toBe("drivers");
@@ -15,7 +15,7 @@ describe("information architecture", () => {
 
 describe("resolveRoute", () => {
   it("passes canonical sections through untouched", () => {
-    for (const section of ["overview", "bookings", "jobs", "activity", "drivers", "livefleet", "vehicles", "evidence", "alerts", "settings", "driverreport", "maintenance"]) {
+    for (const section of ["overview", "bookings", "jobs", "activity", "drivers", "livefleet", "vehicles", "evidence", "alerts", "settings", "logs", "driverreport", "maintenance"]) {
       expect(resolveRoute(`?section=${section}`)).toEqual({ route: section });
     }
   });

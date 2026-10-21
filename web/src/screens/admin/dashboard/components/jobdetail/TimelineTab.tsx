@@ -191,7 +191,7 @@ export function TimelineTab({ job, onUpdated, onToast }: { job: NormalizedJob; o
       </div>
       </div>
 
-      {job.scenarios?.length > 0 && <Block title="Evidence & liability submissions"><JobScenarioSection scenarios={job.scenarios} /></Block>}
+      <JobScenarioSection scenarios={job.scenarios} />
 
       <PhotoModal isOpen={photoIndex !== null} onClose={() => setPhotoIndex(null)} photos={photos} index={photoIndex ?? 0} onIndex={setPhotoIndex}
         deletingId={deletingId} onDelete={photoIndex !== null && photos[photoIndex] && deletable(photos[photoIndex]) ? photo => setConfirmDelete(photo) : undefined} />

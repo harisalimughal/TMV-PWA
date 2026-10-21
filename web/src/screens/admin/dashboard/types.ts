@@ -131,6 +131,8 @@ export interface NormalizedJob {
   bookedStart: string;
   bookedFinish: string;
   actualStart?: string;
+  /** Date used by backend range filters; excludes synthetic completion-fallback starts. */
+  effectiveStart?: string;
   actualFinish?: string;
   pickupArrivalAt?: string;
   vanLoadedAt?: string;
@@ -294,6 +296,8 @@ export interface DriverSummaryItem {
   avgDelayMinutes: number;
   totalChargesPounds: number;
   calculatedChargesPounds?: number;
+  /** Calendar base prices for completed jobs, excluding overtime and road charges. */
+  basePricePounds?: number;
   revenuePounds: number;
   revenueFormatted: string;
   cashCollectedPounds: number;

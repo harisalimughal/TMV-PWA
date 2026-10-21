@@ -1,10 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Job } from "../src/jobs/job.types";
 import type { DriverJobSummaryDoc } from "../src/db/driver-job-summary.repo";
-const mocks = vi.hoisted(() => ({ profile: vi.fn(), jobs: vi.fn(), context: vi.fn(), liabilities: vi.fn(), gps: vi.fn(), setting: vi.fn(), manuals: vi.fn(), allocations: vi.fn(), prepaymentConflicts: vi.fn(), evidence: vi.fn() }));
+const mocks = vi.hoisted(() => ({ profile: vi.fn(), jobs: vi.fn(), context: vi.fn(), liabilities: vi.fn(), gps: vi.fn(), events: vi.fn(), movement: vi.fn(), setting: vi.fn(), manuals: vi.fn(), allocations: vi.fn(), prepaymentConflicts: vi.fn(), evidence: vi.fn() }));
 vi.mock("../src/auth/driver-account.service", () => ({ getDriverProfileByInitials: mocks.profile }));
 vi.mock("../src/reports/driver-report.repo", () => ({ loadDriverReportJobs: mocks.jobs, loadReportContextJobs: mocks.context, loadReportLiabilitySources: mocks.liabilities, reportPrepaymentConflicts: mocks.prepaymentConflicts, ReportCapacityError: class extends Error {} }));
-vi.mock("../src/gps/gps.repo", () => ({ readGpsRange: mocks.gps }));
+vi.mock("../src/gps/gps.repo", () => ({ readGpsRange: mocks.gps, readGpsEventRange: mocks.events, readGpsMovementRange: mocks.movement }));
 vi.mock("../src/db/evidence.repo", () => ({ listEvidenceForJobs: mocks.evidence }));
 vi.mock("../src/db/settings.repo", () => ({ getSetting: mocks.setting }));
 vi.mock("../src/db/driver-job-summary.repo", () => ({ listDriverJobSummariesForJobs: mocks.manuals }));
@@ -26,12 +26,50 @@ beforeEach(() => {
   vi.mocked(readReportAlerts).mockResolvedValue({ events: [], truncated: false });
   mocks.jobs.mockResolvedValue([{ job: job("ONE"), manual: manual("ONE") }, { job: job("TWO"), manual: manual("TWO") }]);
   mocks.context.mockResolvedValue([]); mocks.gps.mockResolvedValue({ events: [], positions: [], drives: [], runs: [], truncated: false });
+  mocks.events.mockResolvedValue({ events: [], truncated: false });
+  mocks.movement.mockResolvedValue({ positions: [], drives: [], truncated: false });
   mocks.evidence.mockResolvedValue([]);
   mocks.setting.mockResolvedValue("[]"); mocks.manuals.mockResolvedValue([]); mocks.allocations.mockResolvedValue([]);
   mocks.liabilities.mockResolvedValue({ sources: [], jobs: [], audits: [] });
   mocks.prepaymentConflicts.mockResolvedValue([]);
 });
 describe("Scoped full-range driver report", () => {
+  it("preserves movement, saved timings, money and alerts without geometry reads for interactive tabs", async () => {
+    const tracked = { ...job("ONE"), gpsliveImei: "123", trackerArrivalAt: "2026-10-09T08:58:00Z" };
+    mocks.jobs.mockResolvedValue([{ job: tracked, manual: manual("ONE") }]);
+    const event = parseGpsEvent({ event_id: "entry", type: "zone_in", event_desc: "Dartford Crossing", dt_tracker: "2026-10-09T10:00:00Z", device: { imei: "123", name: "TEST - AB" } }, "webhook", range.to)!;
+    const points = [0, 1].map(i => ({ _id: String(i), imei: "123", occurredAt: `2026-10-09T09:0${i}:00Z`, timeSource: "provider-assumed-utc", lat: 51 + i * .001, lng: 0, speedKph: 15, ignitionOn: true }));
+    mocks.events.mockResolvedValue({ events: [event], truncated: false });
+    mocks.movement.mockResolvedValue({ positions: points, drives: [], truncated: false });
+    mocks.gps.mockResolvedValue({ events: [event], positions: points, drives: [], runs: [], truncated: false });
+    const display = await getDriverReport("AB", range, "day", false, { includeLiabilities: false, includeGeometry: false });
+    expect(mocks.gps).not.toHaveBeenCalled();
+    expect(mocks.movement).toHaveBeenCalledOnce();
+    expect(mocks.movement).toHaveBeenCalledWith(["123"], expect.any(String), expect.any(String), [{ from: tracked.actualStart, to: tracked.actualFinish }]);
+    expect(mocks.setting.mock.calls.some(([key]) => key === "GPS_TUNNEL_PORTAL_RULES")).toBe(false);
+    expect(display.summary.movingKnownSeconds).toBe(60);
+    expect(display.gpsSummary.confirmedTunnelCrossings).toBeNull();
+    const full = await getDriverReport("AB", range, "day", false, { includeLiabilities: false });
+    expect(mocks.gps).toHaveBeenCalledOnce();
+    expect(display.jobs[0].movement).toEqual(full.jobs[0].movement);
+    expect(display.jobs[0].finance).toEqual(full.jobs[0].finance);
+    expect(display.jobs[0].timings).toEqual(full.jobs[0].timings);
+    expect(display.roadAlerts).toEqual(full.roadAlerts);
+  });
+  it("serves road-alert activity without waiting for positions, movement or portal geometry", async () => {
+    mocks.jobs.mockResolvedValue([{ job: { ...job("ONE"), gpsliveImei: "123" }, manual: manual("ONE") }]);
+    const event = parseGpsEvent({ event_id: "entry", type: "zone_in", event_desc: "Dartford Crossing", dt_tracker: "2026-10-09T10:00:00Z", device: { imei: "123", name: "TEST - AB" } }, "webhook", range.to)!;
+    mocks.events.mockResolvedValue({ events: [event], truncated: false });
+    mocks.setting.mockImplementation(async key => key === "TUNNEL_CHARGE" ? "13.60" : "[]");
+    const report = await buildDriverReport("AB", range, "day", { includeGps: true, includePositions: false, includeLiabilities: false });
+    expect(mocks.gps).not.toHaveBeenCalled();
+    expect(mocks.events).toHaveBeenCalledOnce();
+    expect(report.roadAlerts).toMatchObject([{ jobId: "ONE", estimatedPence: 1360 }]);
+    expect(report.meta).toMatchObject({ gpsIncluded: true, movementIncluded: false });
+    expect(report.gpsSummary).toMatchObject({ coverage: "events-only", confirmedTunnelCrossings: null });
+    expect(report.summary).toMatchObject({ expectedKnownPence: 25000, movingUnknownJobs: 1 });
+    expect(report.jobs[0].manualDetails).not.toBeNull();
+  });
   it("excludes unfinished jobs and their linked road activity while keeping GPS matching context", async () => {
     const done = { ...job("DONE"), gpsliveImei: "123" };
     const active = { ...job("ACTIVE"), status: "IN_PROGRESS", gpsliveImei: "456", actualFinish: "" } as Job;
@@ -60,6 +98,9 @@ describe("Scoped full-range driver report", () => {
     const report = await buildDriverReport("AB", range, "day", { includeGps: false, includeLiabilities: false });
     expect(report.summary).toMatchObject({ completedJobs: 1, expectedKnownPence: 25000, outstandingKnownPence: 3000 });
     expect(report.jobs[0].duration.workingMinutes).toBe(120);
+    expect(report.jobs[0].manualDetails).not.toBeNull();
+    expect(report.jobs[0].duration.manualMinutes).toBe(120);
+    expect(report.jobs[0].finance).toMatchObject({ systemCalculatedPence: 25000, acceptedPence: 25000 });
     expect(report.meta).toMatchObject({ gpsIncluded: false, liabilitiesIncluded: false });
     expect(report.gpsSummary.coverage).toBe("not-requested");
     expect(report.liabilitySummary.completeTotalPence).toBeNull();

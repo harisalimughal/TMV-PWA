@@ -37,9 +37,9 @@ export function JobBadges({ job }: { job: NormalizedJob }) {
 export function chargeHeadline(job: NormalizedJob): { amount: string; label: string; muted: boolean } {
   const calculated = job.totalCharges ?? job.calculatedTotalCharges;
   const stage = lifecycleOf(job);
-  if (stage === "completed") return { amount: formatMoney(job.amountCharged), label: `Final charge · calculated ${formatMoney(calculated)}`, muted: false };
-  if (stage === "cancelled") return { amount: "—", label: `Cancelled · calculated ${formatMoney(calculated)}`, muted: true };
-  return { amount: "Not yet charged", label: `Calculated ${formatMoney(calculated)}`, muted: true };
+  if (stage === "completed") return { amount: formatMoney(job.amountCharged), label: `Driver collected · Total Charges ${formatMoney(calculated)}`, muted: false };
+  if (stage === "cancelled") return { amount: "—", label: `Cancelled · Total Charges ${formatMoney(calculated)}`, muted: true };
+  return { amount: "Not yet charged", label: `Total Charges ${formatMoney(calculated)}`, muted: true };
 }
 
 export function JobSummary({ job }: { job: NormalizedJob }) {

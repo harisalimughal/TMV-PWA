@@ -22,6 +22,7 @@ import { DriverReportPage } from "./dashboard/pages/DriverReportPage";
 import { EvidencePage } from "./dashboard/pages/EvidencePage";
 import { SettingsPage } from "./dashboard/pages/SettingsPage";
 import { MaintenancePage } from "./dashboard/pages/MaintenancePage";
+import { LogsPage } from "./dashboard/pages/LogsPage";
 import { JobDetailRoute } from "./dashboard/components/JobDetailModal";
 import { ROUTE_TITLES, navigateTo, resolveRoute, sectionHref, type RouteId } from "./dashboard/navigation";
 import { cancelPendingNavigation, confirmPendingNavigation, guardNavigation, usePendingNavigation } from "./dashboard/utils/unsavedChanges";
@@ -167,6 +168,7 @@ export function AdminApp() {
       {route === "alerts" && <AlertsCenterPage onSelectSection={handleSelectSection} />}
       {route === "settings" && <SettingsPage />}
       {route === "maintenance" && <MaintenancePage />}
+      {route === "logs" && <LogsPage />}
       <JobDetailRoute />
       <ConfirmDialog
         open={pendingNavigation}

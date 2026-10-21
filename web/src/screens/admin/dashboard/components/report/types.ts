@@ -11,6 +11,7 @@ export interface ReportLocationPatch {
   roadView?: "events" | "jobs";
   /** Expanded job (Jobs and Comparison tabs) or the job picked in a job filter. */
   expand?: string;
+  sortDir?: "asc" | "desc";
 }
 
 export interface GpsState { loading: boolean; error?: string; retry?: () => void; available: boolean }

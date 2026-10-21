@@ -33,7 +33,9 @@ export function useUrlState<T extends Record<string, string>>(defaults: T): [T, 
     const params: Record<string, string | null> = {};
     for (const key of Object.keys(patch)) params[key] = next[key] === defaultsRef.current[key] ? null : next[key];
     setState(next);
-    updateUrlParams(params, options?.push);
+    // An explicit blank can differ from the default (e.g. All dates versus Today).
+    // Keep it in the URL so opening a record or using Back does not restore Today.
+    updateUrlParams(params, options?.push, true);
   }, []);
   return [state, update];
 }

@@ -20,6 +20,8 @@ import { arrival } from "./reportModel";
 import { milestones } from "./milestones";
 import { eventStatus, rateBasisLabel } from "./RoadChargesTab";
 import { cx } from "../../../../../ui/cx";
+import type { GpsState } from "./types";
+import { TrackerLoading } from "./TrackerLoading";
 
 function RecordSection({ title, children, className }: { title: string; children: React.ReactNode; className?: string }) {
   return (
@@ -44,7 +46,7 @@ function Rows({ rows }: { rows: Array<[string, React.ReactNode, React.ReactNode?
   );
 }
 
-function RoadActivity({ job, type, gpsAvailable }: { job: DriverReportJob; type: "tunnel" | "congestion"; gpsAvailable: boolean }) {
+function RoadActivity({ job, type, gpsAvailable, gps }: { job: DriverReportJob; type: "tunnel" | "congestion"; gpsAvailable: boolean; gps?: GpsState }) {
   const rows = (job.roadAlerts ?? []).filter((row: ReportRoadAlert) => row.type === type);
   const saved = type === "tunnel" ? job.finance.tunnelPence : job.finance.congestionPence;
   const reported = job.manualDetails ? manualRoadFee(job.manualDetails, type) : undefined;
@@ -54,7 +56,7 @@ function RoadActivity({ job, type, gpsAvailable }: { job: DriverReportJob; type:
         ["Saved on the job", formatMoney(saved, "Not recorded"), "Job pricing snapshot, included in the job total"],
         ["Manual entry (reported)", reported === undefined ? <Missing>{submissionLabel(job).label}</Missing> : formatMoney(reported, "Not reported")]
       ]} />
-      {!gpsAvailable ? <p className="text-[12.5px] text-admin-ink-2">Tracker zone activity is still loading or unavailable for this range.</p>
+      {gps?.loading ? <TrackerLoading /> : !gpsAvailable ? <p className="text-[12.5px] text-admin-ink-2">Tracker zone activity is unavailable for this range.{gps?.retry && <Action size="sm" variant="ghost" onClick={gps.retry}>Retry GPS</Action>}</p>
         : rows.length === 0 ? <p className="text-[12.5px] text-admin-ink-2">No {type} zone entries linked to this job. Tracker coverage limits apply, so this is not proof of no entry.</p>
         : (
           <ul className="divide-y divide-admin-line rounded-lg border border-admin-line">
@@ -71,7 +73,7 @@ function RoadActivity({ job, type, gpsAvailable }: { job: DriverReportJob; type:
   );
 }
 
-export function JobRecord({ job, open, onToggle, onJob, gpsAvailable }: { job: DriverReportJob; open: boolean; onToggle: () => void; onJob: (id: string) => void; gpsAvailable: boolean }) {
+export function JobRecord({ job, open, onToggle, onJob, gpsAvailable, gps }: { job: DriverReportJob; open: boolean; onToggle: () => void; onJob: (id: string) => void; gpsAvailable: boolean; gps?: GpsState }) {
   const panelId = `job-record-${job.jobId}`;
   const finance = job.finance, manual = job.manualDetails, d = job.duration;
   const arrive = arrival(job);
@@ -124,7 +126,7 @@ export function JobRecord({ job, open, onToggle, onJob, gpsAvailable }: { job: D
                       {index < all.length - 1 && <span className="absolute top-4 h-[calc(100%+4px)] w-px bg-admin-line" />}
                     </span>
                     <span className="min-w-0 text-[13.5px]"><span className="text-admin-ink">{item.label}</span><span className="block text-[12px] text-admin-muted">{item.source}</span></span>
-                    <span className="text-right text-[13.5px] font-medium tabular-nums">{item.display ?? <Missing>{item.missing}</Missing>}</span>
+                    <span className="text-right text-[13.5px] font-medium tabular-nums">{item.display ?? (item.source === "Tracker" && gps?.loading ? <TrackerLoading /> : <Missing>{item.missing}</Missing>)}</span>
                   </li>
                 ))}
               </ol>
@@ -138,7 +140,7 @@ export function JobRecord({ job, open, onToggle, onJob, gpsAvailable }: { job: D
                 ["Scheduled hours", formatMinutes(d.bookedMinutes, "Unavailable"), "Calendar duration"],
                 ["Allocated time", formatMinutes(d.allocatedMinutes, "Unavailable"), "Allowance before extra time"],
                 ["Working hours", formatMinutes(d.workingMinutes, "Unavailable"), "Recorded arrival to finish"],
-                ["Moving hours", moving == null ? <Missing>Unavailable</Missing> : formatMinutes(moving / 60), job.movement ? `Tracker coverage: ${job.movement.onJob.coverage}` : "Tracker"],
+                ["Moving hours", moving == null ? gps?.loading ? <TrackerLoading /> : <Missing>Unavailable</Missing> : formatMinutes(moving / 60), job.movement ? `Tracker coverage: ${job.movement.onJob.coverage}` : "Tracker"],
                 ["Overtime", formatMinutes(d.overtimeMinutes, "Unavailable")],
                 ["Arrival delay", arrive.status === "unverified" ? <Missing>Unverified</Missing> : formatMinutes(Math.max(0, d.arrivalDelayMinutes ?? 0)), arrive.status === "unverified" ? arrive.reason : d.arrivalSource],
                 ["Review report", job.reviewSent ? "Sent" : "Not sent"],
@@ -167,8 +169,8 @@ export function JobRecord({ job, open, onToggle, onJob, gpsAvailable }: { job: D
           <RecordSection title="Financial breakdown" className="[&>div]:px-0 [&>div]:py-0"><JobFinancialBreakdown job={job} /></RecordSection>
 
           <div className="grid gap-3 lg:grid-cols-2">
-            <RecordSection title="Tunnel charges"><RoadActivity job={job} type="tunnel" gpsAvailable={gpsAvailable} /></RecordSection>
-            <RecordSection title="Congestion charges"><RoadActivity job={job} type="congestion" gpsAvailable={gpsAvailable} /></RecordSection>
+            <RecordSection title="Tunnel charges"><RoadActivity job={job} type="tunnel" gpsAvailable={gpsAvailable} gps={gps} /></RecordSection>
+            <RecordSection title="Congestion charges"><RoadActivity job={job} type="congestion" gpsAvailable={gpsAvailable} gps={gps} /></RecordSection>
           </div>
 
           <RecordSection title="System / Manual comparison"><JobComparison job={job} /></RecordSection>

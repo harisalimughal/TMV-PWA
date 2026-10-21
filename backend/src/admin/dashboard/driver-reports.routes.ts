@@ -49,8 +49,20 @@ export function dashboardDriverReportsRoutes(): Router {
       const scheme = String(req.query.activityScheme ?? "all");
       if (!["all", "tunnel", "congestion"].includes(String(scheme))) throw new RangeError("Invalid activity scheme.");
       const detail = req.query.detail ?? "full";
-      if (detail !== "core" && detail !== "full") throw new RangeError("Invalid report detail level.");
-      const report = await getDriverReport(initials, range, groupBy, false, { includeLiabilities: false, includeGps: detail === "full" });
+      if (detail !== "core" && detail !== "full" && detail !== "activity" && detail !== "display") throw new RangeError("Invalid report detail level.");
+      const sortDir = req.query.sortDir;
+      if (sortDir !== undefined && sortDir !== "asc" && sortDir !== "desc") throw new RangeError("Invalid date order.");
+      const ordered = <T>(items: T[], date: (row: T) => string | null | undefined): T[] => {
+        if (!sortDir) return items;
+        const sign = sortDir === "desc" ? -1 : 1;
+        return [...items].sort((a, b) => {
+          const left = Date.parse(date(a) || ""), right = Date.parse(date(b) || "");
+          if (!Number.isFinite(left)) return Number.isFinite(right) ? 1 : 0;
+          if (!Number.isFinite(right)) return -1;
+          return (left - right) * sign;
+        });
+      };
+      const report = await getDriverReport(initials, range, groupBy, false, { includeLiabilities: false, includeGps: detail !== "core", ...(detail === "activity" ? { includePositions: false } : {}), ...(detail === "display" ? { includeGeometry: false } : {}) });
       const visits = report.visits.filter(visit => scheme === "all" || (scheme === "congestion" ? visit.scheme === "congestion" : visit.scheme !== "congestion"));
       const events = report.events.filter(event => scheme === "all" || (scheme === "congestion" ? event.scheme === "congestion" : ["dartford", "blackwall-silvertown"].includes(event.scheme || "")));
       const charges = report.charges.filter(charge => scheme === "all" || charge.type === scheme);
@@ -60,11 +72,13 @@ export function dashboardDriverReportsRoutes(): Router {
         return { items: items.slice((ownPage.page - 1) * ownPage.pageSize, ownPage.page * ownPage.pageSize), total: items.length, ...ownPage };
       };
       res.json({ ...report, activitySummary: { scheme, observedVisits: visits.length, observedEntries: visits.filter(visit => visit.entryObserved).length,
-        confirmedCrossings: report.gpsSummary.coverage === "unavailable" ? null : visits.filter(visit => visit.physicalCrossingConfirmed).length,
+        confirmedCrossings: report.gpsSummary.confirmedTunnelCrossings === null || report.meta?.movementIncluded === false || report.gpsSummary.coverage === "unavailable" ? null : visits.filter(visit => visit.physicalCrossingConfirmed).length,
         chargeableObligations: charges.length, knownCustomerPence: charges.reduce((sum, charge) => sum + (charge.expectedPence ?? 0), 0), unknownChargeAmounts: charges.filter(charge => charge.expectedPence === null).length },
         roadAlertSummary: { entries: roadAlerts.length, chargeableEntries: roadAlerts.filter(row => row.chargeable).length,
           estimatedKnownPence: roadAlerts.reduce((sum, row) => sum + (row.estimatedPence ?? 0), 0), unpricedEntries: roadAlerts.filter(row => row.estimatedPence === null).length },
-        roadAlerts: paginate(roadAlerts, "roadAlerts"), jobs: paginate(report.jobs, "jobs"), events: paginate(events, "events"), visits: paginate(visits, "visits"), charges: paginate(charges, "charges"), liabilities: paginate(report.liabilities, "liabilities") });
+        roadAlerts: paginate(ordered(roadAlerts, row => row.enteredAt), "roadAlerts"), jobs: paginate(ordered(report.jobs, row => row.operationalDate || row.bookedStart), "jobs"),
+        events: paginate(ordered(events, row => row.occurredAt), "events"), visits: paginate(ordered(visits, row => row.entryAt || row.firstInsideAt), "visits"),
+        charges: paginate(ordered(charges, row => row.occurredAt), "charges"), liabilities: paginate(ordered(report.liabilities, row => row.date), "liabilities") });
     } catch (error) {
       res.status(error instanceof ReportCapacityError ? 413 : error instanceof RangeError ? 400 : 500).json({ error: { code: "DRIVER_REPORT_FAILED", message: error instanceof RangeError || error instanceof ReportCapacityError ? error.message : "Driver report could not be loaded. No financial or source data was modified." } });
     }

@@ -81,7 +81,7 @@ export function JobsTab({ report, gps, onJob, onPage, go, expanded }: ReportTabP
         </div>
         {jobs.items.length === 0 ? <div className="tmv-panel"><EmptyState compact title="No jobs in this range" /></div> : (
           <ul className="space-y-2">
-            {jobs.items.map(job => <JobRecord key={job.jobId} job={job} open={expanded === job.jobId} gpsAvailable={gps.available}
+            {jobs.items.map(job => <JobRecord key={job.jobId} job={job} open={expanded === job.jobId} gpsAvailable={gps.available} gps={gps}
               onToggle={() => go({ expand: expanded === job.jobId ? "" : job.jobId })} onJob={onJob} />)}
           </ul>
         )}

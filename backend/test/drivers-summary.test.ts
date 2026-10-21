@@ -3,6 +3,16 @@ import { ExtraChargeType, JobStatus } from "../src/jobs/job.types";
 import { summarizeDrivers } from "../src/admin/dashboard/drivers-summary.routes";
 
 describe("summarizeDrivers", () => {
+  it("sums calendar base prices for completed jobs without adding extras or driver-collected amounts", () => {
+    const [row] = summarizeDrivers([], [
+      { driverInitials: "TI", status: JobStatus.COMPLETED, basePrice: 10000, calculatedTotalCharges: 15000, amountCharged: 14000, evidenceCompleteness: {} },
+      { driverInitials: "TI", status: JobStatus.COMPLETED, basePrice: 2500, calculatedTotalCharges: 5000, amountCharged: 4500, evidenceCompleteness: {} },
+      { driverInitials: "TI", status: JobStatus.COMPLETED, basePrice: 0, calculatedTotalCharges: 1000, amountCharged: 1000, evidenceCompleteness: {} },
+      { driverInitials: "TI", status: JobStatus.READY, basePrice: 99999, evidenceCompleteness: {} },
+      { driverInitials: "TI", status: JobStatus.CANCELLED, basePrice: 99999, evidenceCompleteness: {} }
+    ] as any);
+    expect(row).toMatchObject({ basePricePounds: 125, calculatedChargesPounds: 210, revenuePounds: 195, completed: 3 });
+  });
   it("sums recorded working minutes and counts missing completed-job timings separately", () => {
     const [row] = summarizeDrivers([], [
       { driverInitials: "WD", status: JobStatus.COMPLETED, actualMinutes: 90, evidenceCompleteness: {} },

@@ -6,14 +6,14 @@
  * Replaces the former "Operations Dossier" drawer (active jobs) and the separate
  * Finished Jobs submission drawer, which showed the same job two different ways.
  *
- * Structure: identity + independent status badges, route/charge summary, then tabs --
- * Details | Timeline & evidence | Charges & payment | Activity. Frequent actions
+ * Structure: identity + independent status badges, then one scrolling page starting
+ * with the original booking, timeline/evidence, charges/payment and activity. Frequent actions
  * (Download PDF) sit apart from consequential ones (Reassign, Mark as finished).
  */
 import React, { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, Check, UserX, Copy, Download, MoreHorizontal, Save, UserPlus, CheckCircle2 } from "lucide-react";
-import { fetchJobDetail, deleteEvidencePhoto, markJobFinishedManually, reassignJob, saveJobReview } from "../api";
+import { ArrowLeft, Check, UserX, Copy, Download, Eye, MoreHorizontal, Save, UserPlus, CheckCircle2 } from "lucide-react";
+import { fetchJobDetail, deleteEvidencePhoto, markJobFinishedManually, reassignJob } from "../api";
 import { fetchDrivers as fetchDriverRoster } from "../../../../api/admin";
 import type { NormalizedJob } from "../types";
 import { closeJob, urlParam } from "../navigation";
@@ -24,7 +24,7 @@ import { RawBookingText } from "../../../../components/driver/RawBookingText";
 import { Menu } from "../../../../ui/Menu";
 import { Modal } from "../../../../ui/Modal";
 import { ConfirmDialog } from "../../../../ui/ConfirmDialog";
-import { Action, Badge, Dialog, EmptyState, ErrorState, Facts, LoadingState, Missing, Notice, Tabs, TabPanel, controlBase, type FactRow, type Tone } from "./ds";
+import { Action, Badge, Dialog, EmptyState, ErrorState, Facts, LoadingState, Missing, Notice, controlBase, type FactRow, type Tone } from "./ds";
 import { DriverViewedBadge, JobStatusBadge, ReviewBadge, evidenceState, paymentState } from "./StatusBadge";
 import { JobTimeBreakdown } from "./JobTimeBreakdown";
 import { JobScenarioSection } from "./JobScenarioSection";
@@ -36,21 +36,14 @@ import { waitForPrintImages } from "../utils/printReady";
 import { formatDateTime, formatMoney, formatShortDateTime, formatTime, formatDelay, formatMinutes } from "../utils/format";
 import { hasInvoice, isUnassigned } from "../hooks/useAttention";
 import { cx } from "../../../../ui/cx";
-import { JobSummary, JobBadges } from "./jobdetail/JobSummary";
+import { JobBadges } from "./jobdetail/JobSummary";
 import { DetailsTab } from "./jobdetail/DetailsTab";
 import { TimelineTab } from "./jobdetail/TimelineTab";
 import { ChargesTab } from "./jobdetail/ChargesTab";
 import { ActivityTab } from "./jobdetail/ActivityTab";
 import { lifecycleOf } from "./jobdetail/model";
 
-type DetailTab = "details" | "timeline" | "charges" | "activity";
-const TABS: Array<{ id: DetailTab; label: React.ReactNode }> = [
-  // The suffixes drop below 640 px so all four tabs fit a phone without clipping.
-  { id: "details", label: "Details" }, { id: "timeline", label: <span>Timeline{" "}<span className="hidden sm:inline">&amp; evidence</span></span> },
-  { id: "charges", label: <span>Charges{" "}<span className="hidden sm:inline">&amp; payment</span></span> }, { id: "activity", label: "Activity" }
-];
-
-/** Mounted once by AdminApp: shows the centred job dialog whenever the URL has `job`. */
+/** Mounted once by AdminApp: shows the full-width job page whenever the URL has `job`. */
 export function JobDetailRoute() {
   const [jobId, setJobId] = useState(() => urlParam("job"));
   useEffect(() => {
@@ -65,7 +58,6 @@ export function JobDetailRoute() {
 export function JobDetailModal({ jobId, onClose, initialJob }: { jobId: string; onClose: () => void; initialJob?: NormalizedJob }) {
   const queryClient = useQueryClient();
   const query = useQuery({ queryKey: ["job_detail", jobId], queryFn: () => fetchJobDetail(jobId), initialData: initialJob, retry: 1 });
-  const [tab, setTab] = useState<DetailTab>("details");
   const [copied, setCopied] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const [reassignOpen, setReassignOpen] = useState(false);
@@ -107,20 +99,23 @@ export function JobDetailModal({ jobId, onClose, initialJob }: { jobId: string; 
 
   return (
     <>
-      <Dialog open onClose={onClose} title={job ? job.customerName || "Customer not recorded" : "Job details"} subtitle={subtitle}
+      <Dialog open fullScreen onClose={onClose} title={job ? job.customerName || "Customer not recorded" : "Job details"} subtitle={subtitle}
+        headerActions={job ? <>
+          <Action icon={<Eye />} onClick={() => setPdfOpen(true)}>Preview PDF</Action>
+          <Action variant="primary" icon={<Download />} onClick={() => { setPdfOpen(true); handlePrint(); }}>Download PDF</Action>
+        </> : undefined}
         headerExtra={job ? (
           <div className="space-y-2.5 pt-2 md:py-3">
             {backToReport && (
               <button type="button" onClick={() => { window.history.replaceState({}, "", backToReport); window.dispatchEvent(new PopStateEvent("popstate")); }}
                 className="inline-flex items-center gap-1.5 text-[13.5px] font-semibold text-admin-brand hover:underline"><ArrowLeft aria-hidden className="h-4 w-4" />Back to driver report</button>
             )}
-            <div className="hidden md:block"><JobBadges job={job} /></div>
-            <Tabs tabs={TABS} value={tab} onChange={setTab} label="Job detail sections" idBase={`job-${job.jobId}`} className="md:-mb-3" />
+            <JobBadges job={job} />
           </div>
         ) : undefined}
         footer={job ? (
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <Action variant={stage === "completed" || stage === "cancelled" ? "primary" : "secondary"} icon={<Download />} onClick={() => setPdfOpen(true)}>Download PDF</Action>
+            <span className="text-[12.5px] text-admin-ink-2">{job.jobId}</span>
             <div className="flex items-center gap-2">
               {stage === "completed" || stage === "cancelled"
                 ? <span className="hidden text-[12.5px] text-admin-ink-2 sm:inline">{stage === "completed" ? "Completed jobs keep their recorded driver" : "Cancelled job"}</span>
@@ -130,17 +125,16 @@ export function JobDetailModal({ jobId, onClose, initialJob }: { jobId: string; 
             </div>
           </div>
         ) : undefined}>
-        {job && <div className="mb-4 space-y-3"><div className="md:hidden"><JobBadges job={job} /></div><JobSummary job={job} /></div>}
         {toast && <div className="mb-3"><Notice tone="success">{toast}</Notice></div>}
         {!job && query.isLoading && <LoadingState label="Loading job" rows={6} />}
         {!job && query.isError && <ErrorState title={`Couldn't load job ${jobId}`} message={(query.error as Error)?.message} onRetry={() => void query.refetch()} />}
         {job && (
-          <TabPanel idBase={`job-${job.jobId}`} id={tab}>
-            {tab === "details" && <DetailsTab job={job} />}
-            {tab === "timeline" && <TimelineTab job={job} onUpdated={replaceJob} onToast={flash} />}
-            {tab === "charges" && <ChargesTab job={job} onUpdated={replaceJob} onToast={flash} />}
-            {tab === "activity" && <ActivityTab job={job} />}
-          </TabPanel>
+          <div className="space-y-6">
+            <section aria-label="Job details"><DetailsTab job={job} /></section>
+            <section aria-label="Timeline and evidence"><TimelineTab job={job} onUpdated={replaceJob} onToast={flash} /></section>
+            <section aria-label="Charges and payment"><ChargesTab job={job} /></section>
+            <section aria-label="Job activity"><ActivityTab job={job} /></section>
+          </div>
         )}
       </Dialog>
       {job && reassignOpen && <ReassignDialog job={job} onClose={() => setReassignOpen(false)} onDone={next => { setReassignOpen(false); replaceJob({ ...job, ...next }); flash(`Reassigned to ${next.driverName}`); }} />}

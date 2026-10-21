@@ -48,9 +48,15 @@ import { dashboardSummaryRoutes } from "./admin/dashboard/summary.routes";
 import { dashboardVanRoutes } from "./admin/dashboard/van.routes";
 import { dashboardActivityRoutes } from "./admin/dashboard/activity.routes";
 import { dashboardBookingRoutes } from "./booking/routes";
+import { dashboardLogsRoutes } from "./admin/dashboard/logs.routes";
+import { errorRecorder, ensureServerErrorIndexes } from "./observability/server-errors.repo";
+import { trackServerErrors } from "./observability/server-errors.middleware";
+import { setErrorLogSink } from "./utils/logger";
 import { adminDriverScope } from "./admin/driver-scope";
 
 const app = express();
+setErrorLogSink(errorRecorder.record);
+app.use(trackServerErrors);
 app.use(express.json({ limit: "2mb" }));
 app.use(cookieParser());
 
@@ -86,6 +92,7 @@ app.use("/api/admin/alerts", requireAdminAuth, dashboardAlertsRoutes());
 app.use("/api/admin/notifications", requireAdminAuth, dashboardNotificationsRoutes());
 app.use("/api/admin/messages", requireAdminAuth, dashboardMessagingRoutes());
 app.use("/api/admin/maintenance", requireAdminAuth, dashboardMaintenanceRoutes());
+app.use("/api/admin/logs", requireAdminAuth, dashboardLogsRoutes());
 
 app.use("/api", (_req, res) => {
   res.status(404).json({ error: { code: "API_ROUTE_NOT_FOUND", message: "API route not found." } });
@@ -201,7 +208,7 @@ function startPickupTrackerSweep(): void {
  */
 function ensureIndexesWithRetry(): void {
   const RETRY_MS = 30_000;
-  Promise.all([ensureIndexes(), ensureExceptionsIndexes(), ensureGpsIndexes(), ensureRoadChargeIndexes(), ensureLiabilityIndexes(), ensureDriverReportIndexes()])
+  Promise.all([ensureIndexes(), ensureExceptionsIndexes(), ensureGpsIndexes(), ensureRoadChargeIndexes(), ensureLiabilityIndexes(), ensureDriverReportIndexes(), ensureServerErrorIndexes()])
     .then(() => log.info("mongo indexes verified"))
     .catch(error => {
       log.warn("ensureIndexes failed; retrying", { error: String(error), retry_in_ms: RETRY_MS });

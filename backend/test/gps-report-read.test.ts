@@ -1,14 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-const mocks = vi.hoisted(() => ({ collection: vi.fn(), arrays: {} as Record<string, () => Promise<unknown[]>>, queries: [] as Array<{ collection: string; projection?: unknown; pipeline?: any[] }> }));
+const mocks = vi.hoisted(() => ({ collection: vi.fn(), arrays: {} as Record<string, () => Promise<unknown[]>>, queries: [] as Array<{ collection: string; filter?: any; projection?: unknown; pipeline?: any[] }> }));
 vi.mock("../src/db/mongo", () => ({ getDb: async () => ({ collection: mocks.collection }) }));
-import { readGpsRange } from "../src/gps/gps.repo";
+import { readGpsEventRange, readGpsMovementRange, readGpsRange } from "../src/gps/gps.repo";
 
 beforeEach(() => {
   mocks.queries.length = 0;
   mocks.arrays = Object.fromEntries(["gps_events", "gps_positions", "gps_drives", "gps_sync_runs", "geometry"].map(name => [name, async () => []]));
   mocks.collection.mockImplementation((name: string) => ({
-    find: () => {
-      const query = { collection: name } as typeof mocks.queries[number]; mocks.queries.push(query);
+    find: (filter: unknown) => {
+      const query = { collection: name, filter } as typeof mocks.queries[number]; mocks.queries.push(query);
       const cursor = { project: (projection: unknown) => { query.projection = projection; return cursor; },
         sort: () => cursor, limit: () => cursor, toArray: () => mocks.arrays[name]() };
       return cursor;
@@ -18,6 +18,17 @@ beforeEach(() => {
 });
 
 describe("Bounded GPS report reads", () => {
+  it("bounds interactive movement to job periods with boundary samples and overlapping drives", async () => {
+    await readGpsMovementRange(["TRACKER"], "2026-10-12T00:00:00Z", "2026-10-20T00:00:00Z", [{ from: "2026-10-15T12:00:00Z", to: "2026-10-15T14:00:00Z" }]);
+    expect(mocks.queries.map(query => query.collection)).toEqual(["gps_positions", "gps_drives"]);
+    expect(mocks.queries[0].filter).toMatchObject({ imei: { $in: ["TRACKER"] }, $or: [{ occurredAt: { $gte: "2026-10-15T11:58:00.000Z", $lte: "2026-10-15T14:02:00.000Z" } }] });
+    expect(mocks.queries[1].filter.$or).toEqual([{ start: { $lt: "2026-10-15T14:00:00Z" }, end: { $gt: "2026-10-15T12:00:00Z" } }]);
+  });
+  it("loads road events without reading movement points or zone snapshots", async () => {
+    mocks.arrays.gps_events = async () => [{ _id: "entry" }];
+    expect(await readGpsEventRange(["TRACKER"], "FROM", "TO")).toEqual({ events: [{ _id: "entry" }], truncated: false });
+    expect(mocks.queries.map(query => query.collection)).toEqual(["gps_events"]);
+  });
   it("starts independent collection reads while positions are still pending", async () => {
     let release!: (rows: unknown[]) => void;
     mocks.arrays.gps_positions = vi.fn(() => new Promise(resolve => { release = resolve; }));

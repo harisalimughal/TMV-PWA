@@ -19,6 +19,20 @@ const renderTab = (report: Awaited<ReturnType<typeof sampleDriverReport>>, patch
 };
 
 describe("RoadChargesTab", () => {
+  it.each([true, false])("keeps manual road charges and job actions available when GPS is loading=%s", async loading => {
+    const report = await reportWithUnlinked();
+    report.summary.manualRoadChargeTotals = {
+      tunnel: { knownPence: 777, knownJobs: 1, missingJobs: 0, unavailableJobs: 0 },
+      congestion: { knownPence: 0, knownJobs: 1, missingJobs: 0, unavailableJobs: 0 }
+    };
+    renderTab(report, { view: "jobs", gps: { loading, available: false, error: loading ? undefined : "GPS timed out", retry: vi.fn() } });
+    expect(screen.getByText("£7.77")).toBeInTheDocument();
+    expect(screen.getByRole("columnheader", { name: "Driver reported" })).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: /^Open job / })[0]).toBeEnabled();
+    expect(screen.getByRole("region", { name: "Chargeable times" })).toBeInTheDocument();
+    if (loading) expect(screen.getAllByText("Loading GPS…").length).toBeGreaterThan(0);
+    else expect(screen.getByText(/GPS timed out/)).toBeInTheDocument();
+  });
   it("keeps events with no linked job visible and says they need a match", async () => {
     renderTab(await reportWithUnlinked());
     expect(screen.getByText("1 event on this page needs a job match")).toBeInTheDocument();

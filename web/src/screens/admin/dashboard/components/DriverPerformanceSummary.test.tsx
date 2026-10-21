@@ -13,7 +13,7 @@ const api = vi.hoisted(() => ({ summary: vi.fn(), jobs: vi.fn() }));
 vi.mock("../api", async original => ({ ...await original<typeof import("../api")>(), fetchDrivers: api.summary, fetchJobs: api.jobs }));
 
 const row = (patch: Record<string, unknown>) => ({ initials: "KA", fullName: "Caio", email: "", phone: "", vanRegistration: "", active: true, hasAccount: true, assigned: 4, completed: 4, cancelled: 0, completionRate: 1,
-  avgDurationMinutes: 120, totalDurationMinutes: 480, workingUnknownJobs: 0, avgDelayMinutes: 0, totalChargesPounds: 950, calculatedChargesPounds: 950, revenuePounds: 900, revenueFormatted: "£900.00",
+  avgDurationMinutes: 120, totalDurationMinutes: 480, workingUnknownJobs: 0, avgDelayMinutes: 0, basePricePounds: 800, totalChargesPounds: 950, calculatedChargesPounds: 950, revenuePounds: 900, revenueFormatted: "£900.00",
   cashCollectedPounds: 500, cardCollectedPounds: 400, bankCollectedPounds: 0, invoiceCollectedPounds: 0, totalCollectionsPounds: 900, unknownCollectionJobs: 0, congestionChargePounds: 0, tunnelChargePounds: 0,
   overtimeMinutes: 0, missingEvidenceCount: 0, overtimeCount: 0, reviewSentCount: 3, reviewNotSentCount: 1, ...patch });
 const TWO = [row({}), row({ initials: "TI", fullName: "Tiago", completed: 2, revenuePounds: 300, calculatedChargesPounds: 320, totalCollectionsPounds: 100, cashCollectedPounds: 100, cardCollectedPounds: 0, invoiceCollectedPounds: 200, totalDurationMinutes: 0, workingUnknownJobs: 2, reviewSentCount: 1, reviewNotSentCount: 0, unknownCollectionJobs: 1 })];
@@ -31,12 +31,74 @@ beforeEach(() => {
 });
 
 describe("Performance dashboard", () => {
+  it("asks for both dates rather than claiming there are no jobs when the trend range is incomplete", async () => {
+    renderIt({ from: undefined });
+    expect(await screen.findByRole("group", { name: "Period summary" })).toHaveTextContent("Completed jobs6");
+    expect(screen.getByText("Choose both start and end dates to show the charges trend.")).toBeInTheDocument();
+    expect(api.jobs).not.toHaveBeenCalled();
+  });
+  it("keeps the daily trend aligned with table drivers, MA scope and original total charges", async () => {
+    api.summary.mockResolvedValue({ drivers: [row({ completed: 1 }), row({ initials: "MA", fullName: "MAN VAN", completed: 1, calculatedChargesPounds: 200 })] });
+    const job = (driverInitials: string, calculatedTotalCharges: number, amountCharged: number) => ({ jobId: driverInitials, driverInitials, status: "COMPLETED", bookedStart: "2026-10-09T10:00:00Z", effectiveStart: "2026-10-12T10:00:00Z", totalCharges: 5000, calculatedTotalCharges, amountCharged });
+    const items = [job("KA", 95000, 90000), job("MA", 20000, 10000), job("UNASSIGNED", 500000, 500000)];
+    api.jobs.mockResolvedValue({ items, pagination: { page: 1, pageSize: 100, total: items.length } });
+    renderIt();
+    const trend = await screen.findByRole("table", { name: "Charges per period" });
+    await vi.waitFor(() => expect(within(trend).getByText("£950.00").closest("tr")).toHaveTextContent("£900.00"));
+    expect(within(trend).queryByText("£5,000.00")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("switch", { name: "Include MA in driver performance" }));
+    await vi.waitFor(() => expect(within(screen.getByRole("table", { name: "Charges per period" })).getByText("£1,150.00").closest("tr")).toHaveTextContent("£1,000.00"));
+    expect(within(screen.getByRole("table", { name: "Charges per period" })).queryByText("£5,000.00")).not.toBeInTheDocument();
+  });
+
+  it("toggles MA across performance totals, comparisons and job queries without changing dropdown options or Overview", async () => {
+    localStorage.setItem("tmv:admin-include-ma", "true");
+    api.summary.mockImplementation(async (from: string) => ({ drivers: from?.startsWith("2026-10-03")
+      ? [row({ completed: 3 }), row({ initials: "MA", fullName: "MAN VAN", completed: 100 })]
+      : [...TWO, row({ initials: "MA", fullName: "MAN VAN", completed: 10, revenuePounds: 999999 })] }));
+    renderIt();
+    const kpis = await screen.findByRole("group", { name: "Period summary" });
+    const toggle = screen.getByRole("switch", { name: "Include MA in driver performance" });
+    const dropdown = screen.getByRole("combobox", { name: "Driver" });
+    const options = () => within(dropdown).getAllByRole("option").map(option => option.textContent);
+    const initialOptions = options();
+    expect(initialOptions).toContain("MAN VAN (MA)");
+    expect(toggle).not.toBeChecked();
+    expect(kpis).toHaveTextContent("Completed jobs6");
+    expect(await screen.findByText(/\+3 \(\+100%\) vs previous period/)).toBeInTheDocument();
+    expect(within(screen.getByRole("table", { name: "Driver performance summary" })).queryByText("MAN VAN")).not.toBeInTheDocument();
+    expect(api.jobs).toHaveBeenCalledWith(expect.objectContaining({ includeMA: "0" }));
+    fireEvent.click(toggle);
+    expect(kpis).toHaveTextContent("Completed jobs16");
+    expect(within(screen.getByRole("table", { name: "Driver performance summary" })).getByText("MAN VAN")).toBeInTheDocument();
+    expect(await screen.findByText(/-87 \(-84%\) vs previous period/)).toBeInTheDocument();
+    await vi.waitFor(() => expect(api.jobs.mock.calls.at(-1)?.[0]).not.toHaveProperty("includeMA"));
+    expect(options()).toEqual(initialOptions);
+    fireEvent.click(toggle);
+    expect(kpis).toHaveTextContent("Completed jobs6");
+    expect(options()).toEqual(initialOptions);
+    expect(localStorage.getItem("tmv:admin-include-ma")).toBe("true");
+    localStorage.removeItem("tmv:admin-include-ma");
+  });
+
+  it("keeps MA selected in the dropdown while excluded and restores its figures when included", async () => {
+    api.summary.mockResolvedValue({ drivers: [...TWO, row({ initials: "MA", fullName: "MAN VAN" })] });
+    const onDriver = vi.fn();
+    renderIt({ driver: "MA", onDriver });
+    expect(await screen.findByText(/MA is excluded from Driver performance/)).toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: "Driver" })).toHaveValue("MA");
+    fireEvent.click(screen.getByRole("switch", { name: "Include MA in driver performance" }));
+    expect(await screen.findByRole("heading", { name: "MAN VAN" })).toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: "Driver" })).toHaveValue("MA");
+    expect(onDriver).not.toHaveBeenCalled();
+  });
+
   it("shows five KPI cards whose totals add up the table rows, with each financial measure kept apart", async () => {
     renderIt();
     const kpis = await screen.findByRole("group", { name: "Period summary" });
     expect(kpis).toHaveTextContent("Completed jobs6");
-    expect(kpis).toHaveTextContent("Calculated charges£1,270.00");
-    expect(kpis).toHaveTextContent("Final charges£1,200.00");
+    expect(kpis).toHaveTextContent("Total charges£1,270.00");
+    expect(kpis).toHaveTextContent("Driver collected£1,200.00");
     expect(kpis).toHaveTextContent("Working time8h 0m");
     expect(kpis).toHaveTextContent("2 jobs missing times");
     expect(kpis).toHaveTextContent("Review requests4");
@@ -65,7 +127,9 @@ describe("Performance dashboard", () => {
     const table = within(jobs).getByRole("table", { name: "Completed jobs by driver" });
     expect(within(table).getByText("Caio").closest("tr")).toHaveTextContent("467%");
     expect(within(table).getByText("Tiago").closest("tr")).toHaveTextContent("233%");
-    const charges = within(screen.getByRole("region", { name: /Charges by driver/ })).getByRole("table", { name: "Calculated and final charges by driver" });
+    const charges = within(screen.getByRole("region", { name: /Charges by driver/ })).getByRole("table", { name: "Total charges and driver collected by driver" });
+    expect(within(charges).getByRole("columnheader", { name: "Base price" })).toBeInTheDocument();
+    expect(within(charges).getByText("Caio").closest("tr")).toHaveTextContent("£800.00");
     expect(within(charges).getByText("Tiago").closest("tr")).toHaveTextContent("£320.00");
     expect(within(charges).getByText("Tiago").closest("tr")).toHaveTextContent("£300.00");
     const comparison = screen.getByRole("table", { name: "Driver performance summary" });
@@ -77,7 +141,7 @@ describe("Performance dashboard", () => {
     const payments = await screen.findByRole("region", { name: /Payment methods/ });
     const table = within(payments).getByRole("table", { name: "Recorded receipts by method" });
     expect(within(table).getByText("Cash").closest("tr")).toHaveTextContent("£600.00");
-    expect(within(table).getByText("Invoiced (not received)").closest("tr")).toHaveTextContent("£200.00");
+    expect(within(table).getByText("Invoiced").closest("tr")).toHaveTextContent("£200.00");
     expect(payments).toHaveTextContent("1 job had no verified payment record");
   });
 
@@ -98,11 +162,15 @@ describe("Performance dashboard", () => {
     expect(params().get("driver")).toBe("KA");
   });
 
-  it("sorts the comparison table, with unknown receipts last in both directions", async () => {
-    api.summary.mockResolvedValue({ drivers: [row({}), row({ initials: "TI", fullName: "Tiago", totalCollectionsPounds: undefined })] });
+  it("shows calendar base price instead of receipts and sorts unknown base prices last", async () => {
+    api.summary.mockResolvedValue({ drivers: [row({}), row({ initials: "TI", fullName: "Tiago", basePricePounds: undefined })] });
     renderIt();
     await screen.findByRole("table", { name: "Driver performance summary" });
-    fireEvent.change(screen.getByLabelText("Sort by"), { target: { value: "receipts" } });
+    const table = screen.getByRole("table", { name: "Driver performance summary" });
+    expect(within(table).getByRole("columnheader", { name: "Base price" })).toBeInTheDocument();
+    expect(within(table).queryByRole("columnheader", { name: "Recorded receipts" })).not.toBeInTheDocument();
+    expect(within(table).getByText("Caio").closest("tr")).toHaveTextContent("£800.00");
+    fireEvent.change(screen.getByLabelText("Sort by"), { target: { value: "base" } });
     const names = () => within(screen.getByRole("table", { name: "Driver performance summary" })).getAllByRole("row").slice(1).map(r => r.textContent);
     expect(names()[0]).toContain("Caio");
     fireEvent.click(screen.getByRole("button", { name: "Sort ascending" }));
@@ -137,6 +205,7 @@ describe("Performance dashboard", () => {
   });
 
   it("exports the table with calculated, final and receipts as separate columns", async () => {
+    api.summary.mockResolvedValue({ drivers: [...TWO, row({ initials: "MA", fullName: "MAN VAN" })] });
     const create = vi.fn(() => "blob:x"); const click = vi.fn();
     (URL as unknown as { createObjectURL: unknown }).createObjectURL = create;
     (URL as unknown as { revokeObjectURL: unknown }).revokeObjectURL = vi.fn();
@@ -148,8 +217,15 @@ describe("Performance dashboard", () => {
     expect(click).toHaveBeenCalled();
     const blob = (create.mock.calls[0] as unknown as [Blob])[0];
     const text = await blob.text();
-    expect(text).toContain("Calculated charges (GBP)");
-    expect(text).toContain("Final charges (GBP)");
-    expect(text).toContain("Recorded receipts (GBP, excludes invoices)");
+    expect(text).toContain("Total charges (GBP)");
+    expect(text).toContain("Driver collected (GBP)");
+    expect(text).toContain("Base price (GBP, calendar amount)");
+    expect(text).toContain("800");
+    expect(text).not.toContain("Recorded receipts");
+    expect(text).not.toContain("MAN VAN");
+    fireEvent.click(screen.getByRole("switch", { name: "Include MA in driver performance" }));
+    fireEvent.click(screen.getByRole("button", { name: "Export options" }));
+    fireEvent.click(await screen.findByRole("menuitem", { name: /CSV/ }));
+    expect(await ((create.mock.calls[1] as unknown as [Blob])[0]).text()).toContain("MAN VAN");
   });
 });

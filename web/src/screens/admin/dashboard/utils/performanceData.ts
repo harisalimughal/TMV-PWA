@@ -2,7 +2,7 @@
  * What the Performance dashboard draws, as plain data.
  *
  * Driver-level figures come from the driver summary (the same rows as the table) and the
- * daily trend from the jobs scheduled in the range, so nothing is distributed or
+ * daily trend from jobs in the same backend date range, so nothing is distributed or
  * invented: a bucket with no completed jobs is a real zero, a bucket whose completed jobs
  * all lack a charge is unknown (null), and calculated, final and received stay separate.
  */
@@ -13,7 +13,7 @@ const finite = (value: unknown): value is number => typeof value === "number" &&
 
 /** Calculated charge in pence: the system-priced total, else the stored total. */
 export const calculatedPence = (job: NormalizedJob): number | null => {
-  const value = job.totalCharges ?? job.calculatedTotalCharges;
+  const value = job.calculatedTotalCharges ?? job.totalCharges;
   return finite(value) ? value : null;
 };
 
@@ -24,12 +24,12 @@ export interface TrendRow {
   calculatedMissing: number; finalMissing: number;
 }
 
-/** Calculated and final charges of COMPLETED jobs per bucket, by scheduled day (London). `today` (yyyy-mm-dd, London) marks the first bucket that is not finished. */
+/** Completed jobs bucketed by the backend range date (London). `today` marks the first unfinished bucket. */
 export function chargesTrend(jobs: NormalizedJob[], buckets: Bucket[], grain: Grain, today?: string): TrendRow[] {
   const rows = new Map(buckets.map(bucket => [bucket.key, { key: bucket.key, label: bucket.label, completed: 0, calcSum: 0, calcKnown: 0, calcMissing: 0, finalSum: 0, finalKnown: 0, finalMissing: 0 }]));
   for (const job of jobs) {
     if (job.status !== "COMPLETED") continue;
-    const row = rows.get(bucketKey(job.bookedStart, grain) ?? "");
+    const row = rows.get(bucketKey(job.effectiveStart ?? job.actualStart ?? job.bookedStart, grain) ?? "");
     if (!row) continue;
     row.completed += 1;
     const calculated = calculatedPence(job);
@@ -98,7 +98,7 @@ export interface ReceiptMix {
   receivedTotal: number;
   /** Billed by invoice. Not money received, so it is never a slice of the received ring. */
   invoiced: number;
-  /** Final charges not explained by any recorded payment: shown as a fact, not a slice. */
+  /** Driver collected not explained by any recorded payment: shown as a fact, not a slice. */
   unverifiedJobs: number;
 }
 
@@ -119,8 +119,8 @@ export function jobShares(rows: DriverSummaryItem[]): Array<{ initials: string; 
   return rows.map(row => ({ initials: row.initials, name: row.fullName, completed: row.completed, share: total > 0 ? row.completed / total : null }));
 }
 
-export type SortKey = "name" | "completed" | "calculated" | "final" | "receipts" | "working" | "reviews";
-export const SORT_LABEL: Record<SortKey, string> = { name: "Driver name", completed: "Completed jobs", calculated: "Calculated charges", final: "Final charges", receipts: "Recorded receipts", working: "Working time", reviews: "Review requests sent" };
+export type SortKey = "name" | "completed" | "calculated" | "final" | "base" | "working" | "reviews";
+export const SORT_LABEL: Record<SortKey, string> = { name: "Driver name", completed: "Completed jobs", calculated: "Total charges", final: "Driver collected", base: "Base price", working: "Working time", reviews: "Review requests sent" };
 
 const sortValue = (row: DriverSummaryItem, key: SortKey): number | string | null => {
   switch (key) {
@@ -128,7 +128,7 @@ const sortValue = (row: DriverSummaryItem, key: SortKey): number | string | null
     case "completed": return row.completed;
     case "calculated": return row.calculatedChargesPounds ?? row.totalChargesPounds ?? null;
     case "final": return finite(row.revenuePounds) ? row.revenuePounds : null;
-    case "receipts": return finite(row.totalCollectionsPounds) ? row.totalCollectionsPounds : null;
+    case "base": return finite(row.basePricePounds) ? row.basePricePounds : null;
     case "working": return workingRows([row])[0].minutes;
     case "reviews": return row.reviewSentCount ?? 0;
   }

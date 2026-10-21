@@ -10,6 +10,40 @@ beforeEach(() => {
     events: [{ _id: "cong", scheme: "congestion" }, { _id: "tunnel", scheme: "dartford" }], charges: [{ id: "cong", type: "congestion", expectedPence: 1800 }, { id: "t1", type: "tunnel", expectedPence: 1360 }, { id: "t2", type: "tunnel", expectedPence: 1360 }] });
 });
 describe("Scheme-filtered report pagination", () => {
+  it("requests lightweight road activity while retaining GPS alert evidence", async () => {
+    const report = await mocks.getReport();
+    report.meta = { movementIncluded: false };
+    mocks.getReport.mockClear();
+    const res = { json: vi.fn(), status: vi.fn(), setHeader: vi.fn() }; res.status.mockReturnValue(res);
+    await mocks.handler({ params: { initials: "AB" }, query: { from: "2026-10-09", to: "2026-10-09", detail: "activity", activityScheme: "tunnel" } }, res);
+    expect(mocks.getReport).toHaveBeenCalledWith("AB", expect.any(Object), "day", false, { includeLiabilities: false, includeGps: true, includePositions: false });
+    expect(res.json.mock.calls[0][0].activitySummary.confirmedCrossings).toBeNull();
+  });
+  it.each(["asc", "desc"])("sorts the whole job and event ranges %s before pagination without mutating cached data", async sortDir => {
+    const report = await mocks.getReport();
+    report.jobs = [
+      { jobId: "MID", operationalDate: "2026-10-09T09:00:00Z" },
+      { jobId: "NEW", operationalDate: "2026-10-09T12:00:00Z" },
+      { jobId: "OLD", bookedStart: "2026-10-09T09:00:00+01:00" },
+      { jobId: "UNKNOWN" }
+    ];
+    report.roadAlerts = report.jobs.map((job: any) => ({ id: job.jobId, jobId: job.jobId, type: "tunnel", enteredAt: job.operationalDate || job.bookedStart, estimatedPence: 100 }));
+    const res = { json: vi.fn(), status: vi.fn(), setHeader: vi.fn() }; res.status.mockReturnValue(res);
+    await mocks.handler({ params: { initials: "AB" }, query: { from: "2026-10-09", to: "2026-10-09", sortDir, pageSize: 1, jobsPage: 1, roadAlertsPage: 3 } }, res);
+    const result = res.json.mock.calls[0][0];
+    expect(result.jobs.items[0].jobId).toBe(sortDir === "asc" ? "OLD" : "NEW");
+    expect(result.roadAlerts.items[0].id).toBe(sortDir === "asc" ? "NEW" : "OLD");
+    expect(result.jobs.total).toBe(4);
+    expect(result.summary.expectedKnownPence).toBe(12345);
+    expect(report.jobs.map((job: any) => job.jobId)).toEqual(["MID", "NEW", "OLD", "UNKNOWN"]);
+  });
+
+  it("rejects invalid date order before loading report data", async () => {
+    const res = { json: vi.fn(), status: vi.fn(), setHeader: vi.fn() }; res.status.mockReturnValue(res);
+    await mocks.handler({ params: { initials: "AB" }, query: { from: "2026-10-09", to: "2026-10-09", sortDir: "invalid" } }, res);
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(mocks.getReport).not.toHaveBeenCalled();
+  });
   it("requests an inexpensive core report without unused liabilities", async () => {
     const res = { json: vi.fn(), status: vi.fn(), setHeader: vi.fn() }; res.status.mockReturnValue(res);
     await mocks.handler({ params: { initials: "AB" }, query: { from: "2026-10-09", to: "2026-10-09", detail: "core" } }, res);

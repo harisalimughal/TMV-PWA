@@ -283,12 +283,14 @@ describe("PaperDossierReport", () => {
 });
 
 describe("JobDetailModal", () => {
-  it("shows the booked hire duration on Details, as the legacy dossier did", () => {
+  it("shows booked hire in the original booking description without restoring the removed details cards", () => {
     const client = new QueryClient({ defaultOptions: { queries: { retry: false, enabled: false } } });
-    const { rerender } = render(<QueryClientProvider client={client}><JobDetailModal jobId={job.jobId} onClose={vi.fn()} initialJob={{ ...job, bookingDetails: { ...job.bookingDetails, hireDuration: "03 Hours and 30 Minutes" } }} /></QueryClientProvider>);
-    expect(screen.getByText("Booked hire").nextElementSibling).toHaveTextContent("03 Hours and 30 Minutes");
+    const { rerender } = render(<QueryClientProvider client={client}><JobDetailModal jobId={job.jobId} onClose={vi.fn()} initialJob={{ ...job, rawDescription: "Duration of Van Hire: 03 Hours and 30 Minutes", bookingDetails: { ...job.bookingDetails, hireDuration: "03 Hours and 30 Minutes" } }} /></QueryClientProvider>);
+    expect(screen.getByRole("heading", { name: "Booking Description" })).toBeInTheDocument();
+    expect(screen.getByLabelText("Original booking text")).toHaveTextContent("03 Hours and 30 Minutes");
+    expect(screen.queryByText("Booked hire")).not.toBeInTheDocument();
     rerender(<QueryClientProvider client={client}><JobDetailModal jobId={`${job.jobId}-2`} onClose={vi.fn()} initialJob={{ ...job, jobId: `${job.jobId}-2`, bookingDetails: {} }} /></QueryClientProvider>);
-    expect(screen.getByText("Booked hire").nextElementSibling).toHaveTextContent("Not recorded");
+    expect(screen.getByText("Not available for this job")).toBeInTheDocument();
   });
 
 
@@ -308,7 +310,6 @@ describe("JobDetailModal", () => {
         }} />
       </QueryClientProvider>
     );
-    fireEvent.click(screen.getByRole("tab", { name: "Timeline & evidence" }));
     expect(screen.getByText("Driver marked On my way")).toBeInTheDocument();
     expect(screen.getByText("Tue 22 Sep, 10:45")).toBeInTheDocument();
     expect(screen.getAllByText("Customer signature").length).toBeGreaterThan(0);

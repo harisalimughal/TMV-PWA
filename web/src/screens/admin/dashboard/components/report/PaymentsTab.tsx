@@ -5,7 +5,7 @@
  * comparison has its own tab (./ComparisonTab).
  */
 import React from "react";
-import { ChevronRight } from "lucide-react";
+import { ChevronDown, ChevronRight } from "lucide-react";
 import type { DriverReport } from "../../driverReport.types";
 import { formatDateTime, formatMinutes, formatMoney, plural } from "../../utils/format";
 import { Metric, MetricRow, Section, type Tone } from "../ds";
@@ -96,7 +96,7 @@ function PaymentTotals({ report, onJob }: ReportTabProps) {
                   </summary>
                   <div className="border-t border-admin-line bg-admin-surface/40 py-2">
                     <JobFinancialBreakdown job={job} />
-                    {job.finance.adjustmentNote && <details className="px-4 pb-2 text-[13.5px]"><summary className="inline-flex min-h-6 cursor-pointer items-center py-1 font-semibold text-admin-brand">Adjustment reason</summary><p className="mt-1 text-admin-ink-2">{job.finance.adjustmentNote}</p></details>}
+                    {job.finance.adjustmentNote && <details className="group/adjustment px-4 pb-2 text-[13.5px]"><summary className="inline-flex min-h-6 cursor-pointer list-none items-center gap-1.5 py-1 font-semibold text-admin-brand [&::-webkit-details-marker]:hidden">Adjustment reason<ChevronDown aria-hidden className="h-4 w-4 shrink-0 transition-transform group-open/adjustment:rotate-180" /></summary><p className="mt-1 text-admin-ink-2">{job.finance.adjustmentNote}</p></details>}
                   </div>
                 </details>
               </li>

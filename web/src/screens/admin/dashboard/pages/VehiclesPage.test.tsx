@@ -5,6 +5,8 @@ import { DateTime } from "luxon";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { VanDriverRecordItem } from "../types";
 import { VehiclesPage, attentionSummary, recordDetail } from "./VehiclesPage";
+import { formatRange } from "../utils/format";
+import { dateRangeForPreset } from "../components/DateRangePicker";
 
 const api = vi.hoisted(() => ({ fetchVanDriverRecords: vi.fn(), saveVanCompliance: vi.fn(), deleteVanRecord: vi.fn() }));
 vi.mock("../api", () => api);
@@ -39,6 +41,7 @@ describe("Vehicles (Van) page", () => {
     expect(within(table).getByText(/^Tax \d/)).toBeInTheDocument();
     expect(within(table).getByText(/^Service: Remaining miles:/)).toBeInTheDocument();
     expect(api.fetchVanDriverRecords).toHaveBeenCalledWith(expect.objectContaining({ from: expect.any(String), to: expect.any(String) }));
+    expect(api.fetchVanDriverRecords.mock.calls[0][0]).not.toHaveProperty("history");
   });
 
   it("opens the preview with the three cards, the countdown and the submissions", async () => {
@@ -48,11 +51,34 @@ describe("Vehicles (Van) page", () => {
     expect(within(dialog).getByText("Vehicle Compliance")).toBeInTheDocument();
     expect(within(dialog).getByRole("img", { name: "Road tax: Status: OK" })).toHaveTextContent("109 days");
     expect(within(dialog).getByText("Next MOT date")).toBeInTheDocument();
-    expect(within(dialog).getByText("All van submissions")).toBeInTheDocument();
+    expect(within(dialog).getByText("Van submissions")).toBeInTheDocument();
+    const today = dateRangeForPreset("today");
+    expect(within(dialog).getByText(`${formatRange(today.from, today.to)} · 1 record`)).toBeInTheDocument();
     expect(within(dialog).getByText("No service record")).toBeInTheDocument();
     expect(within(dialog).getAllByText("Not uploaded").length).toBeGreaterThan(0);
     fireEvent.keyDown(document, { key: "Escape" });
     expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it("applies the chosen dates to the submission list and only requests all dates when explicitly selected", async () => {
+    api.fetchVanDriverRecords.mockImplementation(async (query: Record<string, unknown>) => ({
+      items: [{ ...van, latestFuel: query.from ? null : fuel, records: query.from ? [] : [fuel] }],
+      pagination: { page: 1, pageSize: 25, total: 1, totalPages: 1, hasMore: false }
+    }));
+    renderPage();
+    fireEvent.click(await screen.findByRole("button", { name: /Open van details for Aragao/ }));
+    let dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByText("No submissions found.")).toBeInTheDocument();
+    expect(within(dialog).queryByText("48,090 mi · £86.40")).not.toBeInTheDocument();
+    fireEvent.keyDown(document, { key: "Escape" });
+    fireEvent.click(screen.getByRole("button", { name: "All dates" }));
+    await vi.waitFor(() => expect(api.fetchVanDriverRecords).toHaveBeenLastCalledWith(expect.objectContaining({ from: undefined, to: undefined })));
+    expect(new URLSearchParams(window.location.search).get("from")).toBe("");
+    expect(new URLSearchParams(window.location.search).get("to")).toBe("");
+    fireEvent.click(await screen.findByRole("button", { name: /Open van details for Aragao/ }));
+    dialog = await screen.findByRole("dialog");
+    expect(await within(dialog).findByText("All dates · 1 record")).toBeInTheDocument();
+    expect(within(dialog).getAllByText("48,090 mi · £86.40").length).toBeGreaterThan(0);
   });
 
   it("saves compliance dates with the rest of the document unchanged and shows the new date", async () => {

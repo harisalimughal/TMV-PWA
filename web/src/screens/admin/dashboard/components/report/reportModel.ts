@@ -122,7 +122,8 @@ export function summaryCoverage(report: DriverReport, gps: { loading: boolean; e
   if (s.workingMinutesUnknownJobs) lines.push(`${timed} of ${completed} completed jobs have complete timings`);
   if (s.pendingManualJobs) lines.push(`${s.pendingManualJobs} driver submission${s.pendingManualJobs === 1 ? "" : "s"} missing`);
   if (s.unknownSystemCollectionJobs) lines.push(`${s.unknownSystemCollectionJobs} job${s.unknownSystemCollectionJobs === 1 ? "" : "s"} with unverified receipts`);
-  if (gps.error) lines.push("movement and road-charge details could not be loaded");
+  if (gps.loading) lines.push("GPS movement and zone activity are loading");
+  else if (gps.error) lines.push("movement and road-charge details could not be loaded");
   else if (!gps.loading && s.movingUnknownJobs) lines.push(`movement data unavailable for ${s.movingUnknownJobs} job${s.movingUnknownJobs === 1 ? "" : "s"}`);
   if (!report.meta.financialTotalsCoverAllMatchingJobs) lines.push("financial totals do not cover every matching job");
   return { lines, complete: lines.length === 0 };

@@ -3,21 +3,22 @@
  * view) and its three data requests:
  *
  * 1. core  -- the paged report without tracker detail (fast; always loaded).
- * 2. full  -- tracker movement and road-charge events, loaded in the background when
+ * 2. display/activity -- movement and recorded road alerts without polygon processing, loaded in the background when
  *             the core response lacks them or a specific road scheme is selected.
- * 3. range -- every completed job in the range (with road-charge detail), only for
+ * 3. range -- completed jobs in the range without tracker processing, only for
  *             the Comparison tab, so its filters cover the whole selected period
  *             rather than one page.
  *
  * Tab names from the four-tab layout (summary, timings, road, payments with
  * paymentsMode=reconcile) are rewritten to the matching tab of the six.
  */
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { fetchDriverReport } from "../api";
 import { DriverReportView, ReportHeader, type ReportViewLocation } from "../components/DriverReportView";
 import { DateRangePicker, dateRangeForPreset } from "../components/DateRangePicker";
 import { reportApiRange, resolveReportTab } from "../utils/reportNavigation";
+import { mergeReportGps } from "../utils/mergeReportGps";
 import { downloadDriverReport } from "../utils/driverReportDownload";
 import { loadDriverBreakdown, type DriverBreakdown } from "../reports/driverBreakdown";
 import { PaperDriverBreakdown } from "../reports/PaperDriverBreakdown";
@@ -30,8 +31,9 @@ import type { ReconFilter, ReportLocationPatch } from "../components/report/type
 
 const PAGE_KEYS = ["jobs", "events", "visits", "charges", "roadAlerts"] as const;
 const RECON_MAX = 500;
+const REPORT_PAGE_MAX = 200;
 
-interface PageState extends ReportViewLocation { driver: string; from: string; to: string; pages: Record<string, number> }
+interface PageState extends ReportViewLocation { driver: string; from: string; to: string; pages: Record<string, number>; sortDir: "asc" | "desc" }
 
 function readState(): PageState {
   const params = new URLSearchParams(window.location.search), fallback = dateRangeForPreset("7d");
@@ -43,6 +45,7 @@ function readState(): PageState {
     reconFilter: (["review", "missing", "differences", "all"].includes(filter || "") ? filter : "all") as ReconFilter,
     roadView: params.get("roadView") === "jobs" ? "jobs" : "events",
     expand: params.get("expand") || undefined,
+    sortDir: params.get("sortDir") === "desc" ? "desc" : "asc",
     pages: Object.fromEntries(PAGE_KEYS.map(key => [key, Math.max(1, Number(params.get(`${key}Page`) || 1))]))
   };
 }
@@ -90,38 +93,55 @@ export function DriverReportPage({ loadReport = fetchDriverReport }: { loadRepor
     if (patch.reconFilter) values.reconFilter = patch.reconFilter === "all" ? undefined : patch.reconFilter;
     if (patch.roadView) values.roadView = patch.roadView === "events" ? undefined : patch.roadView;
     if (patch.expand !== undefined) values.expand = patch.expand || undefined;
+    if (patch.sortDir) values.sortDir = patch.sortDir === "asc" ? undefined : patch.sortDir;
     const onlyExpand = Object.keys(patch).length === 1 && patch.expand !== undefined;
-    update(values, { push: !onlyExpand, resetPages: patch.tab === "tunnels" || patch.tab === "congestion" });
+    update(values, { push: !onlyExpand, resetPages: !!patch.sortDir || patch.tab === "tunnels" || patch.tab === "congestion" });
   };
 
   const range = reportApiRange(state.from, state.to);
   const activityScheme = state.tab === "tunnels" ? "tunnel" : state.tab === "congestion" ? "congestion" : "all";
   const pageParams = Object.fromEntries(Object.entries(state.pages).map(([key, value]) => [`${key}Page`, value]));
   const coreQuery = useQuery({
-    queryKey: ["driver_report", state.driver, state.from, state.to, "core", state.pages.jobs],
-    queryFn: ({ signal }) => loadReport(state.driver, { ...range, groupBy: "day", pageSize: 25, detail: "core", activityScheme: "all", ...pageParams }, signal),
+    queryKey: ["driver_report", state.driver, state.from, state.to, "core", state.pages.jobs, state.sortDir],
+    queryFn: ({ signal }) => loadReport(state.driver, { ...range, groupBy: "day", pageSize: 25, detail: "core", activityScheme: "all", ...pageParams, sortDir: state.sortDir }, signal),
     enabled: !!state.driver, retry: 1, staleTime: 30_000, gcTime: 5 * 60_000
   });
   const completed = coreQuery.data?.summary.completedJobs ?? 0;
   const needsDetails = completed > 0 && (coreQuery.data?.meta.gpsIncluded === false || activityScheme !== "all");
+  const gpsTab = ["jobs", "performance", "tunnels", "congestion"].includes(state.tab);
+  const loadGpsDetails = needsDetails && gpsTab;
+  const detailLevel = activityScheme === "all" ? "display" : "activity";
   const detailQuery = useQuery({
-    queryKey: ["driver_report", state.driver, state.from, state.to, "full", state.pages, activityScheme],
-    queryFn: ({ signal }) => loadReport(state.driver, { ...range, groupBy: "day", pageSize: 25, activityScheme, detail: "full", ...pageParams }, signal),
-    enabled: !!state.driver && coreQuery.isSuccess && needsDetails, retry: 1, staleTime: 30_000, gcTime: 5 * 60_000
+    queryKey: ["driver_report", state.driver, state.from, state.to, detailLevel, state.pages, activityScheme, state.sortDir],
+    queryFn: ({ signal }) => loadReport(state.driver, { ...range, groupBy: "day", pageSize: 25, activityScheme, detail: detailLevel, ...pageParams, sortDir: state.sortDir }, signal),
+    enabled: !!state.driver && coreQuery.isSuccess && loadGpsDetails, retry: 1, staleTime: 30_000, gcTime: 5 * 60_000
   });
   const reconEnabled = state.tab === "comparison" && completed > 0;
+  const coreCoversComparison = !!coreQuery.data && coreQuery.data.jobs.items.length >= Math.max(completed, coreQuery.data.jobs.total);
   const reconSize = Math.min(RECON_MAX, Math.max(25, completed));
   const reconQuery = useQuery({
-    queryKey: ["driver_report", state.driver, state.from, state.to, "reconcile", reconSize],
-    queryFn: ({ signal }) => loadReport(state.driver, { ...range, groupBy: "day", pageSize: reconSize, jobsPage: 1, detail: "full", activityScheme: "all" }, signal),
-    enabled: !!state.driver && reconEnabled, retry: 1, staleTime: 30_000, gcTime: 5 * 60_000
+    queryKey: ["driver_report", state.driver, state.from, state.to, "reconcile-core", reconSize, state.sortDir],
+    queryFn: async ({ signal }) => {
+      const pageSize = Math.min(REPORT_PAGE_MAX, reconSize);
+      const query = { ...range, groupBy: "day" as const, pageSize, detail: "core" as const, activityScheme: "all" as const, sortDir: state.sortDir };
+      const first = await loadReport(state.driver, { ...query, jobsPage: 1 }, signal);
+      const jobs = new Map(first.jobs.items.map(job => [job.jobId, job]));
+      for (let page = 2; jobs.size < Math.min(first.jobs.total, RECON_MAX) && page <= Math.ceil(RECON_MAX / pageSize); page++) {
+        const next = await loadReport(state.driver, { ...query, jobsPage: page }, signal);
+        const before = jobs.size;
+        for (const job of next.jobs.items) jobs.set(job.jobId, job);
+        if (jobs.size === before) break;
+      }
+      return { ...first, jobs: { ...first.jobs, items: [...jobs.values()].slice(0, RECON_MAX) } };
+    },
+    enabled: !!state.driver && reconEnabled && !coreCoversComparison, retry: 1, staleTime: 30_000, gcTime: 5 * 60_000
   });
 
-  const data = needsDetails ? detailQuery.data ?? coreQuery.data : coreQuery.data;
-  const gpsLoading = needsDetails && !detailQuery.data && !detailQuery.isError;
-  const gpsError = needsDetails && detailQuery.isError ? (detailQuery.error as Error)?.message || "Movement and charge details could not be loaded." : undefined;
+  const data = useMemo(() => coreQuery.data ? mergeReportGps(coreQuery.data, gpsTab && needsDetails ? detailQuery.data : undefined) : undefined, [coreQuery.data, detailQuery.data, gpsTab, needsDetails]);
+  const gpsLoading = loadGpsDetails && !detailQuery.data && !detailQuery.isError;
+  const gpsError = loadGpsDetails && detailQuery.isError ? (detailQuery.error as Error)?.message || "Movement and charge details could not be loaded." : undefined;
   const gpsAvailable = !gpsLoading && !gpsError && data?.meta.gpsIncluded !== false;
-  const reconReport = reconQuery.data;
+  const reconReport = coreCoversComparison ? coreQuery.data : reconQuery.data;
 
   /** "breakdown" builds the designed Driver Breakdown PDF here and opens the print
    *  dialog; "pdf" / "xlsx" download the server's own export. */
@@ -169,6 +189,8 @@ export function DriverReportPage({ loadReport = fetchDriverReport }: { loadRepor
       <ReportHeader name={currentName || state.driver} initials={state.driver} onDrivers={toDrivers} actions={picker} />
       <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-admin-line bg-surface p-2.5">
         <DateRangePicker presets="records" from={state.from} to={state.to} onChange={onDates} />
+        <FilterSelect label="Date order" value={state.sortDir} onChange={value => onLocation({ sortDir: value as "asc" | "desc", expand: "" })}
+          options={[{ value: "asc", label: "Ascending · oldest first" }, { value: "desc", label: "Descending · newest first" }]} className="w-[240px]" />
       </div>
       <div className={panel}>
         {coreQuery.isError ? <ErrorState title="Couldn't load this driver report" message={(coreQuery.error as Error)?.message} onRetry={() => void coreQuery.refetch()} />
@@ -180,11 +202,11 @@ export function DriverReportPage({ loadReport = fetchDriverReport }: { loadRepor
     <DriverReportView report={data} location={state} from={state.from} to={state.to} driverPicker={picker}
       gps={{ loading: gpsLoading, error: gpsError, available: gpsAvailable, retry: () => void detailQuery.refetch() }}
       recon={{
-        jobs: reconReport?.jobs.items ?? [], total: reconReport?.jobs.total ?? completed, loading: reconQuery.isLoading,
+        jobs: reconReport?.jobs.items ?? [], total: reconReport?.jobs.total ?? completed, loading: !reconReport && reconQuery.isFetching,
         gpsAvailable: !!reconReport && reconReport.meta.gpsIncluded !== false,
-        error: reconQuery.isError ? (reconQuery.error as Error)?.message || "Request failed" : undefined, retry: () => void reconQuery.refetch()
+        error: !coreCoversComparison && reconQuery.isError ? (reconQuery.error as Error)?.message || "Request failed" : undefined, retry: () => void reconQuery.refetch()
       }}
-      refreshing={coreQuery.isFetching || detailQuery.isFetching}
+      refreshing={coreQuery.isFetching}
       onLocation={onLocation} onDates={onDates}
       onPage={(key, page) => update({ [`${key}Page`]: page }, { push: false })}
       onJob={openJob} onDrivers={toDrivers}

@@ -4,6 +4,14 @@ import { EvidenceStatus, type EvidenceRecord, type Job } from "../src/jobs/job.t
 const job = { jobId: "ONE", actualStart: "2026-10-09T09:00:00Z", actualFinish: "2026-10-09T11:00:00Z", actualStartSource: "arrival-photo", actualFinishSource: "empty-van-photo",
   pickupArrivalAt: "2026-10-09T09:00:00Z", vanLoadedAt: "2026-10-09T09:20:00Z", trackerArrivalAt: "2026-10-09T08:58:00Z", clientSignatureAt: "2026-10-09T11:05:00Z" } as Job;
 describe("Recorded job milestones", () => {
+  it("explains an unconfirmed historical arrival without changing the saved reason or fabricating a time", () => {
+    const reason = "Awaiting a second distinct fresh stationary tracker report.";
+    const completed = { ...job, status: "COMPLETED", trackerArrivalAt: undefined, trackerUnverifiedReason: reason } as Job;
+    expect(jobReportTimings(completed)).toMatchObject({ trackerArrivalAt: null, trackerUnverifiedReason: "A second qualifying GPS reading was not recorded; pickup arrival could not be confirmed." });
+    expect(completed.trackerUnverifiedReason).toBe(reason);
+    expect(jobReportTimings({ ...completed, status: "IN_PROGRESS" }).trackerUnverifiedReason).toBe(reason);
+    expect(jobReportTimings({ ...completed, trackerArrivalAt: job.trackerArrivalAt }).trackerUnverifiedReason).toBeNull();
+  });
   it("keeps tracker drop-off arrival and departure separate from recorded job finish", () => {
     const result = jobReportTimings({ ...job, dropoffTracking: { imei: "123", arrivalAt: "2026-10-09T10:30:00Z", departureAt: "2026-10-09T11:10:00Z" } });
     expect(result).toMatchObject({ trackerDropoffArrivalAt: "2026-10-09T10:30:00.000Z", trackerDropoffDepartureAt: "2026-10-09T11:10:00.000Z", emptyVanAt: "2026-10-09T11:00:00.000Z" });

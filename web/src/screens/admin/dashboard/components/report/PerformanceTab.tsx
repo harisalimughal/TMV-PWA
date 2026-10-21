@@ -15,7 +15,8 @@ import { Action, EmptyState, FilterSelect, Missing, Notice, Pagination, panel } 
 import { arrival } from "./reportModel";
 import { milestones } from "./milestones";
 import { submissionLabel } from "./ComparisonTab";
-import type { ReportTabProps } from "./types";
+import type { GpsState, ReportTabProps } from "./types";
+import { TrackerLoading } from "./TrackerLoading";
 import { cx } from "../../../../../ui/cx";
 
 function Fact({ label, value, hint }: { label: string; value: React.ReactNode; hint?: React.ReactNode }) {
@@ -35,8 +36,9 @@ function HoursCompare({ scheduled, working }: { scheduled: number | null; workin
   return <div className="space-y-2" role="group" aria-label="Scheduled hours compared with working hours">{bar("Scheduled", scheduled, "var(--chart-violet)")}{bar("Working", working, "var(--chart-teal)")}</div>;
 }
 
-function MilestoneCell({ job, index }: { job: DriverReportJob; index: number }) {
+function MilestoneCell({ job, index, gps }: { job: DriverReportJob; index: number; gps: GpsState }) {
   const item = milestones(job)[index];
+  if (!item.display && item.source === "Tracker" && gps.loading) return <TrackerLoading />;
   return item.display ? <span className="tabular-nums">{item.display}</span> : <span className="block"><span className="text-admin-muted">Not recorded</span>{item.missing !== "Not recorded" && <span className="mt-0.5 block text-[12px] leading-4 text-admin-status-amber">{item.missing}</span>}</span>;
 }
 
@@ -90,7 +92,7 @@ export function PerformanceTab({ report, gps, onJob, onPage, go, expanded }: Rep
                         <th scope="row" className="px-3 py-2.5 text-left font-normal"><button type="button" onClick={() => onJob(job.jobId)} className="inline-flex min-h-6 items-center whitespace-nowrap font-semibold text-admin-brand hover:underline" aria-label={`Open job ${job.jobId}`}>{job.jobId}</button></th>
                         <td className="whitespace-nowrap px-3 py-2.5 tabular-nums">{formatDate(job.operationalDate ?? job.bookedStart)}</td>
                         <td className="max-w-[180px] break-words px-3 py-2.5">{job.customer.name || <Missing />}</td>
-                        {labels.map((_, index) => <td key={index} className="max-w-[150px] px-3 py-2.5"><MilestoneCell job={job} index={index} /></td>)}
+                        {labels.map((_, index) => <td key={index} className="max-w-[150px] px-3 py-2.5"><MilestoneCell job={job} index={index} gps={gps} /></td>)}
                       </tr>
                     ))}
                   </tbody>
@@ -104,7 +106,7 @@ export function PerformanceTab({ report, gps, onJob, onPage, go, expanded }: Rep
                       <Action size="sm" onClick={() => onJob(job.jobId)} aria-label={`Open job ${job.jobId}`}>Open</Action>
                     </div>
                     <dl className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-[13px]">
-                      {milestones(job).map((item, index) => <div key={item.key} className="min-w-0"><dt className="text-[12px] text-admin-ink-2">{item.label}</dt><dd><MilestoneCell job={job} index={index} /></dd></div>)}
+                      {milestones(job).map((item, index) => <div key={item.key} className="min-w-0"><dt className="text-[12px] text-admin-ink-2">{item.label}</dt><dd><MilestoneCell job={job} index={index} gps={gps} /></dd></div>)}
                     </dl>
                   </li>
                 ))}
@@ -132,7 +134,7 @@ export function PerformanceTab({ report, gps, onJob, onPage, go, expanded }: Rep
                       <td className="px-3 py-2.5 text-right tabular-nums">{formatMinutes(d.bookedMinutes, "Unavailable")}</td>
                       <td className="px-3 py-2.5 text-right tabular-nums">{formatMinutes(d.allocatedMinutes, "Unavailable")}</td>
                       <td className="px-3 py-2.5 text-right tabular-nums">{formatMinutes(d.workingMinutes, "Unavailable")}</td>
-                      <td className="px-3 py-2.5 text-right tabular-nums">{moving == null ? <Missing>Unavailable</Missing> : formatMinutes(moving / 60)}</td>
+                      <td className="px-3 py-2.5 text-right tabular-nums">{moving == null ? gps.loading ? <TrackerLoading /> : <Missing>Unavailable</Missing> : formatMinutes(moving / 60)}</td>
                       <td className="px-3 py-2.5 text-right tabular-nums">{formatMinutes(d.overtimeMinutes, "Unavailable")}</td>
                       <td className="px-3 py-2.5">{arrive.status === "unverified" ? <Missing>Unverified</Missing> : arrive.status === "late" ? <span className="text-admin-status-amber">{formatMinutes(arrive.minutes)} late</span> : "On time"}</td>
                       <td className="px-3 py-2.5 text-right tabular-nums">{job.manualDetails ? formatMinutes(d.manualMinutes, "Unavailable") : <Missing>{submissionLabel(job).label}</Missing>}</td>

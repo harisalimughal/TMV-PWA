@@ -70,7 +70,7 @@ export function ComparisonTotals({ report }: { report: DriverReport }) {
   const s = report.summary, cards = s.paymentCards;
   const reportedComplete = s.manualMinutesUnknownJobs === 0;
   const systemItems: CompareItem[] = [
-    { label: "Expected amount", value: formatMoney(cards?.totalChargesPence, "Unknown"), hint: cards?.totalChargeUnknownJobs ? `${plural(cards.totalChargeUnknownJobs, "job")} without a calculated charge` : "Calculated charges" },
+    { label: "Total Charges", value: formatMoney(cards?.totalChargesPence, "Unknown"), hint: cards?.totalChargeUnknownJobs ? `${plural(cards.totalChargeUnknownJobs, "job")} without a calculated charge` : "Base + overtime + road charges" },
     { label: "Scheduled hours", value: s.scheduledMinutesKnown == null ? <Missing>Unavailable</Missing> : formatMinutes(s.scheduledMinutesKnown), hint: s.scheduledMinutesUnknownJobs ? `${s.scheduledMinutesUnknownJobs} unavailable` : "Calendar duration" },
     { label: s.workingMinutesUnknownJobs ? "Working hours (known)" : "Working hours", value: formatMinutes(s.workingMinutesKnown), hint: s.workingMinutesUnknownJobs ? `${plural(s.workingMinutesUnknownJobs, "job")} missing times` : "Arrival to finish" }
   ];
@@ -91,9 +91,9 @@ export function ComparisonTotals({ report }: { report: DriverReport }) {
       <div className="grid gap-3 sm:grid-cols-2">
         <DiffCard label="Working hours vs reported hours" value={reportedComplete ? hoursDifference(s.workingMinutesKnown, s.manualMinutesKnown) : <Missing>Requires review</Missing>}
           detail={reportedComplete ? "Reported minus working time, all jobs submitted" : `${plural(s.manualMinutesUnknownJobs, "missing submission")}, so the totals can't be compared yet`} />
-        <DiffCard label="Expected amount vs driver collected" value={cards?.totalChargesPence != null && cards?.driverCollectionPence != null && !cards.totalChargeUnknownJobs && !cards.driverCollectionUnknownJobs
+        <DiffCard label="Total Charges vs driver collected" value={cards?.totalChargesPence != null && cards?.driverCollectionPence != null && !cards.totalChargeUnknownJobs && !cards.driverCollectionUnknownJobs
           ? formatMoney(cards.driverCollectionPence - cards.totalChargesPence) : <Missing>Can't compare</Missing>}
-          detail={`Final minus calculated charges · ${plural(cards?.adjustmentReasons.length ?? 0, "adjusted job")}`} />
+          detail={`Driver collected minus Total Charges · ${plural(cards?.adjustmentReasons.length ?? 0, "adjusted job")}`} />
       </div>
     </div>
   );
@@ -122,7 +122,7 @@ export function JobComparison({ job, onJob }: { job: DriverReportJob; onJob?: (i
   const finance = job.finance, manual = job.manualDetails, submission = submissionLabel(job);
   const methods = finance.systemPayments.byMethod;
   const system: CompareItem[] = [
-    { label: "Expected amount", value: formatMoney(finance.systemCalculatedPence, "Unknown") },
+    { label: "Total Charges", value: formatMoney(finance.systemCalculatedPence, "Unknown") },
     { label: "Scheduled hours", value: formatMinutes(job.duration.bookedMinutes, "Unavailable") },
     { label: "Working hours", value: formatMinutes(job.duration.workingMinutes, "Unavailable") }
   ];
@@ -147,7 +147,7 @@ export function JobComparison({ job, onJob }: { job: DriverReportJob; onJob?: (i
       </div>
       <div className="flex flex-wrap gap-x-6 gap-y-1 text-[13px] text-admin-ink-2">
         <span>Hours difference: <strong className="tabular-nums text-admin-ink">{known ? hoursDifference(job.duration.workingMinutes, job.duration.manualMinutes) : "Can't compare until the driver submits"}</strong></span>
-        <span>Final minus expected: <strong className="tabular-nums text-admin-ink">{finance.systemCalculatedPence !== null && finance.acceptedPence !== null ? formatMoney(finance.acceptedPence - finance.systemCalculatedPence) : "Can't compare"}</strong></span>
+        <span>Driver collected minus Total Charges: <strong className="tabular-nums text-admin-ink">{finance.systemCalculatedPence !== null && finance.acceptedPence !== null ? formatMoney(finance.acceptedPence - finance.systemCalculatedPence) : "Can't compare"}</strong></span>
       </div>
       {finance.adjustmentNote && <p className="text-[13px] text-admin-ink-2"><span className="font-semibold text-admin-ink">Adjustment reason:</span> {finance.adjustmentNote}</p>}
     </div>
@@ -167,16 +167,16 @@ export function ComparisonTab({ report, go, onJob, filter, expanded, recon }: Re
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
             <h2 id="comparison-jobs-title" className="text-[17px] font-bold text-admin-ink">System / Manual comparison</h2>
-            <p className="text-[13px] text-admin-ink-2">{coversRange ? `All ${plural(recon.total, "completed job")} in the selected range` : `${recon.jobs.length} of ${recon.total} jobs loaded`}</p>
+            <p className="text-[13px] text-admin-ink-2">{recon.loading ? "Loading comparison jobs…" : recon.error ? "Comparison jobs could not be loaded" : coversRange ? `All ${plural(recon.total, "completed job")} in the selected range` : `${recon.jobs.length} of ${recon.total} jobs loaded`}</p>
           </div>
           <div className="flex w-full min-w-0 flex-wrap items-center gap-2 md:w-auto">
-            <FilterSelect label="Job" value={expanded ?? ""} onChange={id => go({ expand: id })} allLabel="All jobs" className="w-full sm:w-[240px]"
+            <FilterSelect label="Job" value={expanded ?? ""} onChange={id => go({ expand: id })} allLabel="All jobs" className="w-full sm:w-[240px]" disabled={recon.loading || !!recon.error}
               options={rows.map(({ job }) => ({ value: job.jobId, label: `${formatDate(job.operationalDate ?? job.bookedStart)} · ${job.customer.name || job.jobId}` }))} />
             <ChoiceChips label="Status" value={active.value} onChange={value => go({ reconFilter: value })}
-              options={FILTERS.map(option => ({ value: option.value, label: option.label, count: rows.filter(row => option.match(row.recon)).length }))} />
+              options={FILTERS.map(option => ({ value: option.value, label: option.label, count: recon.loading || recon.error ? undefined : rows.filter(row => option.match(row.recon)).length }))} />
           </div>
         </div>
-        {!coversRange && !recon.loading && <Notice tone="warning">The server returned {recon.jobs.length} of {recon.total} jobs, so this list and its counts cover the loaded jobs only. Narrow the date range to review every job.</Notice>}
+        {!coversRange && !recon.loading && !recon.error && <Notice tone="warning">The server returned {recon.jobs.length} of {recon.total} jobs, so this list and its counts cover the loaded jobs only. Narrow the date range to review every job.</Notice>}
         <div className={cx(panel, "overflow-hidden")}>
           {recon.loading ? <LoadingState label="Loading jobs for the selected range" />
             : recon.error ? <ErrorState title="Couldn't load jobs for the comparison" message={recon.error} onRetry={recon.retry} />

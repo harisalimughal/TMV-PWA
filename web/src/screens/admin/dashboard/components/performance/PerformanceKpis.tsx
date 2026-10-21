@@ -20,17 +20,17 @@ export function PerformanceKpis({ totals, previous, trend, trendPartial, period,
       <div className="sm:col-span-2 xl:col-span-1">
       <KpiCard label="Completed jobs" accent="violet" icon={<CheckCircle2 />} loading={loading} value={totals.completed}
           comparison={previous ? compareCounts(totals.completed, previous.completed, period, true) : null}
-          spark={jobsSpark ? { values: jobsSpark, label: `Completed jobs per day: ${jobsSpark.join(", ")}` } : null} detail="Finished in the selected dates" />
+          spark={jobsSpark ? { values: jobsSpark, label: `Completed jobs per day: ${jobsSpark.join(", ")}` } : null} detail="Completed jobs in the selected range" />
       </div>
       <div className="sm:col-span-2 xl:col-span-1">
-      <KpiCard label="Calculated charges" accent="blue" icon={<ReceiptText />} loading={loading} value={formatPounds(totals.calculated)}
+      <KpiCard label="Total charges" accent="blue" icon={<ReceiptText />} loading={loading} value={formatPounds(totals.calculated)}
           comparison={previous ? moneyComparison(totals.calculated, previous.calculated, period) : null}
-          spark={calculatedSpark ? { values: calculatedSpark, label: "Calculated charges per day" } : null} detail="System-priced total, not what was billed" />
+          spark={calculatedSpark ? { values: calculatedSpark, label: "Total charges per day" } : null} detail="System-priced total, not what was billed" />
       </div>
       <div className="sm:col-span-2 xl:col-span-1">
-      <KpiCard label="Final charges" accent="teal" icon={<PoundSterling />} loading={loading} value={formatPounds(totals.final)}
+      <KpiCard label="Driver collected" accent="teal" icon={<PoundSterling />} loading={loading} value={formatPounds(totals.final)}
           comparison={previous ? moneyComparison(totals.final, previous.final, period) : null}
-          spark={finalSpark ? { values: finalSpark, label: "Final charges per day" } : null} detail="Billed at completion, includes invoices. Not cash received" />
+          spark={finalSpark ? { values: finalSpark, label: "Driver collected per day" } : null} detail="Billed at completion, includes invoices. Not cash received" />
       </div>
       <div className="sm:col-span-3 xl:col-span-1">
       <KpiCard label="Working time" accent="amber" icon={<Clock />} loading={loading}

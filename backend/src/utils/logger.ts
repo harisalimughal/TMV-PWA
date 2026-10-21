@@ -5,12 +5,14 @@ export interface RequestContext {
   requestId: string;
   userEmail?: string;
   jobId?: string;
+  errorState?: { logged: boolean };
 }
 
 const storage = new AsyncLocalStorage<RequestContext>();
 
 export function runWithContext<T>(context: Partial<RequestContext>, fn: () => T): T {
-  return storage.run({ requestId: context.requestId ?? randomUUID(), ...context }, fn);
+  const parent = storage.getStore();
+  return storage.run({ ...parent, requestId: context.requestId ?? parent?.requestId ?? randomUUID(), ...context, errorState: context.errorState ?? parent?.errorState }, fn);
 }
 
 export function setContext(patch: Partial<RequestContext>): void {
@@ -23,6 +25,15 @@ export function currentRequestId(): string {
 }
 
 type Level = "debug" | "info" | "warn" | "error";
+export interface ErrorLogEvent { timestamp: string; message: string; requestId?: string; jobId?: string; fields: Record<string, unknown> }
+let errorSink: ((event: ErrorLogEvent) => void) | undefined;
+export function setErrorLogSink(sink: (event: ErrorLogEvent) => void): void { errorSink = sink; }
+
+/** Selected access/performance events belong in admin history, not console ERROR. */
+export function recordOperationalIssue(issueType: string, fields: Record<string, unknown> = {}): void {
+  const context = storage.getStore();
+  try { errorSink?.({ timestamp: new Date().toISOString(), message: "Recorded operational issue", requestId: context?.requestId, jobId: context?.jobId, fields: { ...fields, issueType } }); } catch { /* history must not affect requests */ }
+}
 
 const LEVELS: Record<Level, number> = { debug: 10, info: 20, warn: 30, error: 40 };
 const MIN_LEVEL = LEVELS[(process.env.LOG_LEVEL as Level) ?? (process.env.NODE_ENV === "production" ? "info" : "debug")] ?? 20;
@@ -40,6 +51,11 @@ function emit(level: Level, message: string, fields: Record<string, unknown> = {
     ...fields
   };
   const serialized = JSON.stringify(line, (_key, value) => (value === undefined ? undefined : value));
+  if (level === "error") {
+    if (context?.errorState) context.errorState.logged = true;
+    // The optional admin history must never interrupt the operation being logged.
+    try { errorSink?.({ timestamp: new Date().toISOString(), message, requestId: context?.requestId, jobId: context?.jobId, fields }); } catch { /* original server log remains available */ }
+  }
   if (level === "error") console.error(serialized);
   else if (level === "warn") console.warn(serialized);
   else console.log(serialized);

@@ -19,8 +19,10 @@ export function jobReportTimings(job: Job, records: EvidenceRecord[] = []) {
   const age = lastSeen ? Date.now() - Date.parse(lastSeen) : NaN;
   const trackerStatus = proof.at || job.pickupArrivalAt || job.actualStart ? undefined : !lastSeen ? "unverified" :
     !Number.isFinite(age) || age < 0 || age > 120000 ? "stale" : "reporting";
+  const arrivalReason = trackerArrivalReason(job, trackerStatus);
   return { onMyWayAt: instant(job.onMyWayAt), trackerArrivalAt: instant(job.trackerArrivalAt), trackerArrivalDistanceMeters: recordedArrivalDistance(job.trackerArrivalDistanceMeters) ?? null,
-    trackerUnverifiedReason: trackerArrivalReason(job, trackerStatus) ?? null,
+    trackerUnverifiedReason: job.status === "COMPLETED" && arrivalReason === "Awaiting a second distinct fresh stationary tracker report."
+      ? "A second qualifying GPS reading was not recorded; pickup arrival could not be confirmed." : arrivalReason ?? null,
     trackerDropoffArrivalAt: instant(job.dropoffTracking?.arrivalAt), trackerDropoffDepartureAt: instant(job.dropoffTracking?.departureAt),
     trackerDropoffUnverifiedReason: job.dropoffTracking?.unverifiedReason ?? (!job.dropoffLocation ? "Drop-off address has no verified coordinates." : !job.vanLoadedAt ? "Van-loaded time was not recorded." : null),
     proofPhotoAt: proof.at, vanLoadedAt: loaded.at, emptyVanAt: empty.at,

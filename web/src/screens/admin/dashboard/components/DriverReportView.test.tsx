@@ -20,6 +20,14 @@ function view(report: DriverReport, loc = location(), extra: Partial<React.Compo
 }
 
 describe("DriverReportView", () => {
+  it("replaces the range description with oldest/newest date ordering", async () => {
+    const { onLocation } = view(await load());
+    const order = screen.getByRole("combobox", { name: "Date order" });
+    expect(order).toHaveValue("asc");
+    fireEvent.change(order, { target: { value: "desc" } });
+    expect(onLocation).toHaveBeenCalledWith({ sortDir: "desc", expand: "" });
+    expect(screen.queryByText(/every tab uses this range/)).not.toBeInTheDocument();
+  });
   it("has the deployed dashboard's six report tabs", async () => {
     view(await load());
     expect(screen.getAllByRole("tab").map(tab => tab.textContent)).toEqual(["Jobs", "Performance & Timings", "Payments", "Comparison", "Tunnel Charges", "Congestion Charges"]);

@@ -44,6 +44,22 @@ export interface PaginationMeta {
   hasMore: boolean;
 }
 
+export type ServerLogKind = "server_error" | "access" | "slow_request" | "request_issue";
+export interface ServerErrorItem {
+  id: string; occurredAt: string; areaLabel: string; title: string; summary: string; nextStep: string; jobId?: string; requestId?: string;
+  kind?: ServerLogKind; httpStatus?: number; durationMs?: number; audience?: "Admin" | "Driver";
+}
+export interface ServerErrorsResponse {
+  items: ServerErrorItem[]; total: number; page: number; pageSize: number;
+  capture: { pending: number; omitted: number; failed: number; slowRequestMs?: number };
+}
+export async function fetchServerErrors(from: string, to: string, page: number, signal?: AbortSignal, kind: ServerLogKind | "all" = "all"): Promise<ServerErrorsResponse> {
+  const params = new URLSearchParams({ from, to, page: String(page), pageSize: "25", kind });
+  const res = await apiFetch(`/api/admin/logs?${params}`, { signal });
+  if (!res.ok) throw await apiError(res, "Log history could not be loaded.");
+  return res.json();
+}
+
 export async function fetchJobLiabilityReport(jobId: string): Promise<{ items: import("./driverReport.types").ReportLiability[]; coverage: string }> {
   const res = await apiFetch("/api/admin/liabilities/jobs/" + encodeURIComponent(jobId));
   if (!res.ok) throw await apiError(res, "Job liability evidence could not be loaded.");
@@ -52,7 +68,9 @@ export async function fetchJobLiabilityReport(jobId: string): Promise<{ items: i
 
 export async function fetchDriverReport(initials: string, query: Record<string, string | number>, signal?: AbortSignal): Promise<DriverReport> {
   const params = new URLSearchParams(Object.entries(query).map(([key, value]) => [key, String(value)]));
-  const res = await apiFetch(`/api/admin/driver-reports/${encodeURIComponent(initials)}?${params}`, { signal });
+  // This background request can still exceed 30s on a slow history read. Core
+  // job/payment data uses its normal timeout and renders independently.
+  const res = await apiFetch(`/api/admin/driver-reports/${encodeURIComponent(initials)}?${params}`, { signal }, query.detail === "display" ? 60_000 : undefined);
   if (!res.ok) throw await apiError(res, "Driver report could not be loaded.");
   return res.json();
 }

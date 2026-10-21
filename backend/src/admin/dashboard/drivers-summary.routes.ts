@@ -43,6 +43,7 @@ interface DriverStat {
   totalDelayMinutes: number;
   delayJobsCount: number;
   totalChargesPence: number;
+  basePricePence: number;
   calculatedChargesPence: number;
   revenuePence: number;
   cashCollectedPence: number;
@@ -77,7 +78,7 @@ export function summarizeDrivers(drivers: DriverProfile[], jobs: NormalizedJob[]
       hasAccount: true,
       assignedCount: 0, completedCount: 0, cancelledCount: 0,
       totalDurationMinutes: 0, workingUnknownJobs: 0, durationJobsCount: 0, totalDelayMinutes: 0, delayJobsCount: 0,
-      totalChargesPence: 0, calculatedChargesPence: 0, revenuePence: 0, cashCollectedPence: 0, cardCollectedPence: 0, bankCollectedPence: 0,
+      totalChargesPence: 0, basePricePence: 0, calculatedChargesPence: 0, revenuePence: 0, cashCollectedPence: 0, cardCollectedPence: 0, bankCollectedPence: 0,
       invoiceCollectedPence: 0, linkCollectedPence: 0, unknownCollectionJobs: 0, congestionUnknownJobs: 0, tunnelUnknownJobs: 0, congestionChargePence: 0, tunnelChargePence: 0, overtimeMinutes: 0,
       missingEvidenceCount: 0, overtimeCount: 0, reviewSentCount: 0, reviewNotSentCount: 0
     });
@@ -92,7 +93,7 @@ export function summarizeDrivers(drivers: DriverProfile[], jobs: NormalizedJob[]
         hasAccount: false,
         assignedCount: 0, completedCount: 0, cancelledCount: 0,
         totalDurationMinutes: 0, workingUnknownJobs: 0, durationJobsCount: 0, totalDelayMinutes: 0, delayJobsCount: 0,
-        totalChargesPence: 0, calculatedChargesPence: 0, revenuePence: 0, cashCollectedPence: 0, cardCollectedPence: 0, bankCollectedPence: 0,
+        totalChargesPence: 0, basePricePence: 0, calculatedChargesPence: 0, revenuePence: 0, cashCollectedPence: 0, cardCollectedPence: 0, bankCollectedPence: 0,
         invoiceCollectedPence: 0, linkCollectedPence: 0, unknownCollectionJobs: 0, congestionUnknownJobs: 0, tunnelUnknownJobs: 0, congestionChargePence: 0, tunnelChargePence: 0, overtimeMinutes: 0,
         missingEvidenceCount: 0, overtimeCount: 0, reviewSentCount: 0, reviewNotSentCount: 0
       };
@@ -106,6 +107,7 @@ export function summarizeDrivers(drivers: DriverProfile[], jobs: NormalizedJob[]
       if (j.reviewEmailSent === true) stat.reviewSentCount++;
       else stat.reviewNotSentCount++;
       stat.totalChargesPence += j.totalCharges ?? j.calculatedTotalCharges ?? 0;
+      stat.basePricePence += j.basePrice ?? 0;
       // Preserve the original calculation separately from documented price adjustments.
       stat.calculatedChargesPence += j.calculatedTotalCharges ?? j.totalCharges ?? 0;
       stat.revenuePence += j.amountCharged || 0;
@@ -150,6 +152,7 @@ export function summarizeDrivers(drivers: DriverProfile[], jobs: NormalizedJob[]
       assigned: s.assignedCount, completed: s.completedCount, cancelled: s.cancelledCount, completionRate,
       avgDurationMinutes: avgDuration, totalDurationMinutes: s.totalDurationMinutes, workingUnknownJobs: s.workingUnknownJobs, avgDelayMinutes: avgDelay,
       totalChargesPounds: toPounds(pence(s.totalChargesPence)),
+      basePricePounds: toPounds(pence(s.basePricePence)),
       calculatedChargesPounds: toPounds(pence(s.calculatedChargesPence)),
       revenuePounds: toPounds(pence(s.revenuePence)), revenueFormatted: formatGBP(pence(s.revenuePence)),
       cashCollectedPounds: toPounds(pence(s.cashCollectedPence)),

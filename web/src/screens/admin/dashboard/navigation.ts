@@ -9,9 +9,9 @@
  * reloads restore them.
  */
 import type { LucideIcon } from "lucide-react";
-import { Bell, CalendarCheck, ClipboardList, MessagesSquare, FileWarning, LayoutDashboard, Navigation as NavigationIcon, Settings, Truck, Users } from "lucide-react";
+import { Bell, CalendarCheck, ClipboardList, MessagesSquare, FileWarning, LayoutDashboard, Navigation as NavigationIcon, Settings, Truck, Users, ScrollText } from "lucide-react";
 
-export type SectionId = "overview" | "bookings" | "jobs" | "activity" | "drivers" | "livefleet" | "vehicles" | "evidence" | "alerts" | "settings";
+export type SectionId = "overview" | "bookings" | "jobs" | "activity" | "drivers" | "livefleet" | "vehicles" | "evidence" | "alerts" | "settings" | "logs";
 export type RouteId = SectionId | "driverreport" | "maintenance";
 
 export type NavGroupId = "operations" | "fleet" | "communication" | "system";
@@ -35,7 +35,8 @@ export const NAV: NavEntry[] = [
   { id: "vehicles", label: "Van", icon: Truck, group: "fleet", keywords: "vehicles fuel service mot tax compliance" },
   { id: "evidence", label: "Liability", icon: FileWarning, group: "fleet", keywords: "checks check-in checkout parking liability incident" },
   { id: "alerts", label: "Notifications & Alerts", icon: Bell, group: "communication", keywords: "notifications delivery log sms email fleet events" },
-  { id: "settings", label: "Settings", icon: Settings, group: "system", keywords: "configuration pricing rates message templates notifications" }
+  { id: "settings", label: "Settings", icon: Settings, group: "system", keywords: "configuration pricing rates message templates notifications" },
+  { id: "logs", label: "Logs", icon: ScrollText, group: "system", keywords: "server errors problems issues history failures" }
 ];
 
 export const ROUTE_TITLES: Record<RouteId, string> = {
@@ -79,7 +80,7 @@ export function resolveRoute(search: string): ResolvedRoute {
     case "settings":
       return params.get("tab") === "notifications" ? canonical("alerts", { view: "delivery" }, ["tab"]) : { route: "settings" };
     case "overview": case "bookings": case "jobs": case "activity": case "drivers": case "livefleet": case "vehicles": case "evidence": case "alerts":
-    case "driverreport": case "maintenance":
+    case "driverreport": case "maintenance": case "logs":
       return { route: section as RouteId };
     case "": return params.get("job") ? canonical("jobs") : { route: "overview" };
     case "finished": return canonical("jobs", { status: "completed" });
@@ -123,13 +124,14 @@ export function urlParam(name: string): string | null {
 
 /**
  * Replaces this page's own URL state in place (filters, tab, page). `null`/"" removes
- * a key. Uses replaceState so typing in a search box doesn't create one history entry
+ * a key; preserveEmpty retains explicit blanks for useUrlState's nonempty defaults.
+ * Uses replaceState so typing in a search box doesn't create one history entry
  * per keystroke; pass `push` for discrete view changes the user may want to Back out of.
  */
-export function updateUrlParams(values: Record<string, string | number | null | undefined>, push = false) {
+export function updateUrlParams(values: Record<string, string | number | null | undefined>, push = false, preserveEmpty = false) {
   const url = new URL(window.location.href);
   for (const [key, value] of Object.entries(values)) {
-    if (value === null || value === undefined || value === "") url.searchParams.delete(key);
+    if (value === null || value === undefined || (!preserveEmpty && value === "")) url.searchParams.delete(key);
     else url.searchParams.set(key, String(value));
   }
   const href = url.pathname + url.search;

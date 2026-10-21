@@ -3,7 +3,10 @@
 Overview has an **Include MA** switch, off by default. The browser remembers
 the choice in `tmv:admin-include-ma`. Turning it on includes MA (MAN VAN) again.
 The preference applies only to Overview totals, charts and its attention/live
-panels. Jobs, Drivers, broadcast recipients, reports, exports, Activity, Bookings,
+panels. Driver performance has a separate local Include MA switch, initially off,
+which filters its current/previous totals, charts, table and CSV export. Its driver
+dropdown stays complete and retains the selected driver. It does not change the
+Overview preference. Jobs, the driver directory, broadcast recipients, reports, other exports, Activity, Bookings,
 fleet/alerts, scenarios and van mileage continue to include MA.
 
 Ordinary GET/HEAD requests explicitly include MA and navigation downloads carry

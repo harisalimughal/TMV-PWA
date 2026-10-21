@@ -1,10 +1,27 @@
 import { Request, Response, Router } from "express";
+import { DateTime } from "luxon";
 import { listVanRecords, getVanRecord, deleteVanRecord, VanRecordType } from "../../db/van.repo";
 import { listVanCompliance, saveVanCompliance } from "../../db/van-compliance.repo";
 import { toVanComplianceItem, VanComplianceItem } from "../../jobs/van-mileage.service";
 import { listDriverProfiles } from "../../auth/driver-account.service";
 import { driverVisible } from "../driver-scope";
 import { toThumbnailUrl, destroyEvidenceImage, publicIdFromCloudinaryUrl } from "../../storage/cloudinary";
+
+const searchText = (value: unknown) => String(value ?? "").toLowerCase().replace(/\s+/g, "");
+const instant = (value: string) => DateTime.fromISO(value, { zone: "utc" }).toMillis();
+function filterVanRange<T extends { submittedAt: string }>(rows: T[], from: string, to: string): T[] {
+  if (!from && !to) return rows;
+  const boundary = (value: string, end: boolean) => {
+    let date = DateTime.fromISO(value, { zone: "Europe/London" });
+    if (/^\d{4}-\d{2}-\d{2}$/.test(value) && end) date = date.endOf("day");
+    if (!date.isValid) throw new RangeError("Invalid Van date filter.");
+    return date.toMillis();
+  };
+  const start = from ? boundary(from, false) : -Infinity;
+  const end = to ? boundary(to, true) : Infinity;
+  if (end < start) throw new RangeError("The Van end date must be on or after the start date.");
+  return rows.filter(row => { const at = instant(row.submittedAt); return Number.isFinite(at) && at >= start && at <= end; });
+}
 
 type VanRecordApiItem = {
   id: string;
@@ -132,7 +149,7 @@ export function dashboardVanRoutes(): Router {
       const pageSize = Math.min(100, Math.max(1, Number(req.query.pageSize) || 25));
       const from = String(req.query.from || "");
       const to = String(req.query.to || "");
-      const q = String(req.query.q || "").trim().toLowerCase();
+      const q = searchText(req.query.q);
 
       const [allRows, drivers, complianceRows] = await Promise.all([
         listVanRecords(),
@@ -153,13 +170,11 @@ export function dashboardVanRoutes(): Router {
         return item;
       };
 
-      let rows = allRows;
-      if (from) rows = rows.filter(r => r.submittedAt >= from);
-      if (to) rows = rows.filter(r => r.submittedAt <= to);
+      let rows = filterVanRange(allRows, from, to);
       if (q) {
         rows = rows.filter(r =>
           [r._id, r.driverName, r.driverEmail, r.driverInitials, r.vanRegistration, r.mileage, r.odometerReading, r.fuelCost, r.serviceMileage, r.serviceType]
-            .some(v => String(v ?? "").toLowerCase().includes(q))
+            .some(v => searchText(v).includes(q))
         );
       }
 
@@ -202,19 +217,20 @@ export function dashboardVanRoutes(): Router {
           compliance: complianceItemForVan(row.vanRegistration),
           records: []
         };
-        target.latestSubmittedAt = target.latestSubmittedAt > row.submittedAt ? target.latestSubmittedAt : row.submittedAt;
+        target.latestSubmittedAt = instant(target.latestSubmittedAt) > instant(row.submittedAt) ? target.latestSubmittedAt : row.submittedAt;
         target.vanRegistration = target.vanRegistration || row.vanRegistration;
         target.records.push(item);
-        if (row.type === "MILEAGE" && (!target.latestMileage || row.submittedAt > target.latestMileage.submittedAt)) target.latestMileage = item;
-        if (row.type === "FUEL" && (!target.latestFuel || row.submittedAt > target.latestFuel.submittedAt)) target.latestFuel = item;
-        if (row.type === "SERVICE" && (!target.latestService || row.submittedAt > target.latestService.submittedAt)) target.latestService = item;
+        if (row.type === "MILEAGE" && (!target.latestMileage || instant(row.submittedAt) > instant(target.latestMileage.submittedAt))) target.latestMileage = item;
+        if (row.type === "FUEL" && (!target.latestFuel || instant(row.submittedAt) > instant(target.latestFuel.submittedAt))) target.latestFuel = item;
+        if (row.type === "SERVICE" && (!target.latestService || instant(row.submittedAt) > instant(target.latestService.submittedAt))) target.latestService = item;
         grouped.set(key, target);
       }
 
       const allItems = Array.from(grouped.values())
-        .map(item => ({ ...item, records: item.records.sort((a, b) => a.submittedAt.localeCompare(b.submittedAt)) }))
+        .filter(item => !q || item.records.length > 0 || [item.driverName, item.driverEmail, item.driverInitials, item.vanRegistration].some(value => searchText(value).includes(q)))
+        .map(item => ({ ...item, records: item.records.sort((a, b) => instant(a.submittedAt) - instant(b.submittedAt)) }))
         .sort((a, b) => {
-          if (a.latestSubmittedAt || b.latestSubmittedAt) return a.latestSubmittedAt.localeCompare(b.latestSubmittedAt);
+          if (a.latestSubmittedAt || b.latestSubmittedAt) return (instant(a.latestSubmittedAt) || 0) - (instant(b.latestSubmittedAt) || 0);
           return (a.driverName || a.driverEmail).localeCompare(b.driverName || b.driverEmail);
         });
       const total = allItems.length;
@@ -226,8 +242,8 @@ export function dashboardVanRoutes(): Router {
         pagination: { page, pageSize, total, totalPages, hasMore: page < totalPages },
         meta: { fetchedAt: new Date().toISOString() }
       });
-    } catch {
-      res.status(500).json({ error: { code: "VAN_FETCH_FAILED", message: "Failed to load van driver records." } });
+    } catch (error) {
+      res.status(error instanceof RangeError ? 400 : 500).json({ error: { code: "VAN_FETCH_FAILED", message: error instanceof RangeError ? error.message : "Failed to load van driver records." } });
     }
   });
 
@@ -263,17 +279,16 @@ export function dashboardVanRoutes(): Router {
       const pageSize = Math.min(100, Math.max(1, Number(req.query.pageSize) || 25));
       const from = String(req.query.from || "");
       const to = String(req.query.to || "");
-      const q = String(req.query.q || "").trim().toLowerCase();
+      const q = searchText(req.query.q);
       const type = parseType(req.query.type);
 
       let rows = await listVanRecords();
       if (type) rows = rows.filter(r => r.type === type);
-      if (from) rows = rows.filter(r => r.submittedAt >= from);
-      if (to) rows = rows.filter(r => r.submittedAt <= to);
+      rows = filterVanRange(rows, from, to);
       if (q) {
         rows = rows.filter(r =>
           [r._id, r.driverName, r.driverEmail, r.driverInitials, r.vanRegistration, r.mileage, r.odometerReading, r.fuelCost, r.serviceMileage, r.serviceType]
-            .some(v => String(v ?? "").toLowerCase().includes(q))
+            .some(v => searchText(v).includes(q))
         );
       }
 
@@ -286,8 +301,8 @@ export function dashboardVanRoutes(): Router {
         pagination: { page, pageSize, total, totalPages, hasMore: page < totalPages },
         meta: { fetchedAt: new Date().toISOString() }
       });
-    } catch {
-      res.status(500).json({ error: { code: "VAN_FETCH_FAILED", message: "Failed to load van records." } });
+    } catch (error) {
+      res.status(error instanceof RangeError ? 400 : 500).json({ error: { code: "VAN_FETCH_FAILED", message: error instanceof RangeError ? error.message : "Failed to load van records." } });
     }
   });
 

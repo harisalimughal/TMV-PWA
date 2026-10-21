@@ -48,17 +48,17 @@ export function FinancialComparison({ rows, onOpen, state, error, onRetry }: {
 }) {
   const data = rows.map(row => ({
     initials: row.initials, name: row.fullName, calculated: row.calculatedChargesPounds ?? row.totalChargesPounds ?? null, final: Number.isFinite(row.revenuePounds) ? row.revenuePounds : null,
-    receipts: Number.isFinite(row.totalCollectionsPounds) ? row.totalCollectionsPounds! : null, unverified: row.unknownCollectionJobs ?? 0
+    base: Number.isFinite(row.basePricePounds) ? row.basePricePounds! : null
   })).sort((a, b) => (b.final ?? -1) - (a.final ?? -1));
   const empty = data.every(row => !row.calculated && !row.final);
   const ticks = niceTicks(Math.max(0, ...data.flatMap(row => [row.calculated ?? 0, row.final ?? 0])));
   return (
-    <ChartPanel title="Charges by driver" icon={<PoundSterling />} question="Calculated and final charges for each driver, side by side." state={empty && state === "ready" ? "empty" : state}
+    <ChartPanel title="Charges by driver" icon={<PoundSterling />} question="Total charges and driver collected for each driver, side by side." state={empty && state === "ready" ? "empty" : state}
       error={error} onRetry={onRetry} emptyText="No charges in this period." minHeight={260}
-      legend={<ChartLegend items={[{ label: "Calculated", color: CHART.blue }, { label: "Final", color: CHART.violet }]} />}
-      basis="Calculated is the system-priced total. Final is billed at completion and includes invoices. They are different measures and are not added or subtracted."
-      table={{ caption: "Calculated and final charges by driver", columns: ["Driver", "Calculated", "Final", "Recorded receipts"],
-        rows: data.map(row => [row.name, formatPounds(row.calculated), formatPounds(row.final), row.receipts === null ? "Not recorded" : formatPounds(row.receipts)]), numericFrom: 1 }}>
+      legend={<ChartLegend items={[{ label: "Total charges", color: CHART.blue }, { label: "Driver collected", color: CHART.violet }]} />}
+      basis="Total charges are the system-priced total. Driver collected is the amount entered at completion and includes invoices. They are different measures and are not added or subtracted."
+      table={{ caption: "Total charges and driver collected by driver", columns: ["Driver", "Total charges", "Driver collected", "Base price"],
+        rows: data.map(row => [row.name, formatPounds(row.calculated), formatPounds(row.final), row.base === null ? "Not recorded" : formatPounds(row.base)]), numericFrom: 1 }}>
       <div>
       <div style={{ height: Math.max(220, data.length * 58 + 36) }} aria-hidden>
         <ResponsiveContainer width="100%" height="100%">
@@ -70,9 +70,9 @@ export function FinancialComparison({ rows, onOpen, state, error, onRetry }: {
               if (!active || !payload?.length) return null;
               const row = payload[0].payload as (typeof data)[number];
               return <ChartTooltipBox title={row.name} rows={[
-                { label: "Calculated", value: formatPounds(row.calculated), color: CHART.blue }, { label: "Final", value: formatPounds(row.final), color: CHART.violet },
-                { label: "Recorded receipts", value: row.receipts === null ? "Not recorded" : formatPounds(row.receipts) }]}
-                note={row.unverified ? `${plural(row.unverified, "job")} with unverified payment records. Receipts are a known subtotal.` : "Final is billed, not necessarily received."} />;
+                { label: "Total charges", value: formatPounds(row.calculated), color: CHART.blue }, { label: "Driver collected", value: formatPounds(row.final), color: CHART.violet },
+                { label: "Base price", value: row.base === null ? "Not recorded" : formatPounds(row.base) }]}
+                note="Base price is the calendar amount before overtime and road charges. Driver collected includes invoices." />;
             }} />
             <Bar dataKey="calculated" fill={CHART.blue} radius={[0, 6, 6, 0]} maxBarSize={16} cursor="pointer" onClick={(entry: { initials?: string }) => entry.initials && onOpen(entry.initials)} {...chartMotion()} />
             <Bar dataKey="final" fill={CHART.violet} radius={[0, 6, 6, 0]} maxBarSize={16} cursor="pointer" onClick={(entry: { initials?: string }) => entry.initials && onOpen(entry.initials)} {...chartMotion()} />
@@ -87,19 +87,19 @@ export function FinancialComparison({ rows, onOpen, state, error, onRetry }: {
 
 /* ------------------------------------------------------------------- trend ---- */
 
-export function ChargesTrend({ rows, grain, partial, missing, state, error, onRetry }: {
-  rows: TrendRow[]; grain: string; partial: boolean; missing: number; state: PanelState; error?: string; onRetry: () => void;
+export function ChargesTrend({ rows, grain, partial, missing, state, error, onRetry, rangeMissing = false }: {
+  rows: TrendRow[]; grain: string; partial: boolean; missing: number; state: PanelState; error?: string; onRetry: () => void; rangeMissing?: boolean;
 }) {
   const empty = rows.every(row => row.completed === 0);
   const ticks = niceTicks(Math.max(0, ...rows.flatMap(row => [row.calculated ?? 0, row.final ?? 0])));
   return (
-    <ChartPanel title="Charges over time" icon={<TrendingUp />} question={`Calculated and final charges per ${grain}.`} state={empty && state === "ready" ? "empty" : state}
-      error={error} onRetry={onRetry} emptyText="No completed jobs in this period." minHeight={280}
-      legend={<ChartLegend items={[{ label: "Final charges", color: CHART.violet }, { label: "Calculated charges", color: CHART.blue, dashed: true }]} />}
+    <ChartPanel title="Charges over time" icon={<TrendingUp />} question={`Total charges and driver collected per ${grain}.`} state={empty && state === "ready" ? "empty" : state}
+      error={error} onRetry={onRetry} emptyText={rangeMissing ? "Choose both start and end dates to show the charges trend." : "No completed jobs in this period."} minHeight={280}
+      legend={<ChartLegend items={[{ label: "Driver collected", color: CHART.violet }, { label: "Total charges", color: CHART.blue, dashed: true }]} />}
       coverage={<>{partial && <span className="block text-admin-status-amber">This range has more jobs than could be loaded, so the trend is not shown as complete.</span>}
-        {missing > 0 && <span className="block text-admin-status-amber">{plural(missing, "completed job")} had no final charge and {missing === 1 ? "is" : "are"} left out of the line, not drawn as £0.</span>}</>}
-      basis="Completed jobs by scheduled day (London time). Final charges include invoices and are not cash received."
-      table={{ caption: "Charges per period", columns: ["Period", "Completed jobs", "Calculated", "Final"],
+        {missing > 0 && <span className="block text-admin-status-amber">{plural(missing, "completed job")} had no driver-collected amount and {missing === 1 ? "is" : "are"} left out of the line, not drawn as £0.</span>}</>}
+      basis="Completed jobs by actual start day, or booked day when no genuine start is recorded (London time). Driver collected includes invoices."
+      table={{ caption: "Charges per period", columns: ["Period", "Completed jobs", "Total charges", "Driver collected"],
         rows: rows.map(row => [row.label, row.completed, row.calculated === null ? "Not recorded" : formatPounds(row.calculated), row.final === null ? "Not recorded" : formatPounds(row.final)]), numericFrom: 1 }}>
       <div className="h-[250px]" aria-hidden>
         <ResponsiveContainer width="100%" height="100%">
@@ -112,9 +112,9 @@ export function ChargesTrend({ rows, grain, partial, missing, state, error, onRe
               if (!active || !payload?.length) return null;
               const row = payload[0].payload as TrendRow;
               return <ChartTooltipBox title={String(label)} rows={[
-                { label: "Final", value: row.final === null ? "Not recorded" : formatPounds(row.final), color: CHART.violet },
-                { label: "Calculated", value: row.calculated === null ? "Not recorded" : formatPounds(row.calculated), color: CHART.blue },
-                { label: "Completed jobs", value: String(row.completed) }]} note={row.finalMissing ? `${plural(row.finalMissing, "job")} without a final charge.` : undefined} />;
+                { label: "Driver collected", value: row.final === null ? "Not recorded" : formatPounds(row.final), color: CHART.violet },
+                { label: "Total charges", value: row.calculated === null ? "Not recorded" : formatPounds(row.calculated), color: CHART.blue },
+                { label: "Completed jobs", value: String(row.completed) }]} note={row.finalMissing ? `${plural(row.finalMissing, "job")} without a driver-collected amount.` : undefined} />;
             }} />
             <Area type="linear" dataKey="final" stroke={CHART.violet} strokeWidth={2.5} fill="url(#perf-final)" connectNulls={false} {...chartMotion()}
               dot={{ r: 3, fill: CHART.violet, stroke: CHART.surface, strokeWidth: 2 }} activeDot={{ r: 6, fill: CHART.violet, stroke: CHART.surface, strokeWidth: 2 }} />
@@ -191,11 +191,11 @@ export function PaymentMix({ rows, state, error, onRetry }: { rows: DriverSummar
   const colors = { cash: CHART.teal, card: CHART.blue, link: CHART.violet, bank: CHART.cyan } as const;
   const empty = mix.receivedTotal === 0 && mix.invoiced === 0;
   return (
-    <ChartPanel title="Payment methods" icon={<Wallet />} question="How recorded receipts split by method. Invoices are shown apart, because they are billed, not received." state={empty && state === "ready" ? "empty" : state}
+    <ChartPanel title="Payment methods" icon={<Wallet />} question="Recorded payments by method, with invoiced amounts shown separately." state={empty && state === "ready" ? "empty" : state}
       error={error} onRetry={onRetry} emptyText="No payments were recorded in this period." minHeight={220}
       coverage={mix.unverifiedJobs ? <span className="text-admin-status-amber">{plural(mix.unverifiedJobs, "job")} had no verified payment record, so received money is a known subtotal.</span> : undefined}
-      basis="Recorded in the job flow at completion. Invoices to collect are not money received."
-      table={{ caption: "Recorded receipts by method", columns: ["Method", "Amount"], rows: [...mix.segments.map(segment => [segment.label, formatPounds(segment.pounds)]), ["Invoiced (not received)", formatPounds(mix.invoiced)]], numericFrom: 1 }}>
+      basis="Recorded in the job flow at completion. Invoiced amounts do not confirm whether an invoice has been paid."
+      table={{ caption: "Recorded receipts by method", columns: ["Method", "Amount"], rows: [...mix.segments.map(segment => [segment.label, formatPounds(segment.pounds)]), ["Invoiced", formatPounds(mix.invoiced)]], numericFrom: 1 }}>
       <div className="flex flex-wrap items-center justify-center gap-6 py-2">
         {mix.receivedTotal > 0
           ? <DonutChart size={200} stroke={22} active={active} onActive={setActive} centerValue={compactGBP(mix.receivedTotal)} centerLabel="received"
@@ -205,7 +205,7 @@ export function PaymentMix({ rows, state, error, onRetry }: { rows: DriverSummar
         <div className="space-y-2">
           <ChartLegend className="flex-col" items={mix.segments.filter(segment => segment.pounds > 0).map(segment => ({ label: segment.label, color: colors[segment.key], value: formatPounds(segment.pounds) }))} />
           {mix.invoiced > 0 && (
-            <p className="rounded-xl border border-admin-line px-3 py-2 text-[12.5px] text-admin-ink-2"><span className="font-semibold tabular-nums text-admin-ink">{formatPounds(mix.invoiced)}</span> invoiced. Billed, not received.</p>
+            <p className="rounded-xl border border-admin-line px-3 py-2 text-[12.5px] text-admin-ink-2"><span className="font-semibold tabular-nums text-admin-ink">{formatPounds(mix.invoiced)}</span> invoiced.</p>
           )}
         </div>
       </div>

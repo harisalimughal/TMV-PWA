@@ -2,7 +2,7 @@ import { getDriverProfileByInitials } from "../auth/driver-account.service";
 import { getSetting } from "../db/settings.repo";
 import { buildReportJob, reportTrends, reportPeriod, summarizeReportJobs } from "./driver-report.model";
 import { loadDriverReportJobs, loadReportContextJobs, loadReportLiabilitySources, reportPrepaymentConflicts, ReportCapacityError } from "./driver-report.repo";
-import { readGpsRange } from "../gps/gps.repo";
+import { readGpsEventRange, readGpsMovementRange, readGpsRange } from "../gps/gps.repo";
 import { createGpsAssociator } from "../gps/gps.association";
 import { reconstructGpsVisits } from "../gps/gps.visits";
 import { parsePortalRules, verifyPortalTraversals } from "../gps/gps.portals";
@@ -17,13 +17,13 @@ import { listEvidenceForJobs } from "../db/evidence.repo";
 import type { EvidenceRecord } from "../jobs/job.types";
 import { createReportReadCache } from "./report-read-cache";
 
-interface DriverReportReadOptions { includeLiabilities?: boolean; includeGps?: boolean }
+interface DriverReportReadOptions { includeLiabilities?: boolean; includeGps?: boolean; includePositions?: boolean; includeGeometry?: boolean }
 
 const reportCache = createReportReadCache<Awaited<ReturnType<typeof buildDriverReport>>>(30_000, 8,
   report => report.jobs.length + report.events.length + report.visits.length + report.roadAlerts.length + report.liabilities.length < 10_000);
 export async function getDriverReport(initials: string, range: { from: string; to: string }, groupBy: "day" | "week" | "month" = "day", fresh = false, options: DriverReportReadOptions = {}) {
   if (fresh) return buildDriverReport(initials, range, groupBy, options);
-  const key = JSON.stringify([initials, range.from, range.to, groupBy, options.includeLiabilities !== false, options.includeGps !== false]);
+  const key = JSON.stringify([initials, range.from, range.to, groupBy, options.includeLiabilities !== false, options.includeGps !== false, options.includePositions !== false, options.includeGeometry !== false]);
   return reportCache.get(key, () => buildDriverReport(initials, range, groupBy, options));
 }
 
@@ -34,6 +34,8 @@ export async function buildDriverReport(initials: string, range: { from: string;
   ]);
   const sources = loadedSources.filter(source => source.job.status === "COMPLETED");
   const includeGps = options.includeGps !== false && sources.length > 0;
+  const includePositions = includeGps && options.includePositions !== false;
+  const includeGeometry = includePositions && options.includeGeometry !== false;
   const ownContext = includeGps ? await loadReportContextJobs(initials, range.from, range.to) : [];
   const [prepaymentConflicts, evidence, liabilityData] = await Promise.all([
     reportPrepaymentConflicts(sources.map(row => row.job)),
@@ -55,12 +57,17 @@ export async function buildDriverReport(initials: string, range: { from: string;
   // Legacy unpinned jobs still need the fleet fallback for unique historical driver/time matching.
   const linkableJobs = ownJobs.filter(job => job.status !== "CANCELLED" && (job.onMyWayAt || job.actualStart));
   const alertImeis = linkableJobs.every(job => job.gpsliveImei || job.gpsDeviceHistory?.length) ? imeis : undefined;
+  const movementWindows = sources.map(({ job }) => ({ from: job.onMyWayAt || job.actualStart, to: job.actualFinish }))
+    .filter(window => Number.isFinite(Date.parse(window.from)) && Number.isFinite(Date.parse(window.to)) && Date.parse(window.from) < Date.parse(window.to));
   const [sharedContext, gps, alertHistory, alertRates, portalSetting] = await Promise.all([
     imeis.length ? loadReportContextJobs(initials, from, to, imeis) : Promise.resolve([]),
-    imeis.length ? readGpsRange(imeis, from, to, { forReport: true }) : Promise.resolve({ events: [], positions: [], drives: [], runs: [], truncated: false }),
+    imeis.length ? includeGeometry ? readGpsRange(imeis, from, to, { forReport: true }) : Promise.all([
+      readGpsEventRange(imeis, from, to),
+      includePositions ? readGpsMovementRange(imeis, from, to, movementWindows) : Promise.resolve({ positions: [], drives: [], truncated: false })
+    ]).then(([events, movement]) => ({ ...events, ...movement, truncated: events.truncated || movement.truncated, runs: [] })) : Promise.resolve({ events: [], positions: [], drives: [], runs: [], truncated: false }),
     includeGps && linkableJobs.length && (profile || imeis.length) ? readReportAlerts(from, to, alertImeis) : Promise.resolve({ events: [], truncated: false }),
     includeGps ? reportAlertRates() : Promise.resolve({ congestion: null, tunnel: null }),
-    includeGps ? getSetting("GPS_TUNNEL_PORTAL_RULES", "[]").catch(() => null) : Promise.resolve(null)
+    includeGeometry ? getSetting("GPS_TUNNEL_PORTAL_RULES", "[]").catch(() => null) : Promise.resolve(null)
   ]);
   const contexts = [...new Map([...ownJobs, ...sharedContext].map(job => [job.jobId, job])).values()];
   // Keep unfinished contexts for ambiguity detection, but never expose their activity.
@@ -72,17 +79,19 @@ export async function buildDriverReport(initials: string, range: { from: string;
   const events = gps.events.map(event => ({ ...event, association: associate(event) }))
     .filter(event => inRange(event.occurredAt) && event.association.driverInitials === initials && !!event.association.jobId && finishedJobIds.has(event.association.jobId));
   const zones = gps.runs.find(run => run.zoneSnapshot.length)?.zoneSnapshot ?? [];
-  let visits = reconstructGpsVisits(gps.events, gps.positions, zones, contexts, now);
+  // Interactive movement uses the same points and attribution, without running polygon
+  // reconstruction over every sample. Full exports retain physical crossing verification.
+  let visits = reconstructGpsVisits(gps.events, includeGeometry ? gps.positions : [], zones, contexts, now);
   let portalIssue: string | null = null;
   try {
-    if (includeGps) {
+    if (includeGeometry) {
       if (portalSetting === null) throw new RangeError("Portal geometry could not be read.");
       const rules = parsePortalRules(portalSetting);
       visits = verifyPortalTraversals(visits, gps.positions, zones, rules, contexts, now);
       if (!rules.length) portalIssue = "Physical tunnel portal geometry is not configured.";
     }
   } catch { portalIssue = "Portal geometry is invalid; physical crossings cannot be verified."; }
-  const coverage = gps.truncated || gps.runs.some(run => run.status !== "queried") ? "partial" : gps.events.length || gps.positions.length ? "sampled" : "unavailable";
+  const coverage = gps.truncated || gps.runs.some(run => run.status !== "queried") ? "partial" : !includePositions && includeGps && (gps.events.length || alertHistory.events.length) ? "events-only" : gps.events.length || gps.positions.length ? "sampled" : "unavailable";
   const ownVisits = visits.filter(visit => visit.association.driverInitials === initials && !!visit.association.jobId && finishedJobIds.has(visit.association.jobId));
   const visitsByJob = new Map<string, typeof ownVisits>();
   for (const visit of ownVisits) if (visit.association.jobId) {
@@ -119,7 +128,7 @@ export async function buildDriverReport(initials: string, range: { from: string;
     const group = drivesByJob.get(first.jobId) ?? [];
     group.push(drive); drivesByJob.set(first.jobId, group);
   }
-  const movement = (includeGps ? rows : []).map(row => {
+  const movement = (includePositions ? rows : []).map(row => {
     const job = sourceByJob.get(row.jobId)!;
     const ownedPoints = pointsByJob.get(job.jobId) ?? [], drives = drivesByJob.get(job.jobId) ?? [];
     const onJob = gpsMovement(ownedPoints, drives, job.actualStart, job.actualFinish);
@@ -162,7 +171,7 @@ export async function buildDriverReport(initials: string, range: { from: string;
   return { version: "driver-report-v1", generatedAt: now, driver: { initials, name: profile?.fullName || rows[0]?.identity.name || initials, email: profile?.email || null,
       hasCurrentAccount: !!profile, currentVehicleImei: profile?.imei || null }, range, groupBy,
     dateBasis: { jobs: "recorded-operational-start-else-booking", events: "occurrence", liabilities: "approved-incident-else-labelled-submission", endExclusive: true, timezone: "Europe/London" },
-    summary: { ...summarizeReportJobs(rows), expectedRoadChargeTotals: summarizeExpectedRoadCharges(roadAlerts, new Set(rows.map(row => row.jobId)), includeGps), movingKnownSeconds, movingUnknownJobs: includeGps ? completedMovement.filter(entry => entry.onJob.movingSeconds === null).length : rows.filter(row => row.status === "COMPLETED").length,
+    summary: { ...summarizeReportJobs(rows), expectedRoadChargeTotals: summarizeExpectedRoadCharges(roadAlerts, new Set(rows.map(row => row.jobId)), includeGps), movingKnownSeconds, movingUnknownJobs: includePositions ? completedMovement.filter(entry => entry.onJob.movingSeconds === null).length : rows.filter(row => row.status === "COMPLETED").length,
       movingPartialJobs: completedMovement.filter(entry => entry.onJob.coverage === "partial").length },
     trends, jobs: rows.map(row => ({ ...row, movement: movementByJob.get(row.jobId), roadCharges: chargesByJob.get(row.jobId),
       roadAlerts: alertsByJob.get(row.jobId) ?? [], alertHistoryTruncated: alertHistory.truncated })),
@@ -171,9 +180,9 @@ export async function buildDriverReport(initials: string, range: { from: string;
     contextJobs: [...new Map([...contexts, ...liabilityContexts].map(job => [job.jobId, job])).values()].filter(job => !rows.some(row => row.jobId === job.jobId) && (events.some(event => event.association.jobId === job.jobId) || visitRows.some(visit => visit.association.jobId === job.jobId) || chargeRows.some(charge => charge.jobId === job.jobId) || liabilities.some(row => row.jobId === job.jobId)))
       .map(job => ({ jobId: job.jobId, includedInFinancialTotals: false, jobDetailsUrl: `/admin?section=jobs&job=${encodeURIComponent(job.jobId)}` })),
     gpsSummary: { coverage: includeGps ? coverage : "not-requested", providerCoverage: "unknown", truncated: gps.truncated, portalIssue, observedEventCount: events.length, congestionEntries: visitRows.filter(row => row.scheme === "congestion" && row.entryObserved).length,
-      confirmedTunnelCrossings: coverage === "unavailable" ? null : visitRows.filter(row => row.physicalCrossingConfirmed).length, inferredVisits: visitRows.filter(row => !row.entryObserved).length,
+      confirmedTunnelCrossings: !includeGeometry || coverage === "unavailable" ? null : visitRows.filter(row => row.physicalCrossingConfirmed).length, inferredVisits: visitRows.filter(row => !row.entryObserved).length,
       chargeVerificationCounts: chargeReports.flatMap(report => report.flags).reduce((counts, flag) => ({ ...counts, [flag.code]: (counts[flag.code] ?? 0) + 1 }), {} as Record<string, number>),
       observedChargeKnownPence: chargeRows.reduce((total, row) => total + (row.expectedPence ?? 0), 0), unknownChargeAmounts: chargeRows.filter(row => row.expectedPence === null).length },
-    meta: { financialTotalsCoverAllMatchingJobs: true, providerCompletenessKnown: false, readConsistency: "nontransactional", monetaryLiabilityIntakeEnabled: false, adminManualEditingEnabled: false, liabilitiesIncluded: includeLiabilities, gpsIncluded: includeGps,
+    meta: { financialTotalsCoverAllMatchingJobs: true, providerCompletenessKnown: false, readConsistency: "nontransactional", monetaryLiabilityIntakeEnabled: false, adminManualEditingEnabled: false, liabilitiesIncluded: includeLiabilities, gpsIncluded: includeGps, movementIncluded: includePositions,
       cachePolicy: "bounded-display-cache-invalidated-on-app-writes", roadActivityScope: "job-linked-only", gpsContextHours: 6, collectionScope: "completed-operational-range-jobs", gpsCountsAreObservedMinimum: true } };
 }

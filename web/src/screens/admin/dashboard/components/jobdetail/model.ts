@@ -207,7 +207,7 @@ export function comparisonRows(job: NormalizedJob, fmt: { minutes: (m: number | 
   const rows: ComparisonRow[] = [];
   const systemMinutes = typeof (job.timeBilling?.actualMinutes ?? job.actualMinutes) === "number" ? (job.timeBilling?.actualMinutes ?? job.actualMinutes)! : null;
   const reported = driverReportedMinutes(job);
-  rows.push(pair("time", "Working time", systemMinutes, reported, fmt.minutes, (a, b) => `${Math.abs(a - b)} min ${a > b ? "more in the system" : "more reported by the driver"}`, summary ? "Not reported" : "Not submitted"));
+  rows.push(pair("time", "Working time", systemMinutes, reported, fmt.minutes, (a, b) => `${Math.abs(a - b).toFixed(2)} min ${a > b ? "more in the system" : "more reported by the driver"}`, summary ? "Not reported" : "Not submitted"));
   const reportedOvertime = job.driverReportedOvertimeMinutes;
   const systemOvertime = job.timeBilling?.extraMinutes;
   if (typeof reportedOvertime === "number" || typeof systemOvertime === "number") {

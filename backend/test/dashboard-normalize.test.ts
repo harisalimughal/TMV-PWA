@@ -15,6 +15,17 @@ vi.mock("../src/db/settings.repo", () => ({
 import { normalizeMongoDataset } from "../src/admin/dashboard/normalize";
 
 describe("normalizeMongoDataset", () => {
+  it("exposes the same start date used by backend range filters", async () => {
+    const bookedStart = "2026-10-09T09:00:00Z", actualStart = "2026-10-10T09:00:00Z";
+    const jobs = [
+      { jobId: "GENUINE", actualStart },
+      { jobId: "SYNTHETIC", actualStart, actualStartSource: "completion-fallback" },
+      { jobId: "INVALID", actualStart: "invalid" },
+      { jobId: "BOOKED" }
+    ].map(job => ({ bookedStart, bookedFinish: "2026-10-09T11:00:00Z", status: JobStatus.COMPLETED, driverInitials: "TI", extraCharges: [], ...job }));
+    const normalized = await normalizeMongoDataset({ jobs: jobs as any, evidence: [], activity: [], exceptions: [], scenarioSubmissions: [], fetchedAt: actualStart, durationMs: 0 });
+    expect(normalized.map(job => job.effectiveStart)).toEqual(["2026-10-10T09:00:00.000Z", ...Array(3).fill("2026-10-09T09:00:00.000Z")]);
+  });
   it("exposes reassignment warnings and links while resolving the real Calendar event", async () => {
     const notice = { kind: "admin-completed", detectedAt: "2026-10-16T08:00:00Z", previousStart: "2026-10-13T08:00:00Z",
       previousFinish: "2026-10-13T10:00:00Z", previousDriverInitials: "TI", scheduledStart: "2026-10-16T12:00:00Z",

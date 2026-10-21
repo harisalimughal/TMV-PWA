@@ -20,6 +20,122 @@ const tab = (name: string) => screen.findByRole("tab", { name });
 const driverSelect = () => screen.getByRole("combobox", { name: "Driver" });
 
 describe("Driver report URL and request lifecycle", () => {
+  it("retains date order across tabs and requests it before pagination, resetting page numbers", async () => {
+    window.history.replaceState({}, "", `${BASE}&reportTab=performance&jobsPage=2&roadAlertsPage=3`);
+    load.mockImplementation(sampleDriverReport);
+    renderPage();
+    const order = await screen.findByRole("combobox", { name: "Date order" });
+    expect(order).toHaveValue("asc");
+    expect(screen.queryByText(/every tab uses this range/)).not.toBeInTheDocument();
+    fireEvent.change(order, { target: { value: "desc" } });
+    await waitFor(() => expect(load.mock.calls.some(call => call[1].detail === "core" && call[1].sortDir === "desc" && call[1].jobsPage === 1)).toBe(true));
+    expect(params().get("sortDir")).toBe("desc");
+    expect(params().has("jobsPage")).toBe(false);
+    expect(params().has("roadAlertsPage")).toBe(false);
+    fireEvent.click(await tab("Comparison"));
+    await waitFor(() => expect(load.mock.calls.some(call => call[1].pageSize > 25 && call[1].sortDir === "desc")).toBe(true));
+    expect(screen.getByRole("combobox", { name: "Date order" })).toHaveValue("desc");
+    fireEvent.click(await tab("Tunnel Charges"));
+    await waitFor(() => expect(load.mock.calls.some(call => call[1].detail === "activity" && call[1].activityScheme === "tunnel" && call[1].sortDir === "desc")).toBe(true));
+    expect(screen.getByRole("combobox", { name: "Date order" })).toHaveValue("desc");
+    fireEvent.change(screen.getByRole("combobox", { name: "Date order" }), { target: { value: "asc" } });
+    await waitFor(() => expect(screen.getByRole("combobox", { name: "Date order" })).toHaveValue("asc"));
+    expect(params().has("sortDir")).toBe(false);
+  });
+
+  it("does not request GPS for the Payments tab", async () => {
+    load.mockImplementation(async (driver, query) => {
+      const report = await sampleDriverReport(driver, query);
+      return { ...report, meta: { ...report.meta, gpsIncluded: false } };
+    });
+    renderPage();
+    expect(await tab("Payments")).toBeInTheDocument();
+    expect(screen.getByText("Job-wise payment breakdown")).toBeInTheDocument();
+    expect(load).toHaveBeenCalledTimes(1);
+    expect(load.mock.calls[0][1].detail).toBe("core");
+  });
+
+  it("shows job history, payments and app timings while GPS is pending and keeps them after GPS fails", async () => {
+    window.history.replaceState({}, "", `${BASE}&reportTab=jobs`);
+    let rejectGps!: (error: Error) => void;
+    load.mockImplementation(async (driver, query) => {
+      if (query.detail === "display") return new Promise((_, reject) => { rejectGps = reject; });
+      const report = await sampleDriverReport(driver, query);
+      return { ...report, meta: { ...report.meta, gpsIncluded: false } };
+    });
+    renderPage();
+    expect(await screen.findByRole("group", { name: "Selected range totals" })).toBeInTheDocument();
+    await waitFor(() => expect(rejectGps).toBeDefined());
+    expect(screen.getByRole("heading", { name: "Job history" })).toBeInTheDocument();
+    expect(screen.getByText(/GPS movement and zone activity are loading/)).toBeInTheDocument();
+    fireEvent.click(await tab("Performance & Timings"));
+    expect(await screen.findByRole("table", { name: "Timing milestones for each job, London time" })).toBeInTheDocument();
+    expect(screen.getByRole("table", { name: "Durations for each job" })).toBeInTheDocument();
+    expect(screen.getByText("Scheduled vs working hours")).toBeInTheDocument();
+    await act(async () => rejectGps(new Error("GPS pending failure")));
+    await waitFor(() => expect(load.mock.calls.filter(call => call[1].detail === "display")).toHaveLength(2), { timeout: 4000 });
+    await act(async () => rejectGps(new Error("GPS pending failure")));
+    expect(await screen.findByText(/Tracker movement couldn't be loaded/)).toBeInTheDocument();
+    expect(screen.getByRole("table", { name: "Durations for each job" })).toBeInTheDocument();
+  });
+
+  it("uses the jobs already in the core report for a 14-job comparison without waiting for GPS", async () => {
+    window.history.replaceState({}, "", `${BASE}&reportTab=comparison`);
+    load.mockImplementation(async (driver, query) => {
+      if (query.detail !== "core") throw new Error("Comparison must not wait for GPS");
+      const report = await sampleDriverReport(driver, query);
+      const items = Array.from({ length: 14 }, (_, i) => ({ ...report.jobs.items[0], jobId: `COMPARISON-${i}` }));
+      return { ...report, summary: { ...report.summary, completedJobs: 14 }, jobs: { ...report.jobs, items, total: 14 }, meta: { ...report.meta, gpsIncluded: false } };
+    });
+    renderPage();
+    expect(await screen.findByText("All 14 completed jobs in the selected range")).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: /COMPARISON-/ })).toHaveLength(14);
+    expect(load).toHaveBeenCalledTimes(1);
+    expect(screen.queryByText(/The server returned/)).not.toBeInTheDocument();
+  });
+
+  it("pages comparisons within the backend's 200-job request limit", async () => {
+    window.history.replaceState({}, "", `${BASE}&reportTab=comparison`);
+    load.mockImplementation(async (driver, query) => {
+      expect(query.pageSize).toBeLessThanOrEqual(200);
+      expect(query.detail).toBe("core");
+      const report = await sampleDriverReport(driver, { ...query, pageSize: 25 });
+      const all = Array.from({ length: 240 }, (_, i) => ({ ...report.jobs.items[0], jobId: `COMPARISON-${i}` }));
+      const start = ((query.jobsPage ?? 1) - 1) * query.pageSize;
+      return { ...report, summary: { ...report.summary, completedJobs: 240 }, jobs: { ...report.jobs, items: all.slice(start, start + query.pageSize), total: 240 }, meta: { ...report.meta, gpsIncluded: false } };
+    });
+    renderPage();
+    expect(await screen.findByText("All 240 completed jobs in the selected range")).toBeInTheDocument();
+    expect(load.mock.calls.some(call => call[1].pageSize === 200 && call[1].jobsPage === 2)).toBe(true);
+    expect(screen.queryByText(/The server returned/)).not.toBeInTheDocument();
+  });
+
+  it("loads a comparison beyond the current page using core data and recovers from a timeout without false zero counts", async () => {
+    window.history.replaceState({}, "", `${BASE}&reportTab=comparison`);
+    let fail = true;
+    load.mockImplementation(async (driver, query) => {
+      if (query.pageSize > 25 && fail) throw new Error("The request timed out.");
+      const report = await sampleDriverReport(driver, query);
+      const items = Array.from({ length: Math.min(60, query.pageSize) }, (_, i) => ({ ...report.jobs.items[0], jobId: `COMPARISON-${i}` }));
+      return { ...report, summary: { ...report.summary, completedJobs: 60 }, jobs: { ...report.jobs, items, total: 60 }, meta: { ...report.meta, gpsIncluded: false } };
+    });
+    renderPage();
+    expect(await screen.findByText("The request timed out.", {}, { timeout: 4000 })).toBeInTheDocument();
+    expect(screen.getByText("Comparison jobs could not be loaded")).toBeInTheDocument();
+    expect(screen.queryByText(/The server returned/)).not.toBeInTheDocument();
+    expect(screen.queryByText("0 of 60 jobs loaded")).not.toBeInTheDocument();
+    expect(screen.getByRole("radio", { name: "All statuses" })).toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: "Job" })).toBeDisabled();
+    expect(load.mock.calls.every(call => call[1].detail === "core")).toBe(true);
+    expect(load.mock.calls.some(call => call[1].pageSize === 60 && call[1].jobsPage === 1)).toBe(true);
+    const coreCalls = load.mock.calls.filter(call => call[1].pageSize === 25).length;
+    fail = false;
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+    expect(await screen.findByText("All 60 completed jobs in the selected range")).toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: "Job" })).toBeEnabled();
+    expect(load.mock.calls.filter(call => call[1].pageSize === 25)).toHaveLength(coreCalls);
+  });
+
   it("defaults to Jobs and the last 7 days when no tab or dates are given", async () => {
     window.history.replaceState({}, "", "/admin?section=driverreport&driver=DEMO");
     const week = dateRangeForPreset("7d");
@@ -90,9 +206,9 @@ describe("Driver report URL and request lifecycle", () => {
     renderPage();
     expect(await screen.findByText(/Synthetic GPS outage/, {}, { timeout: 4000 })).toBeInTheDocument();
     const coreCalls = load.mock.calls.filter(call => call[1].detail === "core").length;
-    const fullCalls = load.mock.calls.filter(call => call[1].detail === "full").length;
+    const fullCalls = load.mock.calls.filter(call => call[1].detail === "activity").length;
     fireEvent.click(screen.getByRole("button", { name: "Try again" }));
-    await waitFor(() => expect(load.mock.calls.filter(call => call[1].detail === "full").length).toBeGreaterThan(fullCalls));
+    await waitFor(() => expect(load.mock.calls.filter(call => call[1].detail === "activity").length).toBeGreaterThan(fullCalls));
     expect(load.mock.calls.filter(call => call[1].detail === "core")).toHaveLength(coreCalls);
   });
 

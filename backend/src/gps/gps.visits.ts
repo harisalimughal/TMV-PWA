@@ -1,7 +1,7 @@
 import type { Job } from "../jobs/job.types";
 import type { GpsLiveZone } from "../integrations/gpslive";
 import { associateGpsEvent } from "./gps.association";
-import { schemePosition } from "./gps.geometry";
+import { createSchemePosition } from "./gps.geometry";
 import type { GpsEvent, GpsPosition, GpsScheme, GpsVisit } from "./gps.types";
 
 const SCHEMES: GpsScheme[] = ["congestion", "dartford", "blackwall-silvertown"];
@@ -20,6 +20,7 @@ const zoneKey = (event: GpsEvent) => {
 
 /** Arrival order never determines visit order. Overlapping congestion sectors form a union. */
 export function reconstructGpsVisits(events: GpsEvent[], positions: GpsPosition[], zones: GpsLiveZone[], jobs: Job[], now: string): GpsVisit[] {
+  const positionForScheme = createSchemePosition(zones);
   const visits: GpsVisit[] = [];
   const sorted = [...events].filter(valid).sort((a, b) => ms(a.occurredAt!) - ms(b.occurredAt!) ||
     (a.type === b.type ? a._id.localeCompare(b._id) : a.type === "entry" ? -1 : 1));
@@ -82,7 +83,7 @@ export function reconstructGpsVisits(events: GpsEvent[], positions: GpsPosition[
         if (lastAt && ms(p.occurredAt) - ms(lastAt) > 120_000) { state = null; candidate = null; inferred = null; }
         if (lastAt === p.occurredAt) continue;
         lastAt = p.occurredAt;
-        const next = schemePosition(p, scheme, zones);
+        const next = positionForScheme(p, scheme);
         if (next === "boundary" || next === "unavailable") { candidate = null; continue; }
         if (state === next) { candidate = null; continue; }
         if (!candidate || candidate.state !== next) { candidate = { state: next, at: p.occurredAt }; continue; }

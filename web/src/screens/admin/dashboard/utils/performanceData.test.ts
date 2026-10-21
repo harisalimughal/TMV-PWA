@@ -46,15 +46,23 @@ describe("performance data", () => {
   });
 
   it("sorts unknown values last in both directions", () => {
-    const rows = [row({ initials: "A", fullName: "Anna", totalCollectionsPounds: undefined }), row({ initials: "B", fullName: "Ben", totalCollectionsPounds: 100 }), row({ initials: "C", fullName: "Cy", totalCollectionsPounds: 300 })];
-    expect(sortDrivers(rows, "receipts", "desc").map(r => r.initials)).toEqual(["C", "B", "A"]);
-    expect(sortDrivers(rows, "receipts", "asc").map(r => r.initials)).toEqual(["B", "C", "A"]);
+    const rows = [row({ initials: "A", fullName: "Anna", basePricePounds: undefined }), row({ initials: "B", fullName: "Ben", basePricePounds: 100 }), row({ initials: "C", fullName: "Cy", basePricePounds: 300 })];
+    expect(sortDrivers(rows, "base", "desc").map(r => r.initials)).toEqual(["C", "B", "A"]);
+    expect(sortDrivers(rows, "base", "asc").map(r => r.initials)).toEqual(["B", "C", "A"]);
     expect(sortDrivers(rows, "name", "asc").map(r => r.initials)).toEqual(["A", "B", "C"]);
   });
 
   describe("charges trend", () => {
     const from = "2026-10-10", to = "2026-10-14";
     const buckets = bucketsFor(from, to, grainFor(from, to));
+    it("matches the range filter date, including genuine starts across midnight and synthetic-start fallbacks", () => {
+      const rows = chargesTrend([
+        job({ actualStart: "2026-10-13T09:00:00Z" }),
+        job({ actualStart: "2026-10-13T09:00:00Z", effectiveStart: "2026-10-12T10:00:00Z" })
+      ], buckets, "day");
+      expect(rows.find(item => item.key === "2026-10-12")).toMatchObject({ completed: 1, calculated: 100 });
+      expect(rows.find(item => item.key === "2026-10-13")).toMatchObject({ completed: 1, calculated: 100 });
+    });
     it("buckets by London day and never invents a value for an empty day", () => {
       const rows = chargesTrend([job({}), job({ bookedStart: "2026-10-12T15:00:00Z", totalCharges: 5000, amountCharged: 4000 })], buckets, "day");
       const day = rows.find(item => item.key === "2026-10-12")!;
@@ -89,6 +97,8 @@ describe("performance data", () => {
   });
 
   it("reads the calculated charge from either stored total", () => {
+    expect(calculatedPence(job({ totalCharges: 500, calculatedTotalCharges: 1000 }))).toBe(1000);
+    expect(calculatedPence(job({ totalCharges: 500, calculatedTotalCharges: 0 }))).toBe(0);
     expect(calculatedPence(job({ totalCharges: undefined, calculatedTotalCharges: 700 } as Partial<NormalizedJob>))).toBe(700);
     expect(calculatedPence(job({ totalCharges: undefined } as Partial<NormalizedJob>))).toBeNull();
   });

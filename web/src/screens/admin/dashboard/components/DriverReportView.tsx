@@ -10,7 +10,7 @@ import type { DriverReport } from "../driverReport.types";
 import { REPORT_TABS, type ReportTab } from "../utils/reportNavigation";
 import { formatRange } from "../utils/format";
 import { DateRangePicker } from "./DateRangePicker";
-import { Badge, EmptyState, ExportMenu, Notice, Tabs, TabPanel, focusRing } from "./ds";
+import { Badge, EmptyState, ExportMenu, FilterSelect, Notice, Tabs, TabPanel, focusRing } from "./ds";
 import { JobsTab } from "./report/JobsTab";
 import { PerformanceTab } from "./report/PerformanceTab";
 import { PaymentsTab } from "./report/PaymentsTab";
@@ -28,7 +28,7 @@ export const TAB_LABELS: Record<ReportTab, string> = {
   jobs: "Jobs", performance: "Performance & Timings", payments: "Payments", comparison: "Comparison", tunnels: "Tunnel Charges", congestion: "Congestion Charges"
 };
 
-export interface ReportViewLocation { tab: ReportTab; reconFilter: ReconFilter; roadView: "events" | "jobs"; expand?: string }
+export interface ReportViewLocation { tab: ReportTab; reconFilter: ReconFilter; roadView: "events" | "jobs"; expand?: string; sortDir?: "asc" | "desc" }
 
 interface Props {
   report: DriverReport;
@@ -95,7 +95,8 @@ export function DriverReportView({ report, location, from, to, gps, recon, drive
 
       <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-admin-line bg-surface p-2.5">
         <DateRangePicker presets="records" from={from} to={to} onChange={onDates} />
-        <span className="text-[13px] text-admin-ink-2">{range} · London time · every tab uses this range</span>
+        <FilterSelect label="Date order" value={location.sortDir ?? "asc"} onChange={value => onLocation({ sortDir: value as "asc" | "desc", expand: "" })}
+          options={[{ value: "asc", label: "Ascending · oldest first" }, { value: "desc", label: "Descending · newest first" }]} className="w-[240px]" />
       </div>
 
       <Tabs label="Report sections" idBase="report" value={tab} onChange={next => onLocation({ tab: next, expand: "" })}

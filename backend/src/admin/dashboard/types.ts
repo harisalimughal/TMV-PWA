@@ -129,6 +129,8 @@ export interface NormalizedJob {
   bookedStart: string; // ISO UTC
   bookedFinish: string; // ISO UTC
   actualStart?: string; // ISO UTC
+  /** Date used by job range filters: genuine actual start, otherwise booked start. */
+  effectiveStart?: string;
   actualFinish?: string; // ISO UTC
   /** Proof-of-arrival photo timestamp. */
   pickupArrivalAt?: string;

@@ -9,8 +9,8 @@ import { scopedAdminUrl } from "../../../../lib/adminDriverScope";
  *   preview  driver header; Fuel, Service and Vehicle Compliance side by side (road tax
  *            countdown ring, MOT); All van submissions below
  *
- * The date range filters the latest Fuel and Service records shown (as on the live
- * page); compliance is current status and never depends on it. Countdown labels and
+ * The date range filters Fuel, Service and the submission list together;
+ * compliance is current status. Countdown labels and
  * thresholds come from utils/vehicleStatus.ts, ported from the live page. The
  * "Needs attention" filter and insurance expiry from the earlier Aurora page are kept.
  */
@@ -136,7 +136,7 @@ export function VehiclesPage() {
   const [state, setState] = useUrlState({ from: today.from!, to: today.to!, q: "", show: "all", page: "1", vehicle: "" });
   const page = Math.max(1, Number(state.page) || 1);
   const query = useQuery({
-    queryKey: ["van-driver-records", page, state.from, state.to, state.q],
+    queryKey: ["van-driver-records", page, state.from, state.to, state.q, "filtered-history"],
     queryFn: () => fetchVanDriverRecords({ page, from: state.from || undefined, to: state.to || undefined, q: state.q }),
     retry: 1
   });
@@ -180,7 +180,7 @@ export function VehiclesPage() {
           <Action icon={<Download />} onClick={() => { window.location.href = scopedAdminUrl("/api/admin/van/records/export.csv"); }}>Export CSV</Action>
           <Action icon={<RefreshCw className={cx(query.isFetching && "animate-spin motion-reduce:animate-none")} />} aria-label="Refresh vehicles" onClick={() => void query.refetch()} />
         </>}>
-        <DateRangePicker presets="records" from={state.from || undefined} to={state.to || undefined} onChange={(from, to) => setState({ from: from ?? "", to: to ?? "", page: "1" })} />
+        <DateRangePicker presets="records" allowAll from={state.from || undefined} to={state.to || undefined} onChange={(from, to) => setState({ from: from ?? "", to: to ?? "", page: "1" })} />
         <SearchField label="Search vehicles" placeholder="Search driver, initials, van, fuel or service" value={state.q} debounceMs={300} onChange={q => setState({ q, page: "1" })} className="w-full min-w-[260px] sm:w-[360px]" />
         <button type="button" aria-pressed={show === "attention"} onClick={() => setState({ show: show === "attention" ? "all" : "attention", page: "1" })}
           className={cx("inline-flex h-9 items-center gap-2 rounded-xl border px-3 text-[13.5px] font-semibold transition", focusRing,
@@ -219,7 +219,7 @@ export function VehiclesPage() {
       </section>
       <p className="text-[12.5px] text-admin-ink-2">Due soon means within {COMPLIANCE_ALERT_DAYS} days, or within {SERVICE_MILEAGE_WARNING_MILES} miles of the service interval. A recorded date is not proof that a vehicle is compliant.</p>
 
-      {selected && <VanPreview key={selected.id} item={selected} onClose={() => setState({ vehicle: "" })} onChanged={() => void query.refetch()} />}
+      {selected && <VanPreview key={selected.id} item={selected} scope={formatRange(state.from || undefined, state.to || undefined)} onClose={() => setState({ vehicle: "" })} onChanged={() => void query.refetch()} />}
     </>
   );
 }
@@ -286,7 +286,7 @@ function fullPayload(compliance: VanComplianceItem | null, patch: Partial<VanCom
   };
 }
 
-function VanPreview({ item, onClose, onChanged }: { item: VanDriverRecordItem; onClose: () => void; onChanged: () => void }) {
+function VanPreview({ item, scope, onClose, onChanged }: { item: VanDriverRecordItem; scope: string; onClose: () => void; onChanged: () => void }) {
   const [current, setCurrent] = useState(item);
   const [photo, setPhoto] = useState<{ list: PreviewPhoto[]; index: number } | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<VanRecordItem | null>(null);
@@ -328,7 +328,7 @@ function VanPreview({ item, onClose, onChanged }: { item: VanDriverRecordItem; o
             <ServiceCard item={current} onOpen={() => openRecord(current.latestService)} onDelete={current.latestService ? () => setConfirmDelete(current.latestService) : undefined} onSaved={saved} />
             <ComplianceCard item={current} onSaved={saved} />
           </div>
-          <Submissions records={current.records} onOpen={record => openRecord(record)} onDelete={record => setConfirmDelete(record)} />
+          <Submissions records={current.records} scope={scope} onOpen={record => openRecord(record)} onDelete={record => setConfirmDelete(record)} />
         </div>
       </Modal>
       <PhotoModal isOpen={photo !== null} onClose={() => setPhoto(null)} photos={photo?.list ?? []} index={photo?.index ?? 0} onIndex={index => setPhoto(p => (p ? { ...p, index } : p))} />
@@ -469,12 +469,12 @@ function ComplianceCard({ item, onSaved }: { item: VanDriverRecordItem; onSaved:
   );
 }
 
-function Submissions({ records, onOpen, onDelete }: { records: VanRecordItem[]; onOpen: (record: VanRecordItem) => void; onDelete: (record: VanRecordItem) => void }) {
+function Submissions({ records, scope, onOpen, onDelete }: { records: VanRecordItem[]; scope: string; onOpen: (record: VanRecordItem) => void; onDelete: (record: VanRecordItem) => void }) {
   return (
     <CardShell>
       <div className="flex items-center justify-between border-b border-admin-line px-4 py-3">
-        <h3 className="text-[12.5px] font-semibold uppercase tracking-[0.08em] text-admin-ink-2">All van submissions</h3>
-        <span className="text-[12.5px] tabular-nums text-admin-ink-2">{plural(records.length, "record")}</span>
+        <h3 className="text-[12.5px] font-semibold uppercase tracking-[0.08em] text-admin-ink-2">Van submissions</h3>
+        <span className="text-[12.5px] tabular-nums text-admin-ink-2">{scope} · {plural(records.length, "record")}</span>
       </div>
       {records.length === 0 ? (
         <div className="flex flex-col items-center gap-1.5 px-4 py-8 text-center text-admin-ink-2"><Camera className="h-5 w-5" aria-hidden /><p className="text-[13.5px]">No submissions found.</p></div>

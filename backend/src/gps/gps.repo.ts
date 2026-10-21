@@ -95,6 +95,11 @@ export async function gpsEventsPage(from: string, to: string, imei: string | und
   return { items: await col.find(filter).sort({ occurredAt: 1, _id: 1 }).skip((page - 1) * pageSize).limit(pageSize).toArray(), total: await col.countDocuments(filter) };
 }
 
+export async function readGpsEventRange(imeis: string[], from: string, to: string) {
+  const rows = await (await events()).find({ imei: { $in: imeis }, occurredAt: { $gte: from, $lte: to } }).sort({ occurredAt: 1 }).limit(20_001).toArray();
+  return { events: rows.slice(0, 20_000), truncated: rows.length > 20_000 };
+}
+
 export async function readGpsRange(imeis: string[], from: string, to: string, options: { forReport?: boolean } = {}) {
   const [e, p, d, r] = await Promise.all([events(), positions(), drives(), runs()]);
   const imei = { $in: imeis };
@@ -123,12 +128,16 @@ export async function readGpsRange(imeis: string[], from: string, to: string, op
     truncated: eventRows.length > cap || pointRows.length > cap || driveRows.length > cap || runRows.length === 100 };
 }
 
-export async function readGpsMovementRange(imeis: string[], from: string, to: string) {
+export async function readGpsMovementRange(imeis: string[], from: string, to: string, windows?: Array<{ from: string; to: string }>) {
   const db = await getDb(), cap = 20_000, imei = { $in: imeis };
+  // The report only attributes movement inside these job intervals. Retain a
+  // two-minute boundary buffer, matching the largest accepted GPS sample gap.
+  const pointWindows = windows?.map(window => ({ occurredAt: { $gte: new Date(Date.parse(window.from) - 120000).toISOString(), $lte: new Date(Date.parse(window.to) + 120000).toISOString() } }));
+  const driveWindows = windows?.map(window => ({ start: { $lt: window.to }, end: { $gt: window.from } }));
   const [pointRows, driveRows] = await Promise.all([
-    db.collection<GpsPosition>("gps_positions").find({ imei, occurredAt: { $gte: from, $lte: to } })
+    db.collection<GpsPosition>("gps_positions").find({ imei, occurredAt: { $gte: from, $lte: to }, ...(pointWindows?.length ? { $or: pointWindows } : {}) })
       .project<GpsPosition>({ _id: 1, imei: 1, occurredAt: 1, timeSource: 1, conflicts: 1, conflicting: 1, lat: 1, lng: 1, speedKph: 1, ignitionOn: 1 }).sort({ occurredAt: 1 }).limit(cap + 1).toArray(),
-    db.collection<GpsDrive>("gps_drives").find({ imei, start: { $lt: to }, end: { $gt: from } }).sort({ start: 1 }).limit(cap + 1).toArray()
+    db.collection<GpsDrive>("gps_drives").find({ imei, start: { $lt: to }, end: { $gt: from }, ...(driveWindows?.length ? { $or: driveWindows } : {}) }).sort({ start: 1 }).limit(cap + 1).toArray()
   ]);
   return { positions: pointRows.slice(0, cap), drives: driveRows.slice(0, cap), truncated: pointRows.length > cap || driveRows.length > cap };
 }
