@@ -1,5 +1,5 @@
 import { getClient, jobsCollection } from "./mongo";
-import { Job } from "../jobs/job.types";
+import { Job, JobStatus } from "../jobs/job.types";
 import { DateTime } from "luxon";
 import { invalidateReportReads } from "../reports/report-read-cache";
 
@@ -62,13 +62,23 @@ export async function deleteJob(jobId: string): Promise<boolean> {
  * JS. Every driver-facing screen wants exactly that scoped set; only admin/sync call
  * sites, which genuinely need the whole collection, call this with no filter.
  */
-export async function listJobs(filter?: { driverInitials?: string; gpsliveImei?: string }): Promise<Job[]> {
+export async function listJobs(filter?: { driverInitials?: string; gpsliveImei?: string; excludeStatuses?: JobStatus[] }): Promise<Job[]> {
   const col = await jobsCollection();
   const query: Record<string, unknown> = {};
   if (filter?.driverInitials) query.driverInitials = filter.driverInitials;
+  if (filter?.excludeStatuses?.length) query.status = { $nin: filter.excludeStatuses };
   if (filter?.gpsliveImei) query.$or = [{ gpsliveImei: filter.gpsliveImei }, { "gpsDeviceHistory.imei": filter.gpsliveImei }];
   const docs = await col.find(query).toArray();
   return docs.map(({ _id, ...job }: any) => job as Job);
+}
+
+/** Tomorrow's unassigned count needs booking dates, not full customer/job history. */
+export async function listUnassignedJobBookings(): Promise<Array<Pick<Job, "bookedStart">>> {
+  const col = await jobsCollection();
+  // Missing/null assignment fields occur in older records despite Job's string type.
+  const query: Record<string, unknown> = { driverInitials: { $in: ["", null] }, status: { $ne: JobStatus.CANCELLED } };
+  return col.find(query)
+    .project<Pick<Job, "bookedStart">>({ _id: 0, bookedStart: 1 }).toArray();
 }
 
 function escapeRegex(value: string): string {

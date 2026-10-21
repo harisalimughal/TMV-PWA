@@ -2,7 +2,7 @@ import { DateTime } from "luxon";
 import { env } from "../config/env";
 import { getFiretextApiKey } from "../config/live-settings";
 import { getDriverProfile } from "../auth/driver-account.service";
-import { getJob, listJobs, upsertJob } from "../db/jobs.repo";
+import { getJob, listJobs, listUnassignedJobBookings, upsertJob } from "../db/jobs.repo";
 import { appendActivity, listActivityForJob } from "../db/activity.repo";
 import { getSetting } from "../db/settings.repo";
 import { readEvidenceSummary } from "../db/evidence.repo";
@@ -142,7 +142,7 @@ export async function getNextJobForDriver(
   // pulling every job in the company over the wire on every app open. resolveDriver is
   // a single indexed document lookup, so this costs a few ms, not a second query.
   const driver = await resolveDriver(identifier);
-  const jobs = await listJobs({ driverInitials: driver.initials });
+  const jobs = await listJobs({ driverInitials: driver.initials, excludeStatuses: [JobStatus.COMPLETED, JobStatus.CANCELLED] });
   const active = jobs
     .filter(j => j.status === JobStatus.IN_PROGRESS && j.driverInitials === driver.initials)
     .sort((a, b) => a.bookedStart.localeCompare(b.bookedStart))[0];
@@ -189,7 +189,11 @@ export async function getTomorrowJobsForDriver(identifier: string): Promise<{
   driver: DriverProfile;
   unassignedCount: number;
 }> {
-  const [driver, jobs] = await Promise.all([resolveDriver(identifier), listJobs()]);
+  const driver = await resolveDriver(identifier);
+  const [jobs, unassigned] = await Promise.all([
+    listJobs({ driverInitials: driver.initials, excludeStatuses: [JobStatus.CANCELLED] }),
+    listUnassignedJobBookings()
+  ]);
 
   const tomorrowAll = jobs
     .filter(j => isDueTomorrow(j.bookedStart))
@@ -199,7 +203,7 @@ export async function getTomorrowJobsForDriver(identifier: string): Promise<{
     .filter(j => j.driverInitials === driver.initials)
     .sort((a, b) => a.bookedStart.localeCompare(b.bookedStart));
 
-  const unassignedCount = tomorrowAll.filter(j => !j.driverInitials).length;
+  const unassignedCount = unassigned.filter(j => isDueTomorrow(j.bookedStart)).length;
 
   return { jobs: tomorrow, driver, unassignedCount };
 }
@@ -238,7 +242,7 @@ export async function getJobsGroupedForDriver(identifier: string): Promise<{
   // company's, which is what actually made the "Jobs" tab feel slow to load as the
   // collection grew.
   const driver = await resolveDriver(identifier);
-  const jobs = await listJobs({ driverInitials: driver.initials });
+  const jobs = await listJobs({ driverInitials: driver.initials, excludeStatuses: [JobStatus.COMPLETED, JobStatus.CANCELLED] });
   const now = DateTime.now().setZone(env.timezone);
   const todayKey = now.toISODate();
   const tomorrowKey = now.plus({ days: 1 }).toISODate();

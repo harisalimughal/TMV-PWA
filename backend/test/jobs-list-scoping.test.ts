@@ -14,6 +14,7 @@ import { WorkflowState } from "../src/workflow/workflow.states";
 
 const getJob = vi.fn();
 const listJobs = vi.fn().mockResolvedValue([]);
+const listUnassignedJobBookings = vi.fn().mockResolvedValue([]);
 const getDriverProfile = vi.fn();
 const summaries = vi.fn().mockResolvedValue([]);
 vi.mock("../src/db/driver-job-summary.repo", () => ({ listDriverJobSummariesForJobs: (...args: unknown[]) => summaries(...args) }));
@@ -24,6 +25,7 @@ vi.mock("../src/config/env", () => ({
 vi.mock("../src/db/jobs.repo", () => ({
   getJob: (...args: any[]) => getJob(...args),
   listJobs: (...args: any[]) => listJobs(...args),
+  listUnassignedJobBookings: (...args: any[]) => listUnassignedJobBookings(...args),
   upsertJob: vi.fn()
 }));
 vi.mock("../src/auth/driver-account.service", () => ({
@@ -39,6 +41,7 @@ vi.mock("../src/jobs/booking.service", () => ({
 }));
 
 import { getJobsGroupedForDriver, getNextJobForDriver, getPendingSubmissionsForDriver, getTomorrowJobsForDriver, startJob, sendOnMyWay } from "../src/jobs/jobs.service";
+import { syncTodayBookings } from "../src/jobs/booking.service";
 
 const driver = {
   initials: "HE",
@@ -56,6 +59,7 @@ describe("driver job lists are scoped to that driver's own initials", () => {
     vi.clearAllMocks();
     vi.useRealTimers();
     listJobs.mockResolvedValue([]);
+    listUnassignedJobBookings.mockResolvedValue([]);
     summaries.mockResolvedValue([]);
     getDriverProfile.mockResolvedValue(driver);
   });
@@ -86,7 +90,23 @@ describe("driver job lists are scoped to that driver's own initials", () => {
   it("getJobsGroupedForDriver (the 'Jobs' tab) queries only this driver's jobs", async () => {
     await getJobsGroupedForDriver("helena@example.com");
     expect(listJobs).toHaveBeenCalledTimes(1);
-    expect(listJobs).toHaveBeenCalledWith({ driverInitials: "HE" });
+    expect(listJobs).toHaveBeenCalledWith({ driverInitials: "HE", excludeStatuses: [JobStatus.COMPLETED, JobStatus.CANCELLED] });
+  });
+
+  it("returns the stored job list while a Calendar sync is still pending", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2100-01-01T08:00:00Z"));
+    let finishSync!: (jobs: []) => void;
+    const pendingSync = new Promise<[]>(resolve => { finishSync = resolve; });
+    vi.mocked(syncTodayBookings).mockReturnValueOnce(pendingSync);
+    try {
+      const grouped = await getJobsGroupedForDriver("helena@example.com");
+      expect(grouped.today).toEqual([]);
+      expect(syncTodayBookings).toHaveBeenCalled();
+    } finally {
+      finishSync([]);
+      await pendingSync;
+    }
   });
   it("keeps earlier unfinished jobs available in Past regardless of elapsed scheduled time", async () => {
     vi.useFakeTimers(); vi.setSystemTime(new Date("2026-10-12T07:00:00Z"));
@@ -151,7 +171,7 @@ describe("driver job lists are scoped to that driver's own initials", () => {
   it("getNextJobForDriver (the home/active-job screen) queries only this driver's jobs", async () => {
     await getNextJobForDriver("helena@example.com");
     expect(listJobs).toHaveBeenCalledTimes(1);
-    expect(listJobs).toHaveBeenCalledWith({ driverInitials: "HE" });
+    expect(listJobs).toHaveBeenCalledWith({ driverInitials: "HE", excludeStatuses: [JobStatus.COMPLETED, JobStatus.CANCELLED] });
   });
 
   it("still returns this driver's in-progress job as 'active' once scoped", async () => {
@@ -190,6 +210,7 @@ describe("driver job lists are scoped to that driver's own initials", () => {
   it("shows assigned tomorrow endpoint jobs before 21:00 London", async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-09-23T19:59:00.000Z")); // 20:59 Europe/London
+    listUnassignedJobBookings.mockResolvedValue([{ bookedStart: "2026-09-24T10:00:00.000Z" }, { bookedStart: "2026-09-25T10:00:00.000Z" }]);
     listJobs.mockResolvedValue([
       {
         jobId: "TMV-TOMORROW",
@@ -211,6 +232,8 @@ describe("driver job lists are scoped to that driver's own initials", () => {
 
     expect(jobs.map(j => j.jobId)).toEqual(["TMV-TOMORROW"]);
     expect(unassignedCount).toBe(1);
+    expect(listJobs).toHaveBeenCalledWith({ driverInitials: "HE", excludeStatuses: [JobStatus.CANCELLED] });
+    expect(listUnassignedJobBookings).toHaveBeenCalledOnce();
   });
 
   it("does not show jobs beyond tomorrow even after 21:00 London", async () => {

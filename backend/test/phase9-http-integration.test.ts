@@ -5,10 +5,10 @@ import express from "express";
 import cookieParser from "cookie-parser";
 import ExcelJS from "exceljs";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { ExtraChargeType, type Job } from "../src/jobs/job.types";
+import { EvidenceStatus, ExtraChargeType, type Job } from "../src/jobs/job.types";
 
 const state = vi.hoisted(() => ({ jobs: new Map<string, any>(), manuals: new Map<string, any>(), inserts: 0, active: true, tokenVersion: 1, accountFailure: false,
-  profile: { initials: "AB", email: "synthetic@example.invalid", fullName: "Synthetic Driver", active: true, role: "Driver", imei: "", chatUserName: "" }, settingReads: vi.fn() }));
+  profile: { initials: "AB", email: "synthetic@example.invalid", fullName: "Synthetic Driver", active: true, role: "Driver", imei: "", chatUserName: "" }, settingReads: vi.fn(), evidenceReads: vi.fn().mockResolvedValue([]) }));
 vi.mock("../src/config/env", () => ({ env: { nodeEnv: "development", signatureLinkSecret: "synthetic-test-key-not-for-release", adminPassword: "synthetic-admin-password", timezone: "Europe/London",
   maxImageBytes: 1048576, calendarSyncTtlMs: 120000, congestionCharge: 18, tunnelCharge: 13.6, crewRate1Man: 55, crewRate2Man: 55, crewRate3Man: 65, packingRate: 95, crewBillingUnit: "Per 30 minutes" } }));
 vi.mock("../src/db/mongo", () => ({ getDb: () => { throw new Error("Live DB access prohibited in Phase 9 tests."); } }));
@@ -21,7 +21,11 @@ vi.mock("../src/db/driver-job-summary.repo", () => ({ getDriverJobSummary: async
   listDriverJobSummariesForJobs: async (ids: string[]) => ids.flatMap(id => state.manuals.has(id) ? [structuredClone(state.manuals.get(id))] : []),
   insertDriverJobSummary: async (summary: any) => { if (state.manuals.has(summary.jobId)) throw { code: 11000 }; const saved = { ...summary, createdAt: new Date() }; state.manuals.set(summary.jobId, structuredClone(saved)); state.inserts++; return saved; } }));
 vi.mock("../src/db/activity.repo", () => ({ appendActivity: async () => {}, listActivityForJob: async () => [] }));
-vi.mock("../src/db/evidence.repo", () => ({ readEvidenceSummary: async () => ({}), listEvidenceForJob: async () => [], listEvidenceForJobs: async () => [], getEvidence: async () => null, deleteEvidence: async () => {} }));
+vi.mock("../src/db/evidence.repo", async original => ({
+  summarizeEvidence: (await original<typeof import("../src/db/evidence.repo")>()).summarizeEvidence,
+  readEvidenceSummary: async () => ({}), listEvidenceForJob: state.evidenceReads,
+  listEvidenceForJobs: async () => [], getEvidence: async () => null, deleteEvidence: async () => {}
+}));
 vi.mock("../src/db/scenario.repo", () => ({ listScenarioSubmissionsForJob: async () => [] }));
 vi.mock("../src/db/settings.repo", () => ({ getSetting: async (key: string, fallback: string) => { state.settingReads(key); return key === "OVERTIME_RATE_PER_30" ? "55" : fallback; } }));
 vi.mock("../src/admin/dashboard/dataset-cache", () => ({ invalidateDashboardDataset: () => invalidateReportReads() }));
@@ -75,6 +79,7 @@ beforeEach(async () => {
   invalidateReportReads();
   vi.useFakeTimers({ toFake: ["Date"] }); vi.setSystemTime(new Date("2026-10-10T08:00:00Z")); vi.unstubAllEnvs();
   state.jobs.clear(); state.manuals.clear(); state.inserts = 0; state.active = true; state.tokenVersion = 1; state.accountFailure = false; state.settingReads.mockClear();
+  state.evidenceReads.mockReset().mockResolvedValue([]);
   const job = { jobId: "INTEGRATION", driverInitials: "AB", status: "IN_PROGRESS", currentState: "WAITING_OVERTIME", crewSize: 1, extraCharges: [ExtraChargeType.CONGESTION], extraChargeText: "55 per 30 minutes",
     bookedStart: "2026-10-09T08:00:00Z", bookedFinish: "2026-10-09T09:30:00Z", bookedMinutes: 90, actualStart: "2026-10-09T08:00:00Z", actualFinish: "2026-10-09T10:30:00Z",
     actualStartSource: "arrival-photo", actualFinishSource: "empty-van-photo", basePrice: 200, overtimeCharge: 0, totalCharges: 200, customerName: "Synthetic Customer", customerEmail: "", customerPhone: "", pickup: "A", dropoff: "B", rawTitle: "", rawDescription: "",
@@ -90,6 +95,24 @@ beforeEach(async () => {
 afterEach(() => { vi.useRealTimers(); vi.unstubAllEnvs(); });
 
 describe("Real HTTP job/manual/report/export integration with synthetic persistence", () => {
+  it("opens the job with unchanged evidence counts and photos from a single evidence read", async () => {
+    state.jobs.get("INTEGRATION").signatureUrl = "https://example.invalid/signature";
+    state.evidenceReads.mockResolvedValue([
+      { evidenceId: "PHOTO", evidenceType: "Before", status: EvidenceStatus.COMPLETED, cloudinaryUrl: "https://example.invalid/photo" },
+      { evidenceId: "FAILED", evidenceType: "Before", status: EvidenceStatus.FAILED },
+      { evidenceId: "PENDING", evidenceType: "After", status: EvidenceStatus.RECEIVED }
+    ]);
+    const res = await request("/api/jobs/INTEGRATION", driverCookie());
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.evidence).toEqual({ completed: { Before: 1 }, failed: { Before: 1 }, pending: { After: 1 }, hasSignature: true });
+    expect(body.evidenceItems).toEqual([{ evidenceId: "PHOTO", evidenceType: "Before", url: "https://example.invalid/photo" }]);
+    expect(body.job.jobId).toBe("INTEGRATION");
+    expect(body.suggestedTotal).toBe(273);
+    expect(body.driverJobSummary).toBeNull();
+    expect(state.evidenceReads).toHaveBeenCalledExactlyOnceWith("INTEGRATION");
+  });
+
   it("completes, defers missing manual details without blocking starts, locks/retries, survives restart and exports matching totals", async () => {
     const driver = driverCookie(), admin = adminCookie();
     expect((await request("/api/jobs/INTEGRATION/actions", driver, { action: "REVIEW_NONE" })).status).toBe(200);

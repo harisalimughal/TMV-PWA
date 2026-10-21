@@ -32,8 +32,15 @@ export function dashboardNotificationsRoutes(): Router {
   router.get("/", async (_req, res) => {
     try {
       const [jobs, activity, dismissed] = await Promise.all([
-        jobsCollection().then(c => c.find({ actualStart: { $ne: "" } }).toArray()),
-        activityCollection().then(c => c.find({}).toArray()),
+        // These checks run in the background repeatedly. Transfer only the fields
+        // used below, rather than downloading every job and the full activity log.
+        jobsCollection().then(c => c.find({ actualStart: { $ne: "" } }).project({
+          _id: 0, jobId: 1, customerName: 1, customerEmail: 1,
+          customerPhone: 1, driverInitials: 1, actualStart: 1
+        }).toArray()),
+        activityCollection().then(c => c.find({ action: { $in: [...NOTIFY_ACTIONS] } }).project({
+          _id: 0, jobId: 1, action: 1, detail: 1, timestamp: 1
+        }).toArray()),
         listDismissedIds("notification")
       ]);
 

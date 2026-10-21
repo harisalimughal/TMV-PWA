@@ -82,6 +82,11 @@ export async function listEvidenceForJobs(jobIds: string[]): Promise<EvidenceRec
  * workflow.engine.ts), so hasSignature is read from there instead. */
 export async function readEvidenceSummary(jobId: string): Promise<EvidenceProgress> {
   const [records, job] = await Promise.all([listEvidenceForJob(jobId), getJob(jobId)]);
+  return summarizeEvidence(records, Boolean(job?.signatureUrl));
+}
+
+/** Reuse evidence already loaded for a job response rather than querying it twice. */
+export function summarizeEvidence(records: EvidenceRecord[], hasSignature: boolean): EvidenceProgress {
   const completed: Record<string, number> = {};
   const pending: Record<string, number> = {};
   const failed: Record<string, number> = {};
@@ -94,5 +99,5 @@ export async function readEvidenceSummary(jobId: string): Promise<EvidenceProgre
     bucket[record.evidenceType] = (bucket[record.evidenceType] ?? 0) + 1;
   }
 
-  return { completed, pending, failed, hasSignature: Boolean(job?.signatureUrl) };
+  return { completed, pending, failed, hasSignature };
 }

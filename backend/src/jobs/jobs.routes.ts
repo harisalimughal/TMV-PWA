@@ -15,8 +15,8 @@ import { parsePhotoMeta, parseSignatureMeta } from "./photo-meta";
 import { DAMAGE_CATEGORIES, SCENARIOS, ScenarioKey } from "../workflow/scenario.spec";
 import { ValidationError } from "../workflow/validation.engine";
 import { listActivityForJob } from "../db/activity.repo";
-import { listEvidenceForJob, readEvidenceSummary } from "../db/evidence.repo";
-import { EvidenceStatus } from "./job.types";
+import { listEvidenceForJob, summarizeEvidence } from "../db/evidence.repo";
+import { EvidenceStatus, type EvidenceRecord } from "./job.types";
 import { listScenarioSubmissionsForJob } from "../db/scenario.repo";
 import { getSetting } from "../db/settings.repo";
 import { reverseGeocode } from "../integrations/geocode";
@@ -100,7 +100,7 @@ function errorResponse(res: Response, error: unknown): void {
  *  belongs to, its URL, and where/when it was taken — so the app can show them when a
  *  driver steps back to a photo step, and offer to delete any. COMPLETED only (a
  *  half-processed upload isn't something the driver can act on). */
-async function evidenceItemsFor(jobId: string): Promise<
+async function evidenceItemsFor(jobId: string, loadedRecords?: EvidenceRecord[]): Promise<
   Array<{
     evidenceId: string;
     evidenceType: string;
@@ -110,7 +110,7 @@ async function evidenceItemsFor(jobId: string): Promise<
     locationName?: string;
   }>
 > {
-  const records = await listEvidenceForJob(jobId);
+  const records = loadedRecords ?? await listEvidenceForJob(jobId);
   return records
     .filter(r => r.status === EvidenceStatus.COMPLETED && r.cloudinaryUrl)
     .map(r => ({
@@ -203,20 +203,21 @@ export function jobsRoutes(): Router {
   router.get("/:jobId", async (req: Request, res: Response) => {
     try {
       const job = await markJobViewed(String(req.params.jobId), req.driverEmail!, "Opened job workflow");
-      const [activity, evidence, evidenceItems, confirmationText] = await Promise.all([
+      const [activity, records, confirmationText, total, driverJobSummary] = await Promise.all([
         listActivityForJob(job.jobId),
-        readEvidenceSummary(job.jobId),
-        evidenceItemsFor(job.jobId),
-        getConfirmationText()
+        listEvidenceForJob(job.jobId),
+        getConfirmationText(),
+        suggestedTotal(job),
+        getDriverJobSummary(job.jobId)
       ]);
       res.status(200).json({
         job,
         activity,
-        evidence,
-        evidenceItems,
-        suggestedTotal: await suggestedTotal(job),
+        evidence: summarizeEvidence(records, Boolean(job.signatureUrl)),
+        evidenceItems: await evidenceItemsFor(job.jobId, records),
+        suggestedTotal: total,
         confirmationText,
-        driverJobSummary: await getDriverJobSummary(job.jobId)
+        driverJobSummary
       });
     } catch (error) {
       errorResponse(res, error);
