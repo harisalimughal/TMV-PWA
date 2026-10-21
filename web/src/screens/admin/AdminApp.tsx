@@ -14,6 +14,7 @@ import { DriverReportPage } from "./dashboard/pages/DriverReportPage";
 import { LiabilityPage, LIABILITY_SECTIONS } from "./dashboard/pages/LiabilityPage";
 import { ConfigurationsPage, CONFIGURATION_SECTIONS } from "./dashboard/pages/ConfigurationsPage";
 import { MaintenancePage } from "./dashboard/pages/MaintenancePage";
+import { LogsPage } from "./dashboard/pages/LogsPage";
 import { usePushNotifications } from "../../lib/pwa/usePushNotifications";
 import { useServiceWorkerUpdate } from "../pwa-settings/hooks/useServiceWorkerUpdate";
 
@@ -96,6 +97,7 @@ export function AdminApp() {
     setActiveSection(LIABILITY_SECTIONS.includes(section) ? "liabilities" : section === "alerts" ? "notifications" : CONFIGURATION_SECTIONS.includes(section) ? "configurations" : section);
     const url = new URL(window.location.href);
     url.searchParams.set("section", section);
+    if (section === "logs") { url.searchParams.delete("page"); url.searchParams.delete("kind"); }
     if (section === "notifications") url.searchParams.delete("notificationsTab");
     if (section === "configurations") url.searchParams.delete("configurationTab");
     url.searchParams.delete("reportReturn");
@@ -136,6 +138,7 @@ export function AdminApp() {
       {activeSection === "driverreport" && <DriverReportPage />}
       {activeSection === "configurations" && <ConfigurationsPage />}
       {activeSection === "maintenance" && <MaintenancePage />}
+      {activeSection === "logs" && <LogsPage />}
     </Layout>
   );
 }

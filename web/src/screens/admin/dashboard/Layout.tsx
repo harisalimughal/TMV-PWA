@@ -11,7 +11,7 @@ import React, { useState, useEffect, useRef } from "react";
 import {
   LayoutDashboard, Navigation, Truck, CheckSquare, LogIn, LogOut, AlertCircle, ShieldAlert,
   Users, Banknote, RefreshCw, Trash2, ClipboardList, FileWarning,
-  ChevronLeft, ChevronRight, ChevronDown, Search, Command, MessageSquare, Bell, Menu, X, Settings
+  ChevronLeft, ChevronRight, ChevronDown, Search, Command, MessageSquare, Bell, Menu, X, Settings, ScrollText
 } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { triggerDatasetRefresh } from "./api";
@@ -51,6 +51,7 @@ const NAV_CONFIG: NavItem[] = [
  *  profile dropdown) still need a title/icon for the header bar -- looked up here
  *  after NAV_CONFIG comes up empty, instead of silently falling back to Overview's. */
 const EXTRA_NAV_TITLES: Record<string, NavItem> = {
+  logs: { id: "logs", label: "Logs", icon: ScrollText },
   maintenance: { id: "maintenance", label: "Data Maintenance", icon: Trash2 },
   finished: { id: "finished", label: "Finished Jobs", icon: CheckSquare },
   driverreport: { id: "driverreport", label: "Driver Report", icon: Users }

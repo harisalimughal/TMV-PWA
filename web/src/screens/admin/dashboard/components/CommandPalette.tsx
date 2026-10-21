@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from "react";
 import {
   Search, LayoutDashboard, Truck, CheckSquare, LogIn, LogOut, Users, Banknote, Bell, Settings,
-  AlertTriangle, RefreshCw, Download, ShieldAlert, ArrowRight, X
+  AlertTriangle, RefreshCw, Download, ShieldAlert, ArrowRight, X, ScrollText
 } from "lucide-react";
 
 interface Props {
@@ -25,10 +25,16 @@ const PALETTE_ITEMS = [
   { id: "act_refresh", label: "Sync Live Sheets Data", action: "refresh", icon: RefreshCw, category: "Actions" },
   { id: "act_export", label: "Export Jobs to CSV", action: "export", icon: Download, category: "Actions" }
 ];
+// A deliberate search-only destination: never expose it among suggested pages.
+const LOGS_ITEM = { id: "logs", label: "Logs", section: "logs", icon: ScrollText, category: "System" };
 
 export function CommandPalette({ isOpen, onClose, onSelectSection, onRefreshData, onExportCsv }: Props) {
   const [search, setSearch] = useState("");
   const [selectedIndex, setSelectedIndex] = useState(0);
+
+  useEffect(() => {
+    if (isOpen) { setSearch(""); setSelectedIndex(0); }
+  }, [isOpen]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -44,7 +50,7 @@ export function CommandPalette({ isOpen, onClose, onSelectSection, onRefreshData
 
   if (!isOpen) return null;
 
-  const filteredItems = PALETTE_ITEMS.filter(item =>
+  const filteredItems = search.trim().toLowerCase() === "logs" ? [LOGS_ITEM] : PALETTE_ITEMS.filter(item =>
     item.label.toLowerCase().includes(search.toLowerCase()) || item.category.toLowerCase().includes(search.toLowerCase())
   );
 

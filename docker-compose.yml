@@ -20,6 +20,7 @@ services:
       # separate occurrences, ruling out collection size as the cause -- the smallest
       # collection (exceptions) was consistently the slowest, not the largest.
       - UV_THREADPOOL_SIZE=8
+      - APP_BUILD_ID=${VITE_BUILD_ID:-dev}
     # The VPS prefers IPv6 outbound, but MongoDB Atlas's Network Access list only
     # allow-lists the IPv4 address. Node's own dns.setDefaultResultOrder("ipv4first")
     # (src/server.ts) didn't reliably stop the mongodb driver from still attempting

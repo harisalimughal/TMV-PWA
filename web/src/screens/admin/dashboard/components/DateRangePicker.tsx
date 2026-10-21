@@ -8,6 +8,7 @@ interface Props {
   from?: string;
   to?: string;
   onChange: (from?: string, to?: string) => void;
+  presets?: readonly Preset[];
 }
 
 type Preset = "today" | "tomorrow" | "yesterday" | "7d";
@@ -25,7 +26,7 @@ export function dateRangeForPreset(preset: Preset): { from?: string; to?: string
 
 export const defaultDashboardDateRange = () => dateRangeForPreset("today");
 
-export function DateRangePicker({ from, to, onChange }: Props) {
+export function DateRangePicker({ from, to, onChange, presets = ["today", "yesterday", "tomorrow", "7d"] }: Props) {
   const setPreset = (preset: Preset) => {
     const range = dateRangeForPreset(preset);
     onChange(range.from, range.to);
@@ -40,7 +41,7 @@ export function DateRangePicker({ from, to, onChange }: Props) {
   return (
     <div className="flex flex-wrap items-center gap-2 text-xs">
       <div className="flex flex-wrap items-center gap-1 bg-admin-surface p-1 rounded-card border border-admin-line">
-        {(["today", "yesterday", "tomorrow", "7d"] as const).map(preset => (
+        {presets.map(preset => (
           <button
             key={preset}
             type="button"
