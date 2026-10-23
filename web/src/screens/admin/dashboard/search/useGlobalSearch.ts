@@ -16,6 +16,7 @@ import { DRIVER_OPTIONS_QUERY_KEY } from "../hooks/useDriverOptions";
 import { useAttention } from "../hooks/useAttention";
 import { EVIDENCE_KINDS, type EvidenceKind } from "../pages/EvidencePage";
 import { dateRangeForPreset } from "../components/DateRangePicker";
+import { isLogsQuery } from "./hiddenDestinations";
 import {
   jobRequest, parseQuery, rankResults, searchAlerts, searchCustomers, searchDestinations, searchDrivers, searchJobs, searchLiability, searchVehicles,
   LIABILITY_RANGE_PRESET, VAN_RANGE_PRESET, type JobRequest, type ResultType, type SearchResult
@@ -51,9 +52,10 @@ export function useDebounced(value: string, ms = SEARCH_DEBOUNCE_MS): string {
 
 export function useGlobalSearch(raw: string, scope: Scope) {
   const text = raw.trim();
+  const logsQuery = isLogsQuery(text);
   const debounced = useDebounced(text);
   const settled = debounced === text;
-  const serverReady = settled && text.length >= MIN_SERVER_QUERY;
+  const serverReady = !logsQuery && settled && text.length >= MIN_SERVER_QUERY;
   const timings = useRef(new Map<string, number>()).current;
 
   const roster = useQuery({ queryKey: DRIVER_OPTIONS_QUERY_KEY, queryFn: fetchDriverRoster, staleTime: 60 * 60 * 1000, gcTime: 6 * 60 * 60 * 1000 });
@@ -93,6 +95,7 @@ export function useGlobalSearch(raw: string, scope: Scope) {
 
   const results = useMemo(() => {
     if (!parts.query.tokens.length) return [] as SearchResult[];
+    if (logsQuery) return searchDestinations(parts).filter(result => inScope(scope, result.type));
     const all: SearchResult[] = [...searchDestinations(parts), ...searchDrivers(parts, drivers)];
     all.push(...searchVehicles(parts, drivers, serverReady ? vans.data?.items ?? [] : []));
     if (request && jobs.data) {
@@ -104,7 +107,7 @@ export function useGlobalSearch(raw: string, scope: Scope) {
       all.push(...searchAlerts(parts, attention.items));
     }
     return rankResults(all.filter(result => inScope(scope, result.type)));
-  }, [parts, drivers, serverReady, vans.data, request, jobs.data, liability, attention.items, scope]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [parts, drivers, serverReady, vans.data, request, jobs.data, liability, attention.items, scope, logsQuery]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const state = (query: { isError: boolean; isFetching: boolean; data?: unknown }, enabled: boolean): ProviderStatus["state"] =>
     !enabled ? "idle" : query.isError ? "error" : query.isFetching && !query.data ? "loading" : "ok";
@@ -118,7 +121,7 @@ export function useGlobalSearch(raw: string, scope: Scope) {
   return {
     text, parts, results, request, statuses,
     /** True while a pause or a server provider is still outstanding for this query. */
-    pending: text.length >= MIN_SERVER_QUERY && (!settled || statuses.some(status => status.state === "loading")),
+    pending: !logsQuery && text.length >= MIN_SERVER_QUERY && (!settled || statuses.some(status => status.state === "loading")),
     failed: statuses.filter(status => status.state === "error")
   };
 }

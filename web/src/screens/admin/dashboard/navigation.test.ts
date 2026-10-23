@@ -1,11 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { NAV, resolveRoute, navOwner } from "./navigation";
+import { NAV, ROUTE_TITLES, resolveRoute, navOwner } from "./navigation";
 
 const canonical = (search: string) => Object.fromEntries(resolveRoute(search).canonical ?? []);
 
 describe("information architecture", () => {
-  it("has the admin destinations, including Logs under System", () => {
-    expect(NAV.map(entry => entry.label)).toEqual(["Overview", "Bookings", "Jobs", "Activity", "Live Fleet", "Drivers", "Van", "Liability", "Notifications & Alerts", "Settings", "Logs"]);
+  it("keeps Logs out of the sidebar while retaining its route and title", () => {
+    expect(NAV.map(entry => entry.label)).toEqual(["Overview", "Bookings", "Jobs", "Activity", "Live Fleet", "Drivers", "Van", "Liability", "Notifications & Alerts", "Settings"]);
+    expect(ROUTE_TITLES.logs).toBe("Logs");
+    expect(navOwner("logs")).toBeNull();
   });
   it("keeps the driver report under Drivers", () => {
     expect(navOwner("driverreport")).toBe("drivers");

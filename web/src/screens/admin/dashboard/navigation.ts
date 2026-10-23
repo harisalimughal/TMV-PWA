@@ -9,7 +9,7 @@
  * reloads restore them.
  */
 import type { LucideIcon } from "lucide-react";
-import { Bell, CalendarCheck, ClipboardList, MessagesSquare, FileWarning, LayoutDashboard, Navigation as NavigationIcon, Settings, Truck, Users, ScrollText } from "lucide-react";
+import { Bell, CalendarCheck, ClipboardList, MessagesSquare, FileWarning, LayoutDashboard, Navigation as NavigationIcon, Settings, Truck, Users } from "lucide-react";
 
 export type SectionId = "overview" | "bookings" | "jobs" | "activity" | "drivers" | "livefleet" | "vehicles" | "evidence" | "alerts" | "settings" | "logs";
 export type RouteId = SectionId | "driverreport" | "maintenance";
@@ -35,13 +35,13 @@ export const NAV: NavEntry[] = [
   { id: "vehicles", label: "Van", icon: Truck, group: "fleet", keywords: "vehicles fuel service mot tax compliance" },
   { id: "evidence", label: "Liability", icon: FileWarning, group: "fleet", keywords: "checks check-in checkout parking liability incident" },
   { id: "alerts", label: "Notifications & Alerts", icon: Bell, group: "communication", keywords: "notifications delivery log sms email fleet events" },
-  { id: "settings", label: "Settings", icon: Settings, group: "system", keywords: "configuration pricing rates message templates notifications" },
-  { id: "logs", label: "Logs", icon: ScrollText, group: "system", keywords: "server errors problems issues history failures" }
+  { id: "settings", label: "Settings", icon: Settings, group: "system", keywords: "configuration pricing rates message templates notifications" }
 ];
 
 export const ROUTE_TITLES: Record<RouteId, string> = {
   ...Object.fromEntries(NAV.map(entry => [entry.id, entry.label])) as Record<SectionId, string>,
   driverreport: "Driver report",
+  logs: "Logs",
   maintenance: "Data maintenance"
 };
 
@@ -50,7 +50,7 @@ const EVIDENCE_KINDS = ["checkin", "checkout", "parking", "liability"];
 /** Which sidebar entry a route belongs to. */
 export function navOwner(route: RouteId): SectionId | null {
   if (route === "driverreport") return "drivers";
-  if (route === "maintenance") return null;
+  if (route === "maintenance" || route === "logs") return null;
   return route;
 }
 

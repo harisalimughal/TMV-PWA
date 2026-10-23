@@ -21,13 +21,17 @@ describe("Admin shell navigation", () => {
   it("lists the admin destinations and marks the current one", () => {
     render(layout(new QueryClient(), "vehicles"));
     const nav = screen.getByRole("navigation", { name: "Sections" });
-    expect(within(nav).getAllByRole("link").map(link => link.textContent)).toEqual(["Overview", "Bookings", "Jobs", "Activity", "Live Fleet", "Drivers", "Van", "Liability", "Notifications & Alerts", "Settings", "Logs"]);
+    expect(within(nav).getAllByRole("link").map(link => link.textContent)).toEqual(["Overview", "Bookings", "Jobs", "Activity", "Live Fleet", "Drivers", "Van", "Liability", "Notifications & Alerts", "Settings"]);
     expect(within(nav).getByRole("link", { name: "Van" })).toHaveAttribute("aria-current", "page");
   });
 
   it("highlights Drivers while a driver report is open", () => {
     render(layout(new QueryClient(), "driverreport"));
     expect(within(screen.getByRole("navigation", { name: "Sections" })).getByRole("link", { name: "Drivers" })).toHaveAttribute("aria-current", "page");
+  });
+  it("does not expose Logs in the sidebar even while the Logs route is open", () => {
+    render(layout(new QueryClient(), "logs"));
+    expect(within(screen.getByRole("navigation", { name: "Sections" })).queryByRole("link", { name: "Logs" })).not.toBeInTheDocument();
   });
 
   it("keeps the sidebar preference on driver reports instead of collapsing it", () => {

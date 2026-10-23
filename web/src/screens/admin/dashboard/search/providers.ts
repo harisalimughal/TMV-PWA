@@ -20,6 +20,7 @@ import { dateRangeForPreset } from "../components/DateRangePicker";
 import { jobStatusLabel } from "../components/StatusBadge";
 import { formatDate, formatDateTime } from "../utils/format";
 import { compact, fold, normalizeQuery, scoreRecord, TIER, type Field, type Normalized } from "./searchCore";
+import { isLogsQuery } from "./hiddenDestinations";
 
 export type ResultType = "action" | "page" | "driver" | "job" | "customer" | "vehicle" | "liability" | "alert";
 export type Target = { kind: "href"; href: string } | { kind: "job"; jobId: string };
@@ -60,6 +61,7 @@ const MONTHS = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "
 const POSTCODE = /\b([a-z]{1,2}\d[a-z\d]?)\s+(\d[a-z]{2})\b/i;
 
 export interface QueryParts {
+  raw?: string;
   query: Normalized;
   /** A London day named in the query ("13 oct", "13/10", "2026-10-13", "today"). */
   day: DateTime | null;
@@ -86,7 +88,7 @@ export function parseQuery(raw: string, now = DateTime.now().setZone("Europe/Lon
   take(text.match(/\b(today|yesterday|tomorrow)\b/), m => m[1] === "today" ? now : m[1] === "yesterday" ? now.minus({ days: 1 }) : now.plus({ days: 1 }));
   text = text.replace(POSTCODE, "$1 $2");
   const rest = text.split(" ").filter(Boolean).map(token => token.replace(" ", " "));
-  return { query, day, rest };
+  return { raw, query, day, rest };
 }
 
 const queryOf = (tokens: string[]): Normalized => {
@@ -121,7 +123,10 @@ export const DESTINATIONS: Destination[] = [
 export function searchDestinations(parts: QueryParts): SearchResult[] {
   const { query } = parts;
   if (!query.tokens.length) return [];
-  return DESTINATIONS.flatMap(entry => {
+  const entries: Destination[] = isLogsQuery(parts.raw ?? query.text)
+    ? [{ id: "logs", label: "Logs", detail: "Page", keywords: "", type: "page", href: () => sectionHref("logs") }]
+    : DESTINATIONS;
+  return entries.flatMap(entry => {
     const label = scoreRecord(query, [{ name: "label", value: entry.label, kind: "text" }]);
     // One letter matches labels only. A keyword hit is a suggestion, not a name
     // match, so it stays below real records.

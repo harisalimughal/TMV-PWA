@@ -10,6 +10,7 @@
  * sign in on a shared computer never sees them. Nothing is sent to the server.
  */
 import type { SearchResult, Target } from "./providers";
+import { isLogsDestination, isLogsQuery } from "./hiddenDestinations";
 
 const RECENT_KEY = "tmv:admin-search-recent";
 const QUERIES_KEY = "tmv:admin-search-queries";
@@ -28,23 +29,23 @@ const local = () => window.localStorage;
 const session = () => window.sessionStorage;
 
 export function recentItems(): RecentItem[] {
-  return read<RecentItem>(local, RECENT_KEY).filter(item => item && typeof item.id === "string" && typeof item.label === "string" && item.target);
+  return read<RecentItem>(local, RECENT_KEY).filter(item => item && typeof item.id === "string" && typeof item.label === "string" && item.target && !isLogsDestination(item.target));
 }
 
 export function rememberResult(result: SearchResult) {
-  if (result.type === "customer" || result.type === "alert") return;
+  if (result.type === "customer" || result.type === "alert" || isLogsDestination(result.target)) return;
   const label = result.type === "job" ? result.id : result.label;
   const item: RecentItem = { type: result.type, id: result.id, label, target: result.target };
   write(local, RECENT_KEY, [item, ...recentItems().filter(entry => !(entry.type === item.type && entry.id === item.id))].slice(0, MAX_RECENT));
 }
 
 export function recentQueries(): string[] {
-  return read<string>(session, QUERIES_KEY).filter(entry => typeof entry === "string");
+  return read<string>(session, QUERIES_KEY).filter(entry => typeof entry === "string" && !isLogsQuery(entry));
 }
 
 export function rememberQuery(query: string) {
   const value = query.trim().slice(0, 80);
-  if (value.length < 2) return;
+  if (value.length < 2 || isLogsQuery(value)) return;
   write(session, QUERIES_KEY, [value, ...recentQueries().filter(entry => entry.toLowerCase() !== value.toLowerCase())].slice(0, MAX_QUERIES));
 }
 

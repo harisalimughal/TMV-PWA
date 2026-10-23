@@ -162,6 +162,7 @@ export function JobWorkflowScreen({ jobId, onBack }: JobWorkflowScreenProps) {
   const [summarySubmitting, setSummarySubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const actionInFlight = useRef(false);
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
   const [signatureOpen, setSignatureOpen] = useState(false);
   const [customerSignatureBlob, setCustomerSignatureBlob] = useState<Blob | null>(null);
@@ -259,10 +260,12 @@ export function JobWorkflowScreen({ jobId, onBack }: JobWorkflowScreenProps) {
       successMessage?: string,
       opts?: { home?: boolean }
     ): Promise<boolean> => {
+      if (actionInFlight.current) return false;
       if (!online) {
         toast.error("You're offline. Reconnect to continue this job — nothing you've entered is lost.");
         return false;
       }
+      actionInFlight.current = true;
       setBusy(true);
       setError(null);
       try {
@@ -282,13 +285,31 @@ export function JobWorkflowScreen({ jobId, onBack }: JobWorkflowScreenProps) {
       } catch (err) {
         const apiError = err as ApiError;
         setError(apiError?.message || "That didn't work. Try again.");
+        if (job) {
+          try {
+            const latest = await fetchJobDetail(job.jobId);
+            if (latest.job.currentState !== job.currentState || latest.job.status !== job.status) {
+              setJob(latest.job);
+              setSuggestedTotal(latest.suggestedTotal);
+              setEvidenceItems(latest.evidenceItems ?? []);
+              if (latest.confirmationText) setConfirmationText(latest.confirmationText);
+              setDriverJobSummary(latest.driverJobSummary ?? null);
+              setError(null);
+              toast.success("Job refreshed to the current step. Check the details before continuing.");
+              scrollRef.current?.scrollTo({ top: 0, behavior: "smooth" });
+            }
+          } catch {
+            setError(apiError?.message || "That didn't work. Try again.");
+          }
+        }
         return false;
       } finally {
+        actionInFlight.current = false;
         setBusy(false);
         setUploadProgress(null);
       }
     },
-    [online, toast, onBack]
+    [online, toast, onBack, job]
   );
 
   const cancelScenario = useCallback(() => {

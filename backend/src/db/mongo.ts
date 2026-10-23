@@ -1,6 +1,7 @@
 import { Collection, Db, MongoClient } from "mongodb";
 import { env } from "../config/env";
 import { log } from "../utils/logger";
+import { attachMongoDiagnostics } from "../observability/mongo-diagnostics";
 import { Job } from "../jobs/job.types";
 import { EvidenceRecord } from "../jobs/job.types";
 import type { VanRecordDoc } from "./van.repo";
@@ -110,7 +111,8 @@ let clientPromise: Promise<MongoClient> | null = null;
 
 export async function getClient(): Promise<MongoClient> {
   if (!clientPromise) {
-    const client = new MongoClient(env.mongoUri, { minPoolSize: 2 });
+    const client = new MongoClient(env.mongoUri, { minPoolSize: 2, monitorCommands: true });
+    attachMongoDiagnostics(client);
     // TEMPORARY diagnostic instrumentation (remove once the ~10s dashboard-read stalls
     // are root-caused): minPoolSize alone didn't fix it -- the stalls recurred, if
     // anything more often. These are the driver's own connection-pool/heartbeat events,

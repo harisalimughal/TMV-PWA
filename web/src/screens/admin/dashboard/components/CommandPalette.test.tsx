@@ -35,6 +35,39 @@ beforeEach(() => {
 afterEach(() => vi.useRealTimers());
 
 describe("CommandPalette", () => {
+  it("reveals Logs only for the exact word, never partial, fuzzy or keyword searches", async () => {
+    const { input } = renderPalette();
+    for (const query of ["", "l", "log", "logging", "system", "errors", "server logs", "logs extra", "lògs"]) {
+      await type(input, query);
+      expect(screen.queryByRole("option", { name: /^Logs/ })).not.toBeInTheDocument();
+    }
+    for (const query of ["logs", "LOGS", " logs "]) {
+      await type(input, query);
+      expect(screen.getByRole("option", { name: /^Logs/ })).toBeInTheDocument();
+    }
+  });
+  it("opens Logs with Enter without searching unrelated records or remembering the hidden destination", async () => {
+    const { input, onClose } = renderPalette();
+    await type(input, "logs");
+    expect(screen.getAllByRole("option")).toHaveLength(1);
+    expect(api.fetchJobs).not.toHaveBeenCalled();
+    expect(api.fetchScenarios).not.toHaveBeenCalled();
+    expect(api.fetchVanDriverRecords).not.toHaveBeenCalled();
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(window.location.search).toBe("?section=logs");
+    expect(onClose).toHaveBeenCalledOnce();
+    cleanup();
+    renderPalette();
+    expect(screen.getByRole("combobox")).toHaveValue("");
+    expect(screen.queryByRole("option", { name: /^Logs/i })).not.toBeInTheDocument();
+  });
+  it("does not reveal older Logs history entries in default suggestions", () => {
+    localStorage.setItem("tmv:admin-search-recent", JSON.stringify([{ type: "page", id: "logs", label: "Logs", target: { kind: "href", href: "/admin?section=logs" } }]));
+    sessionStorage.setItem("tmv:admin-search-queries", JSON.stringify(["logs", "TI"]));
+    renderPalette();
+    expect(screen.queryByRole("option", { name: /^Logs/i })).not.toBeInTheDocument();
+    expect(screen.getByRole("option", { name: /^TI\b/ })).toBeInTheDocument();
+  });
   it("opens on quick actions, with an example of what can be searched", () => {
     renderPalette();
     expect(labels()).toEqual(expect.arrayContaining(["Generate report", "Jobs", "Drivers", "Parking Liability"]));

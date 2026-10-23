@@ -6,7 +6,7 @@ import { serverLogFilter } from "../src/observability/server-errors.repo";
 import { setErrorLogSink } from "../src/utils/logger";
 
 const sink = vi.fn();
-beforeEach(() => { sink.mockClear(); setErrorLogSink(sink); vi.spyOn(console, "error").mockImplementation(() => {}); });
+beforeEach(() => { sink.mockClear(); setErrorLogSink(sink); vi.spyOn(console, "error").mockImplementation(() => {}); vi.spyOn(console, "log").mockImplementation(() => {}); });
 afterEach(() => { setErrorLogSink(() => {}); vi.restoreAllMocks(); vi.unstubAllEnvs(); });
 
 function request(options: { path?: string; method?: string; status?: number; duration?: number; cookies?: Record<string, string>; code?: string; close?: boolean; stream?: boolean; mutatePath?: boolean } = {}) {

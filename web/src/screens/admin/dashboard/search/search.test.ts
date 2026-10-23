@@ -3,7 +3,7 @@ import { DateTime } from "luxon";
 import type { AdminDriver } from "../../../../api/admin";
 import type { NormalizedJob, ScenarioItem, VanDriverRecordItem } from "../types";
 import { compact, editDistance, fold, highlightParts, matchField, normalizeQuery, scoreRecord, TIER } from "./searchCore";
-import { jobRequest, parseQuery, rankResults, searchCustomers, searchDestinations, searchDrivers, searchJobs, searchLiability, searchVehicles } from "./providers";
+import { DESTINATIONS, fallbackDestinations, jobRequest, parseQuery, rankResults, searchCustomers, searchDestinations, searchDrivers, searchJobs, searchLiability, searchVehicles } from "./providers";
 import { clearSearchHistory, recentItems, recentQueries, rememberQuery, rememberResult } from "./history";
 
 const driver = (initials: string, fullName: string, vanRegistration = "", active = true): AdminDriver =>
@@ -149,6 +149,12 @@ describe("liability", () => {
 });
 
 describe("suggestions and ranking", () => {
+  it("keeps Logs out of general destinations, fallback suggestions and non-exact results", () => {
+    expect(DESTINATIONS.some(entry => entry.id === "logs")).toBe(false);
+    expect(fallbackDestinations().some(entry => entry.id === "logs")).toBe(false);
+    for (const query of ["", "log", "logging", "errors", "system", "server logs", "lògs"]) expect(searchDestinations(parseQuery(query)).some(entry => entry.id === "logs")).toBe(false);
+    expect(searchDestinations(parseQuery(" LOGS "))).toEqual([expect.objectContaining({ id: "logs", target: { kind: "href", href: `${window.location.pathname}?section=logs` } })]);
+  });
   it("'Driver' suggests Drivers, 'Report' Generate report, 'Parking' Parking Liability", () => {
     expect(rankResults(searchDestinations(parseQuery("driver")))[0].label).toBe("Drivers");
     expect(rankResults(searchDestinations(parseQuery("report")))[0].label).toBe("Generate report");
@@ -168,6 +174,13 @@ describe("suggestions and ranking", () => {
 });
 
 describe("history", () => {
+  it("never persists a Logs destination or exact Logs query into suggestions", () => {
+    clearSearchHistory();
+    rememberResult({ type: "page", id: "logs", label: "Logs", target: { kind: "href", href: "/admin?section=logs" }, score: 1 });
+    rememberQuery(" LOGS ");
+    expect(recentItems()).toEqual([]);
+    expect(recentQueries()).toEqual([]);
+  });
   it("keeps ids and short labels only, never customers, and clears", () => {
     clearSearchHistory();
     rememberResult({ type: "job", id: "TMV-1", label: "TMV-1 · Alex Sample", target: { kind: "job", jobId: "TMV-1" }, score: 1 });

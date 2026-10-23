@@ -48,6 +48,10 @@ export type ServerLogKind = "server_error" | "access" | "slow_request" | "reques
 export interface ServerErrorItem {
   id: string; occurredAt: string; areaLabel: string; title: string; summary: string; nextStep: string; jobId?: string; requestId?: string;
   kind?: ServerLogKind; httpStatus?: number; durationMs?: number; audience?: "Admin" | "Driver";
+  method?: string; endpoint?: string; operation?: string; page?: string;
+  requestStartedAt?: string; buildId?: string; serverRunId?: string;
+  filters?: Record<string, string | number>;
+  timings?: Array<{ name: string; durationMs: number; maxMs: number; calls: number; failed: number; pending: number }>;
 }
 export interface ServerErrorsResponse {
   items: ServerErrorItem[]; total: number; page: number; pageSize: number;

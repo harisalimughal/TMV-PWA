@@ -1,4 +1,5 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
+import { DateTime } from "luxon";
 import { useQuery } from "@tanstack/react-query";
 import { AlertCircle, Check, Clock3, Copy, RefreshCw, ShieldAlert } from "lucide-react";
 import { fetchServerErrors, type ServerErrorItem, type ServerLogKind } from "../api";
@@ -22,8 +23,24 @@ function ErrorCard({ item }: { item: ServerErrorItem }) {
   const kind = KIND_PRESENTATION[item.kind ?? "server_error"];
   const Icon = kind.icon;
   const copy = async () => {
-    try { await navigator.clipboard.writeText(`Log reference: ${item.id}${item.requestId ? `\nRequest: ${item.requestId}` : ""}`); setCopied(true); window.setTimeout(() => setCopied(false), 1500); } catch { /* Reference remains selectable. */ }
+    try {
+      await navigator.clipboard.writeText([
+        `Log reference: ${item.id}`, item.requestId && `Request: ${item.requestId}`,
+        item.operation && `Operation: ${item.operation}`, item.endpoint && `Endpoint: ${item.method ?? ""} ${item.endpoint}`,
+        item.page && `Page: ${item.page}`, `Occurred: ${item.occurredAt}`, item.requestStartedAt && `Started: ${item.requestStartedAt}`,
+        item.httpStatus !== undefined && `Response: HTTP ${item.httpStatus}`, item.durationMs !== undefined && `Duration: ${item.durationMs} ms`,
+        item.buildId && `Build: ${item.buildId}`, item.serverRunId && `Server run: ${item.serverRunId}`,
+        ...Object.entries(item.filters ?? {}).map(([key, value]) => `Filter ${key}: ${value}`),
+        ...(item.timings ?? []).map(row => `${row.name}: ${row.durationMs} ms total, ${row.maxMs} ms longest, ${row.calls} calls, ${row.failed} failed, ${row.pending} pending`)
+      ].filter(value => typeof value === "string").join("\n"));
+      setCopied(true);
+    } catch { /* Reference remains selectable. */ }
   };
+  useEffect(() => {
+    if (!copied) return;
+    const timer = window.setTimeout(() => setCopied(false), 1500);
+    return () => window.clearTimeout(timer);
+  }, [copied]);
   return (
     <li className="rounded-2xl border border-admin-line bg-surface p-4 md:p-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -33,7 +50,23 @@ function ErrorCard({ item }: { item: ServerErrorItem }) {
         </div>
         <div className="flex flex-wrap items-center gap-2"><Badge>{kind.label}</Badge><Badge>{item.areaLabel}</Badge>{item.audience && <Badge>{item.audience}</Badge>}<time dateTime={item.occurredAt} className="text-[12.5px] text-admin-ink-2">{formatDateTime(item.occurredAt)}</time></div>
       </div>
+      {item.operation && <p className="mt-3 text-[13px] font-medium text-admin-ink">Operation: {item.operation}</p>}
+      {item.page && <p className="mt-1 text-xs text-admin-ink-2">Page: {item.page}</p>}
       {(item.httpStatus !== undefined || item.durationMs !== undefined) && <p className="mt-3 flex flex-wrap gap-3 text-[12.5px] text-admin-ink-2">{item.httpStatus !== undefined && <span>Response: HTTP {item.httpStatus}</span>}{item.durationMs !== undefined && <span>Time taken: {(item.durationMs / 1000).toFixed(1)} seconds</span>}</p>}
+      <details className="mt-3 rounded-xl border border-admin-line p-3 text-xs text-admin-ink-2">
+        <summary className="cursor-pointer font-medium text-admin-ink">Request details</summary>
+        <div className="mt-3 space-y-2 break-all">
+          {item.endpoint ? <p>Endpoint: <code>{item.method} {item.endpoint}</code></p> : <p>The endpoint was not recorded for this older entry.</p>}
+          {item.requestId && <p>Request: <span className="select-all font-mono">{item.requestId}</span></p>}
+          {item.requestStartedAt && <p>Started: {DateTime.fromISO(item.requestStartedAt).setZone("Europe/London").toFormat("dd LLL yyyy, HH:mm:ss.SSS")} London time</p>}
+          {item.buildId && <p>Build: <code>{item.buildId}</code></p>}
+          {item.serverRunId && <p>Server run: <code>{item.serverRunId}</code></p>}
+          {item.filters && <p>Filters: {Object.entries(item.filters).map(([key, value]) => `${key}=${value}`).join(" · ")}</p>}
+          {!!item.timings?.length && <div><p className="font-medium text-admin-ink">Database timings</p><p className="mt-1">Parallel calls can overlap. These timings cover database commands, not connection-pool waiting or all server processing.</p>
+            <ul className="mt-2 space-y-1">{item.timings.map(row => <li key={row.name}><code>{row.name}</code>: {(row.durationMs / 1000).toFixed(2)}s total · {(row.maxMs / 1000).toFixed(2)}s longest · {row.calls} calls{row.failed ? ` · ${row.failed} failed` : ""}{row.pending ? ` · ${row.pending} pending` : ""}</li>)}</ul>
+          </div>}
+        </div>
+      </details>
       <div className="mt-4 rounded-xl bg-admin-surface p-3 text-[13px]"><span className="font-semibold text-admin-ink">What to do: </span><span className="text-admin-ink-2">{item.nextStep}</span></div>
       <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
         <p className="break-all text-[12px] text-admin-ink-2">Reference: <span className="select-all font-mono">{item.id}</span></p>

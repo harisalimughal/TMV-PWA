@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { ErrorLogEvent } from "../utils/logger";
+import { HTTP_METHODS, operationForEndpoint, safeEndpoint, safePage, safeRequestFilters, safeTimings, type RequestTiming } from "./request-diagnostics";
 
 const HELP = "Try the action again. If it keeps failing, share this reference with the developer.";
 const AREAS = {
@@ -40,6 +41,9 @@ export interface ServerErrorRecord {
   _id: string; occurredAt: Date; area: ErrorArea; areaLabel: string;
   title: string; summary: string; nextStep: string; requestId?: string; jobId?: string;
   kind?: LogKind; httpStatus?: number; durationMs?: number; audience?: "Admin" | "Driver";
+  method?: string; endpoint?: string; operation?: string; page?: string;
+  requestStartedAt?: string; buildId?: string; serverRunId?: string; timings?: RequestTiming[];
+  filters?: Record<string, string | number>;
 }
 
 export function areaForRequest(path: string): ErrorArea {
@@ -53,7 +57,7 @@ export function areaForRequest(path: string): ErrorArea {
 }
 
 /** Only fixed, reviewed text is persisted. Raw messages, exceptions, payloads,
- * URLs, passwords, personal details and stacks never enter the admin collection. */
+ * Raw URLs, passwords, personal details and stacks never enter the admin collection. */
 export function presentServerError(event: ErrorLogEvent): ServerErrorRecord {
   const message = event.message.toLowerCase();
   const area: ErrorArea = /mongo|database/.test(message) ? "database"
@@ -71,12 +75,24 @@ export function presentServerError(event: ErrorLogEvent): ServerErrorRecord {
   const durationMs = event.fields.durationMs;
   const audience = event.fields.audience;
   const jobId = event.jobId ?? event.fields.job_id;
+  const endpoint = safeEndpoint(event.fields.endpoint);
+  const method = typeof event.fields.method === "string" && HTTP_METHODS.includes(event.fields.method as typeof HTTP_METHODS[number]) ? event.fields.method : undefined;
+  const page = safePage(event.fields.page);
+  const timings = safeTimings(event.fields.timings);
+  const filters = safeRequestFilters(event.fields.filters);
+  const started = typeof event.fields.requestStartedAt === "string" && /Z$/.test(event.fields.requestStartedAt) ? Date.parse(event.fields.requestStartedAt) : NaN;
   return { _id: randomUUID(), occurredAt: new Date(event.timestamp), area, areaLabel: AREAS[area].label,
     kind: typeof httpStatus === "number" && httpStatus >= 500 ? "server_error" : issue?.kind ?? "server_error",
     title: copy.title, summary: copy.summary, nextStep: copy.nextStep,
     ...(typeof httpStatus === "number" && Number.isInteger(httpStatus) && httpStatus >= 100 && httpStatus <= 599 ? { httpStatus } : {}),
     ...(typeof durationMs === "number" && Number.isFinite(durationMs) && durationMs >= 0 && durationMs <= 604800000 ? { durationMs: Math.round(durationMs) } : {}),
     ...(audience === "Admin" || audience === "Driver" ? { audience } : {}),
+    ...(method ? { method } : {}), ...(endpoint ? { endpoint, operation: operationForEndpoint(endpoint, method) } : {}),
+    ...(page ? { page } : {}), ...(timings?.length ? { timings } : {}),
+    ...(filters ? { filters } : {}),
+    ...(Number.isFinite(started) ? { requestStartedAt: new Date(started).toISOString() } : {}),
+    ...(typeof event.fields.buildId === "string" && /^(?:local|dev|[0-9a-f]{7,64}|v?\d+\.\d+\.\d+)$/.test(event.fields.buildId) ? { buildId: event.fields.buildId } : {}),
+    ...(typeof event.fields.serverRunId === "string" && /^[0-9a-f-]{36}$/i.test(event.fields.serverRunId) ? { serverRunId: event.fields.serverRunId } : {}),
     ...(/^[0-9a-f-]{36}$/i.test(event.requestId ?? "") ? { requestId: event.requestId } : {}),
     ...(typeof jobId === "string" && /^TMV-[A-Z0-9_-]{1,40}$/.test(jobId) ? { jobId } : {}) };
 }
